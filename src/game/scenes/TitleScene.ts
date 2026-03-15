@@ -4,6 +4,7 @@ import type { SceneManager } from '../SceneManager';
 import type { SaveManager } from '../storage/SaveManager';
 import type { AudioManager } from '../audio/AudioManager';
 import { TutorialOverlay } from '../../ui/TutorialOverlay';
+import { EncyclopediaOverlay } from '../../ui/EncyclopediaOverlay';
 
 export class TitleScene implements Scene {
   private threeScene: THREE.Scene;
@@ -14,6 +15,7 @@ export class TitleScene implements Scene {
   private stars: THREE.Points | null = null;
   private overlay: HTMLDivElement | null = null;
   private tutorialOverlay = new TutorialOverlay();
+  private encyclopediaOverlay = new EncyclopediaOverlay();
 
   constructor(sceneManager: SceneManager, saveManager: SaveManager, audioManager: AudioManager) {
     this.sceneManager = sceneManager;
@@ -131,9 +133,34 @@ export class TitleScene implements Scene {
       });
     });
 
+    // Encyclopedia button
+    const encyclopediaBtn = document.createElement('button');
+    encyclopediaBtn.textContent = 'ずかん';
+    encyclopediaBtn.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: 1.2rem;
+      font-weight: 700;
+      padding: 0.6rem 1.5rem;
+      border: none;
+      border-radius: 1.5rem;
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+      cursor: pointer;
+      touch-action: manipulation;
+      position: absolute;
+      bottom: 2rem;
+      left: 2rem;
+    `;
+    encyclopediaBtn.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      const saveData = this.saveManager.load();
+      this.encyclopediaOverlay.show(saveData.unlockedPlanets, () => {});
+    });
+
     this.overlay.appendChild(title);
     this.overlay.appendChild(button);
     this.overlay.appendChild(tutorialBtn);
+    this.overlay.appendChild(encyclopediaBtn);
     uiOverlay.appendChild(this.overlay);
 
     // First touch anywhere on overlay initializes audio and starts title BGM
@@ -152,6 +179,7 @@ export class TitleScene implements Scene {
 
   exit(): void {
     this.tutorialOverlay.hide();
+    this.encyclopediaOverlay.hide();
     if (this.overlay) {
       this.overlay.remove();
       this.overlay = null;

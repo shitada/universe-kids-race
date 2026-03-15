@@ -3,6 +3,7 @@ import type { Scene, SceneContext, StageConfig } from '../../types';
 import type { SceneManager } from '../SceneManager';
 import type { InputSystem } from '../systems/InputSystem';
 import type { AudioManager } from '../audio/AudioManager';
+import type { SaveManager } from '../storage/SaveManager';
 import { Spaceship } from '../entities/Spaceship';
 import { Star } from '../entities/Star';
 import { Meteorite } from '../entities/Meteorite';
@@ -14,6 +15,8 @@ import { HUD } from '../../ui/HUD';
 import { getStageConfig } from '../config/StageConfig';
 import { ParticleBurstManager } from '../effects/ParticleBurst';
 import { AirShield } from '../effects/AirShield';
+import { CompanionManager } from '../entities/CompanionManager';
+import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
 
 export class StageScene implements Scene {
   private threeScene: THREE.Scene;
@@ -21,6 +24,7 @@ export class StageScene implements Scene {
   private sceneManager: SceneManager;
   private inputSystem: InputSystem;
   private audioManager: AudioManager;
+  private saveManager: SaveManager;
 
   private spaceship!: Spaceship;
   private stars: Star[] = [];
@@ -54,6 +58,9 @@ export class StageScene implements Scene {
   // Boost effects
   private boostLines: THREE.LineSegments | null = null;
 
+  // Companion manager
+  private companionManager: CompanionManager | null = null;
+
   // Sun pulse animation
   private elapsedTime = 0;
 
@@ -67,10 +74,11 @@ export class StageScene implements Scene {
   private flameEmitting = false;
   private static readonly MAX_FLAME_PARTICLES = 100;
 
-  constructor(sceneManager: SceneManager, inputSystem: InputSystem, audioManager: AudioManager) {
+  constructor(sceneManager: SceneManager, inputSystem: InputSystem, audioManager: AudioManager, saveManager: SaveManager) {
     this.sceneManager = sceneManager;
     this.inputSystem = inputSystem;
     this.audioManager = audioManager;
+    this.saveManager = saveManager;
     this.threeScene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(
       60,
@@ -143,6 +151,11 @@ export class StageScene implements Scene {
       this.sceneManager.requestTransition('title');
     });
     this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
+
+    // Companions
+    const saveData = this.saveManager.load();
+    this.companionManager = new CompanionManager(saveData.unlockedPlanets);
+    this.threeScene.add(this.companionManager.getGroup());
 
     // BGM
     this.audioManager.playBGM(this.stageNumber);
@@ -419,8 +432,17 @@ export class StageScene implements Scene {
       star.update(deltaTime);
     }
 
-    // Collision
-    const collisionResult = this.collisionSystem.check(this.spaceship, this.stars, this.meteorites);
+    // Companion orbit update
+    this.companionManager?.update(
+      deltaTime,
+      this.spaceship.position.x,
+      this.spaceship.position.y,
+      this.spaceship.position.z,
+    );
+
+    // Collision (with companion star attraction bonus)
+    const companionBonus = this.companionManager?.getStarAttractionBonus() ?? 0;
+    const collisionResult = this.collisionSystem.check(this.spaceship, this.stars, this.meteorites, companionBonus);
 
     // Star collection
     for (const star of collisionResult.starCollisions) {
@@ -712,6 +734,26 @@ export class StageScene implements Scene {
 
     this.clearOverlay.appendChild(msg);
     this.clearOverlay.appendChild(score);
+
+    // Card acquisition notification for newly unlocked planets
+    const saveData = this.saveManager.load();
+    if (!saveData.unlockedPlanets.includes(this.stageNumber)) {
+      const entry = PLANET_ENCYCLOPEDIA.find((e) => e.stageNumber === this.stageNumber);
+      if (entry) {
+        const cardMsg = document.createElement('div');
+        cardMsg.textContent = `${entry.emoji} ${entry.name}の ずかんカード ゲット！`;
+        cardMsg.style.cssText = `
+          font-family: 'Zen Maru Gothic', sans-serif;
+          font-size: 1.2rem;
+          font-weight: 700;
+          color: #FFD700;
+          margin-top: 1rem;
+          text-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
+        `;
+        this.clearOverlay.appendChild(cardMsg);
+      }
+    }
+
     uiOverlay.appendChild(this.clearOverlay);
   }
 
@@ -734,6 +776,8 @@ export class StageScene implements Scene {
     this.audioManager.stopBGM();
     this.audioManager.stopBoostSFX();
     this.removeBoostFlame();
+    this.companionManager?.dispose();
+    this.companionManager = null;
     this.airShield.dispose();
     if (this.clearOverlay) {
       this.clearOverlay.remove();

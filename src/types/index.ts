@@ -47,4 +47,17 @@ export type SFXType = 'starCollect' | 'rainbowCollect' | 'meteoriteHit' | 'boost
 // Save data
 export interface SaveData {
   clearedStage: number;
+  unlockedPlanets: number[];
+}
+
+// Planet encyclopedia
+export type CompanionShape = 'basic' | 'ringed' | 'radiant' | 'horned' | 'icy' | 'bubble';
+
+export interface PlanetEncyclopediaEntry {
+  stageNumber: number;
+  name: string;
+  emoji: string;
+  trivia: string;
+  planetColor: number;
+  companionShape: CompanionShape;
 }

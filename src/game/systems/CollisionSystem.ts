@@ -8,7 +8,7 @@ export interface CollisionResult {
 }
 
 export class CollisionSystem {
-  check(spaceship: Spaceship, stars: Star[], meteorites: Meteorite[]): CollisionResult {
+  check(spaceship: Spaceship, stars: Star[], meteorites: Meteorite[], companionBonus = 0): CollisionResult {
     const result: CollisionResult = {
       starCollisions: [],
       meteoriteCollision: false,
@@ -16,14 +16,14 @@ export class CollisionSystem {
 
     const sp = spaceship.position;
 
-    // Star collisions
+    // Star collisions (expanded by companion bonus)
     for (const star of stars) {
       if (star.isCollected) continue;
       const dx = sp.x - star.position.x;
       const dy = sp.y - star.position.y;
       const dz = sp.z - star.position.z;
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      const collisionDist = 1.0 + star.radius; // spaceship radius ~1.0
+      const collisionDist = 1.0 + star.radius + companionBonus;
       if (dist < collisionDist) {
         star.collect();
         result.starCollisions.push(star);

@@ -8,6 +8,7 @@ Auto-generated from all feature plans. Last updated: 2026-03-15
 - TypeScript 5.x (ES2020+) + Three.js, Vite (003-ipad-ux-polish)
 - localStorage (SaveManager) (003-ipad-ux-polish)
 - localStorage (SaveManager) — 本機能では変更なし (006-shield-speed-recovery)
+- localStorage (SaveManager) — SaveData インターフェース拡張 (007-encyclopedia-companions)
 
 - TypeScript 5.x (ES2022 target) + Three.js (3D描画), Vite (ビルドツール), Vitest (テスト) (001-space-travel-game)
 
@@ -27,9 +28,9 @@ npm test && npm run lint
 TypeScript 5.x (ES2022 target): Follow standard conventions
 
 ## Recent Changes
+- 007-encyclopedia-companions: Added TypeScript 5.x (ES2020+) + Three.js, Vite
 - 006-shield-speed-recovery: Added TypeScript 5.x (ES2020+) + Three.js, Vite
 - 005-solar-stages-boost-fx: Added TypeScript 5.x (ES2020+) + Three.js, Vite
-- 004-gameplay-audio-polish: Added TypeScript 5.x (ES2020+) + Three.js, Vite
 
 
 <!-- MANUAL ADDITIONS START -->
