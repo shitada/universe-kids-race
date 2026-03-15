@@ -1,50 +1,38 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# Universe Kids Race Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. 子供ファースト
+対象年齢5〜10歳。すべてのUI・ゲームデザインは子供が直感的に
+理解できることを最優先する。テキストは最小限、ひらがな・絵文字・
+アニメーションで伝える。失敗にネガティブな表現は使わない。
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. デザイン
+「のりものリズムパレード」と統一したビジュアルスタイルを基調とする。
+フォントは Zen Maru Gothic、UIは大きな角丸カードと柔らかいシャドウ。
+宇宙テーマに合わせ濃い青ベースの配色とし、カラフルな星・惑星で
+彩る。3Dモデルはカートゥーン調とする。
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. シンプル操作
+iPad タッチ操作に最適化する。操作は左右移動のみ。
+複雑なコンボ・同時押し・長押しは一切なし。
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. 3D 冒険体験
+Three.js を用いた3D描画で、宇宙の奥に向かって進む没入感を
+重視する。iPad Safari で 60fps を維持する。
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### V. 技術スタック
+- Three.js + TypeScript + Vite
+- iPad Safari を唯一のターゲットとする
+- 外部ライブラリは Three.js 以外は原則追加しない
+- YAGNI 原則を徹底する
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
-
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
-
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
-
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+### VI. 開発ワークフロー
+TDD で開発する。各ゲーム機能は独立したモジュールとして作る。
+コードはシンプルで読みやすく保つ。
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
+この Constitution はプロジェクトの最上位ルールとする。
+原則の変更は変更理由と影響範囲を明記した上で行う。
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
-
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.0.0 | **Ratified**: 2026-03-15 | **Last Amended**: 2026-03-15
