@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Scene, SceneContext, StageConfig } from '../../types';
 import type { SceneManager } from '../SceneManager';
 import type { InputSystem } from '../systems/InputSystem';
+import type { AudioManager } from '../audio/AudioManager';
 import { Spaceship } from '../entities/Spaceship';
 import { Star } from '../entities/Star';
 import { Meteorite } from '../entities/Meteorite';
@@ -11,12 +12,14 @@ import { SpawnSystem } from '../systems/SpawnSystem';
 import { BoostSystem } from '../systems/BoostSystem';
 import { HUD } from '../../ui/HUD';
 import { getStageConfig } from '../config/StageConfig';
+import { ParticleBurstManager } from '../effects/ParticleBurst';
 
 export class StageScene implements Scene {
   private threeScene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private sceneManager: SceneManager;
   private inputSystem: InputSystem;
+  private audioManager: AudioManager;
 
   private spaceship!: Spaceship;
   private stars: Star[] = [];
@@ -27,6 +30,7 @@ export class StageScene implements Scene {
   private spawnSystem = new SpawnSystem();
   private boostSystem = new BoostSystem();
   private hud: HUD;
+  private particleBurstManager = new ParticleBurstManager();
 
   private stageConfig!: StageConfig;
   private stageNumber = 1;
@@ -48,9 +52,10 @@ export class StageScene implements Scene {
   // Boost effects
   private boostLines: THREE.LineSegments | null = null;
 
-  constructor(sceneManager: SceneManager, inputSystem: InputSystem) {
+  constructor(sceneManager: SceneManager, inputSystem: InputSystem, audioManager: AudioManager) {
     this.sceneManager = sceneManager;
     this.inputSystem = inputSystem;
+    this.audioManager = audioManager;
     this.threeScene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(
       60,
@@ -109,11 +114,15 @@ export class StageScene implements Scene {
     this.scoreSystem.resetStage();
 
     // HUD
-    this.hud.show();
+    const stageName = `${this.stageConfig.emoji} ${this.stageConfig.displayName}`;
+    this.hud.show(stageName);
     this.hud.setBoostCallback(() => {
       this.inputSystem.setBoostPressed(true);
     });
     this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
+
+    // BGM
+    this.audioManager.playBGM(this.stageNumber);
   }
 
   private createBackground(): void {
@@ -134,40 +143,27 @@ export class StageScene implements Scene {
     this.destinationPlanet = new THREE.Group();
     const goalZ = -(this.stageConfig.stageLength + 50);
 
-    switch (this.stageNumber) {
-      case 1: {
-        // Moon - gray/white
-        const moonGeo = new THREE.SphereGeometry(15, 24, 24);
-        const moonMat = new THREE.MeshToonMaterial({ color: 0xcccccc });
-        const moon = new THREE.Mesh(moonGeo, moonMat);
-        this.destinationPlanet.add(moon);
-        break;
-      }
-      case 2: {
-        // Mars - red
-        const marsGeo = new THREE.SphereGeometry(15, 24, 24);
-        const marsMat = new THREE.MeshToonMaterial({ color: 0xcc4422 });
-        const mars = new THREE.Mesh(marsGeo, marsMat);
-        this.destinationPlanet.add(mars);
-        break;
-      }
-      case 3: {
-        // Saturn - yellow + ring
-        const saturnGeo = new THREE.SphereGeometry(15, 24, 24);
-        const saturnMat = new THREE.MeshToonMaterial({ color: 0xddaa44 });
-        const saturn = new THREE.Mesh(saturnGeo, saturnMat);
-        this.destinationPlanet.add(saturn);
+    // All planets use planetColor from config
+    const sphereGeo = new THREE.SphereGeometry(15, 24, 24);
+    const sphereMat = new THREE.MeshToonMaterial({ color: this.stageConfig.planetColor });
+    const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+    this.destinationPlanet.add(sphere);
 
-        const ringGeo = new THREE.RingGeometry(20, 30, 48);
-        const ringMat = new THREE.MeshToonMaterial({
-          color: 0xeebb66,
-          side: THREE.DoubleSide,
-        });
-        const ring = new THREE.Mesh(ringGeo, ringMat);
-        ring.rotation.x = Math.PI / 3;
-        this.destinationPlanet.add(ring);
-        break;
-      }
+    // Special cases
+    if (this.stageNumber === 4) {
+      // Saturn — add ring
+      const ringGeo = new THREE.RingGeometry(20, 30, 48);
+      const ringMat = new THREE.MeshToonMaterial({
+        color: 0xeebb66,
+        side: THREE.DoubleSide,
+      });
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.rotation.x = Math.PI / 3;
+      this.destinationPlanet.add(ring);
+    } else if (this.stageNumber === 8) {
+      // Sun — add glow PointLight
+      const sunLight = new THREE.PointLight(0xffcc00, 2, 200);
+      this.destinationPlanet.add(sunLight);
     }
 
     this.destinationPlanet.position.set(0, 0, goalZ);
@@ -189,6 +185,7 @@ export class StageScene implements Scene {
     if (input.boostPressed) {
       this.boostSystem.activate();
       this.inputSystem.setBoostPressed(false);
+      this.audioManager.playSFX('boost');
     }
     this.boostSystem.update(deltaTime);
 
@@ -229,6 +226,23 @@ export class StageScene implements Scene {
     // Star collection
     for (const star of collisionResult.starCollisions) {
       this.scoreSystem.addStarScore(star.starType);
+      if (star.starType === 'RAINBOW') {
+        this.audioManager.playSFX('rainbowCollect');
+        this.particleBurstManager.emit(this.threeScene, {
+          position: new THREE.Vector3(star.position.x, star.position.y, star.position.z),
+          color: 0xffdd00,
+          particleCount: 50,
+          isRainbow: true,
+        });
+      } else {
+        this.audioManager.playSFX('starCollect');
+        this.particleBurstManager.emit(this.threeScene, {
+          position: new THREE.Vector3(star.position.x, star.position.y, star.position.z),
+          color: 0xffdd00,
+          particleCount: 20,
+          isRainbow: false,
+        });
+      }
     }
 
     // Meteorite hit
@@ -236,6 +250,7 @@ export class StageScene implements Scene {
       this.spaceship.onMeteoriteHit();
       this.boostSystem.cancel();
       this.damageTimer = StageScene.DAMAGE_FLASH_DURATION;
+      this.audioManager.playSFX('meteoriteHit');
     }
 
     // Damage animation
@@ -268,6 +283,10 @@ export class StageScene implements Scene {
 
     // Boost visual effects
     this.updateBoostEffects();
+
+    // Particle effects
+    this.particleBurstManager.update(deltaTime);
+    this.particleBurstManager.cleanup(this.threeScene);
 
     // HUD update
     this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
@@ -323,6 +342,7 @@ export class StageScene implements Scene {
   private onStageClear(): void {
     this.isCleared = true;
     this.clearTimer = 0;
+    this.audioManager.playSFX('stageClear');
     this.showClearMessage();
   }
 
@@ -369,7 +389,7 @@ export class StageScene implements Scene {
   private handleStageComplete(): void {
     const { totalScore, totalStarCount } = this.scoreSystem.finalizeStage();
 
-    if (this.stageNumber >= 3) {
+    if (this.stageNumber >= 8) {
       this.sceneManager.requestTransition('ending', { totalScore, totalStarCount });
     } else {
       this.sceneManager.requestTransition('stage', {
@@ -382,11 +402,13 @@ export class StageScene implements Scene {
 
   exit(): void {
     this.hud.hide();
+    this.audioManager.stopBGM();
     if (this.clearOverlay) {
       this.clearOverlay.remove();
       this.clearOverlay = null;
     }
     // Cleanup Three.js objects
+    this.particleBurstManager.clear(this.threeScene);
     this.threeScene.clear();
     this.stars = [];
     this.meteorites = [];

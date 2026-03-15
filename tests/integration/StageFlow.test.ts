@@ -16,7 +16,7 @@ function createTrackingScene(transitionLog: { type: SceneType; context: SceneCon
 }
 
 describe('Stage Flow Integration', () => {
-  it('follows full flow: title → stage1 → stage2 → stage3 → ending → title', () => {
+  it('follows full flow: title → stage1 through stage8 → ending → title', () => {
     const log: { type: SceneType; context: SceneContext }[] = [];
     const manager = new SceneManager();
 
@@ -43,15 +43,35 @@ describe('Stage Flow Integration', () => {
     manager.transitionTo('stage', { stageNumber: 3, totalScore: 1200, totalStarCount: 12 });
     expect(log[3].context.stageNumber).toBe(3);
 
-    // Stage 3 → Ending
-    manager.transitionTo('ending', { totalScore: 2000, totalStarCount: 20 });
-    expect(log[4].type).toBe('ending');
-    expect(log[4].context.totalScore).toBe(2000);
-    expect(log[4].context.totalStarCount).toBe(20);
+    // Stage 3 → Stage 4
+    manager.transitionTo('stage', { stageNumber: 4, totalScore: 2000, totalStarCount: 18 });
+    expect(log[4].context.stageNumber).toBe(4);
+
+    // Stage 4 → Stage 5
+    manager.transitionTo('stage', { stageNumber: 5, totalScore: 2800, totalStarCount: 24 });
+    expect(log[5].context.stageNumber).toBe(5);
+
+    // Stage 5 → Stage 6
+    manager.transitionTo('stage', { stageNumber: 6, totalScore: 3600, totalStarCount: 31 });
+    expect(log[6].context.stageNumber).toBe(6);
+
+    // Stage 6 → Stage 7
+    manager.transitionTo('stage', { stageNumber: 7, totalScore: 4500, totalStarCount: 39 });
+    expect(log[7].context.stageNumber).toBe(7);
+
+    // Stage 7 → Stage 8
+    manager.transitionTo('stage', { stageNumber: 8, totalScore: 5500, totalStarCount: 48 });
+    expect(log[8].context.stageNumber).toBe(8);
+
+    // Stage 8 → Ending
+    manager.transitionTo('ending', { totalScore: 7000, totalStarCount: 58 });
+    expect(log[9].type).toBe('ending');
+    expect(log[9].context.totalScore).toBe(7000);
+    expect(log[9].context.totalStarCount).toBe(58);
 
     // Ending → Title (restart)
     manager.transitionTo('title');
-    expect(log[5].type).toBe('title');
+    expect(log[10].type).toBe('title');
   });
 
   it('tracks current scene type correctly', () => {

@@ -6,6 +6,7 @@ import { TitleScene } from './game/scenes/TitleScene';
 import { StageScene } from './game/scenes/StageScene';
 import { EndingScene } from './game/scenes/EndingScene';
 import { SaveManager } from './game/storage/SaveManager';
+import { AudioManager } from './game/audio/AudioManager';
 import type { SceneType, SceneContext } from './types';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
@@ -21,10 +22,11 @@ inputSystem.setup(canvas);
 const sceneManager = new SceneManager();
 const gameLoop = new GameLoop();
 const saveManager = new SaveManager();
+const audioManager = new AudioManager();
 
-const titleScene = new TitleScene(sceneManager, saveManager);
-const stageScene = new StageScene(sceneManager, inputSystem);
-const endingScene = new EndingScene(sceneManager, saveManager);
+const titleScene = new TitleScene(sceneManager, saveManager, audioManager);
+const stageScene = new StageScene(sceneManager, inputSystem, audioManager);
+const endingScene = new EndingScene(sceneManager, saveManager, audioManager);
 
 sceneManager.registerScene('title', titleScene);
 sceneManager.registerScene('stage', stageScene);
@@ -35,7 +37,7 @@ sceneManager.setTransitionHandler((sceneType: SceneType, context?: SceneContext)
   if (sceneType === 'stage' && context?.stageNumber && context.stageNumber > 1) {
     saveManager.save({ clearedStage: context.stageNumber - 1 });
   } else if (sceneType === 'ending') {
-    saveManager.save({ clearedStage: 3 });
+    saveManager.save({ clearedStage: 8 });
   }
   sceneManager.transitionTo(sceneType, context);
 });

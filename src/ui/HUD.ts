@@ -1,13 +1,30 @@
 export class HUD {
   private container: HTMLDivElement | null = null;
+  private stageNameEl: HTMLDivElement | null = null;
   private scoreEl: HTMLSpanElement | null = null;
   private starCountEl: HTMLSpanElement | null = null;
   private boostButton: HTMLButtonElement | null = null;
   private onBoostCallback: (() => void) | null = null;
 
-  show(): void {
+  show(stageName?: string): void {
     const hudRoot = document.getElementById('hud');
     if (!hudRoot) return;
+
+    // Stage name display
+    if (stageName) {
+      this.stageNameEl = document.createElement('div');
+      this.stageNameEl.textContent = stageName;
+      this.stageNameEl.style.cssText = `
+        text-align: center;
+        font-family: 'Zen Maru Gothic', sans-serif;
+        color: #FFD700;
+        font-size: 1.2rem;
+        font-weight: 700;
+        padding: 0.5rem;
+        pointer-events: none;
+      `;
+      hudRoot.appendChild(this.stageNameEl);
+    }
 
     this.container = document.createElement('div');
     this.container.style.cssText = `
@@ -83,6 +100,10 @@ export class HUD {
   }
 
   hide(): void {
+    if (this.stageNameEl) {
+      this.stageNameEl.remove();
+      this.stageNameEl = null;
+    }
     if (this.container) {
       this.container.remove();
       this.container = null;

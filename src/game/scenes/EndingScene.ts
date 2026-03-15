@@ -2,18 +2,21 @@ import * as THREE from 'three';
 import type { Scene, SceneContext } from '../../types';
 import type { SceneManager } from '../SceneManager';
 import type { SaveManager } from '../storage/SaveManager';
+import type { AudioManager } from '../audio/AudioManager';
 
 export class EndingScene implements Scene {
   private threeScene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private sceneManager: SceneManager;
   private saveManager: SaveManager;
+  private audioManager: AudioManager;
   private overlay: HTMLDivElement | null = null;
   private bgStars: THREE.Points | null = null;
 
-  constructor(sceneManager: SceneManager, saveManager: SaveManager) {
+  constructor(sceneManager: SceneManager, saveManager: SaveManager, audioManager: AudioManager) {
     this.sceneManager = sceneManager;
     this.saveManager = saveManager;
+    this.audioManager = audioManager;
     this.threeScene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(
       60,
@@ -45,6 +48,9 @@ export class EndingScene implements Scene {
 
     // Reset save data
     this.saveManager.clear();
+
+    // Ending BGM
+    this.audioManager.playBGM(-1);
 
     this.createOverlay(totalScore, totalStarCount);
   }
@@ -130,6 +136,7 @@ export class EndingScene implements Scene {
   }
 
   exit(): void {
+    this.audioManager.stopBGM();
     if (this.overlay) {
       this.overlay.remove();
       this.overlay = null;

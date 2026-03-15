@@ -36,7 +36,13 @@ export interface StageConfig {
   stageLength: number;
   meteoriteInterval: number;
   starDensity: number;
+  emoji: string;
+  displayName: string;
+  planetColor: number;
 }
+
+// Sound effects
+export type SFXType = 'starCollect' | 'rainbowCollect' | 'meteoriteHit' | 'boost' | 'stageClear';
 
 // Save data
 export interface SaveData {

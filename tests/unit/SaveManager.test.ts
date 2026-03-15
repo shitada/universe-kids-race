@@ -47,9 +47,23 @@ describe('SaveManager', () => {
     expect(data.clearedStage).toBe(0);
   });
 
+  it('accepts clearedStage up to 8', () => {
+    const manager = new SaveManager();
+    manager.save({ clearedStage: 8 });
+    const data = manager.load();
+    expect(data.clearedStage).toBe(8);
+  });
+
+  it('rejects clearedStage greater than 8', () => {
+    storage.set('universe-kids-race-save', JSON.stringify({ clearedStage: 9 }));
+    const manager = new SaveManager();
+    const data = manager.load();
+    expect(data.clearedStage).toBe(0);
+  });
+
   it('clear removes saved data', () => {
     const manager = new SaveManager();
-    manager.save({ clearedStage: 3 });
+    manager.save({ clearedStage: 8 });
     manager.clear();
     const data = manager.load();
     expect(data.clearedStage).toBe(0);

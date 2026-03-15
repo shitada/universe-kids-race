@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Scene, SceneContext } from '../../types';
 import type { SceneManager } from '../SceneManager';
 import type { SaveManager } from '../storage/SaveManager';
-import { AudioManager } from '../audio/AudioManager';
+import type { AudioManager } from '../audio/AudioManager';
 
 export class TitleScene implements Scene {
   private threeScene: THREE.Scene;
@@ -13,10 +13,10 @@ export class TitleScene implements Scene {
   private stars: THREE.Points | null = null;
   private overlay: HTMLDivElement | null = null;
 
-  constructor(sceneManager: SceneManager, saveManager: SaveManager) {
+  constructor(sceneManager: SceneManager, saveManager: SaveManager, audioManager: AudioManager) {
     this.sceneManager = sceneManager;
     this.saveManager = saveManager;
-    this.audioManager = new AudioManager();
+    this.audioManager = audioManager;
     this.threeScene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(
       60,
@@ -97,9 +97,11 @@ export class TitleScene implements Scene {
     button.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
       // Initialize AudioContext on user gesture (iPad Safari requirement)
-      this.audioManager.init(this.camera).catch(() => {});
+      this.audioManager.init().then(() => {
+        this.audioManager.playBGM(0);
+      }).catch(() => {});
       const saveData = this.saveManager.load();
-      const startStage = Math.min(saveData.clearedStage + 1, 3);
+      const startStage = Math.min(saveData.clearedStage + 1, 8);
       this.sceneManager.requestTransition('stage', { stageNumber: startStage });
     });
 

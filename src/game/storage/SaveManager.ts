@@ -9,7 +9,7 @@ export class SaveManager {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return { ...DEFAULT_DATA };
       const data = JSON.parse(raw) as SaveData;
-      if (typeof data.clearedStage !== 'number' || data.clearedStage < 0 || data.clearedStage > 3) {
+      if (typeof data.clearedStage !== 'number' || data.clearedStage < 0 || data.clearedStage > 8) {
         return { ...DEFAULT_DATA };
       }
       return data;
