@@ -13,6 +13,26 @@ export const STAGE_CONFIGS: StageConfig[] = [
   },
   {
     stageNumber: 2,
+    destination: '水星',
+    stageLength: 1100,
+    meteoriteInterval: 2.8,
+    starDensity: 5,
+    emoji: '⚫',
+    displayName: '水星をめざせ！',
+    planetColor: 0x888888,
+  },
+  {
+    stageNumber: 3,
+    destination: '金星',
+    stageLength: 1150,
+    meteoriteInterval: 2.6,
+    starDensity: 5,
+    emoji: '🟡',
+    displayName: '金星をめざせ！',
+    planetColor: 0xddaa44,
+  },
+  {
+    stageNumber: 4,
     destination: '火星',
     stageLength: 1200,
     meteoriteInterval: 2.5,
@@ -22,7 +42,7 @@ export const STAGE_CONFIGS: StageConfig[] = [
     planetColor: 0xcc4422,
   },
   {
-    stageNumber: 3,
+    stageNumber: 5,
     destination: '木星',
     stageLength: 1400,
     meteoriteInterval: 2.0,
@@ -32,7 +52,7 @@ export const STAGE_CONFIGS: StageConfig[] = [
     planetColor: 0xdd8844,
   },
   {
-    stageNumber: 4,
+    stageNumber: 6,
     destination: '土星',
     stageLength: 1600,
     meteoriteInterval: 1.7,
@@ -42,7 +62,7 @@ export const STAGE_CONFIGS: StageConfig[] = [
     planetColor: 0xddaa44,
   },
   {
-    stageNumber: 5,
+    stageNumber: 7,
     destination: '天王星',
     stageLength: 1800,
     meteoriteInterval: 1.4,
@@ -52,7 +72,7 @@ export const STAGE_CONFIGS: StageConfig[] = [
     planetColor: 0x66ccdd,
   },
   {
-    stageNumber: 6,
+    stageNumber: 8,
     destination: '海王星',
     stageLength: 2000,
     meteoriteInterval: 1.1,
@@ -62,7 +82,7 @@ export const STAGE_CONFIGS: StageConfig[] = [
     planetColor: 0x2244cc,
   },
   {
-    stageNumber: 7,
+    stageNumber: 9,
     destination: '冥王星',
     stageLength: 2200,
     meteoriteInterval: 0.8,
@@ -72,7 +92,7 @@ export const STAGE_CONFIGS: StageConfig[] = [
     planetColor: 0xbbaaaa,
   },
   {
-    stageNumber: 8,
+    stageNumber: 10,
     destination: '太陽',
     stageLength: 2500,
     meteoriteInterval: 0.6,
@@ -80,6 +100,16 @@ export const STAGE_CONFIGS: StageConfig[] = [
     emoji: '☀️',
     displayName: '太陽をめざせ！',
     planetColor: 0xffcc00,
+  },
+  {
+    stageNumber: 11,
+    destination: '地球',
+    stageLength: 2700,
+    meteoriteInterval: 0.5,
+    starDensity: 10,
+    emoji: '🌍',
+    displayName: '地球をめざせ！',
+    planetColor: 0x2266aa,
   },
 ];
 

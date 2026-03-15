@@ -17,13 +17,41 @@ class MockOscillatorNode {
   onended: (() => void) | null = null;
 }
 
+class MockAudioBuffer {
+  numberOfChannels = 1;
+  length = 44100;
+  sampleRate = 44100;
+  private data = new Float32Array(44100);
+  getChannelData = vi.fn().mockReturnValue(this.data);
+}
+
+class MockAudioBufferSourceNode {
+  buffer: any = null;
+  loop = false;
+  connect = vi.fn().mockReturnThis();
+  disconnect = vi.fn();
+  start = vi.fn();
+  stop = vi.fn();
+}
+
+class MockBiquadFilterNode {
+  type: BiquadFilterType = 'lowpass';
+  frequency = { value: 350 };
+  connect = vi.fn().mockReturnThis();
+  disconnect = vi.fn();
+}
+
 class MockAudioContext {
   state: AudioContextState = 'suspended';
   currentTime = 0;
+  sampleRate = 44100;
   resume = vi.fn().mockImplementation(async () => { this.state = 'running'; });
   close = vi.fn().mockImplementation(async () => { this.state = 'closed'; });
   createOscillator = vi.fn(() => new MockOscillatorNode());
   createGain = vi.fn(() => new MockGainNode());
+  createBufferSource = vi.fn(() => new MockAudioBufferSourceNode());
+  createBiquadFilter = vi.fn(() => new MockBiquadFilterNode());
+  createBuffer = vi.fn(() => new MockAudioBuffer());
   destination = {};
 }
 
@@ -245,32 +273,52 @@ describe('AudioManager', () => {
   });
 
   describe('BGM_CONFIGS validation (T010)', () => {
-    it('stages 1-8 all have unique tempos', () => {
+    it('has configs for all 11 stages plus title and ending', () => {
+      for (let stage = 0; stage <= 11; stage++) {
+        expect(BGM_CONFIGS[stage]).toBeDefined();
+      }
+      expect(BGM_CONFIGS[-1]).toBeDefined();
+    });
+
+    it('stages 1-11 all have unique tempos', () => {
       const tempos = new Set<number>();
-      for (let stage = 1; stage <= 8; stage++) {
+      for (let stage = 1; stage <= 11; stage++) {
         expect(BGM_CONFIGS[stage]).toBeDefined();
         tempos.add(BGM_CONFIGS[stage].tempo);
       }
-      expect(tempos.size).toBe(8);
+      expect(tempos.size).toBe(11);
     });
 
-    it('stages 1-8 all have unique tempo+key combinations', () => {
+    it('stages 1-11 all have unique tempo+key combinations', () => {
       const signatures = new Set<string>();
-      for (let stage = 1; stage <= 8; stage++) {
+      for (let stage = 1; stage <= 11; stage++) {
         const config = BGM_CONFIGS[stage];
         signatures.add(`${config.tempo}-${JSON.stringify(config.chords[0])}`);
       }
-      expect(signatures.size).toBe(8);
+      expect(signatures.size).toBe(11);
     });
 
     it('all configs have 8 chords, 8 bassNotes, and 8 melodyNotes', () => {
-      for (const key of [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8]) {
+      for (const key of [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) {
         const config = BGM_CONFIGS[key];
         expect(config).toBeDefined();
         expect(config.chords).toHaveLength(8);
         expect(config.bassNotes).toHaveLength(8);
         expect(config.melodyNotes).toHaveLength(8);
       }
+    });
+
+    it('new BGM definitions: 水星(2, Dm, 112BPM), 金星(3, Eb, 115BPM), 地球(11, C, 145BPM)', () => {
+      expect(BGM_CONFIGS[2].tempo).toBe(112);
+      expect(BGM_CONFIGS[3].tempo).toBe(115);
+      expect(BGM_CONFIGS[11].tempo).toBe(145);
+      // 地球 uses square wave melody
+      expect(BGM_CONFIGS[11].waveforms.melody).toBe('square');
+    });
+
+    it('remapped BGM: old stage 2 (火星) is now stage 4', () => {
+      // Old stage 2 (Mars) had tempo 118
+      expect(BGM_CONFIGS[4].tempo).toBe(118);
     });
   });
 
@@ -330,6 +378,127 @@ describe('AudioManager', () => {
       // Should use title config (stage 0), bass = 110 Hz
       const firstOsc = ctx.createOscillator.mock.results[0].value;
       expect(firstOsc.frequency.value).toBe(110);
+      am.dispose();
+    });
+  });
+
+  describe('startBoostSFX() (T016)', () => {
+    it('creates AudioBufferSourceNode with loop=true, lowpass filter 800Hz, gain 0.15', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      const ctx = (am as any).ctx;
+
+      am.startBoostSFX();
+
+      expect(ctx.createBuffer).toHaveBeenCalledWith(1, 44100, 44100);
+      expect(ctx.createBufferSource).toHaveBeenCalled();
+      expect(ctx.createBiquadFilter).toHaveBeenCalled();
+
+      const source = ctx.createBufferSource.mock.results[0].value;
+      expect(source.loop).toBe(true);
+      expect(source.buffer).not.toBeNull();
+      expect(source.start).toHaveBeenCalled();
+
+      const filter = ctx.createBiquadFilter.mock.results[0].value;
+      expect(filter.type).toBe('lowpass');
+      expect(filter.frequency.value).toBe(800);
+
+      const gain = ctx.createGain.mock.results[0].value;
+      expect(gain.gain.value).toBe(0.15);
+
+      am.dispose();
+    });
+
+    it('is no-op when not initialized', () => {
+      const am = new AudioManager();
+      am.startBoostSFX(); // Should not throw
+    });
+
+    it('is no-op when already playing (idempotent)', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      const ctx = (am as any).ctx;
+
+      am.startBoostSFX();
+      am.startBoostSFX(); // Second call is no-op
+
+      expect(ctx.createBufferSource).toHaveBeenCalledTimes(1);
+      am.dispose();
+    });
+
+    it('stores node references in private fields', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+
+      am.startBoostSFX();
+
+      expect((am as any).boostNoiseSource).not.toBeNull();
+      expect((am as any).boostNoiseGain).not.toBeNull();
+      expect((am as any).boostNoiseFilter).not.toBeNull();
+      am.dispose();
+    });
+  });
+
+  describe('stopBoostSFX() (T016)', () => {
+    it('fades out gain and cleans up nodes after 300ms', () => {
+      vi.useFakeTimers();
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+
+      am.startBoostSFX();
+      const gain = (am as any).boostNoiseGain;
+      const source = (am as any).boostNoiseSource;
+
+      am.stopBoostSFX();
+
+      expect(gain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(0, expect.any(Number));
+
+      // Nodes nulled immediately
+      expect((am as any).boostNoiseSource).toBeNull();
+      expect((am as any).boostNoiseGain).toBeNull();
+      expect((am as any).boostNoiseFilter).toBeNull();
+
+      // After 300ms, actual stop/disconnect happens
+      vi.advanceTimersByTime(300);
+      expect(source.stop).toHaveBeenCalled();
+      expect(source.disconnect).toHaveBeenCalled();
+
+      vi.useRealTimers();
+      am.dispose();
+    });
+
+    it('is no-op when not playing', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      am.stopBoostSFX(); // Should not throw
+      am.dispose();
+    });
+  });
+
+  describe('playSFX("boostReady") (T021)', () => {
+    it('creates sine oscillator sweeping 880→1760Hz, duration 0.2s, gain 0.15', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      const ctx = (am as any).ctx;
+
+      am.playSFX('boostReady');
+
+      const osc = ctx.createOscillator.mock.results[0].value;
+      expect(osc.type).toBe('sine');
+      expect(osc.frequency.setValueAtTime).toHaveBeenCalledWith(880, expect.any(Number));
+      expect(osc.frequency.exponentialRampToValueAtTime).toHaveBeenCalledWith(1760, expect.any(Number));
+
+      const gain = ctx.createGain.mock.results[0].value;
+      expect(gain.gain.setValueAtTime).toHaveBeenCalledWith(0.15, expect.any(Number));
+
+      expect(osc.start).toHaveBeenCalled();
+      expect(osc.stop).toHaveBeenCalled();
       am.dispose();
     });
   });

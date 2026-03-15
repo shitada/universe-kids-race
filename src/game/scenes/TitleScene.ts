@@ -102,7 +102,7 @@ export class TitleScene implements Scene {
       this.audioManager.initSync();
       this.audioManager.playBGM(0);
       const saveData = this.saveManager.load();
-      const startStage = Math.min(saveData.clearedStage + 1, 8);
+      const startStage = Math.min(saveData.clearedStage + 1, 11);
       this.sceneManager.requestTransition('stage', { stageNumber: startStage });
     });
 
@@ -135,6 +135,12 @@ export class TitleScene implements Scene {
     this.overlay.appendChild(button);
     this.overlay.appendChild(tutorialBtn);
     uiOverlay.appendChild(this.overlay);
+
+    // First touch anywhere on overlay initializes audio and starts title BGM
+    this.overlay.addEventListener('pointerdown', () => {
+      this.audioManager.initSync();
+      this.audioManager.playBGM(0);
+    }, { once: true });
   }
 
   update(deltaTime: number): void {

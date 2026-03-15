@@ -52,6 +52,19 @@ export class StageScene implements Scene {
   // Boost effects
   private boostLines: THREE.LineSegments | null = null;
 
+  // Sun pulse animation
+  private elapsedTime = 0;
+
+  // Boost flame particles
+  private boostFlame: THREE.Points | null = null;
+  private flamePositions: Float32Array | null = null;
+  private flameColors: Float32Array | null = null;
+  private flameLifetimes: Float32Array | null = null;
+  private flameVelocities: Float32Array | null = null;
+  private flameIndex = 0;
+  private flameEmitting = false;
+  private static readonly MAX_FLAME_PARTICLES = 100;
+
   constructor(sceneManager: SceneManager, inputSystem: InputSystem, audioManager: AudioManager) {
     this.sceneManager = sceneManager;
     this.inputSystem = inputSystem;
@@ -72,6 +85,7 @@ export class StageScene implements Scene {
     this.isCleared = false;
     this.clearTimer = 0;
     this.damageTimer = 0;
+    this.elapsedTime = 0;
 
     // Restore total scores if passed
     if (context.totalScore !== undefined) {
@@ -146,27 +160,185 @@ export class StageScene implements Scene {
     this.destinationPlanet = new THREE.Group();
     const goalZ = -(this.stageConfig.stageLength + 50);
 
-    // All planets use planetColor from config
-    const sphereGeo = new THREE.SphereGeometry(15, 24, 24);
-    const sphereMat = new THREE.MeshToonMaterial({ color: this.stageConfig.planetColor });
-    const sphere = new THREE.Mesh(sphereGeo, sphereMat);
-    this.destinationPlanet.add(sphere);
+    switch (this.stageNumber) {
+      case 2: {
+        // Mercury — small gray sphere with crater canvas texture
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#888888';
+        ctx.fillRect(0, 0, 256, 256);
+        for (let i = 0; i < 30; i++) {
+          const x = Math.random() * 256;
+          const y = Math.random() * 256;
+          const r = 3 + Math.random() * 12;
+          ctx.beginPath();
+          ctx.arc(x, y, r, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(60,60,60,${0.3 + Math.random() * 0.4})`;
+          ctx.fill();
+        }
+        const tex = new THREE.CanvasTexture(canvas);
+        const geo = new THREE.SphereGeometry(10, 24, 24);
+        const mat = new THREE.MeshToonMaterial({ map: tex });
+        this.destinationPlanet.add(new THREE.Mesh(geo, mat));
+        break;
+      }
+      case 3: {
+        // Venus — yellow-orange sphere with swirl canvas texture
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#ddaa44';
+        ctx.fillRect(0, 0, 256, 256);
+        for (let i = 0; i < 8; i++) {
+          ctx.beginPath();
+          const cx = 128 + (Math.random() - 0.5) * 100;
+          const cy = 128 + (Math.random() - 0.5) * 100;
+          ctx.strokeStyle = `rgba(200,150,60,${0.3 + Math.random() * 0.3})`;
+          ctx.lineWidth = 3 + Math.random() * 5;
+          for (let a = 0; a < Math.PI * 4; a += 0.1) {
+            const r = 10 + a * 8;
+            ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+          }
+          ctx.stroke();
+        }
+        const tex = new THREE.CanvasTexture(canvas);
+        const geo = new THREE.SphereGeometry(14, 24, 24);
+        const mat = new THREE.MeshToonMaterial({ map: tex });
+        this.destinationPlanet.add(new THREE.Mesh(geo, mat));
+        break;
+      }
+      case 5: {
+        // Jupiter — large sphere with horizontal stripe bands canvas texture
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d')!;
+        const colors = ['#cc7733', '#dd9955', '#bb6622', '#eebb77', '#aa5511', '#ddaa66'];
+        for (let y = 0; y < 256; y++) {
+          const bandIdx = Math.floor(y / (256 / colors.length)) % colors.length;
+          ctx.fillStyle = colors[bandIdx];
+          ctx.fillRect(0, y, 256, 1);
+        }
+        const tex = new THREE.CanvasTexture(canvas);
+        const geo = new THREE.SphereGeometry(20, 24, 24);
+        const mat = new THREE.MeshToonMaterial({ map: tex });
+        this.destinationPlanet.add(new THREE.Mesh(geo, mat));
+        break;
+      }
+      case 6: {
+        // Saturn — sphere with tilted ring
+        const sphereGeo = new THREE.SphereGeometry(15, 24, 24);
+        const sphereMat = new THREE.MeshToonMaterial({ color: this.stageConfig.planetColor });
+        this.destinationPlanet.add(new THREE.Mesh(sphereGeo, sphereMat));
+        const ringGeo = new THREE.RingGeometry(20, 30, 48);
+        const ringMat = new THREE.MeshToonMaterial({ color: 0xeebb66, side: THREE.DoubleSide });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.rotation.x = Math.PI / 3;
+        this.destinationPlanet.add(ring);
+        break;
+      }
+      case 7: {
+        // Uranus — cyan sphere with sideways ring (rotation.z = PI/2)
+        const sphereGeo = new THREE.SphereGeometry(16, 24, 24);
+        const sphereMat = new THREE.MeshToonMaterial({ color: 0x66ccdd });
+        this.destinationPlanet.add(new THREE.Mesh(sphereGeo, sphereMat));
+        const ringGeo = new THREE.RingGeometry(21, 28, 48);
+        const ringMat = new THREE.MeshToonMaterial({ color: 0x99ddee, side: THREE.DoubleSide });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.rotation.z = Math.PI / 2;
+        this.destinationPlanet.add(ring);
+        break;
+      }
+      case 9: {
+        // Pluto — small sphere
+        const geo = new THREE.SphereGeometry(8, 24, 24);
+        const mat = new THREE.MeshToonMaterial({ color: 0xbbaaaa });
+        this.destinationPlanet.add(new THREE.Mesh(geo, mat));
+        break;
+      }
+      case 10: {
+        // Sun — gold sphere with emissive, PointLight, pulse animation in update()
+        const geo = new THREE.SphereGeometry(25, 24, 24);
+        const mat = new THREE.MeshToonMaterial({ color: 0xffcc00, emissive: 0xffaa00, emissiveIntensity: 0.5 });
+        this.destinationPlanet.add(new THREE.Mesh(geo, mat));
+        const sunLight = new THREE.PointLight(0xffcc00, 2, 200);
+        this.destinationPlanet.add(sunLight);
+        break;
+      }
+      case 11: {
+        // Earth — blue ocean + brown continents canvas texture + cloud layer
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d')!;
+        // Blue ocean
+        ctx.fillStyle = '#2266aa';
+        ctx.fillRect(0, 0, 512, 256);
+        // Brown continents (simplified shapes)
+        ctx.fillStyle = '#886644';
+        // Eurasia-like landmass
+        ctx.beginPath();
+        ctx.ellipse(300, 80, 80, 40, 0.2, 0, Math.PI * 2);
+        ctx.fill();
+        // Africa-like landmass
+        ctx.beginPath();
+        ctx.ellipse(280, 150, 30, 50, 0.1, 0, Math.PI * 2);
+        ctx.fill();
+        // Americas-like landmass
+        ctx.beginPath();
+        ctx.ellipse(100, 90, 25, 60, 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(110, 170, 20, 40, -0.2, 0, Math.PI * 2);
+        ctx.fill();
+        // Australia-like
+        ctx.beginPath();
+        ctx.ellipse(420, 170, 25, 15, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Green patches on continents
+        ctx.fillStyle = '#447733';
+        ctx.beginPath();
+        ctx.ellipse(290, 75, 40, 20, 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(95, 85, 15, 30, 0.2, 0, Math.PI * 2);
+        ctx.fill();
 
-    // Special cases
-    if (this.stageNumber === 4) {
-      // Saturn — add ring
-      const ringGeo = new THREE.RingGeometry(20, 30, 48);
-      const ringMat = new THREE.MeshToonMaterial({
-        color: 0xeebb66,
-        side: THREE.DoubleSide,
-      });
-      const ring = new THREE.Mesh(ringGeo, ringMat);
-      ring.rotation.x = Math.PI / 3;
-      this.destinationPlanet.add(ring);
-    } else if (this.stageNumber === 8) {
-      // Sun — add glow PointLight
-      const sunLight = new THREE.PointLight(0xffcc00, 2, 200);
-      this.destinationPlanet.add(sunLight);
+        const tex = new THREE.CanvasTexture(canvas);
+        const geo = new THREE.SphereGeometry(15, 32, 32);
+        const mat = new THREE.MeshToonMaterial({ map: tex });
+        this.destinationPlanet.add(new THREE.Mesh(geo, mat));
+
+        // Cloud layer
+        const cloudCanvas = document.createElement('canvas');
+        cloudCanvas.width = 512;
+        cloudCanvas.height = 256;
+        const cctx = cloudCanvas.getContext('2d')!;
+        cctx.clearRect(0, 0, 512, 256);
+        cctx.fillStyle = 'rgba(255,255,255,0.6)';
+        for (let i = 0; i < 20; i++) {
+          const x = Math.random() * 512;
+          const y = Math.random() * 256;
+          cctx.beginPath();
+          cctx.ellipse(x, y, 20 + Math.random() * 40, 8 + Math.random() * 15, Math.random() * Math.PI, 0, Math.PI * 2);
+          cctx.fill();
+        }
+        const cloudTex = new THREE.CanvasTexture(cloudCanvas);
+        const cloudGeo = new THREE.SphereGeometry(15.5, 32, 32);
+        const cloudMat = new THREE.MeshToonMaterial({ map: cloudTex, transparent: true, opacity: 0.3 });
+        this.destinationPlanet.add(new THREE.Mesh(cloudGeo, cloudMat));
+        break;
+      }
+      default: {
+        // Moon(1), Mars(4), Neptune(8), and any other — simple colored sphere
+        const sphereGeo = new THREE.SphereGeometry(15, 24, 24);
+        const sphereMat = new THREE.MeshToonMaterial({ color: this.stageConfig.planetColor });
+        this.destinationPlanet.add(new THREE.Mesh(sphereGeo, sphereMat));
+        break;
+      }
     }
 
     this.destinationPlanet.position.set(0, 0, goalZ);
@@ -184,13 +356,31 @@ export class StageScene implements Scene {
 
     const input = this.inputSystem.getState();
 
-    // Boost
+    // Capture boost state before changes
+    const wasActive = this.boostSystem.isActive();
+    const wasAvailable = this.boostSystem.isAvailable();
+
+    // Boost activation
     if (input.boostPressed) {
-      this.boostSystem.activate();
+      if (this.boostSystem.activate()) {
+        this.audioManager.playSFX('boost');
+        this.audioManager.startBoostSFX();
+        this.initBoostFlame();
+      }
       this.inputSystem.setBoostPressed(false);
-      this.audioManager.playSFX('boost');
     }
     this.boostSystem.update(deltaTime);
+
+    // Boost end detection (wasActive → !isActive)
+    if (wasActive && !this.boostSystem.isActive()) {
+      this.audioManager.stopBoostSFX();
+      this.flameEmitting = false;
+    }
+
+    // Cooldown completion detection
+    if (!wasAvailable && this.boostSystem.isAvailable()) {
+      this.audioManager.playSFX('boostReady');
+    }
 
     // Apply boost state to spaceship
     if (this.boostSystem.isActive() && this.spaceship.speedState !== 'BOOST') {
@@ -254,6 +444,8 @@ export class StageScene implements Scene {
       this.boostSystem.cancel();
       this.damageTimer = StageScene.DAMAGE_FLASH_DURATION;
       this.audioManager.playSFX('meteoriteHit');
+      this.audioManager.stopBoostSFX();
+      this.removeBoostFlame();
     }
 
     // Damage animation
@@ -284,8 +476,23 @@ export class StageScene implements Scene {
       this.spaceship.position.z - 20,
     );
 
+    // Sun pulse animation
+    if (this.stageNumber === 10 && this.destinationPlanet) {
+      const s = 1.0 + Math.sin(this.elapsedTime * 2) * 0.05;
+      this.destinationPlanet.scale.set(s, s, s);
+    }
+    this.elapsedTime += deltaTime;
+
     // Boost visual effects
     this.updateBoostEffects();
+
+    // Boost flame particles
+    if (this.boostSystem.isActive() && this.flameEmitting) {
+      this.emitFlameParticles();
+    }
+    if (this.boostFlame) {
+      this.updateFlameParticles(deltaTime);
+    }
 
     // Particle effects
     this.particleBurstManager.update(deltaTime);
@@ -343,10 +550,113 @@ export class StageScene implements Scene {
     }
   }
 
+  private initBoostFlame(): void {
+    if (this.boostFlame) return;
+    const MAX = StageScene.MAX_FLAME_PARTICLES;
+    this.flamePositions = new Float32Array(MAX * 3);
+    this.flameColors = new Float32Array(MAX * 3);
+    this.flameLifetimes = new Float32Array(MAX);
+    this.flameVelocities = new Float32Array(MAX * 2);
+    this.flameIndex = 0;
+    this.flameEmitting = true;
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(this.flamePositions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(this.flameColors, 3));
+
+    const material = new THREE.PointsMaterial({
+      vertexColors: true,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      sizeAttenuation: true,
+      size: 0.5,
+      depthWrite: false,
+    });
+
+    this.boostFlame = new THREE.Points(geometry, material);
+    this.threeScene.add(this.boostFlame);
+  }
+
+  private emitFlameParticles(): void {
+    if (!this.flamePositions || !this.flameColors || !this.flameLifetimes || !this.flameVelocities) return;
+    const MAX = StageScene.MAX_FLAME_PARTICLES;
+    const shipPos = this.spaceship.position;
+
+    for (let p = 0; p < 5; p++) {
+      const idx = this.flameIndex % MAX;
+      const i3 = idx * 3;
+      const i2 = idx * 2;
+
+      this.flamePositions[i3] = shipPos.x + (Math.random() - 0.5);
+      this.flamePositions[i3 + 1] = shipPos.y + (Math.random() - 0.5);
+      this.flamePositions[i3 + 2] = shipPos.z + 2;
+
+      const t = Math.random();
+      this.flameColors[i3] = 1.0;
+      this.flameColors[i3 + 1] = 0.4 * (1 - t) + 0.133 * t;
+      this.flameColors[i3 + 2] = 0;
+
+      this.flameLifetimes[idx] = 0.5;
+      this.flameVelocities[i2] = 3 + Math.random() * 2;
+      this.flameVelocities[i2 + 1] = (Math.random() - 0.5);
+
+      this.flameIndex++;
+    }
+  }
+
+  private updateFlameParticles(deltaTime: number): void {
+    if (!this.flamePositions || !this.flameColors || !this.flameLifetimes || !this.flameVelocities || !this.boostFlame) return;
+    const MAX = StageScene.MAX_FLAME_PARTICLES;
+    let hasLive = false;
+
+    for (let i = 0; i < MAX; i++) {
+      if (this.flameLifetimes[i] <= 0) continue;
+      this.flameLifetimes[i] -= deltaTime;
+      const i3 = i * 3;
+      const i2 = i * 2;
+
+      if (this.flameLifetimes[i] <= 0) {
+        this.flamePositions[i3 + 2] = 99999;
+        this.flameColors[i3] = 0;
+        this.flameColors[i3 + 1] = 0;
+        this.flameColors[i3 + 2] = 0;
+        continue;
+      }
+
+      hasLive = true;
+      this.flamePositions[i3 + 2] += this.flameVelocities[i2] * deltaTime;
+      this.flamePositions[i3 + 1] += this.flameVelocities[i2 + 1] * deltaTime;
+    }
+
+    (this.boostFlame.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    (this.boostFlame.geometry.attributes.color as THREE.BufferAttribute).needsUpdate = true;
+
+    if (!this.flameEmitting && !hasLive) {
+      this.removeBoostFlame();
+    }
+  }
+
+  private removeBoostFlame(): void {
+    if (this.boostFlame) {
+      this.threeScene.remove(this.boostFlame);
+      this.boostFlame.geometry.dispose();
+      (this.boostFlame.material as THREE.PointsMaterial).dispose();
+      this.boostFlame = null;
+    }
+    this.flamePositions = null;
+    this.flameColors = null;
+    this.flameLifetimes = null;
+    this.flameVelocities = null;
+    this.flameIndex = 0;
+    this.flameEmitting = false;
+  }
+
   private onStageClear(): void {
     this.isCleared = true;
     this.clearTimer = 0;
     this.audioManager.playSFX('stageClear');
+    this.audioManager.stopBoostSFX();
+    this.removeBoostFlame();
     this.showClearMessage();
   }
 
@@ -393,7 +703,7 @@ export class StageScene implements Scene {
   private handleStageComplete(): void {
     const { totalScore, totalStarCount } = this.scoreSystem.finalizeStage();
 
-    if (this.stageNumber >= 8) {
+    if (this.stageNumber >= 11) {
       this.sceneManager.requestTransition('ending', { totalScore, totalStarCount });
     } else {
       this.sceneManager.requestTransition('stage', {
@@ -407,6 +717,8 @@ export class StageScene implements Scene {
   exit(): void {
     this.hud.hide();
     this.audioManager.stopBGM();
+    this.audioManager.stopBoostSFX();
+    this.removeBoostFlame();
     if (this.clearOverlay) {
       this.clearOverlay.remove();
       this.clearOverlay = null;

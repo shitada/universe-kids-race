@@ -26,9 +26,9 @@ npm test && npm run lint
 TypeScript 5.x (ES2022 target): Follow standard conventions
 
 ## Recent Changes
+- 005-solar-stages-boost-fx: Added TypeScript 5.x (ES2020+) + Three.js, Vite
 - 004-gameplay-audio-polish: Added TypeScript 5.x (ES2020+) + Three.js, Vite
 - 003-ipad-ux-polish: Added TypeScript 5.x (ES2020+) + Three.js, Vite
-- 002-ipad-game-enhancements: Added TypeScript 5.7+ (strict mode) + Three.js 0.170, Web Audio API (ブラウザ内蔵)
 
 
 <!-- MANUAL ADDITIONS START -->

@@ -57,8 +57,40 @@ export const BGM_CONFIGS: Record<number, BGMConfig> = {
     waveforms: { melody: 'sine', pad: 'sine', arpeggio: 'sine', bass: 'sine' },
     volumes: { melody: 0.08, pad: 0.04, arpeggio: 0.06, bass: 0.05 },
   },
-  // Stage 2: Mars — D, 118 BPM — やや活発
+  // Stage 2: Mercury — Dm, 112 BPM — 軽快、小さな惑星
   2: {
+    tempo: 112,
+    beatsPerChord: 4,
+    chords: [
+      [294, 349, 440], [262, 330, 392], [220, 262, 330], [247, 294, 370],
+      [294, 349, 440], [220, 262, 330], [247, 294, 370], [262, 330, 392],
+    ],
+    bassNotes: [147, 131, 110, 123, 147, 110, 123, 131],
+    melodyNotes: [
+      [587, 659, 698, 659], [523, 587, 659, 587], [440, 523, 587, 523], [494, 587, 659, 587],
+      [587, 659, 698, 659], [440, 523, 587, 523], [494, 587, 659, 587], [523, 587, 659, 587],
+    ],
+    waveforms: { melody: 'sine', pad: 'sine', arpeggio: 'sine', bass: 'sine' },
+    volumes: { melody: 0.08, pad: 0.04, arpeggio: 0.06, bass: 0.05 },
+  },
+  // Stage 3: Venus — Eb, 115 BPM — 神秘的な厚い雲
+  3: {
+    tempo: 115,
+    beatsPerChord: 4,
+    chords: [
+      [311, 370, 466], [262, 311, 392], [233, 294, 349], [277, 349, 415],
+      [311, 370, 466], [262, 311, 392], [277, 349, 415], [233, 294, 349],
+    ],
+    bassNotes: [156, 131, 117, 139, 156, 131, 139, 117],
+    melodyNotes: [
+      [622, 698, 784, 698], [523, 622, 698, 622], [466, 523, 587, 523], [554, 622, 698, 622],
+      [622, 698, 784, 698], [523, 622, 698, 622], [554, 622, 698, 622], [466, 523, 587, 523],
+    ],
+    waveforms: { melody: 'sine', pad: 'sine', arpeggio: 'sine', bass: 'sine' },
+    volumes: { melody: 0.09, pad: 0.04, arpeggio: 0.06, bass: 0.05 },
+  },
+  // Stage 4: Mars — D, 118 BPM — やや活発
+  4: {
     tempo: 118,
     beatsPerChord: 4,
     chords: [
@@ -73,8 +105,8 @@ export const BGM_CONFIGS: Record<number, BGMConfig> = {
     waveforms: { melody: 'sine', pad: 'sine', arpeggio: 'sine', bass: 'sine' },
     volumes: { melody: 0.09, pad: 0.04, arpeggio: 0.06, bass: 0.06 },
   },
-  // Stage 3: Jupiter — Eb, 120 BPM — 壮大、神秘的
-  3: {
+  // Stage 5: Jupiter — Eb, 120 BPM — 壮大、神秘的
+  5: {
     tempo: 120,
     beatsPerChord: 4,
     chords: [
@@ -89,9 +121,9 @@ export const BGM_CONFIGS: Record<number, BGMConfig> = {
     waveforms: { melody: 'sine', pad: 'sine', arpeggio: 'sine', bass: 'sine' },
     volumes: { melody: 0.09, pad: 0.04, arpeggio: 0.06, bass: 0.06 },
   },
-  // Stage 4: Saturn — Em, 115 BPM — ミステリアス
-  4: {
-    tempo: 115,
+  // Stage 6: Saturn — Em, 122 BPM — ミステリアス
+  6: {
+    tempo: 122,
     beatsPerChord: 4,
     chords: [
       [330, 392, 494], [262, 330, 392], [196, 247, 294], [294, 370, 440],
@@ -105,8 +137,8 @@ export const BGM_CONFIGS: Record<number, BGMConfig> = {
     waveforms: { melody: 'triangle', pad: 'sine', arpeggio: 'triangle', bass: 'sine' },
     volumes: { melody: 0.10, pad: 0.04, arpeggio: 0.06, bass: 0.06 },
   },
-  // Stage 5: Uranus — Fm, 125 BPM — 遠い宇宙感
-  5: {
+  // Stage 7: Uranus — Fm, 125 BPM — 遠い宇宙感
+  7: {
     tempo: 125,
     beatsPerChord: 4,
     chords: [
@@ -121,8 +153,8 @@ export const BGM_CONFIGS: Record<number, BGMConfig> = {
     waveforms: { melody: 'triangle', pad: 'sine', arpeggio: 'triangle', bass: 'sine' },
     volumes: { melody: 0.10, pad: 0.04, arpeggio: 0.07, bass: 0.07 },
   },
-  // Stage 6: Neptune — G, 130 BPM — 力強い前進
-  6: {
+  // Stage 8: Neptune — G, 130 BPM — 力強い前進
+  8: {
     tempo: 130,
     beatsPerChord: 4,
     chords: [
@@ -137,8 +169,8 @@ export const BGM_CONFIGS: Record<number, BGMConfig> = {
     waveforms: { melody: 'square', pad: 'triangle', arpeggio: 'triangle', bass: 'sine' },
     volumes: { melody: 0.10, pad: 0.04, arpeggio: 0.07, bass: 0.07 },
   },
-  // Stage 7: Pluto — Am, 135 BPM — 緊張感のあるマイナー
-  7: {
+  // Stage 9: Pluto — Am, 135 BPM — 緊張感のあるマイナー
+  9: {
     tempo: 135,
     beatsPerChord: 4,
     chords: [
@@ -153,8 +185,8 @@ export const BGM_CONFIGS: Record<number, BGMConfig> = {
     waveforms: { melody: 'square', pad: 'triangle', arpeggio: 'triangle', bass: 'sine' },
     volumes: { melody: 0.11, pad: 0.04, arpeggio: 0.07, bass: 0.07 },
   },
-  // Stage 8: Sun — C, 140 BPM — 勝利のクライマックス
-  8: {
+  // Stage 10: Sun — C, 140 BPM — 勝利のクライマックス
+  10: {
     tempo: 140,
     beatsPerChord: 4,
     chords: [
@@ -165,6 +197,22 @@ export const BGM_CONFIGS: Record<number, BGMConfig> = {
     melodyNotes: [
       [523, 659, 784, 659], [392, 494, 587, 494], [440, 523, 659, 523], [349, 440, 523, 440],
       [523, 659, 784, 659], [392, 494, 587, 494], [349, 440, 523, 440], [523, 659, 784, 659],
+    ],
+    waveforms: { melody: 'square', pad: 'triangle', arpeggio: 'triangle', bass: 'sine' },
+    volumes: { melody: 0.12, pad: 0.05, arpeggio: 0.08, bass: 0.08 },
+  },
+  // Stage 11: Earth — C, 145 BPM — 帰還の凱旋、squareメロディ
+  11: {
+    tempo: 145,
+    beatsPerChord: 4,
+    chords: [
+      [262, 330, 392], [220, 262, 330], [175, 220, 262], [196, 247, 294],
+      [262, 330, 392], [330, 392, 494], [220, 262, 330], [262, 330, 392],
+    ],
+    bassNotes: [131, 110, 87, 98, 131, 165, 110, 131],
+    melodyNotes: [
+      [523, 659, 784, 880], [440, 523, 659, 784], [349, 440, 523, 659], [392, 494, 587, 659],
+      [523, 659, 784, 880], [659, 784, 880, 1047], [440, 523, 659, 784], [523, 659, 784, 880],
     ],
     waveforms: { melody: 'square', pad: 'triangle', arpeggio: 'triangle', bass: 'sine' },
     volumes: { melody: 0.12, pad: 0.05, arpeggio: 0.08, bass: 0.08 },
@@ -193,6 +241,9 @@ export class AudioManager {
   private bgmOscillators: OscillatorNode[] = [];
   private bgmGains: GainNode[] = [];
   private bgmTimer: ReturnType<typeof setTimeout> | null = null;
+  private boostNoiseSource: AudioBufferSourceNode | null = null;
+  private boostNoiseGain: GainNode | null = null;
+  private boostNoiseFilter: BiquadFilterNode | null = null;
 
   async init(): Promise<void> {
     try {
@@ -208,6 +259,7 @@ export class AudioManager {
   }
 
   initSync(): void {
+    if (this.initialized) return;
     try {
       const AudioCtx = globalThis.AudioContext || (globalThis as any).webkitAudioContext;
       this.ctx = new AudioCtx();
@@ -347,6 +399,60 @@ export class AudioManager {
     this.bgmGains = [];
   }
 
+  startBoostSFX(): void {
+    if (!this.initialized || !this.ctx) return;
+    if (this.boostNoiseSource) return;
+    try {
+      const sampleRate = this.ctx.sampleRate;
+      const buffer = this.ctx.createBuffer(1, sampleRate, sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      this.boostNoiseSource = this.ctx.createBufferSource();
+      this.boostNoiseSource.buffer = buffer;
+      this.boostNoiseSource.loop = true;
+      this.boostNoiseFilter = this.ctx.createBiquadFilter();
+      this.boostNoiseFilter.type = 'lowpass';
+      this.boostNoiseFilter.frequency.value = 800;
+      this.boostNoiseGain = this.ctx.createGain();
+      this.boostNoiseGain.gain.value = 0.15;
+      this.boostNoiseSource.connect(this.boostNoiseFilter);
+      this.boostNoiseFilter.connect(this.boostNoiseGain);
+      this.boostNoiseGain.connect(this.ctx.destination);
+      this.boostNoiseSource.start();
+    } catch {
+      this.boostNoiseSource = null;
+      this.boostNoiseGain = null;
+      this.boostNoiseFilter = null;
+    }
+  }
+
+  stopBoostSFX(): void {
+    if (!this.boostNoiseSource || !this.boostNoiseGain || !this.ctx) return;
+    try {
+      this.boostNoiseGain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.3);
+      const source = this.boostNoiseSource;
+      const filter = this.boostNoiseFilter;
+      const gain = this.boostNoiseGain;
+      this.boostNoiseSource = null;
+      this.boostNoiseGain = null;
+      this.boostNoiseFilter = null;
+      setTimeout(() => {
+        try {
+          source.stop();
+          source.disconnect();
+          filter?.disconnect();
+          gain?.disconnect();
+        } catch { /* ignore */ }
+      }, 300);
+    } catch {
+      this.boostNoiseSource = null;
+      this.boostNoiseGain = null;
+      this.boostNoiseFilter = null;
+    }
+  }
+
   playSFX(type: SFXType): void {
     if (!this.initialized || !this.ctx) return;
     try {
@@ -366,6 +472,9 @@ export class AudioManager {
         case 'stageClear':
           this.playArpeggio([523, 659, 784, 1047], 'sine', 0.2, 0.2);
           break;
+        case 'boostReady':
+          this.playSweep('sine', 880, 1760, 0.2, 0.15);
+          break;
       }
     } catch {
       // Ignore SFX errors
@@ -374,6 +483,7 @@ export class AudioManager {
 
   dispose(): void {
     this.stopBGM();
+    this.stopBoostSFX();
     if (this.ctx) {
       try { this.ctx.close(); } catch { /* ignore */ }
       this.ctx = null;
