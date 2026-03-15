@@ -114,7 +114,7 @@ export class StageScene implements Scene {
     this.scoreSystem.resetStage();
 
     // HUD
-    const stageName = `${this.stageConfig.emoji} ${this.stageConfig.displayName}`;
+    const stageName = `ステージ${this.stageConfig.stageNumber}: ${this.stageConfig.emoji} ${this.stageConfig.displayName}`;
     this.hud.show(stageName);
     this.hud.setBoostCallback(() => {
       this.inputSystem.setBoostPressed(true);

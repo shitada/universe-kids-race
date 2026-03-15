@@ -26,10 +26,10 @@ npm test && npm run lint
 TypeScript 5.x (ES2022 target): Follow standard conventions
 
 ## Recent Changes
+- 004-gameplay-audio-polish: Added TypeScript 5.x (ES2020+) + Three.js, Vite
 - 003-ipad-ux-polish: Added TypeScript 5.x (ES2020+) + Three.js, Vite
 - 002-ipad-game-enhancements: Added TypeScript 5.7+ (strict mode) + Three.js 0.170, Web Audio API (ブラウザ内蔵)
 
-- 001-space-travel-game: Added TypeScript 5.x (ES2022 target) + Three.js (3D描画), Vite (ビルドツール), Vitest (テスト)
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

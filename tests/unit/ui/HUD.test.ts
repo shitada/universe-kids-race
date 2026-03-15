@@ -154,6 +154,22 @@ describe('HUD', () => {
     });
   });
 
+  describe('Stage Number Display (004-US1)', () => {
+    it('displays stage name with stage number prefix', () => {
+      hud.show('ステージ1: 🌙 月をめざせ！');
+      const hudRoot = document.getElementById('hud')!;
+      const stageNameEl = hudRoot.children[1] as HTMLElement;
+      expect(stageNameEl.textContent).toBe('ステージ1: 🌙 月をめざせ！');
+    });
+
+    it('displays stage 8 with correct format', () => {
+      hud.show('ステージ8: ☀️ 太陽をめざせ！');
+      const hudRoot = document.getElementById('hud')!;
+      const stageNameEl = hudRoot.children[1] as HTMLElement;
+      expect(stageNameEl.textContent).toBe('ステージ8: ☀️ 太陽をめざせ！');
+    });
+  });
+
   describe('Boost Button Design (US6)', () => {
     it('has gradient background', () => {
       hud.show('Test');

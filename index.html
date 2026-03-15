@@ -21,6 +21,9 @@
       overflow: hidden;
       background: #000020;
       font-family: 'Zen Maru Gothic', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
     }
     #game-canvas {
       display: block;
@@ -57,6 +60,7 @@
   <canvas id="game-canvas"></canvas>
   <div id="hud"></div>
   <div id="ui-overlay"></div>
+  <script>document.addEventListener('contextmenu', function(e) { e.preventDefault(); });</script>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
