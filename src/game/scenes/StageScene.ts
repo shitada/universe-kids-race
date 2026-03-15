@@ -13,6 +13,7 @@ import { BoostSystem } from '../systems/BoostSystem';
 import { HUD } from '../../ui/HUD';
 import { getStageConfig } from '../config/StageConfig';
 import { ParticleBurstManager } from '../effects/ParticleBurst';
+import { AirShield } from '../effects/AirShield';
 
 export class StageScene implements Scene {
   private threeScene: THREE.Scene;
@@ -31,6 +32,7 @@ export class StageScene implements Scene {
   private boostSystem = new BoostSystem();
   private hud: HUD;
   private particleBurstManager = new ParticleBurstManager();
+  private airShield!: AirShield;
 
   private stageConfig!: StageConfig;
   private stageNumber = 1;
@@ -112,6 +114,10 @@ export class StageScene implements Scene {
     // Spaceship
     this.spaceship = new Spaceship();
     this.threeScene.add(this.spaceship.mesh);
+
+    // Air shield
+    this.airShield = new AirShield();
+    this.threeScene.add(this.airShield.getMesh());
 
     // Camera behind spaceship
     this.camera.position.set(0, 5, 10);
@@ -494,6 +500,15 @@ export class StageScene implements Scene {
       this.updateFlameParticles(deltaTime);
     }
 
+    // Air shield sync
+    this.airShield.setPosition(
+      this.spaceship.position.x,
+      this.spaceship.position.y,
+      this.spaceship.position.z,
+    );
+    this.airShield.setBoostMode(this.boostSystem.isActive());
+    this.airShield.update(deltaTime);
+
     // Particle effects
     this.particleBurstManager.update(deltaTime);
     this.particleBurstManager.cleanup(this.threeScene);
@@ -719,6 +734,7 @@ export class StageScene implements Scene {
     this.audioManager.stopBGM();
     this.audioManager.stopBoostSFX();
     this.removeBoostFlame();
+    this.airShield.dispose();
     if (this.clearOverlay) {
       this.clearOverlay.remove();
       this.clearOverlay = null;

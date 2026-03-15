@@ -7,6 +7,7 @@ Auto-generated from all feature plans. Last updated: 2026-03-15
 - localStorage (既存 SaveManager — clearedStage 0→7 に拡張) (002-ipad-game-enhancements)
 - TypeScript 5.x (ES2020+) + Three.js, Vite (003-ipad-ux-polish)
 - localStorage (SaveManager) (003-ipad-ux-polish)
+- localStorage (SaveManager) — 本機能では変更なし (006-shield-speed-recovery)
 
 - TypeScript 5.x (ES2022 target) + Three.js (3D描画), Vite (ビルドツール), Vitest (テスト) (001-space-travel-game)
 
@@ -26,9 +27,9 @@ npm test && npm run lint
 TypeScript 5.x (ES2022 target): Follow standard conventions
 
 ## Recent Changes
+- 006-shield-speed-recovery: Added TypeScript 5.x (ES2020+) + Three.js, Vite
 - 005-solar-stages-boost-fx: Added TypeScript 5.x (ES2020+) + Three.js, Vite
 - 004-gameplay-audio-polish: Added TypeScript 5.x (ES2020+) + Three.js, Vite
-- 003-ipad-ux-polish: Added TypeScript 5.x (ES2020+) + Three.js, Vite
 
 
 <!-- MANUAL ADDITIONS START -->

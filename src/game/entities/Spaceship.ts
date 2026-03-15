@@ -6,6 +6,7 @@ const LATERAL_SPEED = 15;
 const SLOWDOWN_MULTIPLIER = 0.4;
 const BOOST_MULTIPLIER = 2.0;
 const SPEED_STATE_DURATION = 3.0;
+const RECOVERY_DURATION = 1.0;
 
 export class Spaceship {
   position = { x: 0, y: 0, z: 0 };
@@ -67,6 +68,12 @@ export class Spaceship {
         return this.speed * BOOST_MULTIPLIER;
       case 'SLOWDOWN':
         return this.speed * SLOWDOWN_MULTIPLIER;
+      case 'RECOVERING': {
+        const progress = 1 - (this.speedStateTimer / RECOVERY_DURATION);
+        const eased = 1 - (1 - progress) * (1 - progress);
+        const multiplier = SLOWDOWN_MULTIPLIER + (1 - SLOWDOWN_MULTIPLIER) * eased;
+        return this.speed * multiplier;
+      }
       default:
         return this.speed;
     }
@@ -80,8 +87,13 @@ export class Spaceship {
     if (this.speedState !== 'NORMAL') {
       this.speedStateTimer -= deltaTime;
       if (this.speedStateTimer <= 0) {
-        this.speedState = 'NORMAL';
-        this.speedStateTimer = 0;
+        if (this.speedState === 'SLOWDOWN') {
+          this.speedState = 'RECOVERING';
+          this.speedStateTimer = RECOVERY_DURATION;
+        } else {
+          this.speedState = 'NORMAL';
+          this.speedStateTimer = 0;
+        }
       }
     }
 

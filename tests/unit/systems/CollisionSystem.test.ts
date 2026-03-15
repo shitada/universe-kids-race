@@ -58,4 +58,15 @@ describe('CollisionSystem', () => {
     const result = system.check(ship, [], [met]);
     expect(result.meteoriteCollision).toBe(false);
   });
+
+  it('detects meteorite collision during RECOVERING state (not invincible)', () => {
+    const ship = new Spaceship();
+    ship.position = { x: 0, y: 0, z: 0 };
+    // Put ship in RECOVERING state
+    ship.speedState = 'RECOVERING';
+    ship.speedStateTimer = 0.5;
+    const met = new Meteorite(0.5, 0, 0);
+    const result = system.check(ship, [], [met]);
+    expect(result.meteoriteCollision).toBe(true);
+  });
 });

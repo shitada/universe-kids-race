@@ -56,12 +56,23 @@ describe('Spaceship', () => {
     expect(ship.speedState).toBe('SLOWDOWN');
   });
 
-  it('recovers from SLOWDOWN after timer expires', () => {
+  it('transitions from SLOWDOWN to RECOVERING after timer expires', () => {
     const ship = new Spaceship();
     ship.onMeteoriteHit();
     expect(ship.speedState).toBe('SLOWDOWN');
-    // Update for 3+ seconds to recover
+    // Update for 3+ seconds to finish SLOWDOWN
     ship.update(3.1);
+    expect(ship.speedState).toBe('RECOVERING');
+  });
+
+  it('transitions from RECOVERING to NORMAL after recovery timer expires', () => {
+    const ship = new Spaceship();
+    ship.onMeteoriteHit();
+    // SLOWDOWN → RECOVERING
+    ship.update(3.1);
+    expect(ship.speedState).toBe('RECOVERING');
+    // RECOVERING → NORMAL (1 second)
+    ship.update(1.1);
     expect(ship.speedState).toBe('NORMAL');
   });
 
@@ -83,5 +94,58 @@ describe('Spaceship', () => {
     const progress = ship.getProgress(500);
     expect(progress).toBeGreaterThan(0);
     expect(progress).toBeLessThanOrEqual(1);
+  });
+
+  describe('RECOVERING state', () => {
+    it('getForwardSpeed at progress 0 returns SLOWDOWN_MULTIPLIER speed', () => {
+      const ship = new Spaceship();
+      ship.onMeteoriteHit();
+      ship.update(3.01); // transition to RECOVERING
+      expect(ship.speedState).toBe('RECOVERING');
+      // At start of RECOVERING, speed should be ~0.4x
+      const speed = ship.getForwardSpeed();
+      const normalSpeed = ship.speed;
+      expect(speed / normalSpeed).toBeCloseTo(0.4, 1);
+    });
+
+    it('getForwardSpeed at progress 0.5 returns ~0.85x', () => {
+      const ship = new Spaceship();
+      ship.onMeteoriteHit();
+      ship.update(3.01); // transition to RECOVERING
+      // Advance 0.5s into RECOVERING (half of 1.0s duration)
+      ship.update(0.5);
+      expect(ship.speedState).toBe('RECOVERING');
+      const speed = ship.getForwardSpeed();
+      const normalSpeed = ship.speed;
+      expect(speed / normalSpeed).toBeCloseTo(0.85, 1);
+    });
+
+    it('getForwardSpeed at progress 1.0 transitions to NORMAL (1.0x)', () => {
+      const ship = new Spaceship();
+      ship.onMeteoriteHit();
+      ship.update(3.01); // transition to RECOVERING
+      ship.update(1.01); // finish RECOVERING
+      expect(ship.speedState).toBe('NORMAL');
+      const speed = ship.getForwardSpeed();
+      expect(speed).toBe(ship.speed);
+    });
+
+    it('re-hit during RECOVERING resets to SLOWDOWN', () => {
+      const ship = new Spaceship();
+      ship.onMeteoriteHit();
+      ship.update(3.01); // transition to RECOVERING
+      expect(ship.speedState).toBe('RECOVERING');
+      ship.onMeteoriteHit(); // re-hit
+      expect(ship.speedState).toBe('SLOWDOWN');
+    });
+
+    it('boost during RECOVERING switches to BOOST', () => {
+      const ship = new Spaceship();
+      ship.onMeteoriteHit();
+      ship.update(3.01); // transition to RECOVERING
+      expect(ship.speedState).toBe('RECOVERING');
+      ship.activateBoost();
+      expect(ship.speedState).toBe('BOOST');
+    });
   });
 });

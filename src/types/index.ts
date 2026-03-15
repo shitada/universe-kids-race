@@ -18,7 +18,7 @@ export interface Scene {
 }
 
 // Speed states
-export type SpeedState = 'NORMAL' | 'BOOST' | 'SLOWDOWN';
+export type SpeedState = 'NORMAL' | 'BOOST' | 'SLOWDOWN' | 'RECOVERING';
 
 // Star types
 export type StarType = 'NORMAL' | 'RAINBOW';
