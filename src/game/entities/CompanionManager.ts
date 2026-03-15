@@ -8,6 +8,7 @@ interface CompanionData {
   orbitRadius: number;
   orbitSpeed: number;
   orbitTilt: number;
+  entranceTimer: number;
 }
 
 export class CompanionManager {
@@ -29,9 +30,28 @@ export class CompanionManager {
       const orbitSpeed = 1.0 + i * 0.05;
       const orbitTilt = (i - count / 2) * 0.15;
 
-      this.companions.push({ mesh, angleOffset, orbitRadius, orbitSpeed, orbitTilt });
+      this.companions.push({ mesh, angleOffset, orbitRadius, orbitSpeed, orbitTilt, entranceTimer: 0 });
       this.group.add(mesh);
     }
+  }
+
+  addCompanion(stageNumber: number): boolean {
+    const entry = PLANET_ENCYCLOPEDIA.find((e) => e.stageNumber === stageNumber);
+    if (!entry) return false;
+
+    const mesh = this.createCompanionMesh(entry);
+    const count = this.companions.length;
+    const newCount = count + 1;
+    const baseRadius = newCount <= 3 ? 2.0 : newCount <= 7 ? 2.5 : 3.0;
+    const angleOffset = count * ((2 * Math.PI) / newCount);
+    const orbitRadius = baseRadius + (count % 3) * 0.15;
+    const orbitSpeed = 1.0 + count * 0.05;
+    const orbitTilt = (count - newCount / 2) * 0.15;
+
+    mesh.scale.set(0, 0, 0);
+    this.companions.push({ mesh, angleOffset, orbitRadius, orbitSpeed, orbitTilt, entranceTimer: 1.0 });
+    this.group.add(mesh);
+    return true;
   }
 
   update(deltaTime: number, shipX: number, shipY: number, shipZ: number): void {
@@ -43,7 +63,15 @@ export class CompanionManager {
       const y = shipY + c.orbitRadius * Math.sin(angle) * Math.cos(c.orbitTilt);
       const z = shipZ + c.orbitRadius * Math.sin(angle) * Math.sin(c.orbitTilt);
       c.mesh.position.set(x, y, z);
-      c.mesh.rotation.y += deltaTime * 2;
+
+      if (c.entranceTimer > 0) {
+        c.entranceTimer -= deltaTime;
+        const progress = Math.max(0, Math.min(1, 1 - c.entranceTimer));
+        c.mesh.scale.setScalar(progress);
+        c.mesh.rotation.y += deltaTime * 8;
+      } else {
+        c.mesh.rotation.y += deltaTime * 2;
+      }
     }
   }
 

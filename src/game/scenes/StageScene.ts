@@ -72,7 +72,7 @@ export class StageScene implements Scene {
   private flameVelocities: Float32Array | null = null;
   private flameIndex = 0;
   private flameEmitting = false;
-  private static readonly MAX_FLAME_PARTICLES = 100;
+  private static readonly MAX_FLAME_PARTICLES = 150;
 
   constructor(sceneManager: SceneManager, inputSystem: InputSystem, audioManager: AudioManager, saveManager: SaveManager) {
     this.sceneManager = sceneManager;
@@ -367,6 +367,13 @@ export class StageScene implements Scene {
   update(deltaTime: number): void {
     if (this.isCleared) {
       this.clearTimer += deltaTime;
+      // Keep companion entrance animation progressing during clear screen
+      this.companionManager?.update(
+        deltaTime,
+        this.spaceship.position.x,
+        this.spaceship.position.y,
+        this.spaceship.position.z,
+      );
       if (this.clearTimer >= this.clearDelay) {
         this.handleStageComplete();
       }
@@ -619,7 +626,7 @@ export class StageScene implements Scene {
     const MAX = StageScene.MAX_FLAME_PARTICLES;
     const shipPos = this.spaceship.position;
 
-    for (let p = 0; p < 5; p++) {
+    for (let p = 0; p < 8; p++) {
       const idx = this.flameIndex % MAX;
       const i3 = idx * 3;
       const i2 = idx * 2;
@@ -633,7 +640,7 @@ export class StageScene implements Scene {
       this.flameColors[i3 + 1] = 0.4 * (1 - t) + 0.133 * t;
       this.flameColors[i3 + 2] = 0;
 
-      this.flameLifetimes[idx] = 0.5;
+      this.flameLifetimes[idx] = 0.7;
       this.flameVelocities[i2] = 3 + Math.random() * 2;
       this.flameVelocities[i2 + 1] = (Math.random() - 0.5);
 
@@ -694,6 +701,13 @@ export class StageScene implements Scene {
     this.audioManager.playSFX('stageClear');
     this.audioManager.stopBoostSFX();
     this.removeBoostFlame();
+
+    // Add companion if this is a new planet unlock
+    const saveData = this.saveManager.load();
+    if (!saveData.unlockedPlanets.includes(this.stageNumber)) {
+      this.companionManager?.addCompanion(this.stageNumber);
+    }
+
     this.showClearMessage();
   }
 
@@ -751,6 +765,18 @@ export class StageScene implements Scene {
           text-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
         `;
         this.clearOverlay.appendChild(cardMsg);
+
+        const companionMsg = document.createElement('div');
+        companionMsg.textContent = `${entry.emoji} ${entry.name}が なかまに なったよ！`;
+        companionMsg.style.cssText = `
+          font-family: 'Zen Maru Gothic', sans-serif;
+          font-size: 1.2rem;
+          font-weight: 700;
+          color: #FFD700;
+          margin-top: 0.5rem;
+          text-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
+        `;
+        this.clearOverlay.appendChild(companionMsg);
       }
     }
 

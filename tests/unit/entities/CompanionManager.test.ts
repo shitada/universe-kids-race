@@ -161,6 +161,89 @@ describe('CompanionManager', () => {
     });
   });
 
+  describe('addCompanion', () => {
+    it('returns true and increments companion count for valid stageNumber', () => {
+      const manager = new CompanionManager([]);
+      expect(manager.addCompanion(1)).toBe(true);
+      expect(manager.getCount()).toBe(1);
+    });
+
+    it('adds mesh to group', () => {
+      const manager = new CompanionManager([]);
+      const before = manager.getGroup().children.length;
+      manager.addCompanion(1);
+      expect(manager.getGroup().children.length).toBe(before + 1);
+    });
+
+    it('returns false for invalid stageNumber (no matching PLANET_ENCYCLOPEDIA entry)', () => {
+      const manager = new CompanionManager([]);
+      expect(manager.addCompanion(99)).toBe(false);
+      expect(manager.getCount()).toBe(0);
+    });
+
+    it('sets initial mesh scale to (0, 0, 0)', () => {
+      const manager = new CompanionManager([]);
+      manager.addCompanion(1);
+      const mesh = manager.getGroup().children[0];
+      expect(mesh.scale.x).toBe(0);
+      expect(mesh.scale.y).toBe(0);
+      expect(mesh.scale.z).toBe(0);
+    });
+
+    it('sets entranceTimer to 1.0', () => {
+      const manager = new CompanionManager([]);
+      manager.addCompanion(1);
+      // After update(0, ...) scale should still be 0 (timer just started)
+      // After update(0.5, ...) scale should be ~0.5
+      manager.update(0.5, 0, 0, 0);
+      const mesh = manager.getGroup().children[0];
+      expect(mesh.scale.x).toBeCloseTo(0.5, 1);
+    });
+
+    it('progresses scale toward 1.0 during entrance animation', () => {
+      const manager = new CompanionManager([]);
+      manager.addCompanion(1);
+      manager.update(0.5, 0, 0, 0);
+      const mesh = manager.getGroup().children[0];
+      expect(mesh.scale.x).toBeCloseTo(0.5, 1);
+      expect(mesh.scale.y).toBeCloseTo(0.5, 1);
+      expect(mesh.scale.z).toBeCloseTo(0.5, 1);
+    });
+
+    it('completes entrance animation: entranceTimer <= 0, scale ≈ 1.0, normal orbit resumes', () => {
+      const manager = new CompanionManager([]);
+      manager.addCompanion(1);
+      manager.update(1.0, 0, 0, 0);
+      const mesh = manager.getGroup().children[0];
+      expect(mesh.scale.x).toBeCloseTo(1.0, 1);
+      expect(mesh.scale.y).toBeCloseTo(1.0, 1);
+      expect(mesh.scale.z).toBeCloseTo(1.0, 1);
+    });
+
+    it('spins at 4x normal speed (deltaTime * 8) during entrance', () => {
+      const manager = new CompanionManager([]);
+      manager.addCompanion(1);
+      const mesh = manager.getGroup().children[0];
+      const initialRotY = mesh.rotation.y;
+      manager.update(0.5, 0, 0, 0);
+      // During entrance: rotation.y += deltaTime * 8 = 0.5 * 8 = 4.0
+      expect(mesh.rotation.y - initialRotY).toBeCloseTo(4.0, 1);
+    });
+
+    it('uses normal rotation speed (deltaTime * 2) after entrance completes', () => {
+      const manager = new CompanionManager([]);
+      manager.addCompanion(1);
+      // Complete entrance animation
+      manager.update(1.0, 0, 0, 0);
+      const mesh = manager.getGroup().children[0];
+      const rotAfterEntrance = mesh.rotation.y;
+      // Now update with normal speed
+      manager.update(0.5, 0, 0, 0);
+      // Normal rotation: deltaTime * 2 = 0.5 * 2 = 1.0
+      expect(mesh.rotation.y - rotAfterEntrance).toBeCloseTo(1.0, 1);
+    });
+  });
+
   describe('companion shapes', () => {
     it('creates basic shape for moon (stageNumber 1)', () => {
       const manager = new CompanionManager([1]);

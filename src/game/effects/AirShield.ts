@@ -17,29 +17,25 @@ export class AirShield {
       side: THREE.FrontSide,
     });
     this.mesh = new THREE.Mesh(geometry, this.material);
+    this.mesh.visible = false;
   }
 
   update(deltaTime: number): void {
-    this.elapsedTime += deltaTime;
+    if (!this.isBoosting) return;
 
-    if (this.isBoosting) {
-      const pulse = Math.sin(this.elapsedTime * 5 * Math.PI * 2) * 0.5 + 0.5;
-      this.material.opacity = 0.25 + pulse * 0.10;
-      const s = 1.25 + pulse * 0.10;
-      this.mesh.scale.set(s, s, s);
-    } else {
-      const pulse = Math.sin(this.elapsedTime * 3 * Math.PI * 2) * 0.5 + 0.5;
-      this.material.opacity = 0.10 + pulse * 0.10;
-      const s = 1.00 + pulse * 0.05;
-      this.mesh.scale.set(s, s, s);
-    }
+    this.elapsedTime += deltaTime;
+    const pulse = Math.sin(this.elapsedTime * 5 * Math.PI * 2) * 0.5 + 0.5;
+    this.material.opacity = 0.25 + pulse * 0.10;
   }
 
   setBoostMode(active: boolean): void {
     this.isBoosting = active;
     if (active) {
+      this.mesh.visible = true;
+      this.mesh.scale.set(1.0, 0.8, 2.0);
       this.material.color.setHex(0x88ddff);
     } else {
+      this.mesh.visible = false;
       this.material.color.setHex(0x44aaff);
     }
   }

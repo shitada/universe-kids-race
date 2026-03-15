@@ -19,61 +19,44 @@ describe('AirShield', () => {
     shield.dispose();
   });
 
-  it('initializes with isBoosting false and elapsedTime 0', () => {
+  it('mesh is hidden by default after construction', () => {
     const shield = new AirShield();
-    // After construction, opacity should be at initial value
-    const mat = shield.getMesh().material as THREE.MeshBasicMaterial;
-    expect(mat.opacity).toBeCloseTo(0.15, 2);
+    expect(shield.getMesh().visible).toBe(false);
     shield.dispose();
   });
 
-  it('update animates opacity in normal mode (0.10–0.20)', () => {
+  it('setBoostMode(true) makes mesh visible with elliptical scale and color 0x88ddff', () => {
     const shield = new AirShield();
-    const mat = shield.getMesh().material as THREE.MeshBasicMaterial;
-
-    // Collect opacity values over several frames
-    const opacities: number[] = [];
-    for (let i = 0; i < 60; i++) {
-      shield.update(1 / 60);
-      opacities.push(mat.opacity);
-    }
-
-    const min = Math.min(...opacities);
-    const max = Math.max(...opacities);
-    expect(min).toBeGreaterThanOrEqual(0.09); // slight tolerance
-    expect(max).toBeLessThanOrEqual(0.21);
-
-    shield.dispose();
-  });
-
-  it('update animates scale in normal mode (1.00–1.05)', () => {
-    const shield = new AirShield();
-    const mesh = shield.getMesh();
-
-    const scales: number[] = [];
-    for (let i = 0; i < 60; i++) {
-      shield.update(1 / 60);
-      scales.push(mesh.scale.x);
-    }
-
-    const min = Math.min(...scales);
-    const max = Math.max(...scales);
-    expect(min).toBeGreaterThanOrEqual(0.99);
-    expect(max).toBeLessThanOrEqual(1.06);
-
-    shield.dispose();
-  });
-
-  it('setBoostMode switches color to 0x88ddff', () => {
-    const shield = new AirShield();
-    const mat = shield.getMesh().material as THREE.MeshBasicMaterial;
-
     shield.setBoostMode(true);
+    const mesh = shield.getMesh();
+    const mat = mesh.material as THREE.MeshBasicMaterial;
+    expect(mesh.visible).toBe(true);
+    expect(mesh.scale.x).toBeCloseTo(1.0);
+    expect(mesh.scale.y).toBeCloseTo(0.8);
+    expect(mesh.scale.z).toBeCloseTo(2.0);
     expect(mat.color.getHex()).toBe(0x88ddff);
+    shield.dispose();
+  });
 
+  it('setBoostMode(false) hides mesh and resets color', () => {
+    const shield = new AirShield();
+    shield.setBoostMode(true);
     shield.setBoostMode(false);
+    const mesh = shield.getMesh();
+    const mat = mesh.material as THREE.MeshBasicMaterial;
+    expect(mesh.visible).toBe(false);
     expect(mat.color.getHex()).toBe(0x44aaff);
+    shield.dispose();
+  });
 
+  it('update does not change opacity when not boosting (early return)', () => {
+    const shield = new AirShield();
+    const mat = shield.getMesh().material as THREE.MeshBasicMaterial;
+    const initialOpacity = mat.opacity;
+    for (let i = 0; i < 60; i++) {
+      shield.update(1 / 60);
+    }
+    expect(mat.opacity).toBe(initialOpacity);
     shield.dispose();
   });
 
@@ -96,21 +79,17 @@ describe('AirShield', () => {
     shield.dispose();
   });
 
-  it('boost mode animates scale in range 1.25–1.35', () => {
+  it('boost mode keeps scale fixed at elliptical (1.0, 0.8, 2.0) — no scale pulse', () => {
     const shield = new AirShield();
     const mesh = shield.getMesh();
 
     shield.setBoostMode(true);
-    const scales: number[] = [];
     for (let i = 0; i < 60; i++) {
       shield.update(1 / 60);
-      scales.push(mesh.scale.x);
+      expect(mesh.scale.x).toBeCloseTo(1.0);
+      expect(mesh.scale.y).toBeCloseTo(0.8);
+      expect(mesh.scale.z).toBeCloseTo(2.0);
     }
-
-    const min = Math.min(...scales);
-    const max = Math.max(...scales);
-    expect(min).toBeGreaterThanOrEqual(1.24);
-    expect(max).toBeLessThanOrEqual(1.36);
 
     shield.dispose();
   });
