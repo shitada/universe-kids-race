@@ -46,6 +46,12 @@ export class BoostSystem {
     return this.active;
   }
 
+  getCooldownProgress(): number {
+    if (this.available) return 1.0;
+    if (this.active) return 0.0;
+    return 1.0 - this.cooldownTimer / BoostSystem.COOLDOWN;
+  }
+
   reset(): void {
     this.active = false;
     this.available = true;

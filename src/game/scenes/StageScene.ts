@@ -119,6 +119,9 @@ export class StageScene implements Scene {
     this.hud.setBoostCallback(() => {
       this.inputSystem.setBoostPressed(true);
     });
+    this.hud.setHomeCallback(() => {
+      this.sceneManager.requestTransition('title');
+    });
     this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
 
     // BGM
@@ -290,6 +293,7 @@ export class StageScene implements Scene {
 
     // HUD update
     this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
+    this.hud.updateCooldown(this.boostSystem.getCooldownProgress());
 
     // Check stage clear
     const progress = this.spaceship.getProgress(this.stageConfig.stageLength);

@@ -66,4 +66,41 @@ describe('BoostSystem', () => {
     expect(system.isAvailable()).toBe(true);
     expect(system.isActive()).toBe(false);
   });
+
+  describe('getCooldownProgress()', () => {
+    it('returns 1.0 when available', () => {
+      const system = new BoostSystem();
+      expect(system.getCooldownProgress()).toBe(1.0);
+    });
+
+    it('returns 0.0 when boost is active', () => {
+      const system = new BoostSystem();
+      system.activate();
+      expect(system.getCooldownProgress()).toBe(0.0);
+    });
+
+    it('returns 0.0 at start of cooldown', () => {
+      const system = new BoostSystem();
+      system.activate();
+      system.update(3.1); // boost ends, cooldown starts
+      // cooldownTimer is 5.0, progress = 1 - 5/5 = 0.0
+      expect(system.getCooldownProgress()).toBeCloseTo(0.0, 1);
+    });
+
+    it('returns ~0.5 at halfway through cooldown', () => {
+      const system = new BoostSystem();
+      system.activate();
+      system.update(3.1); // boost ends
+      system.update(2.5); // half cooldown
+      expect(system.getCooldownProgress()).toBeCloseTo(0.5, 1);
+    });
+
+    it('returns 1.0 after cooldown completes', () => {
+      const system = new BoostSystem();
+      system.activate();
+      system.update(3.1); // boost ends
+      system.update(5.1); // cooldown ends
+      expect(system.getCooldownProgress()).toBe(1.0);
+    });
+  });
 });

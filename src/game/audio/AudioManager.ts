@@ -122,6 +122,17 @@ export class AudioManager {
     }
   }
 
+  initSync(): void {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      this.ctx = new AudioCtx();
+      this.ctx.resume(); // Call in sync callstack; don't await the Promise
+      this.initialized = true;
+    } catch {
+      this.initialized = false;
+    }
+  }
+
   playBGM(stageNumber: number): void {
     if (!this.initialized || !this.ctx) return;
     this.stopBGM();

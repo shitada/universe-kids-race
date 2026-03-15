@@ -3,6 +3,7 @@ import type { Scene, SceneContext } from '../../types';
 import type { SceneManager } from '../SceneManager';
 import type { SaveManager } from '../storage/SaveManager';
 import type { AudioManager } from '../audio/AudioManager';
+import { TutorialOverlay } from '../../ui/TutorialOverlay';
 
 export class TitleScene implements Scene {
   private threeScene: THREE.Scene;
@@ -12,6 +13,7 @@ export class TitleScene implements Scene {
   private audioManager: AudioManager;
   private stars: THREE.Points | null = null;
   private overlay: HTMLDivElement | null = null;
+  private tutorialOverlay = new TutorialOverlay();
 
   constructor(sceneManager: SceneManager, saveManager: SaveManager, audioManager: AudioManager) {
     this.sceneManager = sceneManager;
@@ -96,17 +98,42 @@ export class TitleScene implements Scene {
 
     button.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
-      // Initialize AudioContext on user gesture (iPad Safari requirement)
-      this.audioManager.init().then(() => {
-        this.audioManager.playBGM(0);
-      }).catch(() => {});
+      // Initialize AudioContext synchronously on user gesture (iPad Safari requirement)
+      this.audioManager.initSync();
+      this.audioManager.playBGM(0);
       const saveData = this.saveManager.load();
       const startStage = Math.min(saveData.clearedStage + 1, 8);
       this.sceneManager.requestTransition('stage', { stageNumber: startStage });
     });
 
+    // Tutorial button
+    const tutorialBtn = document.createElement('button');
+    tutorialBtn.textContent = 'あそびかた';
+    tutorialBtn.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: 1.2rem;
+      font-weight: 700;
+      padding: 0.6rem 1.5rem;
+      border: none;
+      border-radius: 1.5rem;
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+      cursor: pointer;
+      touch-action: manipulation;
+      position: absolute;
+      bottom: 2rem;
+      right: 2rem;
+    `;
+    tutorialBtn.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      this.tutorialOverlay.show(() => {
+        this.tutorialOverlay.hide();
+      });
+    });
+
     this.overlay.appendChild(title);
     this.overlay.appendChild(button);
+    this.overlay.appendChild(tutorialBtn);
     uiOverlay.appendChild(this.overlay);
   }
 
@@ -118,6 +145,7 @@ export class TitleScene implements Scene {
   }
 
   exit(): void {
+    this.tutorialOverlay.hide();
     if (this.overlay) {
       this.overlay.remove();
       this.overlay = null;

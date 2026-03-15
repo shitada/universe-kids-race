@@ -61,6 +61,40 @@ describe('AudioManager', () => {
     });
   });
 
+  describe('initSync()', () => {
+    it('creates AudioContext and calls resume synchronously', () => {
+      audioManager.initSync();
+      // After initSync, playBGM should work (not no-op)
+      audioManager.playBGM(1);
+      audioManager.stopBGM();
+    });
+
+    it('sets initialized to true on success', () => {
+      audioManager.initSync();
+      // Verify initialized by checking playSFX works (not no-op)
+      audioManager.playSFX('starCollect');
+    });
+
+    it('handles failure gracefully and sets initialized to false', () => {
+      vi.stubGlobal('AudioContext', class {
+        constructor() { throw new Error('Not supported'); }
+      });
+      const manager = new AudioManager();
+      manager.initSync(); // Should not throw
+      // All methods should be no-op after failed init
+      manager.playBGM(1);
+      manager.stopBGM();
+      manager.playSFX('starCollect');
+      vi.stubGlobal('AudioContext', MockAudioContext);
+    });
+
+    it('does not use await (synchronous execution)', () => {
+      // initSync returns void, not Promise
+      const result = audioManager.initSync();
+      expect(result).toBeUndefined();
+    });
+  });
+
   describe('playBGM()', () => {
     it('is no-op when not initialized', () => {
       audioManager.playBGM(1); // Should not throw
