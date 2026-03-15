@@ -10,6 +10,7 @@ Auto-generated from all feature plans. Last updated: 2026-03-15
 - localStorage (SaveManager) — 本機能では変更なし (006-shield-speed-recovery)
 - localStorage (SaveManager) — SaveData インターフェース拡張 (007-encyclopedia-companions)
 - localStorage (SaveManager) — 変更なし (008-companion-shield-boost-fix)
+- N/A（変更なし） (009-boost-flame-fadeout)
 
 - TypeScript 5.x (ES2022 target) + Three.js (3D描画), Vite (ビルドツール), Vitest (テスト) (001-space-travel-game)
 
@@ -29,9 +30,9 @@ npm test && npm run lint
 TypeScript 5.x (ES2022 target): Follow standard conventions
 
 ## Recent Changes
+- 009-boost-flame-fadeout: Added TypeScript 5.x (ES2020+) + Three.js, Vite
 - 008-companion-shield-boost-fix: Added TypeScript 5.x (ES2020+) + Three.js, Vite
 - 007-encyclopedia-companions: Added TypeScript 5.x (ES2020+) + Three.js, Vite
-- 006-shield-speed-recovery: Added TypeScript 5.x (ES2020+) + Three.js, Vite
 
 
 <!-- MANUAL ADDITIONS START -->

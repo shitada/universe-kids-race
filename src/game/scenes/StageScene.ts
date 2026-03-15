@@ -522,7 +522,7 @@ export class StageScene implements Scene {
     this.updateBoostEffects();
 
     // Boost flame particles
-    if (this.boostSystem.isActive() && this.flameEmitting) {
+    if (this.boostSystem.isActive()) {
       this.emitFlameParticles();
     }
     if (this.boostFlame) {
@@ -626,13 +626,23 @@ export class StageScene implements Scene {
     const MAX = StageScene.MAX_FLAME_PARTICLES;
     const shipPos = this.spaceship.position;
 
-    for (let p = 0; p < 8; p++) {
+    // Fadeout calculation
+    const progress = this.boostSystem.getDurationProgress();
+    const fadeStart = 0.83;
+    const emitCount = progress < fadeStart
+      ? 8
+      : Math.max(0, Math.round(8 * (1.0 - progress) / (1.0 - fadeStart)));
+    const sizeFraction = progress < fadeStart
+      ? 1.0
+      : (1.0 - progress) / (1.0 - fadeStart);
+
+    for (let p = 0; p < emitCount; p++) {
       const idx = this.flameIndex % MAX;
       const i3 = idx * 3;
       const i2 = idx * 2;
 
-      this.flamePositions[i3] = shipPos.x + (Math.random() - 0.5);
-      this.flamePositions[i3 + 1] = shipPos.y + (Math.random() - 0.5);
+      this.flamePositions[i3] = shipPos.x + (Math.random() - 0.5) * sizeFraction;
+      this.flamePositions[i3 + 1] = shipPos.y + (Math.random() - 0.5) * sizeFraction;
       this.flamePositions[i3 + 2] = shipPos.z + 2;
 
       const t = Math.random();
@@ -645,6 +655,11 @@ export class StageScene implements Scene {
       this.flameVelocities[i2 + 1] = (Math.random() - 0.5);
 
       this.flameIndex++;
+    }
+
+    // Scale particle size during fade phase
+    if (this.boostFlame) {
+      (this.boostFlame.material as THREE.PointsMaterial).size = 0.5 * sizeFraction;
     }
   }
 

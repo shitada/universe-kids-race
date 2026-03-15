@@ -52,6 +52,11 @@ export class BoostSystem {
     return 1.0 - this.cooldownTimer / BoostSystem.COOLDOWN;
   }
 
+  getDurationProgress(): number {
+    if (!this.active) return 1.0;
+    return 1.0 - this.durationTimer / BoostSystem.DURATION;
+  }
+
   reset(): void {
     this.active = false;
     this.available = true;
