@@ -1,7 +1,33 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { CompanionManager } from '../../../src/game/entities/CompanionManager';
+import { PLANET_ENCYCLOPEDIA } from '../../../src/game/config/PlanetEncyclopedia';
 
 describe('CompanionManager', () => {
+  describe('createCompanionMesh (static)', () => {
+    it('creates a mesh group from a PlanetEncyclopediaEntry', () => {
+      const entry = PLANET_ENCYCLOPEDIA[0]; // stage 1
+      const mesh = CompanionManager.createCompanionMesh(entry);
+      expect(mesh).toBeDefined();
+      expect(mesh.type).toBe('Group');
+    });
+
+    it('creates different shapes for different companionShape values', () => {
+      const shapes = new Set<number>();
+      for (const entry of PLANET_ENCYCLOPEDIA) {
+        const mesh = CompanionManager.createCompanionMesh(entry);
+        shapes.add(mesh.children.length);
+      }
+      // Different shapes produce different child counts
+      expect(shapes.size).toBeGreaterThan(1);
+    });
+
+    it('creates meshes for all 11 encyclopedia entries without error', () => {
+      for (const entry of PLANET_ENCYCLOPEDIA) {
+        expect(() => CompanionManager.createCompanionMesh(entry)).not.toThrow();
+      }
+    });
+  });
+
   describe('constructor', () => {
     it('creates meshes for each unlocked planet', () => {
       const manager = new CompanionManager([1, 2, 3]);

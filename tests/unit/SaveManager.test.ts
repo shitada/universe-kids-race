@@ -14,9 +14,23 @@ const localStorageMock = {
 
 vi.stubGlobal('localStorage', localStorageMock);
 
+// Mock sessionStorage
+const sessionStore = new Map<string, string>();
+const sessionStorageMock = {
+  getItem: vi.fn((key: string) => sessionStore.get(key) ?? null),
+  setItem: vi.fn((key: string, value: string) => sessionStore.set(key, value)),
+  removeItem: vi.fn((key: string) => sessionStore.delete(key)),
+  clear: vi.fn(() => sessionStore.clear()),
+  length: 0,
+  key: vi.fn(() => null),
+};
+
+vi.stubGlobal('sessionStorage', sessionStorageMock);
+
 describe('SaveManager', () => {
   beforeEach(() => {
     storage.clear();
+    sessionStore.clear();
     vi.clearAllMocks();
   });
 
@@ -132,6 +146,58 @@ describe('SaveManager', () => {
       manager.save({ clearedStage: 5, unlockedPlanets: [1, 3, 5, 11] });
       const data = manager.load();
       expect(data.unlockedPlanets).toEqual([1, 3, 5, 11]);
+    });
+  });
+
+  describe('session management (sessionStorage flag pattern)', () => {
+    const SESSION_KEY = 'universe-kids-race-session';
+
+    function runSessionCheck(saveManager: SaveManager): void {
+      if (!sessionStorage.getItem(SESSION_KEY)) {
+        saveManager.clear();
+      }
+      sessionStorage.setItem(SESSION_KEY, 'active');
+    }
+
+    it('clears save data when sessionStorage flag is absent and localStorage has data', () => {
+      const manager = new SaveManager();
+      manager.save({ clearedStage: 5, unlockedPlanets: [1, 2, 3, 4, 5] });
+
+      // No session flag set — simulates Safari swipe termination
+      runSessionCheck(manager);
+
+      const data = manager.load();
+      expect(data.clearedStage).toBe(0);
+      expect(data.unlockedPlanets).toEqual([]);
+    });
+
+    it('preserves save data when sessionStorage flag is present', () => {
+      const manager = new SaveManager();
+      manager.save({ clearedStage: 5, unlockedPlanets: [1, 2, 3, 4, 5] });
+
+      // Session flag already set — tab was kept alive
+      sessionStore.set(SESSION_KEY, 'active');
+
+      runSessionCheck(manager);
+
+      const data = manager.load();
+      expect(data.clearedStage).toBe(5);
+      expect(data.unlockedPlanets).toEqual([1, 2, 3, 4, 5]);
+    });
+
+    it('calls clear safely when sessionStorage flag is absent and localStorage is empty', () => {
+      const manager = new SaveManager();
+      // No data saved, no session flag
+      expect(() => runSessionCheck(manager)).not.toThrow();
+      const data = manager.load();
+      expect(data.clearedStage).toBe(0);
+      expect(data.unlockedPlanets).toEqual([]);
+    });
+
+    it('sets sessionStorage flag to active after check', () => {
+      const manager = new SaveManager();
+      runSessionCheck(manager);
+      expect(sessionStore.get(SESSION_KEY)).toBe('active');
     });
   });
 });

@@ -24,7 +24,7 @@ export class CompanionManager {
       const entry = PLANET_ENCYCLOPEDIA.find((e) => e.stageNumber === unlockedPlanets[i]);
       if (!entry) continue;
 
-      const mesh = this.createCompanionMesh(entry);
+      const mesh = CompanionManager.createCompanionMesh(entry);
       const angleOffset = i * ((2 * Math.PI) / count);
       const orbitRadius = baseRadius + (i % 3) * 0.15;
       const orbitSpeed = 1.0 + i * 0.05;
@@ -39,7 +39,7 @@ export class CompanionManager {
     const entry = PLANET_ENCYCLOPEDIA.find((e) => e.stageNumber === stageNumber);
     if (!entry) return false;
 
-    const mesh = this.createCompanionMesh(entry);
+    const mesh = CompanionManager.createCompanionMesh(entry);
     const count = this.companions.length;
     const newCount = count + 1;
     const baseRadius = newCount <= 3 ? 2.0 : newCount <= 7 ? 2.5 : 3.0;
@@ -104,24 +104,24 @@ export class CompanionManager {
     this.group.clear();
   }
 
-  private createCompanionMesh(entry: PlanetEncyclopediaEntry): THREE.Group {
+  static createCompanionMesh(entry: PlanetEncyclopediaEntry): THREE.Group {
     switch (entry.companionShape) {
       case 'ringed':
-        return this.createRinged(entry.planetColor);
+        return CompanionManager.createRinged(entry.planetColor);
       case 'radiant':
-        return this.createRadiant(entry.planetColor);
+        return CompanionManager.createRadiant(entry.planetColor);
       case 'horned':
-        return this.createHorned(entry.planetColor);
+        return CompanionManager.createHorned(entry.planetColor);
       case 'icy':
-        return this.createIcy(entry.planetColor);
+        return CompanionManager.createIcy(entry.planetColor);
       case 'bubble':
-        return this.createBubble(entry.planetColor);
+        return CompanionManager.createBubble(entry.planetColor);
       default:
-        return this.createBasic(entry.planetColor);
+        return CompanionManager.createBasic(entry.planetColor);
     }
   }
 
-  private createBasic(color: number): THREE.Group {
+  private static createBasic(color: number): THREE.Group {
     const group = new THREE.Group();
     const mat = new THREE.MeshToonMaterial({ color });
     const eyeMat = new THREE.MeshToonMaterial({ color: 0x111111 });
@@ -150,8 +150,8 @@ export class CompanionManager {
     return group;
   }
 
-  private createRinged(color: number): THREE.Group {
-    const group = this.createBasic(color);
+  private static createRinged(color: number): THREE.Group {
+    const group = CompanionManager.createBasic(color);
     const mat = new THREE.MeshToonMaterial({ color, side: THREE.DoubleSide });
     const ring = new THREE.Mesh(new THREE.RingGeometry(0.4, 0.55, 12), mat);
     ring.rotation.x = (Math.PI / 2) * 0.8;
@@ -159,7 +159,7 @@ export class CompanionManager {
     return group;
   }
 
-  private createRadiant(color: number): THREE.Group {
+  private static createRadiant(color: number): THREE.Group {
     const group = new THREE.Group();
     const mat = new THREE.MeshToonMaterial({ color });
     const eyeMat = new THREE.MeshToonMaterial({ color: 0x111111 });
@@ -192,7 +192,7 @@ export class CompanionManager {
     return group;
   }
 
-  private createHorned(color: number): THREE.Group {
+  private static createHorned(color: number): THREE.Group {
     const group = new THREE.Group();
     const mat = new THREE.MeshToonMaterial({ color });
     const eyeMat = new THREE.MeshToonMaterial({ color: 0x111111 });
@@ -221,7 +221,7 @@ export class CompanionManager {
     return group;
   }
 
-  private createIcy(color: number): THREE.Group {
+  private static createIcy(color: number): THREE.Group {
     const group = new THREE.Group();
     const mat = new THREE.MeshToonMaterial({ color });
     const eyeMat = new THREE.MeshToonMaterial({ color: 0x111111 });
@@ -250,7 +250,7 @@ export class CompanionManager {
     return group;
   }
 
-  private createBubble(color: number): THREE.Group {
+  private static createBubble(color: number): THREE.Group {
     const group = new THREE.Group();
     const mat = new THREE.MeshToonMaterial({ color, transparent: true, opacity: 0.7 });
     const eyeMat = new THREE.MeshToonMaterial({ color: 0x111111 });

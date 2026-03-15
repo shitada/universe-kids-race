@@ -24,6 +24,13 @@ const gameLoop = new GameLoop();
 const saveManager = new SaveManager();
 const audioManager = new AudioManager();
 
+// Session management: detect Safari swipe termination
+const SESSION_KEY = 'universe-kids-race-session';
+if (!sessionStorage.getItem(SESSION_KEY)) {
+  saveManager.clear();
+}
+sessionStorage.setItem(SESSION_KEY, 'active');
+
 const titleScene = new TitleScene(sceneManager, saveManager, audioManager);
 const stageScene = new StageScene(sceneManager, inputSystem, audioManager, saveManager);
 const endingScene = new EndingScene(sceneManager, saveManager, audioManager);
