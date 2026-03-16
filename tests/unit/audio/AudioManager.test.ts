@@ -503,6 +503,144 @@ describe('AudioManager', () => {
     });
   });
 
+  describe('ensureResumed() (T001)', () => {
+    it('does not throw when ctx is null', () => {
+      const am = new AudioManager();
+      // ctx is null before init
+      expect(() => am.ensureResumed()).not.toThrow();
+    });
+
+    it('calls ctx.resume() when ctx.state is suspended', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      const ctx = (am as any).ctx as MockAudioContext;
+      ctx.state = 'suspended';
+
+      am.ensureResumed();
+
+      expect(ctx.resume).toHaveBeenCalled();
+      am.dispose();
+    });
+
+    it('does not call resume() when ctx.state is running', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      const ctx = (am as any).ctx as MockAudioContext;
+      ctx.state = 'running';
+      ctx.resume.mockClear();
+
+      am.ensureResumed();
+
+      expect(ctx.resume).not.toHaveBeenCalled();
+      am.dispose();
+    });
+  });
+
+  describe('initSync() suspended handling (T002)', () => {
+    it('calls ensureResumed() when already initialized and ctx is suspended', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync(); // first call
+      const ctx = (am as any).ctx as MockAudioContext;
+      ctx.state = 'suspended';
+      ctx.resume.mockClear();
+
+      am.initSync(); // second call — should resume
+
+      expect(ctx.resume).toHaveBeenCalled();
+      am.dispose();
+    });
+
+    it('does not call resume() when already initialized and ctx is running', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync(); // first call
+      const ctx = (am as any).ctx as MockAudioContext;
+      ctx.state = 'running';
+      ctx.resume.mockClear();
+
+      am.initSync(); // second call
+
+      expect(ctx.resume).not.toHaveBeenCalled();
+      am.dispose();
+    });
+  });
+
+  describe('bgmGeneration and bgmPlaying (T008)', () => {
+    it('sets bgmPlaying to true after playBGM()', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+
+      am.playBGM(1);
+
+      expect((am as any).bgmPlaying).toBe(true);
+      am.dispose();
+    });
+
+    it('sets bgmPlaying to false after stopBGM()', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      am.playBGM(1);
+
+      am.stopBGM();
+
+      expect((am as any).bgmPlaying).toBe(false);
+      am.dispose();
+    });
+
+    it('stale tick stops on generation mismatch after double playBGM()', () => {
+      vi.useFakeTimers();
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      const ctx = (am as any).ctx as MockAudioContext;
+
+      am.playBGM(1); // gen A
+      const genAfterFirst = (am as any).bgmGeneration;
+
+      am.playBGM(2); // gen B — stopBGM increments gen, then playBGM increments again
+      const genAfterSecond = (am as any).bgmGeneration;
+
+      expect(genAfterSecond).toBeGreaterThan(genAfterFirst);
+
+      // Advance timer to trigger ticks — only latest gen's ticks should schedule
+      const oscCountBefore = ctx.createOscillator.mock.calls.length;
+      vi.advanceTimersByTime(1000);
+      // Should only have ticks from the second playBGM
+      // (stale ticks from first playBGM return early due to gen mismatch)
+
+      vi.useRealTimers();
+      am.dispose();
+    });
+
+    it('tick does not reschedule after stopBGM()', () => {
+      vi.useFakeTimers();
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+
+      am.playBGM(1);
+      am.stopBGM();
+
+      // After stopBGM, bgmTimer is null and generation incremented
+      expect((am as any).bgmTimer).toBeNull();
+
+      // Advance timers — no new ticks should fire
+      const ctx = (am as any).ctx as MockAudioContext;
+      const oscCountAfterStop = ctx.createOscillator.mock.calls.length;
+      vi.advanceTimersByTime(2000);
+      // No new oscillators should be created
+      expect(ctx.createOscillator.mock.calls.length).toBe(oscCountAfterStop);
+
+      vi.useRealTimers();
+      am.dispose();
+    });
+  });
+
   describe('dispose()', () => {
     it('is safe to call when not initialized', () => {
       audioManager.dispose(); // Should not throw

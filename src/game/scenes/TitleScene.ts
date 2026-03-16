@@ -123,8 +123,8 @@ export class TitleScene implements Scene {
       cursor: pointer;
       touch-action: manipulation;
       position: absolute;
-      bottom: 2rem;
-      right: 2rem;
+      bottom: max(2rem, calc(env(safe-area-inset-bottom, 0px) + 1rem));
+      right: max(2rem, calc(env(safe-area-inset-right, 0px) + 1rem));
     `;
     tutorialBtn.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
@@ -148,8 +148,8 @@ export class TitleScene implements Scene {
       cursor: pointer;
       touch-action: manipulation;
       position: absolute;
-      bottom: 2rem;
-      left: 2rem;
+      bottom: max(2rem, calc(env(safe-area-inset-bottom, 0px) + 1rem));
+      left: max(2rem, calc(env(safe-area-inset-left, 0px) + 1rem));
     `;
     encyclopediaBtn.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
@@ -163,10 +163,9 @@ export class TitleScene implements Scene {
     this.overlay.appendChild(encyclopediaBtn);
     uiOverlay.appendChild(this.overlay);
 
-    // First touch anywhere on overlay initializes audio and starts title BGM
+    // First touch anywhere on overlay initializes audio (iPad Safari requirement)
     this.overlay.addEventListener('pointerdown', () => {
       this.audioManager.initSync();
-      this.audioManager.playBGM(0);
     }, { once: true });
   }
 

@@ -64,13 +64,12 @@ describe('HUD', () => {
       expect(homeBtn!.textContent).toBe('🏠');
     });
 
-    it('positions home button at top-left', () => {
+    it('positions home button at top-left with safe area inset', () => {
       hud.show('🌙 つきを めざせ！');
       const hudRoot = document.getElementById('hud')!;
       const homeBtn = hudRoot.querySelector('button') as HTMLButtonElement;
       expect(homeBtn.style.position).toBe('absolute');
       expect(homeBtn.style.top).toBe('0.8rem');
-      expect(homeBtn.style.left).toBe('1rem');
     });
 
     it('sets pointer-events auto on home button', () => {

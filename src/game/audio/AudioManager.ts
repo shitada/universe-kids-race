@@ -244,6 +244,8 @@ export class AudioManager {
   private boostNoiseSource: AudioBufferSourceNode | null = null;
   private boostNoiseGain: GainNode | null = null;
   private boostNoiseFilter: BiquadFilterNode | null = null;
+  private bgmPlaying = false;
+  private bgmGeneration = 0;
 
   async init(): Promise<void> {
     try {
@@ -258,8 +260,17 @@ export class AudioManager {
     }
   }
 
+  ensureResumed(): void {
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
+  }
+
   initSync(): void {
-    if (this.initialized) return;
+    if (this.initialized) {
+      this.ensureResumed();
+      return;
+    }
     try {
       const AudioCtx = globalThis.AudioContext || (globalThis as any).webkitAudioContext;
       this.ctx = new AudioCtx();
@@ -271,8 +282,12 @@ export class AudioManager {
   }
 
   playBGM(stageNumber: number): void {
+    this.ensureResumed();
     if (!this.initialized || !this.ctx) return;
     this.stopBGM();
+    this.bgmGeneration++;
+    this.bgmPlaying = true;
+    const currentGen = this.bgmGeneration;
 
     const config = BGM_CONFIGS[stageNumber] ?? BGM_CONFIGS[0];
     const beatInterval = 60 / config.tempo;
@@ -320,6 +335,7 @@ export class AudioManager {
 
     const tick = () => {
       if (!this.initialized || !this.ctx) return;
+      if (currentGen !== this.bgmGeneration) return;
 
       const chordIndex = Math.floor(beat / config.beatsPerChord) % config.chords.length;
       const beatInChord = beat % config.beatsPerChord;
@@ -384,6 +400,8 @@ export class AudioManager {
   }
 
   stopBGM(): void {
+    this.bgmGeneration++;
+    this.bgmPlaying = false;
     if (this.bgmTimer) {
       clearTimeout(this.bgmTimer);
       this.bgmTimer = null;
@@ -400,6 +418,7 @@ export class AudioManager {
   }
 
   startBoostSFX(): void {
+    this.ensureResumed();
     if (!this.initialized || !this.ctx) return;
     if (this.boostNoiseSource) return;
     try {
@@ -454,6 +473,7 @@ export class AudioManager {
   }
 
   playSFX(type: SFXType): void {
+    this.ensureResumed();
     if (!this.initialized || !this.ctx) return;
     try {
       switch (type) {

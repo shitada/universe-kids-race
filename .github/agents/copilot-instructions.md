@@ -1,6 +1,6 @@
 # universe-kids-race Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-03-15
+Auto-generated from all feature plans. Last updated: 2026-03-16
 
 ## Active Technologies
 - TypeScript 5.7+ (strict mode) + Three.js 0.170, Web Audio API (ブラウザ内蔵) (002-ipad-game-enhancements)
@@ -12,6 +12,7 @@ Auto-generated from all feature plans. Last updated: 2026-03-15
 - localStorage (SaveManager) — 変更なし (008-companion-shield-boost-fix)
 - N/A（変更なし） (009-boost-flame-fadeout)
 - localStorage（ゲーム永続データ）+ sessionStorage（セッションフラグ） (010-session-encyclopedia-celebration)
+- localStorage（既存）+ sessionStorage（既存） (011-device-compat-audio-fix)
 
 - TypeScript 5.x (ES2022 target) + Three.js (3D描画), Vite (ビルドツール), Vitest (テスト) (001-space-travel-game)
 
@@ -31,9 +32,9 @@ npm test && npm run lint
 TypeScript 5.x (ES2022 target): Follow standard conventions
 
 ## Recent Changes
+- 011-device-compat-audio-fix: Added TypeScript 5.x (ES2020+) + Three.js, Vite
 - 010-session-encyclopedia-celebration: Added TypeScript 5.x (ES2020+) + Three.js, Vite
 - 009-boost-flame-fadeout: Added TypeScript 5.x (ES2020+) + Three.js, Vite
-- 008-companion-shield-boost-fix: Added TypeScript 5.x (ES2020+) + Three.js, Vite
 
 
 <!-- MANUAL ADDITIONS START -->

@@ -23,8 +23,8 @@ export class HUD {
     this.homeButton.textContent = '🏠';
     this.homeButton.style.position = 'absolute';
     this.homeButton.style.top = '0.8rem';
-    this.homeButton.style.left = '1rem';
-    this.homeButton.style.fontSize = '1.8rem';
+    this.homeButton.style.left = 'max(1rem, calc(env(safe-area-inset-left, 0px) + 0.5rem))';
+    this.homeButton.style.fontSize = 'clamp(1.4rem, 4vmin, 1.8rem)';
     this.homeButton.style.background = 'rgba(255, 255, 255, 0.15)';
     this.homeButton.style.border = 'none';
     this.homeButton.style.borderRadius = '50%';
@@ -102,10 +102,10 @@ export class HUD {
     this.boostButton = document.createElement('button');
     this.boostButton.textContent = '🚀 ブースト!';
     this.boostButton.style.position = 'absolute';
-    this.boostButton.style.bottom = '2rem';
-    this.boostButton.style.right = '2rem';
+    this.boostButton.style.bottom = 'max(2rem, calc(env(safe-area-inset-bottom, 0px) + 1rem))';
+    this.boostButton.style.right = 'max(2rem, calc(env(safe-area-inset-right, 0px) + 1rem))';
     this.boostButton.style.fontFamily = "'Zen Maru Gothic', sans-serif";
-    this.boostButton.style.fontSize = '1.3rem';
+    this.boostButton.style.fontSize = 'clamp(1rem, 3.5vmin, 1.3rem)';
     this.boostButton.style.fontWeight = '700';
     this.boostButton.style.padding = '0.8rem 1.5rem';
     this.boostButton.style.border = 'none';
@@ -138,8 +138,8 @@ export class HUD {
     this.cooldownContainer.setAttribute('data-cooldown-container', '');
     this.cooldownContainer.style.cssText = `
       position: absolute;
-      bottom: 1rem;
-      right: 2rem;
+      bottom: max(1rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem));
+      right: max(2rem, calc(env(safe-area-inset-right, 0px) + 1rem));
       width: 80px;
       height: 6px;
       border-radius: 3px;

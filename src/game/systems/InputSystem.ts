@@ -4,6 +4,7 @@ export class InputSystem {
   private state: InputState = { moveDirection: 0, boostPressed: false };
   private canvas: HTMLCanvasElement | null = null;
   private activePointers = new Map<number, 'left' | 'right'>();
+  private pressedKeys = new Set<string>();
 
   private onPointerDown = (e: PointerEvent): void => {
     e.preventDefault();
@@ -25,6 +26,32 @@ export class InputSystem {
     this.updateDirection();
   };
 
+  private onKeyDown = (e: KeyboardEvent): void => {
+    if (e.repeat) return;
+    switch (e.key) {
+      case 'ArrowLeft':
+      case 'ArrowRight':
+        e.preventDefault();
+        this.pressedKeys.add(e.key);
+        this.updateDirection();
+        break;
+      case ' ':
+        e.preventDefault();
+        this.state.boostPressed = true;
+        break;
+    }
+  };
+
+  private onKeyUp = (e: KeyboardEvent): void => {
+    switch (e.key) {
+      case 'ArrowLeft':
+      case 'ArrowRight':
+        this.pressedKeys.delete(e.key);
+        this.updateDirection();
+        break;
+    }
+  };
+
   private updateDirection(): void {
     let left = false;
     let right = false;
@@ -32,6 +59,8 @@ export class InputSystem {
       if (side === 'left') left = true;
       if (side === 'right') right = true;
     }
+    if (this.pressedKeys.has('ArrowLeft')) left = true;
+    if (this.pressedKeys.has('ArrowRight')) right = true;
     if (left && right) {
       this.state.moveDirection = 0;
     } else if (left) {
@@ -49,6 +78,8 @@ export class InputSystem {
     canvas.addEventListener('pointerup', this.onPointerUp);
     canvas.addEventListener('pointercancel', this.onPointerCancel);
     canvas.addEventListener('pointerleave', this.onPointerUp);
+    window.addEventListener('keydown', this.onKeyDown);
+    window.addEventListener('keyup', this.onKeyUp);
   }
 
   getState(): InputState {
@@ -67,7 +98,10 @@ export class InputSystem {
       this.canvas.removeEventListener('pointerleave', this.onPointerUp);
       this.canvas = null;
     }
+    window.removeEventListener('keydown', this.onKeyDown);
+    window.removeEventListener('keyup', this.onKeyUp);
     this.activePointers.clear();
+    this.pressedKeys.clear();
     this.state = { moveDirection: 0, boostPressed: false };
   }
 }
