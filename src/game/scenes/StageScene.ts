@@ -618,6 +618,7 @@ export class StageScene implements Scene {
     });
 
     this.boostFlame = new THREE.Points(geometry, material);
+    this.boostFlame.frustumCulled = false;
     this.threeScene.add(this.boostFlame);
   }
 
