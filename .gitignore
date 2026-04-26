@@ -11,3 +11,6 @@ Thumbs.db
 .idea/
 coverage/
 .vite/
+logs/
+test-results/
+playwright-report/
