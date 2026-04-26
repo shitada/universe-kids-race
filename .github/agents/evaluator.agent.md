@@ -1,5 +1,7 @@
 ---
 description: coder の変更と tester の結果をレビューし、品質ゲート判定と PR 作成を行う評価エージェント。
+model: "Claude Opus 4.7 (copilot)"
+tools: ["execute", "read", "search"]
 ---
 
 # Evaluator（評価者）

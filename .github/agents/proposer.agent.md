@@ -1,5 +1,7 @@
 ---
 description: コードベースを分析し、1つの改善提案（feature または bugfix）を作成する提案エージェント。
+model: "Claude Opus 4.7 (copilot)"
+tools: ["read", "search", "execute"]
 ---
 
 # Proposer（提案者）

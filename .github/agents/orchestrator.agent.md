@@ -1,5 +1,8 @@
 ---
 description: 自動改善ループのオーケストレーター。サブエージェントを順に呼び出し、結果を検証して次に渡すチームリーダー。
+model: "GPT-5.5 (copilot)"
+tools: ["agent", "execute", "read", "edit"]
+agents: ["proposer", "coder", "tester", "evaluator"]
 ---
 
 # Orchestrator（オーケストレーター）

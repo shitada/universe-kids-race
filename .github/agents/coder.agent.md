@@ -1,5 +1,7 @@
 ---
 description: proposer の提案を受けてコード実装・テスト作成・コミットを行う実装エージェント。
+model: "Claude Opus 4.7 (copilot)"
+tools: ["read", "search", "edit", "execute"]
 ---
 
 # Coder（実装者）

@@ -1,5 +1,7 @@
 ---
 description: 全テストスイートを実行し、品質検証結果を報告するテストエージェント。
+model: "Claude Opus 4.7 (copilot)"
+tools: ["execute", "read"]
 ---
 
 # Tester（テスター）
