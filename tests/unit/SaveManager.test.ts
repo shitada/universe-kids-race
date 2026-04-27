@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SaveManager } from '../../src/game/storage/SaveManager';
 
 // Mock localStorage
@@ -146,6 +146,56 @@ describe('SaveManager', () => {
       manager.save({ clearedStage: 5, unlockedPlanets: [1, 3, 5, 11] });
       const data = manager.load();
       expect(data.unlockedPlanets).toEqual([1, 3, 5, 11]);
+    });
+  });
+
+  describe('storage failure resilience', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('does not throw when localStorage.setItem throws QuotaExceededError on save', () => {
+      const manager = new SaveManager();
+      vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+        throw new Error('QuotaExceededError');
+      });
+      expect(() => manager.save({ clearedStage: 3, unlockedPlanets: [1, 2] })).not.toThrow();
+    });
+
+    it('does not throw when localStorage.removeItem throws on clear', () => {
+      const manager = new SaveManager();
+      vi.spyOn(localStorage, 'removeItem').mockImplementation(() => {
+        throw new Error('removal failed');
+      });
+      expect(() => manager.clear()).not.toThrow();
+    });
+
+    it('returns previously stored value when a later save fails to write', () => {
+      const manager = new SaveManager();
+      manager.save({ clearedStage: 4, unlockedPlanets: [1, 2] });
+
+      vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+        throw new Error('QuotaExceededError');
+      });
+      expect(() => manager.save({ clearedStage: 9, unlockedPlanets: [1, 2, 3] })).not.toThrow();
+
+      vi.restoreAllMocks();
+      const data = manager.load();
+      expect(data.clearedStage).toBe(4);
+      expect(data.unlockedPlanets).toEqual([1, 2]);
+    });
+
+    it('returns default when setItem fails before any successful write', () => {
+      const manager = new SaveManager();
+      vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+        throw new Error('QuotaExceededError');
+      });
+      manager.save({ clearedStage: 7, unlockedPlanets: [1, 2, 3] });
+
+      vi.restoreAllMocks();
+      const data = manager.load();
+      expect(data.clearedStage).toBe(0);
+      expect(data.unlockedPlanets).toEqual([]);
     });
   });
 

@@ -93,6 +93,6 @@ document.addEventListener('visibilitychange', () => {
     audioManager.suspend();
   } else {
     gameLoop.resume();
-    audioManager.ensureResumed();
+    audioManager.resumeIfPlaying();
   }
 });
