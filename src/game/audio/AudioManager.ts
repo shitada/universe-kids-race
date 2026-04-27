@@ -268,7 +268,11 @@ export class AudioManager {
 
   suspend(): void {
     if (this.ctx && this.ctx.state === 'running') {
-      this.ctx.suspend();
+      try {
+        this.ctx.suspend();
+      } catch {
+        /* ignore */
+      }
     }
   }
 
