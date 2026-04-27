@@ -90,6 +90,7 @@ window.addEventListener('resize', () => {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     gameLoop.pause();
+    audioManager.suspend();
   } else {
     gameLoop.resume();
     audioManager.ensureResumed();
