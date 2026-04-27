@@ -124,11 +124,32 @@ EOF
 - ブランチ: ${branch_name}
 - プロジェクトルート: ${PROJECT_ROOT}"
 
-  if copilot -p "${prompt}" --agent orchestrator --yolo 2>&1 | tee "${log_dir}/copilot-output.log"; then
+  local exit_code=0
+  copilot -p "${prompt}" --agent orchestrator --yolo 2>&1 | tee "${log_dir}/copilot-output.log" || exit_code=$?
+
+  # コンソール出力を MD に変換
+  cat > "${log_dir}/05-copilot-console.md" << MDEOF
+# Copilot CLI コンソール出力
+
+## 実行情報
+- **タイムスタンプ**: ${timestamp}
+- **ブランチ**: ${branch_name}
+- **イテレーション**: ${iteration_num}/${ITERATIONS}
+- **終了コード**: ${exit_code}
+
+## コンソール出力
+
+\`\`\`
+$(cat "${log_dir}/copilot-output.log")
+\`\`\`
+MDEOF
+  rm -f "${log_dir}/copilot-output.log"
+
+  if [ "${exit_code}" -eq 0 ]; then
     ok "イテレーション ${iteration_num} 完了"
     return 0
   else
-    error "イテレーション ${iteration_num} 失敗（終了コード: $?）"
+    error "イテレーション ${iteration_num} 失敗（終了コード: ${exit_code}）"
     return 1
   fi
 }
