@@ -6,11 +6,31 @@ export class InputSystem {
   private activePointers = new Map<number, 'left' | 'right'>();
   private pressedKeys = new Set<string>();
 
+  private sideOf(clientX: number): 'left' | 'right' | null {
+    if (!this.canvas) return null;
+    const width = this.canvas.clientWidth;
+    if (width <= 0) return null;
+    const half = width / 2;
+    const deadZone = width * 0.02;
+    if (Math.abs(clientX - half) <= deadZone) return null;
+    return clientX < half ? 'left' : 'right';
+  }
+
   private onPointerDown = (e: PointerEvent): void => {
     e.preventDefault();
     if (!this.canvas) return;
-    const half = this.canvas.clientWidth / 2;
-    const side = e.clientX < half ? 'left' : 'right';
+    const side = this.sideOf(e.clientX) ?? (e.clientX < this.canvas.clientWidth / 2 ? 'left' : 'right');
+    this.activePointers.set(e.pointerId, side);
+    this.updateDirection();
+  };
+
+  private onPointerMove = (e: PointerEvent): void => {
+    if (!this.canvas) return;
+    if (!this.activePointers.has(e.pointerId)) return;
+    const side = this.sideOf(e.clientX);
+    if (side === null) return;
+    const current = this.activePointers.get(e.pointerId);
+    if (current === side) return;
     this.activePointers.set(e.pointerId, side);
     this.updateDirection();
   };
@@ -75,6 +95,7 @@ export class InputSystem {
   setup(canvas: HTMLCanvasElement): void {
     this.canvas = canvas;
     canvas.addEventListener('pointerdown', this.onPointerDown);
+    canvas.addEventListener('pointermove', this.onPointerMove);
     canvas.addEventListener('pointerup', this.onPointerUp);
     canvas.addEventListener('pointercancel', this.onPointerCancel);
     canvas.addEventListener('pointerleave', this.onPointerUp);
@@ -93,6 +114,7 @@ export class InputSystem {
   dispose(): void {
     if (this.canvas) {
       this.canvas.removeEventListener('pointerdown', this.onPointerDown);
+      this.canvas.removeEventListener('pointermove', this.onPointerMove);
       this.canvas.removeEventListener('pointerup', this.onPointerUp);
       this.canvas.removeEventListener('pointercancel', this.onPointerCancel);
       this.canvas.removeEventListener('pointerleave', this.onPointerUp);
