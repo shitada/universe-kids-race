@@ -266,19 +266,14 @@ export class AudioManager {
     }
   }
 
+  // Symmetric counterpart to ensureResumed(): pause AudioContext when going to background.
   suspend(): void {
-    if (this.ctx && this.ctx.state === 'running') {
-      try {
+    try {
+      if (this.ctx && this.ctx.state === 'running') {
         this.ctx.suspend();
-      } catch {
-        /* ignore */
       }
-    }
-  }
-
-  resumeIfPlaying(): void {
-    if (this.bgmPlaying) {
-      this.ensureResumed();
+    } catch {
+      // Ignore: matches ensureResumed() style and avoids breaking on unsupported environments.
     }
   }
 

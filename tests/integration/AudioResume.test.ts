@@ -77,18 +77,14 @@ describe('AudioResume integration (T003)', () => {
     vi.restoreAllMocks();
   });
 
-  it('resumeIfPlaying() resumes AudioContext when document becomes visible during BGM playback', () => {
+  it('ensureResumed() is called when document becomes visible', () => {
     audioManager.initSync();
-    audioManager.playBGM(1);
-    const ctx = (audioManager as any).ctx as { resume: ReturnType<typeof vi.fn>; state: AudioContextState };
-    ctx.state = 'suspended';
-    ctx.resume.mockClear();
+    const spy = vi.spyOn(audioManager, 'ensureResumed');
 
+    // Simulate visibilitychange registration as done in main.ts
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) {
-        audioManager.suspend();
-      } else {
-        audioManager.resumeIfPlaying();
+      if (!document.hidden) {
+        audioManager.ensureResumed();
       }
     });
 
@@ -97,7 +93,7 @@ describe('AudioResume integration (T003)', () => {
       handler(new Event('visibilitychange'));
     }
 
-    expect(ctx.resume).toHaveBeenCalled();
+    expect(spy).toHaveBeenCalled();
   });
 
   it('suspend() is called when document becomes hidden', () => {
@@ -112,7 +108,7 @@ describe('AudioResume integration (T003)', () => {
       if (document.hidden) {
         audioManager.suspend();
       } else {
-        audioManager.resumeIfPlaying();
+        audioManager.ensureResumed();
       }
     });
 
@@ -153,5 +149,36 @@ describe('AudioResume integration (T003)', () => {
     }
     expect(ctx.resume).toHaveBeenCalled();
     expect(ctx.state).toBe('running');
+  });
+
+  it('ctx.suspend() is called when document becomes hidden via visibilitychange', () => {
+    audioManager.initSync();
+    // After initSync, ctx.resume() was called; emulate the running state for this test.
+    const ctx = (audioManager as any).ctx as InstanceType<typeof MockAudioContext>;
+    ctx.state = 'running';
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        audioManager.suspend();
+      }
+    });
+
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+    for (const handler of listeners['visibilitychange'] ?? []) {
+      handler(new Event('visibilitychange'));
+    }
+
+    expect(ctx.suspend).toHaveBeenCalledTimes(1);
+  });
+
+  it('suspend() is idempotent when ctx is already suspended', () => {
+    audioManager.initSync();
+    const ctx = (audioManager as any).ctx as InstanceType<typeof MockAudioContext>;
+    ctx.state = 'suspended';
+
+    audioManager.suspend();
+    audioManager.suspend();
+
+    expect(ctx.suspend).not.toHaveBeenCalled();
   });
 });

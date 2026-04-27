@@ -170,7 +170,7 @@ describe('AudioManager', () => {
     });
   });
 
-  describe('suspend() / resumeIfPlaying()', () => {
+  describe('suspend() / ensureResumed()', () => {
     it('suspend() calls AudioContext.suspend when state is running', async () => {
       vi.stubGlobal('AudioContext', MockAudioContext);
       const am = new AudioManager();
@@ -205,7 +205,7 @@ describe('AudioManager', () => {
       expect(() => am.suspend()).not.toThrow();
     });
 
-    it('resumeIfPlaying() resumes when BGM is playing', () => {
+    it('ensureResumed() resumes AudioContext when suspended', () => {
       vi.stubGlobal('AudioContext', MockAudioContext);
       const am = new AudioManager();
       am.initSync();
@@ -214,13 +214,13 @@ describe('AudioManager', () => {
       ctx.state = 'suspended';
       ctx.resume.mockClear();
 
-      am.resumeIfPlaying();
+      am.ensureResumed();
 
       expect(ctx.resume).toHaveBeenCalledTimes(1);
       am.dispose();
     });
 
-    it('resumeIfPlaying() does nothing when BGM is not playing', () => {
+    it('ensureResumed() resumes AudioContext even when BGM is not playing', () => {
       vi.stubGlobal('AudioContext', MockAudioContext);
       const am = new AudioManager();
       am.initSync();
@@ -228,13 +228,13 @@ describe('AudioManager', () => {
       ctx.state = 'suspended';
       ctx.resume.mockClear();
 
-      am.resumeIfPlaying();
+      am.ensureResumed();
 
-      expect(ctx.resume).not.toHaveBeenCalled();
+      expect(ctx.resume).toHaveBeenCalledTimes(1);
       am.dispose();
     });
 
-    it('suspend() then resumeIfPlaying() round-trip leaves state running', () => {
+    it('suspend() then ensureResumed() round-trip leaves state running', () => {
       vi.stubGlobal('AudioContext', MockAudioContext);
       const am = new AudioManager();
       am.initSync();
@@ -245,7 +245,7 @@ describe('AudioManager', () => {
       am.suspend();
       expect(ctx.state).toBe('suspended');
 
-      am.resumeIfPlaying();
+      am.ensureResumed();
       expect(ctx.state).toBe('running');
       am.dispose();
     });
