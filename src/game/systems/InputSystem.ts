@@ -72,6 +72,23 @@ export class InputSystem {
     }
   };
 
+  private resetInputs(): void {
+    this.activePointers.clear();
+    this.pressedKeys.clear();
+    this.state.boostPressed = false;
+    this.updateDirection();
+  }
+
+  private onLoseFocus = (): void => {
+    this.resetInputs();
+  };
+
+  private onVisibilityChange = (): void => {
+    if (typeof document !== 'undefined' && document.hidden) {
+      this.resetInputs();
+    }
+  };
+
   private updateDirection(): void {
     let left = false;
     let right = false;
@@ -101,6 +118,9 @@ export class InputSystem {
     canvas.addEventListener('pointerleave', this.onPointerUp);
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
+    window.addEventListener('blur', this.onLoseFocus);
+    window.addEventListener('pagehide', this.onLoseFocus);
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
   }
 
   getState(): InputState {
@@ -122,6 +142,9 @@ export class InputSystem {
     }
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
+    window.removeEventListener('blur', this.onLoseFocus);
+    window.removeEventListener('pagehide', this.onLoseFocus);
+    document.removeEventListener('visibilitychange', this.onVisibilityChange);
     this.activePointers.clear();
     this.pressedKeys.clear();
     this.state = { moveDirection: 0, boostPressed: false };
