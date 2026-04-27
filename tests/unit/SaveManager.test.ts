@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SaveManager } from '../../src/game/storage/SaveManager';
 
 // Mock localStorage
@@ -149,6 +149,56 @@ describe('SaveManager', () => {
     });
   });
 
+  describe('storage failure resilience', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('does not throw when localStorage.setItem throws QuotaExceededError on save', () => {
+      const manager = new SaveManager();
+      vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+        throw new Error('QuotaExceededError');
+      });
+      expect(() => manager.save({ clearedStage: 3, unlockedPlanets: [1, 2] })).not.toThrow();
+    });
+
+    it('does not throw when localStorage.removeItem throws on clear', () => {
+      const manager = new SaveManager();
+      vi.spyOn(localStorage, 'removeItem').mockImplementation(() => {
+        throw new Error('removal failed');
+      });
+      expect(() => manager.clear()).not.toThrow();
+    });
+
+    it('returns previously stored value when a later save fails to write', () => {
+      const manager = new SaveManager();
+      manager.save({ clearedStage: 4, unlockedPlanets: [1, 2] });
+
+      vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+        throw new Error('QuotaExceededError');
+      });
+      expect(() => manager.save({ clearedStage: 9, unlockedPlanets: [1, 2, 3] })).not.toThrow();
+
+      vi.restoreAllMocks();
+      const data = manager.load();
+      expect(data.clearedStage).toBe(4);
+      expect(data.unlockedPlanets).toEqual([1, 2]);
+    });
+
+    it('returns default when setItem fails before any successful write', () => {
+      const manager = new SaveManager();
+      vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+        throw new Error('QuotaExceededError');
+      });
+      manager.save({ clearedStage: 7, unlockedPlanets: [1, 2, 3] });
+
+      vi.restoreAllMocks();
+      const data = manager.load();
+      expect(data.clearedStage).toBe(0);
+      expect(data.unlockedPlanets).toEqual([]);
+    });
+  });
+
   describe('session management (sessionStorage flag pattern)', () => {
     const SESSION_KEY = 'universe-kids-race-session';
 
@@ -202,31 +252,33 @@ describe('SaveManager', () => {
   });
 
   describe('exception safety (iPad Safari hardening)', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     it('save() does not throw when localStorage.setItem throws QuotaExceededError', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      localStorageMock.setItem.mockImplementationOnce(() => {
+      vi.spyOn(localStorage, 'setItem').mockImplementationOnce(() => {
         throw new Error('QuotaExceededError');
       });
       const manager = new SaveManager();
       expect(() => manager.save({ clearedStage: 3, unlockedPlanets: [1, 2, 3] })).not.toThrow();
       expect(warnSpy).toHaveBeenCalled();
-      warnSpy.mockRestore();
     });
 
     it('clear() does not throw when localStorage.removeItem throws', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      localStorageMock.removeItem.mockImplementationOnce(() => {
+      vi.spyOn(localStorage, 'removeItem').mockImplementationOnce(() => {
         throw new Error('SecurityError');
       });
       const manager = new SaveManager();
       expect(() => manager.clear()).not.toThrow();
       expect(warnSpy).toHaveBeenCalled();
-      warnSpy.mockRestore();
     });
 
     it('load() returns DEFAULT_DATA after a save() failure (no crash on subsequent load)', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      localStorageMock.setItem.mockImplementationOnce(() => {
+      vi.spyOn(localStorage, 'setItem').mockImplementationOnce(() => {
         throw new Error('QuotaExceededError');
       });
       const manager = new SaveManager();
@@ -234,7 +286,6 @@ describe('SaveManager', () => {
       const data = manager.load();
       expect(data.clearedStage).toBe(0);
       expect(data.unlockedPlanets).toEqual([]);
-      warnSpy.mockRestore();
     });
 
     it('isFreshSession() does not throw when sessionStorage.getItem throws', () => {
