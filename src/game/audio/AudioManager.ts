@@ -266,6 +266,22 @@ export class AudioManager {
     }
   }
 
+  suspend(): void {
+    if (this.ctx && this.ctx.state === 'running') {
+      try {
+        this.ctx.suspend();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  resumeIfPlaying(): void {
+    if (this.bgmPlaying) {
+      this.ensureResumed();
+    }
+  }
+
   initSync(): void {
     if (this.initialized) {
       this.ensureResumed();

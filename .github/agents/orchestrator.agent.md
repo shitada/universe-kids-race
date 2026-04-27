@@ -82,10 +82,13 @@ agents: ["proposer", "coder", "tester", "evaluator"]
 ### ステップ 4: Evaluator 呼び出し
 
 `task` ツールで Evaluator を呼び出す。プロンプトには以下を含める:
-- Proposer の提案内容
+- Proposer の提案内容（**種別を必ず含める**: feature / bugfix / performance）
 - Coder の実装レポート
 - Tester のテスト結果
 - ブランチ名
+- **種別に応じたマージ指示**:
+  - `bugfix` / `performance` → 「ハードゲート全通過後に自動マージしてください」
+  - `feature` → 「人間のレビューを待ってください」
 
 **結果の検証:**
 - 判定結果（keep / discard）を確認
