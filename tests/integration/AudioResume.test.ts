@@ -88,7 +88,6 @@ describe('AudioResume integration (T003)', () => {
       }
     });
 
-    // Simulate becoming visible
     Object.defineProperty(document, 'hidden', { value: false, configurable: true });
     for (const handler of listeners['visibilitychange'] ?? []) {
       handler(new Event('visibilitychange'));
@@ -97,23 +96,59 @@ describe('AudioResume integration (T003)', () => {
     expect(spy).toHaveBeenCalled();
   });
 
-  it('ensureResumed() is NOT called when document becomes hidden', () => {
+  it('suspend() is called when document becomes hidden', () => {
     audioManager.initSync();
-    const spy = vi.spyOn(audioManager, 'ensureResumed');
+    audioManager.playBGM(1);
+    const ctx = (audioManager as any).ctx as { suspend: ReturnType<typeof vi.fn>; state: AudioContextState };
+    // Simulate running state (initSync's resume is async; force running for the test)
+    ctx.state = 'running';
+    ctx.suspend.mockClear();
 
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) {
+      if (document.hidden) {
+        audioManager.suspend();
+      } else {
         audioManager.ensureResumed();
       }
     });
 
-    // Simulate becoming hidden
     Object.defineProperty(document, 'hidden', { value: true, configurable: true });
     for (const handler of listeners['visibilitychange'] ?? []) {
       handler(new Event('visibilitychange'));
     }
 
-    expect(spy).not.toHaveBeenCalled();
+    expect(ctx.suspend).toHaveBeenCalledTimes(1);
+    expect(ctx.state).toBe('suspended');
+  });
+
+  it('suspend() transitions AudioContext to suspended on hidden, and ensureResumed() restores running on visible', () => {
+    audioManager.initSync();
+    const ctx = (audioManager as unknown as { ctx: MockAudioContext }).ctx;
+    ctx.state = 'running';
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        audioManager.suspend();
+      } else {
+        audioManager.ensureResumed();
+      }
+    });
+
+    // Hidden -> suspended
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+    for (const handler of listeners['visibilitychange'] ?? []) {
+      handler(new Event('visibilitychange'));
+    }
+    expect(ctx.suspend).toHaveBeenCalled();
+    expect(ctx.state).toBe('suspended');
+
+    // Visible -> running
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+    for (const handler of listeners['visibilitychange'] ?? []) {
+      handler(new Event('visibilitychange'));
+    }
+    expect(ctx.resume).toHaveBeenCalled();
+    expect(ctx.state).toBe('running');
   });
 
   it('ctx.suspend() is called when document becomes hidden via visibilitychange', () => {

@@ -46,6 +46,7 @@ class MockAudioContext {
   currentTime = 0;
   sampleRate = 44100;
   resume = vi.fn().mockImplementation(async () => { this.state = 'running'; });
+  suspend = vi.fn().mockImplementation(async () => { this.state = 'suspended'; });
   close = vi.fn().mockImplementation(async () => { this.state = 'closed'; });
   createOscillator = vi.fn(() => new MockOscillatorNode());
   createGain = vi.fn(() => new MockGainNode());
@@ -166,6 +167,87 @@ describe('AudioManager', () => {
       audioManager.playSFX('boost');
       audioManager.playSFX('stageClear');
       // All should play without error
+    });
+  });
+
+  describe('suspend() / ensureResumed()', () => {
+    it('suspend() calls AudioContext.suspend when state is running', async () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      await am.init();
+      const ctx = (am as any).ctx;
+      ctx.state = 'running';
+      ctx.suspend.mockClear();
+
+      am.suspend();
+
+      expect(ctx.suspend).toHaveBeenCalledTimes(1);
+      am.dispose();
+    });
+
+    it('suspend() is a no-op when state is suspended (safe double-call)', async () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      await am.init();
+      const ctx = (am as any).ctx;
+      ctx.state = 'suspended';
+      ctx.suspend.mockClear();
+
+      am.suspend();
+      am.suspend();
+
+      expect(ctx.suspend).not.toHaveBeenCalled();
+      am.dispose();
+    });
+
+    it('suspend() is a no-op when not initialized', () => {
+      const am = new AudioManager();
+      expect(() => am.suspend()).not.toThrow();
+    });
+
+    it('ensureResumed() resumes AudioContext when suspended', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      am.playBGM(1);
+      const ctx = (am as any).ctx;
+      ctx.state = 'suspended';
+      ctx.resume.mockClear();
+
+      am.ensureResumed();
+
+      expect(ctx.resume).toHaveBeenCalledTimes(1);
+      am.dispose();
+    });
+
+    it('ensureResumed() resumes AudioContext even when BGM is not playing', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      const ctx = (am as any).ctx;
+      ctx.state = 'suspended';
+      ctx.resume.mockClear();
+
+      am.ensureResumed();
+
+      expect(ctx.resume).toHaveBeenCalledTimes(1);
+      am.dispose();
+    });
+
+    it('suspend() then ensureResumed() round-trip leaves state running', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      am.playBGM(1);
+      const ctx = (am as any).ctx;
+      ctx.state = 'running';
+
+      am.suspend();
+      expect(ctx.state).toBe('suspended');
+
+      am.ensureResumed();
+      expect(ctx.state).toBe('running');
+      am.dispose();
     });
   });
 

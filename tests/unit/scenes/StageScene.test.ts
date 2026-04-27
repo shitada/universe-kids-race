@@ -1,0 +1,119 @@
+// @vitest-environment jsdom
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import * as THREE from 'three';
+import { StageScene } from '../../../src/game/scenes/StageScene';
+import { Star } from '../../../src/game/entities/Star';
+import { Meteorite } from '../../../src/game/entities/Meteorite';
+import type { SceneManager } from '../../../src/game/SceneManager';
+import type { InputSystem } from '../../../src/game/systems/InputSystem';
+import type { AudioManager } from '../../../src/game/audio/AudioManager';
+import type { SaveManager } from '../../../src/game/storage/SaveManager';
+
+function createScene(): StageScene {
+  const sceneManager = { requestTransition: vi.fn() } as unknown as SceneManager;
+  const inputSystem = {} as InputSystem;
+  const audioManager = {} as AudioManager;
+  const saveManager = {} as SaveManager;
+  return new StageScene(sceneManager, inputSystem, audioManager, saveManager);
+}
+
+describe('StageScene cleanupPassedObjects', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '<div id="hud"></div><div id="ui-overlay"></div>';
+  });
+
+  it('removes passed stars from array, scene, and disposes resources', () => {
+    const scene = createScene();
+    const internal = scene as unknown as {
+      stars: Star[];
+      meteorites: Meteorite[];
+      threeScene: THREE.Scene;
+      spaceship: { position: { x: number; y: number; z: number } };
+      cleanupPassedObjects(): void;
+    };
+
+    internal.threeScene = new THREE.Scene();
+    internal.spaceship = { position: { x: 0, y: 0, z: 0 } };
+
+    const passedStar = new Star(0, 0, 50);
+    const aheadStar = new Star(0, 0, -50);
+    internal.threeScene.add(passedStar.mesh);
+    internal.threeScene.add(aheadStar.mesh);
+    internal.stars = [passedStar, aheadStar];
+
+    const passedGeoSpy = vi.spyOn(passedStar.mesh.geometry, 'dispose');
+    const aheadGeoSpy = vi.spyOn(aheadStar.mesh.geometry, 'dispose');
+
+    internal.cleanupPassedObjects();
+
+    expect(internal.stars).toHaveLength(1);
+    expect(internal.stars[0]).toBe(aheadStar);
+    expect(internal.threeScene.children).not.toContain(passedStar.mesh);
+    expect(internal.threeScene.children).toContain(aheadStar.mesh);
+    expect(passedGeoSpy).toHaveBeenCalledTimes(1);
+    expect(aheadGeoSpy).not.toHaveBeenCalled();
+  });
+
+  it('removes passed meteorites from array, scene, and disposes resources', () => {
+    const scene = createScene();
+    const internal = scene as unknown as {
+      stars: Star[];
+      meteorites: Meteorite[];
+      threeScene: THREE.Scene;
+      spaceship: { position: { x: number; y: number; z: number } };
+      cleanupPassedObjects(): void;
+    };
+
+    internal.threeScene = new THREE.Scene();
+    internal.spaceship = { position: { x: 0, y: 0, z: 0 } };
+
+    const passedMet = new Meteorite(0, 0, 50);
+    const aheadMet = new Meteorite(0, 0, -50);
+    internal.threeScene.add(passedMet.mesh);
+    internal.threeScene.add(aheadMet.mesh);
+    internal.meteorites = [passedMet, aheadMet];
+    internal.stars = [];
+
+    const passedGeoSpy = vi.spyOn(passedMet.mesh.geometry, 'dispose');
+
+    internal.cleanupPassedObjects();
+
+    expect(internal.meteorites).toHaveLength(1);
+    expect(internal.meteorites[0]).toBe(aheadMet);
+    expect(internal.threeScene.children).not.toContain(passedMet.mesh);
+    expect(internal.threeScene.children).toContain(aheadMet.mesh);
+    expect(passedGeoSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not let scene children grow unboundedly across many cleanup cycles', () => {
+    const scene = createScene();
+    const internal = scene as unknown as {
+      stars: Star[];
+      meteorites: Meteorite[];
+      threeScene: THREE.Scene;
+      spaceship: { position: { x: number; y: number; z: number } };
+      cleanupPassedObjects(): void;
+    };
+
+    internal.threeScene = new THREE.Scene();
+    internal.spaceship = { position: { x: 0, y: 0, z: 0 } };
+    internal.stars = [];
+    internal.meteorites = [];
+
+    for (let cycle = 0; cycle < 20; cycle++) {
+      const star = new Star(0, 0, internal.spaceship.position.z + 50);
+      const met = new Meteorite(0, 0, internal.spaceship.position.z + 50);
+      internal.threeScene.add(star.mesh);
+      internal.threeScene.add(met.mesh);
+      internal.stars.push(star);
+      internal.meteorites.push(met);
+
+      internal.cleanupPassedObjects();
+      internal.spaceship.position.z -= 50;
+    }
+
+    expect(internal.stars).toHaveLength(0);
+    expect(internal.meteorites).toHaveLength(0);
+    expect(internal.threeScene.children).toHaveLength(0);
+  });
+});
