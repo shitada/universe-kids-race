@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { SpeedState } from '../../types';
+import { disposeObject3D } from '../utils/disposeObject3D';
 
 const BASE_SPEED = 50;
 const LATERAL_SPEED = 15;
@@ -130,5 +131,9 @@ export class Spaceship {
     this.speedState = 'NORMAL';
     this.speedStateTimer = 0;
     this.mesh.position.set(0, 0, 0);
+  }
+
+  dispose(): void {
+    disposeObject3D(this.mesh);
   }
 }

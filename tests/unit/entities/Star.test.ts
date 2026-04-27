@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import * as THREE from 'three';
 import { Star } from '../../../src/game/entities/Star';
 
 describe('Star', () => {
@@ -31,5 +32,16 @@ describe('Star', () => {
   it('has a radius for collision', () => {
     const star = new Star(0, 0, -10);
     expect(star.radius).toBeGreaterThan(0);
+  });
+
+  it('disposes geometry and material on dispose()', () => {
+    const star = new Star(0, 0, -10);
+    const geoSpy = vi.spyOn(star.mesh.geometry, 'dispose');
+    const matSpy = vi.spyOn(star.mesh.material as THREE.Material, 'dispose');
+
+    star.dispose();
+
+    expect(geoSpy).toHaveBeenCalledTimes(1);
+    expect(matSpy).toHaveBeenCalledTimes(1);
   });
 });

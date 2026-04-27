@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import * as THREE from 'three';
 import { Spaceship } from '../../../src/game/entities/Spaceship';
 
 describe('Spaceship', () => {
@@ -146,6 +147,26 @@ describe('Spaceship', () => {
       expect(ship.speedState).toBe('RECOVERING');
       ship.activateBoost();
       expect(ship.speedState).toBe('BOOST');
+    });
+  });
+
+  describe('dispose', () => {
+    it('disposes all child mesh geometry and materials recursively', () => {
+      const ship = new Spaceship();
+      const geoSpies: ReturnType<typeof vi.spyOn>[] = [];
+      const matSpies: ReturnType<typeof vi.spyOn>[] = [];
+      ship.mesh.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          geoSpies.push(vi.spyOn(child.geometry, 'dispose'));
+          matSpies.push(vi.spyOn(child.material as THREE.Material, 'dispose'));
+        }
+      });
+      expect(geoSpies.length).toBeGreaterThan(0);
+
+      ship.dispose();
+
+      for (const s of geoSpies) expect(s).toHaveBeenCalledTimes(1);
+      for (const s of matSpies) expect(s).toHaveBeenCalledTimes(1);
     });
   });
 });

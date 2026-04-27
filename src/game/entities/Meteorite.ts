@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { disposeObject3D } from '../utils/disposeObject3D';
 
 export class Meteorite {
   position: { x: number; y: number; z: number };
@@ -21,5 +22,9 @@ export class Meteorite {
   update(deltaTime: number): void {
     this.mesh.rotation.x += deltaTime * 0.5;
     this.mesh.rotation.z += deltaTime * 0.3;
+  }
+
+  dispose(): void {
+    disposeObject3D(this.mesh);
   }
 }

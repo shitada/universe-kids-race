@@ -17,6 +17,7 @@ import { ParticleBurstManager } from '../effects/ParticleBurst';
 import { AirShield } from '../effects/AirShield';
 import { CompanionManager } from '../entities/CompanionManager';
 import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
+import { disposeObject3D } from '../utils/disposeObject3D';
 
 export class StageScene implements Scene {
   private threeScene: THREE.Scene;
@@ -558,6 +559,7 @@ export class StageScene implements Scene {
     if (this.boostLines) {
       this.threeScene.remove(this.boostLines);
       this.boostLines.geometry.dispose();
+      (this.boostLines.material as THREE.Material).dispose();
       this.boostLines = null;
     }
 
@@ -825,8 +827,30 @@ export class StageScene implements Scene {
       this.clearOverlay.remove();
       this.clearOverlay = null;
     }
-    // Cleanup Three.js objects
+    // Cleanup Three.js objects (dispose geometry/material before clearing the scene)
     this.particleBurstManager.clear(this.threeScene);
+
+    // Dispose entities
+    this.spaceship?.dispose();
+    for (const star of this.stars) star.dispose();
+    for (const met of this.meteorites) met.dispose();
+
+    // Dispose retained scene resources
+    if (this.boostLines) {
+      this.boostLines.geometry.dispose();
+      (this.boostLines.material as THREE.Material).dispose();
+      this.boostLines = null;
+    }
+    if (this.bgStars) {
+      this.bgStars.geometry.dispose();
+      (this.bgStars.material as THREE.Material).dispose();
+      this.bgStars = null;
+    }
+    if (this.destinationPlanet) {
+      disposeObject3D(this.destinationPlanet);
+      this.destinationPlanet = null;
+    }
+
     this.threeScene.clear();
     this.stars = [];
     this.meteorites = [];
