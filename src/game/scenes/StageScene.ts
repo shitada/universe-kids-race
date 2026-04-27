@@ -582,16 +582,22 @@ export class StageScene implements Scene {
 
   private cleanupPassedObjects(): void {
     const shipZ = this.spaceship.position.z;
-    for (const star of this.stars) {
-      if (!star.isCollected && star.position.z > shipZ + 30) {
+    for (let i = this.stars.length - 1; i >= 0; i--) {
+      const star = this.stars[i];
+      if (star.position.z > shipZ + 30) {
         star.isCollected = true;
         star.mesh.visible = false;
+        star.dispose();
+        this.stars.splice(i, 1);
       }
     }
-    for (const met of this.meteorites) {
-      if (met.isActive && met.position.z > shipZ + 30) {
+    for (let i = this.meteorites.length - 1; i >= 0; i--) {
+      const met = this.meteorites[i];
+      if (met.position.z > shipZ + 30) {
         met.isActive = false;
         met.mesh.visible = false;
+        met.dispose();
+        this.meteorites.splice(i, 1);
       }
     }
   }
