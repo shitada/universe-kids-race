@@ -45,6 +45,7 @@ class MockAudioContext {
   currentTime = 0;
   sampleRate = 44100;
   resume = vi.fn().mockImplementation(async () => { this.state = 'running'; });
+  suspend = vi.fn().mockImplementation(async () => { this.state = 'suspended'; });
   close = vi.fn().mockImplementation(async () => { this.state = 'closed'; });
   createOscillator = vi.fn(() => new MockOscillatorNode());
   createGain = vi.fn(() => new MockGainNode());
@@ -113,5 +114,35 @@ describe('AudioResume integration (T003)', () => {
     }
 
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('suspend() transitions AudioContext to suspended on hidden, and ensureResumed() restores running on visible', () => {
+    audioManager.initSync();
+    const ctx = (audioManager as unknown as { ctx: MockAudioContext }).ctx;
+    ctx.state = 'running';
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        audioManager.suspend();
+      } else {
+        audioManager.ensureResumed();
+      }
+    });
+
+    // Hidden -> suspended
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+    for (const handler of listeners['visibilitychange'] ?? []) {
+      handler(new Event('visibilitychange'));
+    }
+    expect(ctx.suspend).toHaveBeenCalled();
+    expect(ctx.state).toBe('suspended');
+
+    // Visible -> running
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+    for (const handler of listeners['visibilitychange'] ?? []) {
+      handler(new Event('visibilitychange'));
+    }
+    expect(ctx.resume).toHaveBeenCalled();
+    expect(ctx.state).toBe('running');
   });
 });

@@ -266,6 +266,16 @@ export class AudioManager {
     }
   }
 
+  suspend(): void {
+    if (this.ctx && this.ctx.state === 'running') {
+      try {
+        this.ctx.suspend();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
   initSync(): void {
     if (this.initialized) {
       this.ensureResumed();
