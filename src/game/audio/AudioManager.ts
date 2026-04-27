@@ -266,6 +266,19 @@ export class AudioManager {
     }
   }
 
+  suspend(): void {
+    if (!this.ctx) return;
+    if (this.ctx.state !== 'running') return;
+    try {
+      const result = this.ctx.suspend();
+      if (result && typeof (result as Promise<void>).catch === 'function') {
+        (result as Promise<void>).catch(() => { /* ignore */ });
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
   initSync(): void {
     if (this.initialized) {
       this.ensureResumed();
