@@ -79,6 +79,61 @@ describe('disposeObject3D', () => {
     expect(() => disposeObject3D(obj)).not.toThrow();
   });
 
+  it('disposes texture in material.map', () => {
+    const geo = new THREE.BoxGeometry();
+    const tex = new THREE.Texture();
+    const mat = new THREE.MeshBasicMaterial({ map: tex });
+    const mesh = new THREE.Mesh(geo, mat);
+    const texSpy = vi.spyOn(tex, 'dispose');
+
+    disposeObject3D(mesh);
+
+    expect(texSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('disposes both map and normalMap on a material', () => {
+    const geo = new THREE.BoxGeometry();
+    const map = new THREE.Texture();
+    const normalMap = new THREE.Texture();
+    const mat = new THREE.MeshStandardMaterial({ map, normalMap });
+    const mesh = new THREE.Mesh(geo, mat);
+    const mapSpy = vi.spyOn(map, 'dispose');
+    const normalSpy = vi.spyOn(normalMap, 'dispose');
+
+    disposeObject3D(mesh);
+
+    expect(mapSpy).toHaveBeenCalledTimes(1);
+    expect(normalSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('disposes textures within an array material', () => {
+    const geo = new THREE.BoxGeometry();
+    const t1 = new THREE.Texture();
+    const t2 = new THREE.Texture();
+    const m1 = new THREE.MeshBasicMaterial({ map: t1 });
+    const m2 = new THREE.MeshBasicMaterial({ map: t2 });
+    const mesh = new THREE.Mesh(geo, [m1, m2]);
+    const s1 = vi.spyOn(t1, 'dispose');
+    const s2 = vi.spyOn(t2, 'dispose');
+
+    disposeObject3D(mesh);
+
+    expect(s1).toHaveBeenCalledTimes(1);
+    expect(s2).toHaveBeenCalledTimes(1);
+  });
+
+  it('disposes a CanvasTexture (StageScene usage pattern)', () => {
+    const fakeCanvas = { width: 16, height: 16 } as unknown as HTMLCanvasElement;
+    const tex = new THREE.CanvasTexture(fakeCanvas);
+    const mat = new THREE.MeshBasicMaterial({ map: tex });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+    const texSpy = vi.spyOn(tex, 'dispose');
+
+    disposeObject3D(mesh);
+
+    expect(texSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('removes the object from its parent', () => {
     const parent = new THREE.Group();
     const child = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());
