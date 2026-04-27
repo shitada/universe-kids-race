@@ -9,107 +9,147 @@ import type { InputSystem } from '../../../src/game/systems/InputSystem';
 import type { AudioManager } from '../../../src/game/audio/AudioManager';
 import type { SaveManager } from '../../../src/game/storage/SaveManager';
 
-function createStage(): StageScene {
-  const sceneManager = { requestTransition: vi.fn() } as unknown as SceneManager;
-  const inputSystem = { setBoostPressed: vi.fn() } as unknown as InputSystem;
+function createScene(): StageScene {
+  const sceneManager = {} as unknown as SceneManager;
+  const inputSystem = {} as unknown as InputSystem;
   const audioManager = {
     playBGM: vi.fn(),
     stopBGM: vi.fn(),
     playSFX: vi.fn(),
+    initFromInteraction: vi.fn(),
   } as unknown as AudioManager;
   const saveManager = {
-    load: vi.fn().mockReturnValue({ clearedStage: 0, unlockedPlanets: [] }),
+    load: vi.fn(() => ({ clearedStage: 0, unlockedPlanets: [] })),
     save: vi.fn(),
+    clear: vi.fn(),
   } as unknown as SaveManager;
   return new StageScene(sceneManager, inputSystem, audioManager, saveManager);
 }
 
+interface StageSceneInternals {
+  threeScene: THREE.Scene;
+  spaceship: { position: { x: number; y: number; z: number } };
+  stars: Star[];
+  meteorites: Meteorite[];
+  cleanupPassedObjects: () => void;
+}
+
 describe('StageScene.cleanupPassedObjects', () => {
-  it('disposes and removes stars/meteorites that have passed behind the spaceship', () => {
-    const stage = createStage();
-    const internals = stage as unknown as {
-      spaceship: { position: { z: number } };
-      stars: Star[];
-      meteorites: Meteorite[];
-      threeScene: THREE.Scene;
-      cleanupPassedObjects: () => void;
-    };
+  it('removes passed Stars from array, scene, and disposes them', () => {
+    const scene = createScene();
+    const internals = scene as unknown as StageSceneInternals;
 
-    // Replace threeScene with a fresh one we control
-    internals.threeScene = new THREE.Scene();
-    internals.spaceship = { position: { z: 0 } };
+    const threeScene = new THREE.Scene();
+    internals.threeScene = threeScene;
+    internals.spaceship = { position: { x: 0, y: 0, z: 0 } };
 
-    // Two stars: one well behind (passed), one ahead
-    const passedStar = new Star(0, 0, 100, 'NORMAL'); // behind: z=100 > shipZ(0)+30
-    const aheadStar = new Star(0, 0, -50, 'NORMAL');
-    internals.stars = [passedStar, aheadStar];
-    internals.threeScene.add(passedStar.mesh);
-    internals.threeScene.add(aheadStar.mesh);
+    // Star far behind ship (z > 30) -> should be removed
+    const passedStar = new Star(0, 0, 50);
+    threeScene.add(passedStar.mesh);
+    const passedDispose = vi.spyOn(passedStar, 'dispose');
 
-    // Two meteorites: one passed, one ahead
-    const passedMet = new Meteorite(0, 0, 80);
-    const aheadMet = new Meteorite(0, 0, -20);
-    internals.meteorites = [passedMet, aheadMet];
-    internals.threeScene.add(passedMet.mesh);
-    internals.threeScene.add(aheadMet.mesh);
+    // Star ahead -> should remain
+    const aheadStar = new Star(0, 0, -10);
+    threeScene.add(aheadStar.mesh);
 
-    const passedStarGeo = passedStar.mesh.geometry;
-    const passedStarMat = passedStar.mesh.material as THREE.Material;
-    const passedMetGeo = passedMet.mesh.geometry;
-    const passedMetMat = passedMet.mesh.material as THREE.Material;
-    const geoSpy = vi.spyOn(passedStarGeo, 'dispose');
-    const matSpy = vi.spyOn(passedStarMat, 'dispose');
-    const metGeoSpy = vi.spyOn(passedMetGeo, 'dispose');
-    const metMatSpy = vi.spyOn(passedMetMat, 'dispose');
+    // Star just behind threshold -> should remain (z == shipZ + 30 not strictly greater)
+    const borderlineStar = new Star(0, 0, 30);
+    threeScene.add(borderlineStar.mesh);
 
-    expect(internals.threeScene.children).toHaveLength(4);
+    internals.stars = [passedStar, aheadStar, borderlineStar];
+    internals.meteorites = [];
 
     internals.cleanupPassedObjects();
 
-    // Arrays only contain ahead objects
-    expect(internals.stars).toEqual([aheadStar]);
-    expect(internals.meteorites).toEqual([aheadMet]);
+    expect(internals.stars).toHaveLength(2);
+    expect(internals.stars).toContain(aheadStar);
+    expect(internals.stars).toContain(borderlineStar);
+    expect(internals.stars).not.toContain(passedStar);
 
-    // Passed meshes are removed from the scene graph; ahead meshes remain
-    expect(internals.threeScene.children).toContain(aheadStar.mesh);
-    expect(internals.threeScene.children).toContain(aheadMet.mesh);
-    expect(internals.threeScene.children).not.toContain(passedStar.mesh);
-    expect(internals.threeScene.children).not.toContain(passedMet.mesh);
-    expect(internals.threeScene.children).toHaveLength(2);
+    expect(passedStar.mesh.parent).toBeNull();
+    expect(aheadStar.mesh.parent).toBe(threeScene);
+    expect(borderlineStar.mesh.parent).toBe(threeScene);
 
-    // dispose() was called on geometries/materials of the passed entities
-    expect(geoSpy).toHaveBeenCalled();
-    expect(matSpy).toHaveBeenCalled();
-    expect(metGeoSpy).toHaveBeenCalled();
-    expect(metMatSpy).toHaveBeenCalled();
+    expect(passedDispose).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps stars/meteorites that are still within the active range', () => {
-    const stage = createStage();
-    const internals = stage as unknown as {
-      spaceship: { position: { z: number } };
-      stars: Star[];
-      meteorites: Meteorite[];
-      threeScene: THREE.Scene;
-      cleanupPassedObjects: () => void;
-    };
+  it('removes passed Meteorites from array, scene, and disposes them', () => {
+    const scene = createScene();
+    const internals = scene as unknown as StageSceneInternals;
 
-    internals.threeScene = new THREE.Scene();
-    internals.spaceship = { position: { z: 0 } };
+    const threeScene = new THREE.Scene();
+    internals.threeScene = threeScene;
+    internals.spaceship = { position: { x: 0, y: 0, z: 0 } };
 
-    // Boundary: exactly at shipZ + 30 should NOT be cleaned up (uses strict >)
-    const boundaryStar = new Star(0, 0, 30, 'NORMAL');
-    const boundaryMet = new Meteorite(0, 0, 30);
-    internals.stars = [boundaryStar];
-    internals.meteorites = [boundaryMet];
-    internals.threeScene.add(boundaryStar.mesh);
-    internals.threeScene.add(boundaryMet.mesh);
+    const passedMet = new Meteorite(0, 0, 100);
+    threeScene.add(passedMet.mesh);
+    const passedDispose = vi.spyOn(passedMet, 'dispose');
+
+    const aheadMet = new Meteorite(0, 0, -20);
+    threeScene.add(aheadMet.mesh);
+
+    internals.stars = [];
+    internals.meteorites = [passedMet, aheadMet];
 
     internals.cleanupPassedObjects();
 
-    expect(internals.stars).toEqual([boundaryStar]);
-    expect(internals.meteorites).toEqual([boundaryMet]);
-    expect(internals.threeScene.children).toContain(boundaryStar.mesh);
-    expect(internals.threeScene.children).toContain(boundaryMet.mesh);
+    expect(internals.meteorites).toHaveLength(1);
+    expect(internals.meteorites).toContain(aheadMet);
+    expect(internals.meteorites).not.toContain(passedMet);
+
+    expect(passedMet.mesh.parent).toBeNull();
+    expect(aheadMet.mesh.parent).toBe(threeScene);
+
+    expect(passedDispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('also cleans up already-collected Stars and inactive Meteorites once they pass behind', () => {
+    const scene = createScene();
+    const internals = scene as unknown as StageSceneInternals;
+
+    const threeScene = new THREE.Scene();
+    internals.threeScene = threeScene;
+    internals.spaceship = { position: { x: 0, y: 0, z: 0 } };
+
+    const collectedPassed = new Star(0, 0, 60);
+    collectedPassed.isCollected = true;
+    collectedPassed.mesh.visible = false;
+    threeScene.add(collectedPassed.mesh);
+
+    const inactivePassed = new Meteorite(0, 0, 60);
+    inactivePassed.isActive = false;
+    inactivePassed.mesh.visible = false;
+    threeScene.add(inactivePassed.mesh);
+
+    internals.stars = [collectedPassed];
+    internals.meteorites = [inactivePassed];
+
+    internals.cleanupPassedObjects();
+
+    expect(internals.stars).toHaveLength(0);
+    expect(internals.meteorites).toHaveLength(0);
+    expect(collectedPassed.mesh.parent).toBeNull();
+    expect(inactivePassed.mesh.parent).toBeNull();
+  });
+
+  it('keeps unrelated objects untouched when cleaning passed objects', () => {
+    const scene = createScene();
+    const internals = scene as unknown as StageSceneInternals;
+
+    const threeScene = new THREE.Scene();
+    internals.threeScene = threeScene;
+    internals.spaceship = { position: { x: 0, y: 0, z: 0 } };
+
+    const decoration = new THREE.Mesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshBasicMaterial(),
+    );
+    threeScene.add(decoration);
+
+    internals.stars = [];
+    internals.meteorites = [];
+    internals.cleanupPassedObjects();
+
+    expect(decoration.parent).toBe(threeScene);
   });
 });
