@@ -200,4 +200,72 @@ describe('SaveManager', () => {
       expect(sessionStore.get(SESSION_KEY)).toBe('active');
     });
   });
+
+  describe('exception safety (iPad Safari hardening)', () => {
+    it('save() does not throw when localStorage.setItem throws QuotaExceededError', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      localStorageMock.setItem.mockImplementationOnce(() => {
+        throw new Error('QuotaExceededError');
+      });
+      const manager = new SaveManager();
+      expect(() => manager.save({ clearedStage: 3, unlockedPlanets: [1, 2, 3] })).not.toThrow();
+      expect(warnSpy).toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('clear() does not throw when localStorage.removeItem throws', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      localStorageMock.removeItem.mockImplementationOnce(() => {
+        throw new Error('SecurityError');
+      });
+      const manager = new SaveManager();
+      expect(() => manager.clear()).not.toThrow();
+      expect(warnSpy).toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('load() returns DEFAULT_DATA after a save() failure (no crash on subsequent load)', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      localStorageMock.setItem.mockImplementationOnce(() => {
+        throw new Error('QuotaExceededError');
+      });
+      const manager = new SaveManager();
+      manager.save({ clearedStage: 7, unlockedPlanets: [1, 2] });
+      const data = manager.load();
+      expect(data.clearedStage).toBe(0);
+      expect(data.unlockedPlanets).toEqual([]);
+      warnSpy.mockRestore();
+    });
+
+    it('isFreshSession() does not throw when sessionStorage.getItem throws', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      sessionStorageMock.getItem.mockImplementationOnce(() => {
+        throw new Error('SecurityError');
+      });
+      const manager = new SaveManager();
+      let result: boolean | undefined;
+      expect(() => {
+        result = manager.isFreshSession();
+      }).not.toThrow();
+      expect(result).toBe(false);
+      expect(warnSpy).toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('isFreshSession() does not throw when sessionStorage.setItem throws', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      sessionStorageMock.setItem.mockImplementationOnce(() => {
+        throw new Error('QuotaExceededError');
+      });
+      const manager = new SaveManager();
+      expect(() => manager.isFreshSession()).not.toThrow();
+      warnSpy.mockRestore();
+    });
+
+    it('isFreshSession() returns true on first call and false on subsequent calls', () => {
+      const manager = new SaveManager();
+      expect(manager.isFreshSession()).toBe(true);
+      expect(manager.isFreshSession()).toBe(false);
+    });
+  });
 });
