@@ -120,14 +120,25 @@ export class HUD {
 
     this.boostButton.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
-      if (this.boostButton) {
-        this.boostButton.style.transform = 'scale(0.9)';
+      if (!this.boostButton) return;
+
+      if (this.lastCooldownProgress < 1.0) {
+        if (this.boostButton.hasAttribute('data-boost-shake')) return;
+        this.boostButton.setAttribute('data-boost-shake', '');
         setTimeout(() => {
           if (this.boostButton) {
-            this.boostButton.style.transform = 'scale(1.0)';
+            this.boostButton.removeAttribute('data-boost-shake');
           }
-        }, 150);
+        }, 250);
+        return;
       }
+
+      this.boostButton.style.transform = 'scale(0.9)';
+      setTimeout(() => {
+        if (this.boostButton) {
+          this.boostButton.style.transform = 'scale(1.0)';
+        }
+      }, 150);
       this.onBoostCallback?.();
     });
 
@@ -171,6 +182,16 @@ export class HUD {
       @keyframes boostBtnPulse {
         0%, 100% { transform: scale(1.0); }
         50% { transform: scale(1.05); }
+      }
+      @keyframes boostShake {
+        0%, 100% { transform: translateX(0); }
+        20% { transform: translateX(-4px); }
+        40% { transform: translateX(4px); }
+        60% { transform: translateX(-4px); }
+        80% { transform: translateX(4px); }
+      }
+      button[data-boost-shake] {
+        animation: boostShake 0.25s ease-in-out 1 !important;
       }
     `;
     document.head.appendChild(style);

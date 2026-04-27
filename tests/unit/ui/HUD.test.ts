@@ -218,4 +218,50 @@ describe('HUD', () => {
       expect(boostBtn.style.filter).toBe('none');
     });
   });
+
+  describe('Boost Button Cooldown Tap Feedback', () => {
+    it('does not invoke callback while cooldown is in progress', () => {
+      hud.show('Test');
+      let callCount = 0;
+      hud.setBoostCallback(() => { callCount++; });
+      hud.updateCooldown(0.5);
+      const uiOverlay = document.getElementById('ui-overlay')!;
+      const boostBtn = uiOverlay.querySelector('button') as HTMLButtonElement;
+      boostBtn.dispatchEvent(new Event('pointerdown'));
+      expect(callCount).toBe(0);
+    });
+
+    it('adds data-boost-shake attribute on cooldown tap and removes it after ~250ms', async () => {
+      hud.show('Test');
+      hud.setBoostCallback(() => {});
+      hud.updateCooldown(0.5);
+      const uiOverlay = document.getElementById('ui-overlay')!;
+      const boostBtn = uiOverlay.querySelector('button') as HTMLButtonElement;
+      boostBtn.dispatchEvent(new Event('pointerdown'));
+      expect(boostBtn.hasAttribute('data-boost-shake')).toBe(true);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(boostBtn.hasAttribute('data-boost-shake')).toBe(false);
+    });
+
+    it('invokes callback once when cooldown is complete', () => {
+      hud.show('Test');
+      let callCount = 0;
+      hud.setBoostCallback(() => { callCount++; });
+      hud.updateCooldown(1.0);
+      const uiOverlay = document.getElementById('ui-overlay')!;
+      const boostBtn = uiOverlay.querySelector('button') as HTMLButtonElement;
+      boostBtn.dispatchEvent(new Event('pointerdown'));
+      expect(callCount).toBe(1);
+    });
+
+    it('invokes callback on first tap before any updateCooldown call (initial active state)', () => {
+      hud.show('Test');
+      let callCount = 0;
+      hud.setBoostCallback(() => { callCount++; });
+      const uiOverlay = document.getElementById('ui-overlay')!;
+      const boostBtn = uiOverlay.querySelector('button') as HTMLButtonElement;
+      boostBtn.dispatchEvent(new Event('pointerdown'));
+      expect(callCount).toBe(1);
+    });
+  });
 });
