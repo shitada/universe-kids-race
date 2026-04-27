@@ -45,6 +45,7 @@ class MockAudioContext {
   currentTime = 0;
   sampleRate = 44100;
   resume = vi.fn().mockImplementation(async () => { this.state = 'running'; });
+  suspend = vi.fn().mockImplementation(async () => { this.state = 'suspended'; });
   close = vi.fn().mockImplementation(async () => { this.state = 'closed'; });
   createOscillator = vi.fn(() => new MockOscillatorNode());
   createGain = vi.fn(() => new MockGainNode());
@@ -76,42 +77,51 @@ describe('AudioResume integration (T003)', () => {
     vi.restoreAllMocks();
   });
 
-  it('ensureResumed() is called when document becomes visible', () => {
+  it('resumeIfPlaying() resumes AudioContext when document becomes visible during BGM playback', () => {
     audioManager.initSync();
-    const spy = vi.spyOn(audioManager, 'ensureResumed');
+    audioManager.playBGM(1);
+    const ctx = (audioManager as any).ctx as { resume: ReturnType<typeof vi.fn>; state: AudioContextState };
+    ctx.state = 'suspended';
+    ctx.resume.mockClear();
 
-    // Simulate visibilitychange registration as done in main.ts
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) {
-        audioManager.ensureResumed();
+      if (document.hidden) {
+        audioManager.suspend();
+      } else {
+        audioManager.resumeIfPlaying();
       }
     });
 
-    // Simulate becoming visible
     Object.defineProperty(document, 'hidden', { value: false, configurable: true });
     for (const handler of listeners['visibilitychange'] ?? []) {
       handler(new Event('visibilitychange'));
     }
 
-    expect(spy).toHaveBeenCalled();
+    expect(ctx.resume).toHaveBeenCalled();
   });
 
-  it('ensureResumed() is NOT called when document becomes hidden', () => {
+  it('suspend() is called when document becomes hidden', () => {
     audioManager.initSync();
-    const spy = vi.spyOn(audioManager, 'ensureResumed');
+    audioManager.playBGM(1);
+    const ctx = (audioManager as any).ctx as { suspend: ReturnType<typeof vi.fn>; state: AudioContextState };
+    // Simulate running state (initSync's resume is async; force running for the test)
+    ctx.state = 'running';
+    ctx.suspend.mockClear();
 
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) {
-        audioManager.ensureResumed();
+      if (document.hidden) {
+        audioManager.suspend();
+      } else {
+        audioManager.resumeIfPlaying();
       }
     });
 
-    // Simulate becoming hidden
     Object.defineProperty(document, 'hidden', { value: true, configurable: true });
     for (const handler of listeners['visibilitychange'] ?? []) {
       handler(new Event('visibilitychange'));
     }
 
-    expect(spy).not.toHaveBeenCalled();
+    expect(ctx.suspend).toHaveBeenCalledTimes(1);
+    expect(ctx.state).toBe('suspended');
   });
 });
