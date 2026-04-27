@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import * as THREE from 'three';
 import { Meteorite } from '../../../src/game/entities/Meteorite';
 
 describe('Meteorite', () => {
@@ -19,5 +20,16 @@ describe('Meteorite', () => {
     const met = new Meteorite(0, 0, 0);
     met.isActive = false;
     expect(met.isActive).toBe(false);
+  });
+
+  it('disposes geometry and material on dispose()', () => {
+    const met = new Meteorite(0, 0, 0);
+    const geoSpy = vi.spyOn(met.mesh.geometry, 'dispose');
+    const matSpy = vi.spyOn(met.mesh.material as THREE.Material, 'dispose');
+
+    met.dispose();
+
+    expect(geoSpy).toHaveBeenCalledTimes(1);
+    expect(matSpy).toHaveBeenCalledTimes(1);
   });
 });

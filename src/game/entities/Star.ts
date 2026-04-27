@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { StarType } from '../../types';
+import { disposeObject3D } from '../utils/disposeObject3D';
 
 export class Star {
   position: { x: number; y: number; z: number };
@@ -47,5 +48,9 @@ export class Star {
   collect(): void {
     this.isCollected = true;
     this.mesh.visible = false;
+  }
+
+  dispose(): void {
+    disposeObject3D(this.mesh);
   }
 }
