@@ -50,7 +50,8 @@ describe('StageScene cleanupPassedObjects', () => {
     expect(internal.stars[0]).toBe(aheadStar);
     expect(internal.threeScene.children).not.toContain(passedStar.mesh);
     expect(internal.threeScene.children).toContain(aheadStar.mesh);
-    expect(passedGeoSpy).toHaveBeenCalledTimes(1);
+    // Shared NORMAL star geometry must NOT be disposed when an instance is removed.
+    expect(passedGeoSpy).not.toHaveBeenCalled();
     expect(aheadGeoSpy).not.toHaveBeenCalled();
   });
 
@@ -82,7 +83,8 @@ describe('StageScene cleanupPassedObjects', () => {
     expect(internal.meteorites[0]).toBe(aheadMet);
     expect(internal.threeScene.children).not.toContain(passedMet.mesh);
     expect(internal.threeScene.children).toContain(aheadMet.mesh);
-    expect(passedGeoSpy).toHaveBeenCalledTimes(1);
+    // Shared meteorite geometry must NOT be disposed when an instance is removed.
+    expect(passedGeoSpy).not.toHaveBeenCalled();
   });
 
   it('does not let scene children grow unboundedly across many cleanup cycles', () => {

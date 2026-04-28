@@ -22,14 +22,44 @@ describe('Meteorite', () => {
     expect(met.isActive).toBe(false);
   });
 
-  it('disposes geometry and material on dispose()', () => {
+  it('does NOT dispose shared geometry/material on dispose()', () => {
     const met = new Meteorite(0, 0, 0);
     const geoSpy = vi.spyOn(met.mesh.geometry, 'dispose');
     const matSpy = vi.spyOn(met.mesh.material as THREE.Material, 'dispose');
 
     met.dispose();
 
-    expect(geoSpy).toHaveBeenCalledTimes(1);
-    expect(matSpy).toHaveBeenCalledTimes(1);
+    expect(geoSpy).not.toHaveBeenCalled();
+    expect(matSpy).not.toHaveBeenCalled();
+  });
+
+  it('removes the mesh from its parent on dispose()', () => {
+    const met = new Meteorite(0, 0, 0);
+    const parent = new THREE.Group();
+    parent.add(met.mesh);
+    expect(met.mesh.parent).toBe(parent);
+
+    met.dispose();
+
+    expect(met.mesh.parent).toBeNull();
+  });
+
+  it('100 meteorites share the same geometry and material references', () => {
+    const mets = Array.from({ length: 100 }, () => new Meteorite(0, 0, 0));
+    const geo = mets[0].mesh.geometry;
+    const mat = mets[0].mesh.material;
+    for (const m of mets) {
+      expect(m.mesh.geometry).toBe(geo);
+      expect(m.mesh.material).toBe(mat);
+    }
+  });
+
+  it('disposing one meteorite does not break a sibling created afterwards', () => {
+    const a = new Meteorite(0, 0, 0);
+    a.dispose();
+    const b = new Meteorite(0, 0, 0);
+    expect(b.mesh.geometry).toBe(a.mesh.geometry);
+    expect(b.mesh.material).toBe(a.mesh.material);
+    expect((b.mesh.geometry as THREE.BufferGeometry).attributes.position).toBeDefined();
   });
 });
