@@ -62,4 +62,41 @@ describe('Meteorite', () => {
     expect(b.mesh.material).toBe(a.mesh.material);
     expect((b.mesh.geometry as THREE.BufferGeometry).attributes.position).toBeDefined();
   });
+
+  it('reset() repositions the meteorite and re-activates it', () => {
+    const met = new Meteorite(1, 2, -3);
+    met.isActive = false;
+    met.update(0.5);
+    expect(met.mesh.rotation.x).not.toBe(0);
+
+    met.reset(7, 8, -9);
+
+    expect(met.position).toEqual({ x: 7, y: 8, z: -9 });
+    expect(met.mesh.position.x).toBe(7);
+    expect(met.mesh.position.y).toBe(8);
+    expect(met.mesh.position.z).toBe(-9);
+    expect(met.mesh.rotation.x).toBe(0);
+    expect(met.mesh.rotation.z).toBe(0);
+    expect(met.isActive).toBe(true);
+  });
+
+  it('recycle() detaches mesh from parent and preserves shared resources', () => {
+    const met = new Meteorite(0, 0, 0);
+    const parent = new THREE.Group();
+    parent.add(met.mesh);
+    met.update(0.5);
+    met.isActive = false;
+
+    const geoSpy = vi.spyOn(met.mesh.geometry, 'dispose');
+    const matSpy = vi.spyOn(met.mesh.material as THREE.Material, 'dispose');
+
+    met.recycle();
+
+    expect(met.mesh.parent).toBeNull();
+    expect(met.mesh.rotation.x).toBe(0);
+    expect(met.mesh.rotation.z).toBe(0);
+    expect(met.isActive).toBe(true);
+    expect(geoSpy).not.toHaveBeenCalled();
+    expect(matSpy).not.toHaveBeenCalled();
+  });
 });
