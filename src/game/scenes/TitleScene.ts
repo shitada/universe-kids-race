@@ -9,6 +9,7 @@ import { EncyclopediaOverlay } from '../../ui/EncyclopediaOverlay';
 export class TitleScene implements Scene {
   private threeScene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
+  private lastAspect = 0;
   private sceneManager: SceneManager;
   private saveManager: SaveManager;
   private audioManager: AudioManager;
@@ -32,6 +33,7 @@ export class TitleScene implements Scene {
   }
 
   enter(_context: SceneContext): void {
+    this.lastAspect = 0;
     this.threeScene = new THREE.Scene();
     this.threeScene.background = new THREE.Color(0x000020);
 
@@ -190,8 +192,12 @@ export class TitleScene implements Scene {
   }
 
   getCamera(): THREE.Camera {
-    this.camera.aspect = window.innerWidth / window.innerHeight;
-    this.camera.updateProjectionMatrix();
+    const aspect = window.innerWidth / window.innerHeight;
+    if (aspect !== this.lastAspect && Number.isFinite(aspect) && aspect > 0) {
+      this.camera.aspect = aspect;
+      this.camera.updateProjectionMatrix();
+      this.lastAspect = aspect;
+    }
     return this.camera;
   }
 }
