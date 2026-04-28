@@ -52,10 +52,9 @@ export class Star {
     if (this.starType === 'RAINBOW' && !this.isCollected) {
       this.hueOffset += deltaTime * 0.5;
       const hue = this.hueOffset % 1;
-      const color = new THREE.Color().setHSL(hue, 1, 0.5);
       const mat = this.mesh.material as THREE.MeshToonMaterial;
-      mat.color.copy(color);
-      mat.emissive.copy(color);
+      mat.color.setHSL(hue, 1, 0.5);
+      mat.emissive.setHSL(hue, 1, 0.5);
     }
   }
 
