@@ -204,3 +204,101 @@ describe('InputSystem — pointermove tracking', () => {
     zeroCanvas.remove();
   });
 });
+
+describe('InputSystem — focus/visibility reset', () => {
+  let input: InputSystem;
+  let canvas: HTMLCanvasElement;
+
+  beforeEach(() => {
+    input = new InputSystem();
+    canvas = createCanvas();
+    input.setup(canvas);
+  });
+
+  afterEach(() => {
+    input.dispose();
+    canvas.remove();
+    // restore visibility default
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+  });
+
+  it('window blur clears pressedKeys and resets moveDirection to 0', () => {
+    keyDown('ArrowLeft');
+    expect(input.getState().moveDirection).toBe(-1);
+    window.dispatchEvent(new Event('blur'));
+    expect(input.getState().moveDirection).toBe(0);
+    // Subsequent keyup should not produce side effects
+    keyUp('ArrowLeft');
+    expect(input.getState().moveDirection).toBe(0);
+  });
+
+  it('visibilitychange (hidden=true) clears activePointers and resets moveDirection', () => {
+    pointerDown(canvas, 100);
+    expect(input.getState().moveDirection).toBe(-1);
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(input.getState().moveDirection).toBe(0);
+    // After reset, pointerup for the same id must be a no-op (no negative side effects)
+    pointerUp(canvas);
+    expect(input.getState().moveDirection).toBe(0);
+  });
+
+  it('visibilitychange (hidden=false) does NOT reset inputs', () => {
+    keyDown('ArrowRight');
+    expect(input.getState().moveDirection).toBe(1);
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(input.getState().moveDirection).toBe(1);
+  });
+
+  it('pagehide clears inputs (iOS Safari background fallback)', () => {
+    keyDown('ArrowLeft');
+    expect(input.getState().moveDirection).toBe(-1);
+    window.dispatchEvent(new Event('pagehide'));
+    expect(input.getState().moveDirection).toBe(0);
+  });
+
+  it('blur also resets boostPressed to false', () => {
+    keyDown(' ');
+    expect(input.getState().boostPressed).toBe(true);
+    window.dispatchEvent(new Event('blur'));
+    expect(input.getState().boostPressed).toBe(false);
+  });
+
+  it('after reset, new keypress still updates moveDirection (listeners not removed)', () => {
+    keyDown('ArrowLeft');
+    window.dispatchEvent(new Event('blur'));
+    expect(input.getState().moveDirection).toBe(0);
+    keyDown('ArrowRight');
+    expect(input.getState().moveDirection).toBe(1);
+  });
+
+  it('dispose() removes blur/visibilitychange/pagehide listeners (no side effects after dispose)', () => {
+    input.dispose();
+    expect(() => {
+      window.dispatchEvent(new Event('blur'));
+      window.dispatchEvent(new Event('pagehide'));
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    }).not.toThrow();
+    expect(input.getState().moveDirection).toBe(0);
+    expect(input.getState().boostPressed).toBe(false);
+  });
+
+  it('repeated setup→dispose cycles do not leak listeners', () => {
+    input.dispose();
+    for (let i = 0; i < 5; i++) {
+      const c = createCanvas();
+      const sys = new InputSystem();
+      sys.setup(c);
+      window.dispatchEvent(new Event('blur'));
+      expect(sys.getState().moveDirection).toBe(0);
+      sys.dispose();
+      c.remove();
+    }
+    // Reinitialize for afterEach to dispose cleanly
+    input = new InputSystem();
+    canvas = createCanvas();
+    input.setup(canvas);
+  });
+});
