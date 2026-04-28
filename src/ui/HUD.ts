@@ -10,6 +10,12 @@ export class HUD {
   private onBoostCallback: (() => void) | null = null;
   private onHomeCallback: (() => void) | null = null;
   private lastCooldownProgress = 1.0;
+  // Differential write caches for updateCooldown.
+  // NOTE: If a future code path mutates cooldownBar / boostButton styles
+  // outside of updateCooldown, these caches may become stale and need to
+  // be invalidated explicitly.
+  private lastCooldownPct = -1;
+  private lastReadyState: boolean | null = null;
 
   show(stageName?: string): void {
     const hudRoot = document.getElementById('hud');
@@ -213,25 +219,27 @@ export class HUD {
   updateCooldown(progress: number): void {
     if (!this.cooldownBar || !this.boostButton) return;
 
-    const pct = Math.max(0, Math.min(1, progress)) * 100;
-    this.cooldownBar.style.width = `${pct}%`;
-
-    // Glow effect on completion
-    if (progress >= 1.0) {
-      this.cooldownBar.style.boxShadow = '0 0 10px #00ff88';
-    } else {
-      this.cooldownBar.style.boxShadow = 'none';
+    const clamped = Math.max(0, Math.min(1, progress));
+    const pct = Math.round(clamped * 100);
+    if (pct !== this.lastCooldownPct) {
+      this.cooldownBar.style.width = `${pct}%`;
+      this.lastCooldownPct = pct;
     }
 
-    // Boost button cooldown visual state
-    if (progress < 1.0) {
-      this.boostButton.style.opacity = '0.5';
-      this.boostButton.style.filter = 'grayscale(0.8)';
-      this.boostButton.style.animation = 'none';
-    } else {
-      this.boostButton.style.opacity = '1';
-      this.boostButton.style.filter = 'none';
-      this.boostButton.style.animation = 'boostBtnPulse 2s ease-in-out infinite';
+    const ready = progress >= 1.0;
+    if (ready !== this.lastReadyState) {
+      if (ready) {
+        this.cooldownBar.style.boxShadow = '0 0 10px #00ff88';
+        this.boostButton.style.opacity = '1';
+        this.boostButton.style.filter = 'none';
+        this.boostButton.style.animation = 'boostBtnPulse 2s ease-in-out infinite';
+      } else {
+        this.cooldownBar.style.boxShadow = 'none';
+        this.boostButton.style.opacity = '0.5';
+        this.boostButton.style.filter = 'grayscale(0.8)';
+        this.boostButton.style.animation = 'none';
+      }
+      this.lastReadyState = ready;
     }
 
     this.lastCooldownProgress = progress;
@@ -260,6 +268,8 @@ export class HUD {
     }
     this.cooldownBar = null;
     this.lastCooldownProgress = 1.0;
+    this.lastCooldownPct = -1;
+    this.lastReadyState = null;
     this.scoreEl = null;
     this.starCountEl = null;
   }

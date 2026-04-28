@@ -264,4 +264,99 @@ describe('HUD', () => {
       expect(callCount).toBe(1);
     });
   });
+
+  describe('updateCooldown differential writes (perf)', () => {
+    function spyStyleSetter(el: HTMLElement, prop: string): { count: number; values: string[] } {
+      const tracker = { count: 0, values: [] as string[] };
+      let current = (el.style as unknown as Record<string, string>)[prop] ?? '';
+      Object.defineProperty(el.style, prop, {
+        configurable: true,
+        get() { return current; },
+        set(v: string) {
+          tracker.count++;
+          tracker.values.push(v);
+          current = v;
+        },
+      });
+      return tracker;
+    }
+
+    it('does not rewrite cooldown bar width when progress is unchanged across frames', () => {
+      hud.show('Test');
+      const bar = document.querySelector('[data-cooldown-bar]') as HTMLElement;
+      // Prime with an initial value, then start spying.
+      hud.updateCooldown(0.42);
+      const widthSpy = spyStyleSetter(bar, 'width');
+      for (let i = 0; i < 10; i++) {
+        hud.updateCooldown(0.42);
+      }
+      expect(widthSpy.count).toBe(0);
+    });
+
+    it('does not rewrite boost button opacity/filter/animation while ready state is unchanged', () => {
+      hud.show('Test');
+      const boostBtn = document.getElementById('ui-overlay')!.querySelector('button') as HTMLButtonElement;
+      // Establish ready state.
+      hud.updateCooldown(1.0);
+      const opacitySpy = spyStyleSetter(boostBtn, 'opacity');
+      const filterSpy = spyStyleSetter(boostBtn, 'filter');
+      const animationSpy = spyStyleSetter(boostBtn, 'animation');
+      hud.updateCooldown(1.0);
+      hud.updateCooldown(1.0);
+      hud.updateCooldown(1.0);
+      expect(opacitySpy.count).toBe(0);
+      expect(filterSpy.count).toBe(0);
+      expect(animationSpy.count).toBe(0);
+    });
+
+    it('updates boxShadow and animation exactly once per ready-state transition', () => {
+      hud.show('Test');
+      const bar = document.querySelector('[data-cooldown-bar]') as HTMLElement;
+      const boostBtn = document.getElementById('ui-overlay')!.querySelector('button') as HTMLButtonElement;
+      // Start from a known not-ready state.
+      hud.updateCooldown(0.5);
+      const boxShadowSpy = spyStyleSetter(bar, 'boxShadow');
+      const animationSpy = spyStyleSetter(boostBtn, 'animation');
+
+      // 0.5 -> 1.0 : 1 transition (not-ready -> ready)
+      hud.updateCooldown(1.0);
+      // 1.0 -> 0.5 : 1 transition (ready -> not-ready)
+      hud.updateCooldown(0.5);
+
+      expect(boxShadowSpy.count).toBe(2);
+      expect(animationSpy.count).toBe(2);
+    });
+
+    it('quantizes width to integer percentage', () => {
+      hud.show('Test');
+      hud.updateCooldown(0.333);
+      const bar = document.querySelector('[data-cooldown-bar]') as HTMLElement;
+      expect(bar.style.width).toBe('33%');
+    });
+
+    it('reapplies styles on the first updateCooldown after hide()/show() re-entry', () => {
+      hud.show('Test');
+      hud.updateCooldown(0.5);
+      hud.hide();
+
+      const uiOverlay = document.createElement('div');
+      uiOverlay.id = 'ui-overlay';
+      const hudRoot = document.createElement('div');
+      hudRoot.id = 'hud';
+      // Fresh DOM hosts (afterEach already removed previous ones during teardown,
+      // but we are still inside the same test, so re-create them now).
+      document.getElementById('ui-overlay')?.remove();
+      document.getElementById('hud')?.remove();
+      document.body.appendChild(hudRoot);
+      document.body.appendChild(uiOverlay);
+
+      hud.show('Test');
+      hud.updateCooldown(0.5);
+
+      const bar = document.querySelector('[data-cooldown-bar]') as HTMLElement;
+      const boostBtn = document.getElementById('ui-overlay')!.querySelector('button') as HTMLButtonElement;
+      expect(bar.style.width).toBe('50%');
+      expect(boostBtn.style.opacity).toBe('0.5');
+    });
+  });
 });
