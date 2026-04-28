@@ -7,6 +7,7 @@ import { StageScene } from './game/scenes/StageScene';
 import { EndingScene } from './game/scenes/EndingScene';
 import { SaveManager } from './game/storage/SaveManager';
 import { AudioManager } from './game/audio/AudioManager';
+import { AdaptivePixelRatioController } from './game/utils/AdaptivePixelRatioController';
 import type { SceneType, SceneContext } from './types';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
@@ -15,16 +16,15 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 const maxPixelRatio = Math.min(window.devicePixelRatio, 2);
 const PIXEL_RATIO_TIERS = [1.0, 1.5, maxPixelRatio];
 const MAX_TIER = PIXEL_RATIO_TIERS.length - 1;
-let currentTier = MAX_TIER;
 
 function applyPixelRatioTier(tier: number): void {
   const clamped = Math.max(0, Math.min(MAX_TIER, tier));
-  currentTier = clamped;
   renderer.setPixelRatio(PIXEL_RATIO_TIERS[clamped]);
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
 applyPixelRatioTier(MAX_TIER);
+const pixelRatioController = new AdaptivePixelRatioController(MAX_TIER, applyPixelRatioTier);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x000020);
 
@@ -73,52 +73,6 @@ sceneManager.setTransitionHandler((sceneType: SceneType, context?: SceneContext)
 // Start from title
 sceneManager.transitionTo('title');
 
-// Adaptive pixel ratio scaling thresholds (Constitution IV: maintain 60fps on iPad Safari).
-const FPS_DOWNSCALE_THRESHOLD = 50;
-const FPS_UPSCALE_THRESHOLD = 58;
-const DOWNSCALE_SUSTAIN_MS = 1500;
-const UPSCALE_SUSTAIN_MS = 3000;
-const TIER_CHANGE_COOLDOWN_MS = 2000;
-const RESUME_GRACE_MS = 1000;
-
-let lowFpsSince: number | null = null;
-let highFpsSince: number | null = null;
-let lastTierChangeAt = 0;
-let resumeGraceUntil = 0;
-
-function handleFpsSample(fps: number): void {
-  const now = performance.now();
-  if (now < resumeGraceUntil) {
-    lowFpsSince = null;
-    highFpsSince = null;
-    return;
-  }
-  if (now - lastTierChangeAt < TIER_CHANGE_COOLDOWN_MS) {
-    return;
-  }
-
-  if (fps < FPS_DOWNSCALE_THRESHOLD) {
-    highFpsSince = null;
-    if (lowFpsSince === null) lowFpsSince = now;
-    if (now - lowFpsSince >= DOWNSCALE_SUSTAIN_MS && currentTier > 0) {
-      applyPixelRatioTier(currentTier - 1);
-      lastTierChangeAt = now;
-      lowFpsSince = null;
-    }
-  } else if (fps >= FPS_UPSCALE_THRESHOLD) {
-    lowFpsSince = null;
-    if (highFpsSince === null) highFpsSince = now;
-    if (now - highFpsSince >= UPSCALE_SUSTAIN_MS && currentTier < MAX_TIER) {
-      applyPixelRatioTier(currentTier + 1);
-      lastTierChangeAt = now;
-      highFpsSince = null;
-    }
-  } else {
-    lowFpsSince = null;
-    highFpsSince = null;
-  }
-}
-
 gameLoop.start(
   (deltaTime: number) => {
     sceneManager.update(deltaTime);
@@ -130,7 +84,9 @@ gameLoop.start(
       renderer.render(scene, camera);
     }
   },
-  handleFpsSample,
+  (fps: number) => {
+    pixelRatioController.sample(fps, performance.now());
+  },
 );
 
 // Handle resize
@@ -151,8 +107,6 @@ document.addEventListener('visibilitychange', () => {
   } else {
     gameLoop.resume();
     audioManager.ensureResumed();
-    resumeGraceUntil = performance.now() + RESUME_GRACE_MS;
-    lowFpsSince = null;
-    highFpsSince = null;
+    pixelRatioController.notifyResume(performance.now());
   }
 });
