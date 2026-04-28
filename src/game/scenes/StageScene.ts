@@ -56,8 +56,9 @@ export class StageScene implements Scene {
   // Background stars
   private bgStars: THREE.Points | null = null;
 
-  // Boost effects
+  // Boost effects (retained: single instance reused per frame; do not dispose per instance)
   private boostLines: THREE.LineSegments | null = null;
+  private boostLinePositions: Float32Array | null = null;
 
   // Companion manager
   private companionManager: CompanionManager | null = null;
@@ -157,6 +158,9 @@ export class StageScene implements Scene {
     const saveData = this.saveManager.load();
     this.companionManager = new CompanionManager(saveData.unlockedPlanets);
     this.threeScene.add(this.companionManager.getGroup());
+
+    // Boost line effect (created once, reused per frame)
+    this.initBoostLines();
 
     // BGM
     this.audioManager.playBGM(this.stageNumber);
@@ -554,30 +558,44 @@ export class StageScene implements Scene {
     }
   }
 
+  private initBoostLines(): void {
+    if (this.boostLines) return;
+    // 20 line segments × 2 endpoints × 3 floats = 120
+    this.boostLinePositions = new Float32Array(120);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(this.boostLinePositions, 3));
+    const mat = new THREE.LineBasicMaterial({ color: 0x00ddff, transparent: true, opacity: 0.6 });
+    this.boostLines = new THREE.LineSegments(geo, mat);
+    this.boostLines.frustumCulled = false;
+    this.boostLines.visible = false;
+    this.threeScene.add(this.boostLines);
+  }
+
   private updateBoostEffects(): void {
-    // Remove old boost lines
-    if (this.boostLines) {
-      this.threeScene.remove(this.boostLines);
-      this.boostLines.geometry.dispose();
-      (this.boostLines.material as THREE.Material).dispose();
-      this.boostLines = null;
+    if (!this.boostLines || !this.boostLinePositions) return;
+
+    if (!this.boostSystem.isActive()) {
+      this.boostLines.visible = false;
+      return;
     }
 
-    if (this.boostSystem.isActive()) {
-      const positions: number[] = [];
-      for (let i = 0; i < 20; i++) {
-        const x = this.spaceship.position.x + (Math.random() - 0.5) * 4;
-        const y = (Math.random() - 0.5) * 3;
-        const z = this.spaceship.position.z + 2 + Math.random() * 8;
-        positions.push(x, y, z);
-        positions.push(x, y, z + 2 + Math.random() * 3);
-      }
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-      const mat = new THREE.LineBasicMaterial({ color: 0x00ddff, transparent: true, opacity: 0.6 });
-      this.boostLines = new THREE.LineSegments(geo, mat);
-      this.threeScene.add(this.boostLines);
+    const pos = this.boostLinePositions;
+    const shipX = this.spaceship.position.x;
+    const shipZ = this.spaceship.position.z;
+    for (let i = 0; i < 20; i++) {
+      const x = shipX + (Math.random() - 0.5) * 4;
+      const y = (Math.random() - 0.5) * 3;
+      const z = shipZ + 2 + Math.random() * 8;
+      const base = i * 6;
+      pos[base] = x;
+      pos[base + 1] = y;
+      pos[base + 2] = z;
+      pos[base + 3] = x;
+      pos[base + 4] = y;
+      pos[base + 5] = z + 2 + Math.random() * 3;
     }
+    (this.boostLines.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+    this.boostLines.visible = true;
   }
 
   private cleanupPassedObjects(): void {
@@ -848,10 +866,12 @@ export class StageScene implements Scene {
 
     // Dispose retained scene resources
     if (this.boostLines) {
+      this.threeScene.remove(this.boostLines);
       this.boostLines.geometry.dispose();
       (this.boostLines.material as THREE.Material).dispose();
       this.boostLines = null;
     }
+    this.boostLinePositions = null;
     if (this.bgStars) {
       this.bgStars.geometry.dispose();
       (this.bgStars.material as THREE.Material).dispose();
