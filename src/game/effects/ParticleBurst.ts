@@ -1,5 +1,12 @@
 import * as THREE from 'three';
 
+/**
+ * Legacy options shape preserved for backwards-compatible call sites.
+ * The recommended hot-path API is the primitive-argument overload of
+ * `ParticleBurst.reset` / `ParticleBurstManager.emit`, which avoids
+ * per-emit GC allocations (no `new THREE.Vector3` / `new THREE.Color`
+ * / options literal). See `reset(scene, x, y, z, color, count, isRainbow)`.
+ */
 export interface ParticleBurstOptions {
   position: THREE.Vector3;
   color: number;
@@ -21,6 +28,10 @@ export class ParticleBurst {
   private readonly positionAttr: THREE.BufferAttribute;
   private readonly colorAttr: THREE.BufferAttribute;
   private readonly sizeAttr: THREE.BufferAttribute;
+  // Reused per-instance color scratch buffers. Safe because each pool slot
+  // owns its own ParticleBurst, so concurrent emits never share these.
+  private readonly baseColor = new THREE.Color();
+  private readonly tempColor = new THREE.Color();
   private count = 0;
   private maxLifetime = 0.5;
   private elapsed = 0;
@@ -59,24 +70,33 @@ export class ParticleBurst {
     this.points.visible = false;
   }
 
-  reset(scene: THREE.Scene, options: ParticleBurstOptions): void {
+  reset(
+    scene: THREE.Scene,
+    x: number,
+    y: number,
+    z: number,
+    color: number,
+    particleCount: number,
+    isRainbow: boolean,
+  ): void {
     if (this.disposed) return;
-    const count = Math.min(Math.max(0, options.particleCount), MAX_PARTICLES_PER_BURST);
+    const count = Math.min(Math.max(0, particleCount), MAX_PARTICLES_PER_BURST);
     this.count = count;
-    this.maxLifetime = options.isRainbow ? 0.8 : 0.5;
+    this.maxLifetime = isRainbow ? 0.8 : 0.5;
     this.elapsed = 0;
 
-    const baseColor = new THREE.Color(options.color);
-    const speedMin = options.isRainbow ? 8 : 5;
-    const speedMax = options.isRainbow ? 15 : 10;
-    const initialSize = options.isRainbow ? 0.5 : 0.3;
-    const tempColor = options.isRainbow ? new THREE.Color() : null;
+    this.baseColor.set(color);
+    const baseColor = this.baseColor;
+    const speedMin = isRainbow ? 8 : 5;
+    const speedMax = isRainbow ? 15 : 10;
+    const initialSize = isRainbow ? 0.5 : 0.3;
+    const tempColor = isRainbow ? this.tempColor : null;
 
     for (let i = 0; i < count; i++) {
       const i3 = i * 3;
-      this.positions[i3] = options.position.x;
-      this.positions[i3 + 1] = options.position.y;
-      this.positions[i3 + 2] = options.position.z;
+      this.positions[i3] = x;
+      this.positions[i3 + 1] = y;
+      this.positions[i3 + 2] = z;
 
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
@@ -85,7 +105,7 @@ export class ParticleBurst {
       this.velocities[i3 + 1] = Math.sin(phi) * Math.sin(theta) * speed;
       this.velocities[i3 + 2] = Math.cos(phi) * speed;
 
-      if (options.isRainbow && tempColor) {
+      if (isRainbow && tempColor) {
         tempColor.setHSL(Math.random(), 1, 0.5);
         this.colors[i3] = tempColor.r;
         this.colors[i3 + 1] = tempColor.g;
@@ -114,9 +134,18 @@ export class ParticleBurst {
     this.active = true;
   }
 
-  // Backwards-compatible alias for the legacy initialization API.
+  // Backwards-compatible alias for the legacy options-object initialization API.
+  // Prefer the primitive-argument `reset` to avoid per-call allocations.
   init(scene: THREE.Scene, options: ParticleBurstOptions): void {
-    this.reset(scene, options);
+    this.reset(
+      scene,
+      options.position.x,
+      options.position.y,
+      options.position.z,
+      options.color,
+      options.particleCount,
+      options.isRainbow,
+    );
   }
 
   update(deltaTime: number): void {
@@ -199,7 +228,15 @@ export class ParticleBurstManager {
     }
   }
 
-  emit(scene: THREE.Scene, options: ParticleBurstOptions): void {
+  emit(
+    scene: THREE.Scene,
+    x: number,
+    y: number,
+    z: number,
+    color: number,
+    particleCount: number,
+    isRainbow: boolean,
+  ): void {
     let slot: ParticleBurst | null = null;
     for (const burst of this.pool) {
       if (!burst.isActive()) {
@@ -222,7 +259,7 @@ export class ParticleBurstManager {
       }
     }
 
-    slot.reset(scene, options);
+    slot.reset(scene, x, y, z, color, particleCount, isRainbow);
   }
 
   update(deltaTime: number): void {
