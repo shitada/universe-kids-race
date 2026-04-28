@@ -46,7 +46,7 @@ describe('StageScene.cleanupPassedObjects', () => {
     // Star far behind ship (z > 30) -> should be removed
     const passedStar = new Star(0, 0, 50);
     threeScene.add(passedStar.mesh);
-    const passedDispose = vi.spyOn(passedStar, 'dispose');
+    const passedRecycle = vi.spyOn(passedStar, 'recycle');
 
     // Star ahead -> should remain
     const aheadStar = new Star(0, 0, -10);
@@ -70,7 +70,7 @@ describe('StageScene.cleanupPassedObjects', () => {
     expect(aheadStar.mesh.parent).toBe(threeScene);
     expect(borderlineStar.mesh.parent).toBe(threeScene);
 
-    expect(passedDispose).toHaveBeenCalledTimes(1);
+    expect(passedRecycle).toHaveBeenCalledTimes(1);
   });
 
   it('removes passed Meteorites from array, scene, and disposes them', () => {
@@ -83,7 +83,7 @@ describe('StageScene.cleanupPassedObjects', () => {
 
     const passedMet = new Meteorite(0, 0, 100);
     threeScene.add(passedMet.mesh);
-    const passedDispose = vi.spyOn(passedMet, 'dispose');
+    const passedRecycle = vi.spyOn(passedMet, 'recycle');
 
     const aheadMet = new Meteorite(0, 0, -20);
     threeScene.add(aheadMet.mesh);
@@ -100,7 +100,7 @@ describe('StageScene.cleanupPassedObjects', () => {
     expect(passedMet.mesh.parent).toBeNull();
     expect(aheadMet.mesh.parent).toBe(threeScene);
 
-    expect(passedDispose).toHaveBeenCalledTimes(1);
+    expect(passedRecycle).toHaveBeenCalledTimes(1);
   });
 
   it('also cleans up already-collected Stars and inactive Meteorites once they pass behind', () => {
