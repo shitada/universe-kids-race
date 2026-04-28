@@ -461,20 +461,26 @@ export class StageScene implements Scene {
       this.scoreSystem.addStarScore(star.starType);
       if (star.starType === 'RAINBOW') {
         this.audioManager.playSFX('rainbowCollect');
-        this.particleBurstManager.emit(this.threeScene, {
-          position: new THREE.Vector3(star.position.x, star.position.y, star.position.z),
-          color: 0xffdd00,
-          particleCount: 50,
-          isRainbow: true,
-        });
+        this.particleBurstManager.emit(
+          this.threeScene,
+          star.position.x,
+          star.position.y,
+          star.position.z,
+          0xffdd00,
+          50,
+          true,
+        );
       } else {
         this.audioManager.playSFX('starCollect');
-        this.particleBurstManager.emit(this.threeScene, {
-          position: new THREE.Vector3(star.position.x, star.position.y, star.position.z),
-          color: 0xffdd00,
-          particleCount: 20,
-          isRainbow: false,
-        });
+        this.particleBurstManager.emit(
+          this.threeScene,
+          star.position.x,
+          star.position.y,
+          star.position.z,
+          0xffdd00,
+          20,
+          false,
+        );
       }
     }
 
