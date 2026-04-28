@@ -34,14 +34,56 @@ describe('Star', () => {
     expect(star.radius).toBeGreaterThan(0);
   });
 
-  it('disposes geometry and material on dispose()', () => {
-    const star = new Star(0, 0, -10);
+  it('disposes only the per-instance RAINBOW material; shared geometry is preserved', () => {
+    const star = new Star(0, 0, -10, 'RAINBOW');
     const geoSpy = vi.spyOn(star.mesh.geometry, 'dispose');
     const matSpy = vi.spyOn(star.mesh.material as THREE.Material, 'dispose');
 
     star.dispose();
 
-    expect(geoSpy).toHaveBeenCalledTimes(1);
+    expect(geoSpy).not.toHaveBeenCalled();
     expect(matSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT dispose shared geometry/material for a NORMAL star', () => {
+    const star = new Star(0, 0, -10, 'NORMAL');
+    const geoSpy = vi.spyOn(star.mesh.geometry, 'dispose');
+    const matSpy = vi.spyOn(star.mesh.material as THREE.Material, 'dispose');
+
+    star.dispose();
+
+    expect(geoSpy).not.toHaveBeenCalled();
+    expect(matSpy).not.toHaveBeenCalled();
+  });
+
+  it('NORMAL stars share the same geometry and material references', () => {
+    const stars = Array.from({ length: 100 }, () => new Star(0, 0, -10, 'NORMAL'));
+    const geo = stars[0].mesh.geometry;
+    const mat = stars[0].mesh.material;
+    for (const s of stars) {
+      expect(s.mesh.geometry).toBe(geo);
+      expect(s.mesh.material).toBe(mat);
+    }
+  });
+
+  it('RAINBOW star shares geometry but uses its own material', () => {
+    const normal = new Star(0, 0, -10, 'NORMAL');
+    const rainbow1 = new Star(0, 0, -10, 'RAINBOW');
+    const rainbow2 = new Star(0, 0, -10, 'RAINBOW');
+
+    expect(rainbow1.mesh.geometry).toBe(normal.mesh.geometry);
+    expect(rainbow2.mesh.geometry).toBe(normal.mesh.geometry);
+    expect(rainbow1.mesh.material).not.toBe(normal.mesh.material);
+    expect(rainbow1.mesh.material).not.toBe(rainbow2.mesh.material);
+  });
+
+  it('disposing one star does not affect a sibling star created afterwards', () => {
+    const a = new Star(0, 0, -10, 'NORMAL');
+    a.dispose();
+    const b = new Star(0, 0, -10, 'NORMAL');
+    // Shared resources still usable
+    expect(b.mesh.geometry).toBe(a.mesh.geometry);
+    expect(b.mesh.material).toBe(a.mesh.material);
+    expect((b.mesh.geometry as THREE.BufferGeometry).attributes.position).toBeDefined();
   });
 });

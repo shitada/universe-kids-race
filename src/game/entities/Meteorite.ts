@@ -1,5 +1,12 @@
 import * as THREE from 'three';
-import { disposeObject3D } from '../utils/disposeObject3D';
+
+// Shared resources for Meteorite instances. All meteorites have identical
+// shape and color, so we reuse a single geometry/material to reduce GC and
+// GPU buffer churn. Do NOT mutate SHARED_MATERIAL or dispose() these from
+// instance dispose() (the generic disposeObject3D path is intentionally
+// bypassed here).
+const SHARED_GEOMETRY = new THREE.DodecahedronGeometry(1.0);
+const SHARED_MATERIAL = new THREE.MeshToonMaterial({ color: 0x887766 });
 
 export class Meteorite {
   position: { x: number; y: number; z: number };
@@ -14,9 +21,7 @@ export class Meteorite {
   }
 
   private createMesh(): THREE.Mesh {
-    const geo = new THREE.DodecahedronGeometry(this.radius);
-    const mat = new THREE.MeshToonMaterial({ color: 0x887766 });
-    return new THREE.Mesh(geo, mat);
+    return new THREE.Mesh(SHARED_GEOMETRY, SHARED_MATERIAL);
   }
 
   update(deltaTime: number): void {
@@ -25,6 +30,7 @@ export class Meteorite {
   }
 
   dispose(): void {
-    disposeObject3D(this.mesh);
+    // Shared geometry/material are NOT disposed here; only detach from parent.
+    this.mesh.parent?.remove(this.mesh);
   }
 }
