@@ -620,6 +620,74 @@ describe('AudioManager', () => {
     });
   });
 
+  describe('suspend()', () => {
+    it('does not throw when ctx is null', () => {
+      const am = new AudioManager();
+      expect(() => am.suspend()).not.toThrow();
+    });
+
+    it('calls ctx.suspend() and transitions state to suspended when running', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      const ctx = (am as any).ctx as MockAudioContext;
+      ctx.state = 'running';
+      ctx.suspend.mockClear();
+
+      am.suspend();
+
+      expect(ctx.suspend).toHaveBeenCalled();
+      expect(ctx.state).toBe('suspended');
+      am.dispose();
+    });
+
+    it('does not call ctx.suspend() when state is suspended', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      const ctx = (am as any).ctx as MockAudioContext;
+      ctx.state = 'suspended';
+      ctx.suspend.mockClear();
+
+      am.suspend();
+
+      expect(ctx.suspend).not.toHaveBeenCalled();
+    });
+
+    it('does not call ctx.suspend() when state is closed', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      const ctx = (am as any).ctx as MockAudioContext;
+      ctx.state = 'closed';
+      ctx.suspend.mockClear();
+
+      am.suspend();
+
+      expect(ctx.suspend).not.toHaveBeenCalled();
+    });
+
+    it('does not throw after dispose()', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      am.dispose();
+      expect(() => am.suspend()).not.toThrow();
+    });
+
+    it('swallows rejected promise from ctx.suspend()', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      const ctx = (am as any).ctx as MockAudioContext;
+      ctx.state = 'running';
+      ctx.suspend.mockImplementationOnce(() => Promise.reject(new Error('not allowed')));
+
+      expect(() => am.suspend()).not.toThrow();
+      am.dispose();
+    });
+  });
+
   describe('initSync() suspended handling (T002)', () => {
     it('calls ensureResumed() when already initialized and ctx is suspended', () => {
       vi.stubGlobal('AudioContext', MockAudioContext);

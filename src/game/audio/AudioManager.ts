@@ -266,14 +266,16 @@ export class AudioManager {
     }
   }
 
-  // Symmetric counterpart to ensureResumed(): pause AudioContext when going to background.
   suspend(): void {
+    if (!this.ctx) return;
+    if (this.ctx.state !== 'running') return;
     try {
-      if (this.ctx && this.ctx.state === 'running') {
-        this.ctx.suspend();
+      const result = this.ctx.suspend();
+      if (result && typeof (result as Promise<void>).catch === 'function') {
+        (result as Promise<void>).catch(() => { /* ignore */ });
       }
     } catch {
-      // Ignore: matches ensureResumed() style and avoids breaking on unsupported environments.
+      /* ignore */
     }
   }
 
