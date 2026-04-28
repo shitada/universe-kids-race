@@ -86,4 +86,30 @@ describe('Star', () => {
     expect(b.mesh.material).toBe(a.mesh.material);
     expect((b.mesh.geometry as THREE.BufferGeometry).attributes.position).toBeDefined();
   });
+
+  it('RAINBOW update keeps the same material instance across frames', () => {
+    const star = new Star(0, 0, -10, 'RAINBOW');
+    const matRef = star.mesh.material;
+    for (let i = 0; i < 10; i++) {
+      star.update(0.016);
+    }
+    expect(star.mesh.material).toBe(matRef);
+  });
+
+  it('RAINBOW update advances hue without allocating a new Color instance', () => {
+    const star = new Star(0, 0, -10, 'RAINBOW');
+    const mat = star.mesh.material as THREE.MeshToonMaterial;
+    const colorRef = mat.color;
+    const emissiveRef = mat.emissive;
+    const initialHsl = { h: 0, s: 0, l: 0 };
+    mat.color.getHSL(initialHsl);
+    star.update(0.5);
+    star.update(0.5);
+    const afterHsl = { h: 0, s: 0, l: 0 };
+    mat.color.getHSL(afterHsl);
+    expect(afterHsl.h).not.toBe(initialHsl.h);
+    // Color/emissive references are mutated in place, not replaced.
+    expect(mat.color).toBe(colorRef);
+    expect(mat.emissive).toBe(emissiveRef);
+  });
 });
