@@ -8,38 +8,55 @@ export interface CollisionResult {
 }
 
 export class CollisionSystem {
+  // Reusable result buffer to avoid per-frame GC allocations on the hot path.
+  // NOTE: The returned object (and its `starCollisions` array) is owned by this
+  // instance and is only valid until the next `check()` call. Callers must
+  // consume it synchronously and must not retain references across frames.
+  private readonly result: CollisionResult = {
+    starCollisions: [],
+    meteoriteCollision: false,
+  };
+
+  /**
+   * Detects star/meteorite collisions for the current frame.
+   *
+   * Performance notes:
+   * - Uses squared-distance comparison to avoid square root computation in the hot loop.
+   * - Returns a reusable buffer; the result is only valid until the next
+   *   `check()` call. Do not store references to the returned object or its
+   *   `starCollisions` array beyond the current frame.
+   */
   check(spaceship: Spaceship, stars: Star[], meteorites: Meteorite[], companionBonus = 0): CollisionResult {
-    const result: CollisionResult = {
-      starCollisions: [],
-      meteoriteCollision: false,
-    };
+    const result = this.result;
+    result.starCollisions.length = 0;
+    result.meteoriteCollision = false;
 
     const sp = spaceship.position;
 
-    // Star collisions (expanded by companion bonus)
+    // Star collisions (expanded by companion bonus) — squared distance comparison.
     for (const star of stars) {
       if (star.isCollected) continue;
       const dx = sp.x - star.position.x;
       const dy = sp.y - star.position.y;
       const dz = sp.z - star.position.z;
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const distSq = dx * dx + dy * dy + dz * dz;
       const collisionDist = 1.0 + star.radius + companionBonus;
-      if (dist < collisionDist) {
+      if (distSq < collisionDist * collisionDist) {
         star.collect();
         result.starCollisions.push(star);
       }
     }
 
-    // Meteorite collisions (skip during SLOWDOWN invincibility)
+    // Meteorite collisions (skip during SLOWDOWN invincibility) — squared distance comparison.
     if (spaceship.speedState !== 'SLOWDOWN') {
       for (const met of meteorites) {
         if (!met.isActive) continue;
         const dx = sp.x - met.position.x;
         const dy = sp.y - met.position.y;
         const dz = sp.z - met.position.z;
-        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        const distSq = dx * dx + dy * dy + dz * dz;
         const collisionDist = 1.0 + met.radius;
-        if (dist < collisionDist) {
+        if (distSq < collisionDist * collisionDist) {
           result.meteoriteCollision = true;
           break;
         }

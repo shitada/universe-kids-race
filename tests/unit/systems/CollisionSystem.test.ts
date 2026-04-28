@@ -106,4 +106,71 @@ describe('CollisionSystem', () => {
       expect(result.starCollisions).toHaveLength(1);
     });
   });
+
+  describe('squared-distance boundary behavior', () => {
+    it('does NOT collide when distance equals collisionDist (strict <)', () => {
+      const ship = new Spaceship();
+      ship.position = { x: 0, y: 0, z: 0 };
+      // Star radius default 0.6 → collisionDist = 1.0 + 0.6 = 1.6. Place exactly at 1.6.
+      const star = new Star(1.6, 0, 0);
+      const result = system.check(ship, [star], []);
+      expect(result.starCollisions).toHaveLength(0);
+    });
+
+    it('collides when distance is just inside collisionDist', () => {
+      const ship = new Spaceship();
+      ship.position = { x: 0, y: 0, z: 0 };
+      const star = new Star(1.59, 0, 0);
+      const result = system.check(ship, [star], []);
+      expect(result.starCollisions).toHaveLength(1);
+    });
+
+    it('meteorite: does NOT collide when distance equals collisionDist', () => {
+      const ship = new Spaceship();
+      ship.position = { x: 0, y: 0, z: 0 };
+      // Meteorite radius default 1.0 → collisionDist = 2.0. Place exactly at 2.0.
+      const met = new Meteorite(2.0, 0, 0);
+      const result = system.check(ship, [], [met]);
+      expect(result.meteoriteCollision).toBe(false);
+    });
+
+    it('meteorite: collides when distance is just inside collisionDist', () => {
+      const ship = new Spaceship();
+      ship.position = { x: 0, y: 0, z: 0 };
+      const met = new Meteorite(1.99, 0, 0);
+      const result = system.check(ship, [], [met]);
+      expect(result.meteoriteCollision).toBe(true);
+    });
+  });
+
+  describe('result buffer reuse', () => {
+    it('does not carry starCollisions from the previous call', () => {
+      const sys = new CollisionSystem();
+      const ship = new Spaceship();
+      ship.position = { x: 0, y: 0, z: 0 };
+
+      const starHit = new Star(0.5, 0, 0);
+      const r1 = sys.check(ship, [starHit], []);
+      expect(r1.starCollisions).toHaveLength(1);
+
+      // Second call with no stars in range must produce an empty list,
+      // even though the buffer is reused.
+      const starFar = new Star(50, 0, 0);
+      const r2 = sys.check(ship, [starFar], []);
+      expect(r2.starCollisions).toHaveLength(0);
+    });
+
+    it('resets meteoriteCollision flag between calls', () => {
+      const sys = new CollisionSystem();
+      const ship = new Spaceship();
+      ship.position = { x: 0, y: 0, z: 0 };
+
+      const met = new Meteorite(0.5, 0, 0);
+      const r1 = sys.check(ship, [], [met]);
+      expect(r1.meteoriteCollision).toBe(true);
+
+      const r2 = sys.check(ship, [], []);
+      expect(r2.meteoriteCollision).toBe(false);
+    });
+  });
 });
