@@ -7,6 +7,7 @@ import { StageScene } from './game/scenes/StageScene';
 import { EndingScene } from './game/scenes/EndingScene';
 import { SaveManager } from './game/storage/SaveManager';
 import { AudioManager } from './game/audio/AudioManager';
+import { createResizeCoalescer } from './game/utils/ResizeCoalescer';
 import type { SceneType, SceneContext } from './types';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
@@ -17,15 +18,39 @@ const PIXEL_RATIO_TIERS = [1.0, 1.5, maxPixelRatio];
 const MAX_TIER = PIXEL_RATIO_TIERS.length - 1;
 let currentTier = MAX_TIER;
 
+let lastAppliedWidth = 0;
+let lastAppliedHeight = 0;
+
+function applyRendererSize(width: number, height: number): void {
+  if (width !== lastAppliedWidth || height !== lastAppliedHeight) {
+    renderer.setSize(width, height);
+    lastAppliedWidth = width;
+    lastAppliedHeight = height;
+  }
+  const camera = sceneManager.getCurrentCamera();
+  if (camera instanceof THREE.PerspectiveCamera) {
+    const aspect = width / height;
+    if (camera.aspect !== aspect) {
+      camera.aspect = aspect;
+      camera.updateProjectionMatrix();
+    }
+  }
+}
+
 function applyPixelRatioTier(tier: number): void {
   const clamped = Math.max(0, Math.min(MAX_TIER, tier));
   currentTier = clamped;
   renderer.setPixelRatio(PIXEL_RATIO_TIERS[clamped]);
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  // Force re-apply: pixel ratio change requires setSize even if dimensions match.
+  lastAppliedWidth = 0;
+  lastAppliedHeight = 0;
+  applyRendererSize(window.innerWidth, window.innerHeight);
 }
 
-applyPixelRatioTier(MAX_TIER);
+renderer.setPixelRatio(PIXEL_RATIO_TIERS[MAX_TIER]);
 renderer.setSize(window.innerWidth, window.innerHeight);
+lastAppliedWidth = window.innerWidth;
+lastAppliedHeight = window.innerHeight;
 renderer.setClearColor(0x000020);
 
 const inputSystem = new InputSystem();
@@ -133,15 +158,14 @@ gameLoop.start(
   handleFpsSample,
 );
 
-// Handle resize
-window.addEventListener('resize', () => {
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  const camera = sceneManager.getCurrentCamera();
-  if (camera instanceof THREE.PerspectiveCamera) {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-  }
-});
+// Handle resize - coalesce via rAF to avoid WebGL framebuffer reallocation
+// thrash on iPad Safari URL bar show/hide (Constitution IV: 60fps).
+const resizeCoalescer = createResizeCoalescer((w, h) => applyRendererSize(w, h));
+function scheduleResize(): void {
+  resizeCoalescer.schedule(window.innerWidth, window.innerHeight);
+}
+window.addEventListener('resize', scheduleResize);
+window.addEventListener('orientationchange', scheduleResize);
 
 // Auto-pause on background (T053 early integration)
 document.addEventListener('visibilitychange', () => {
@@ -154,5 +178,8 @@ document.addEventListener('visibilitychange', () => {
     resumeGraceUntil = performance.now() + RESUME_GRACE_MS;
     lowFpsSince = null;
     highFpsSince = null;
+    // Re-sync size in case viewport changed while in background.
+    resizeCoalescer.schedule(window.innerWidth, window.innerHeight);
+    resizeCoalescer.flush();
   }
 });
