@@ -22,6 +22,7 @@ import { disposeObject3D } from '../utils/disposeObject3D';
 export class StageScene implements Scene {
   private threeScene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
+  private lastAspect = 0;
   private sceneManager: SceneManager;
   private inputSystem: InputSystem;
   private audioManager: AudioManager;
@@ -92,6 +93,7 @@ export class StageScene implements Scene {
   }
 
   enter(context: SceneContext): void {
+    this.lastAspect = 0;
     this.stageNumber = context.stageNumber ?? 1;
     this.stageConfig = getStageConfig(this.stageNumber);
     this.isCleared = false;
@@ -898,8 +900,12 @@ export class StageScene implements Scene {
   }
 
   getCamera(): THREE.Camera {
-    this.camera.aspect = window.innerWidth / window.innerHeight;
-    this.camera.updateProjectionMatrix();
+    const aspect = window.innerWidth / window.innerHeight;
+    if (aspect !== this.lastAspect && Number.isFinite(aspect) && aspect > 0) {
+      this.camera.aspect = aspect;
+      this.camera.updateProjectionMatrix();
+      this.lastAspect = aspect;
+    }
     return this.camera;
   }
 }

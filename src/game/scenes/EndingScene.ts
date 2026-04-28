@@ -16,6 +16,7 @@ export class EndingScene implements Scene {
 
   private threeScene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
+  private lastAspect = 0;
   private sceneManager: SceneManager;
   private saveManager: SaveManager;
   private audioManager: AudioManager;
@@ -41,6 +42,7 @@ export class EndingScene implements Scene {
   }
 
   enter(context: SceneContext): void {
+    this.lastAspect = 0;
     const totalScore = context.totalScore ?? 0;
     const totalStarCount = context.totalStarCount ?? 0;
 
@@ -288,8 +290,12 @@ export class EndingScene implements Scene {
   }
 
   getCamera(): THREE.Camera {
-    this.camera.aspect = window.innerWidth / window.innerHeight;
-    this.camera.updateProjectionMatrix();
+    const aspect = window.innerWidth / window.innerHeight;
+    if (aspect !== this.lastAspect && Number.isFinite(aspect) && aspect > 0) {
+      this.camera.aspect = aspect;
+      this.camera.updateProjectionMatrix();
+      this.lastAspect = aspect;
+    }
     return this.camera;
   }
 }
