@@ -1,0 +1,105 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { GameLoop } from '../../src/game/GameLoop';
+
+describe('GameLoop', () => {
+  let nowValue = 0;
+  let rafCallback: FrameRequestCallback | null = null;
+  let rafHandle = 0;
+
+  beforeEach(() => {
+    nowValue = 0;
+    rafCallback = null;
+    rafHandle = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => nowValue);
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback): number => {
+      rafCallback = cb;
+      rafHandle += 1;
+      return rafHandle;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (_handle: number): void => {
+      rafCallback = null;
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  function advance(ms: number): void {
+    nowValue += ms;
+    const cb = rafCallback;
+    rafCallback = null;
+    cb?.(nowValue);
+  }
+
+  it('invokes update and render callbacks each frame', () => {
+    const loop = new GameLoop();
+    const onUpdate = vi.fn();
+    const onRender = vi.fn();
+    loop.start(onUpdate, onRender);
+    // start() executes one synchronous frame, then schedules subsequent ones via rAF.
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    advance(16);
+    advance(16);
+    expect(onUpdate).toHaveBeenCalledTimes(3);
+    expect(onRender).toHaveBeenCalledTimes(3);
+    loop.stop();
+  });
+
+  it('reports fps samples through onFpsSample callback', () => {
+    const loop = new GameLoop();
+    const samples: number[] = [];
+    loop.start(
+      () => {},
+      () => {},
+      (fps) => samples.push(fps),
+    );
+    for (let i = 0; i < 10; i += 1) {
+      advance(1000 / 60);
+    }
+    expect(samples.length).toBeGreaterThan(0);
+    const last = samples[samples.length - 1];
+    expect(last).toBeGreaterThanOrEqual(55);
+    expect(last).toBeLessThanOrEqual(65);
+    loop.stop();
+  });
+
+  it('exposes the current fps via getFps()', () => {
+    const loop = new GameLoop();
+    loop.start(
+      () => {},
+      () => {},
+    );
+    for (let i = 0; i < 10; i += 1) {
+      advance(1000 / 60);
+    }
+    expect(loop.getFps()).toBeGreaterThanOrEqual(55);
+    expect(loop.getFps()).toBeLessThanOrEqual(65);
+    loop.stop();
+  });
+
+  it('resets fps tracking on pause and resume', () => {
+    const loop = new GameLoop();
+    loop.start(
+      () => {},
+      () => {},
+    );
+    for (let i = 0; i < 30; i += 1) {
+      advance(1000 / 30); // 30 fps before pause
+    }
+    expect(loop.getFps()).toBeLessThan(40);
+
+    loop.pause();
+    // Long real-time gap while paused — should be discarded.
+    nowValue += 5000;
+    loop.resume();
+    expect(loop.getFps()).toBe(60);
+
+    for (let i = 0; i < 10; i += 1) {
+      advance(1000 / 60); // 60 fps after resume
+    }
+    expect(loop.getFps()).toBeGreaterThanOrEqual(55);
+    loop.stop();
+  });
+});
