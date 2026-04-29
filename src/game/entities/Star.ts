@@ -21,7 +21,9 @@ const RAINBOW_INITIAL_COLOR = 0xff0000;
 
 export class Star {
   position: { x: number; y: number; z: number };
-  radius = 0.6;
+  // Constant for every Star instance. CollisionSystem.check() relies on this
+  // invariance to hoist the collision-radius computation out of its hot loop.
+  readonly radius = 0.6;
   starType: StarType;
   scoreValue: number;
   isCollected = false;

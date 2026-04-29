@@ -246,4 +246,58 @@ describe('CollisionSystem', () => {
       expect(result.meteoriteCollision).toBe(true);
     });
   });
+
+  describe('hoisted invariant collision radii (perf refactor regression)', () => {
+    it('star: collides exactly at expanded boundary (just inside) with companionBonus', () => {
+      const sys = new CollisionSystem();
+      const ship = new Spaceship();
+      ship.position = { x: 0, y: 0, z: 0 };
+      const star = new Star(1.99, 0, 0);
+      const result = sys.check(ship, [star], [], 0.4);
+      expect(result.starCollisions).toHaveLength(1);
+    });
+
+    it('star: does NOT collide at exactly expanded boundary with companionBonus', () => {
+      const sys = new CollisionSystem();
+      const ship = new Spaceship();
+      ship.position = { x: 0, y: 0, z: 0 };
+      const star = new Star(2.0, 0, 0);
+      const result = sys.check(ship, [star], [], 0.4);
+      expect(result.starCollisions).toHaveLength(0);
+    });
+
+    it('meteorite: does not collide just outside collisionDist (strict < boundary)', () => {
+      const sys = new CollisionSystem();
+      const ship = new Spaceship();
+      ship.position = { x: 0, y: 0, z: 0 };
+      const met = new Meteorite(2.0001, 0, 0);
+      const result = sys.check(ship, [], [met]);
+      expect(result.meteoriteCollision).toBe(false);
+    });
+
+    it('mixed frame: star collected and meteorite hit are both reported consistently', () => {
+      const sys = new CollisionSystem();
+      const ship = new Spaceship();
+      ship.position = { x: 0, y: 0, z: 0 };
+      const starHit = new Star(0.5, 0, 0);
+      const starFar = new Star(0, 0, 50);
+      const metHit = new Meteorite(0, 0.5, 0);
+      const metFar = new Meteorite(0, 0, 50);
+
+      const result = sys.check(ship, [starHit, starFar], [metHit, metFar]);
+      expect(result.starCollisions).toEqual([starHit]);
+      expect(starHit.isCollected).toBe(true);
+      expect(starFar.isCollected).toBe(false);
+      expect(result.meteoriteCollision).toBe(true);
+    });
+
+    it('handles empty star and meteorite arrays without throwing', () => {
+      const sys = new CollisionSystem();
+      const ship = new Spaceship();
+      ship.position = { x: 0, y: 0, z: 0 };
+      const result = sys.check(ship, [], []);
+      expect(result.starCollisions).toHaveLength(0);
+      expect(result.meteoriteCollision).toBe(false);
+    });
+  });
 });

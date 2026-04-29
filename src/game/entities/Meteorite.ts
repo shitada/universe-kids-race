@@ -10,7 +10,10 @@ const SHARED_MATERIAL = new THREE.MeshToonMaterial({ color: 0x887766 });
 
 export class Meteorite {
   position: { x: number; y: number; z: number };
-  radius = 1.0;
+  // Constant for every Meteorite instance. CollisionSystem.check() relies on
+  // this invariance to hoist the collision-radius computation out of its hot
+  // loop.
+  readonly radius = 1.0;
   isActive = true;
   mesh: THREE.Mesh;
 
