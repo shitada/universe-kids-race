@@ -607,6 +607,47 @@ describe('AudioManager', () => {
       expect((am as any).boostNoiseFilter).not.toBeNull();
       am.dispose();
     });
+
+    it('caches the noise buffer across multiple invocations (no re-allocation)', () => {
+      vi.useFakeTimers();
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      const ctx = (am as any).ctx;
+
+      am.startBoostSFX();
+      am.stopBoostSFX();
+      vi.advanceTimersByTime(300);
+      am.startBoostSFX();
+
+      // createBuffer should only have been called once (cached) even though
+      // createBufferSource is called every start.
+      expect(ctx.createBuffer).toHaveBeenCalledTimes(1);
+      expect(ctx.createBufferSource).toHaveBeenCalledTimes(2);
+
+      vi.useRealTimers();
+      am.dispose();
+    });
+
+    it('regenerates the noise buffer after dispose() + init() (cache is cleared)', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      const ctx1 = (am as any).ctx;
+
+      am.startBoostSFX();
+      expect(ctx1.createBuffer).toHaveBeenCalledTimes(1);
+
+      am.dispose();
+      expect((am as any).noiseBuffer).toBeNull();
+
+      am.initSync();
+      const ctx2 = (am as any).ctx;
+      am.startBoostSFX();
+      expect(ctx2.createBuffer).toHaveBeenCalledTimes(1);
+
+      am.dispose();
+    });
   });
 
   describe('stopBoostSFX() (T016)', () => {
