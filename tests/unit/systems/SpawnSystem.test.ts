@@ -114,6 +114,30 @@ describe('SpawnSystem', () => {
     }
   });
 
+  it('returns the same SpawnResult buffer across consecutive update() calls', () => {
+    const system = new SpawnSystem();
+    const first = system.update(0.016, -10, testConfig);
+    const firstStarsRef = first.newStars;
+    const firstMeteoritesRef = first.newMeteorites;
+    for (let i = 0; i < 100; i++) {
+      const next = system.update(0.016, -10 - i, testConfig);
+      expect(next).toBe(first);
+      expect(next.newStars).toBe(firstStarsRef);
+      expect(next.newMeteorites).toBe(firstMeteoritesRef);
+    }
+  });
+
+  it('clears previous frame entries at the start of each update()', () => {
+    const system = new SpawnSystem();
+    const first = system.update(3.5, -10, testConfig);
+    expect(first.newMeteorites.length).toBeGreaterThan(0);
+    expect(first.newStars.length).toBeGreaterThan(0);
+    // Next call without enough delta to spawn a meteorite must reset the buffer.
+    const second = system.update(0.0, -10, testConfig);
+    expect(second.newMeteorites).toHaveLength(0);
+    expect(second.newStars).toHaveLength(0);
+  });
+
   it('dispose() releases pooled GPU resources for the meteorite pool', () => {
     const system = new SpawnSystem();
     const result = system.update(3.5, -10, testConfig);

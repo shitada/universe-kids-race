@@ -3,6 +3,14 @@ import { Star } from '../entities/Star';
 import { Meteorite } from '../entities/Meteorite';
 import { EntityPool } from '../utils/EntityPool';
 
+/**
+ * Per-frame spawn output from {@link SpawnSystem.update}.
+ *
+ * NOTE: The object returned by `update()` (and its `newStars` / `newMeteorites`
+ * arrays) is owned by the {@link SpawnSystem} instance and is only valid until
+ * the next `update()` call. Callers must consume it synchronously and must not
+ * retain references across frames.
+ */
 export interface SpawnResult {
   newStars: Star[];
   newMeteorites: Meteorite[];
@@ -12,6 +20,15 @@ export class SpawnSystem {
   private lastStarSpawnZ = 0;
   private meteoriteTimer = 0;
   private spawnAheadDistance = 80;
+
+  // Reusable result buffer to avoid per-frame GC allocations on the hot path.
+  // NOTE: The returned object (and its arrays) is owned by this instance and
+  // is only valid until the next `update()` call. Callers must consume it
+  // synchronously and must not retain references across frames.
+  private readonly result: SpawnResult = {
+    newStars: [],
+    newMeteorites: [],
+  };
 
   // NORMAL stars and meteorites are pooled to eliminate per-spawn Mesh
   // allocations on iPad Safari. RAINBOW stars are NOT pooled because they
@@ -29,8 +46,19 @@ export class SpawnSystem {
     (met) => met.dispose(),
   );
 
+  /**
+   * Advances the spawner by `deltaTime` and returns any newly spawned stars
+   * and meteorites for this frame.
+   *
+   * Performance notes:
+   * - Returns a reusable buffer; the result is only valid until the next
+   *   `update()` call. Do not store references to the returned object or its
+   *   `newStars` / `newMeteorites` arrays beyond the current frame.
+   */
   update(deltaTime: number, spaceshipZ: number, config: StageConfig): SpawnResult {
-    const result: SpawnResult = { newStars: [], newMeteorites: [] };
+    const result = this.result;
+    result.newStars.length = 0;
+    result.newMeteorites.length = 0;
 
     // Spawn stars ahead based on density
     const starSpacing = 100 / config.starDensity;
