@@ -6,6 +6,57 @@ import type { AudioManager } from '../audio/AudioManager';
 import { CompanionManager } from '../entities/CompanionManager';
 import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
 
+// ──────────────────────────────────────────────────────────────────────────────
+// SHARED background-star resources for EndingScene
+//
+// `TitleScene` と同じく、再入場ごとの BufferGeometry / PointsMaterial 生成と
+// VBO アップロードを避けるためモジュールレベルでキャッシュする。共有資源は
+// `exit()` でも dispose しない (`StageScene` 規約と一致)。
+// ──────────────────────────────────────────────────────────────────────────────
+
+let SHARED_ENDING_BG_STARS_GEOMETRY: THREE.BufferGeometry | null = null;
+let SHARED_ENDING_BG_STARS_MATERIAL: THREE.PointsMaterial | null = null;
+
+function getEndingBgStarsGeometry(): THREE.BufferGeometry {
+  if (!SHARED_ENDING_BG_STARS_GEOMETRY) {
+    const geo = new THREE.BufferGeometry();
+    const positions = new Float32Array(3000);
+    for (let i = 0; i < 3000; i++) {
+      positions[i] = (Math.random() - 0.5) * 200;
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    SHARED_ENDING_BG_STARS_GEOMETRY = geo;
+  }
+  return SHARED_ENDING_BG_STARS_GEOMETRY;
+}
+
+function getEndingBgStarsMaterial(): THREE.PointsMaterial {
+  if (!SHARED_ENDING_BG_STARS_MATERIAL) {
+    SHARED_ENDING_BG_STARS_MATERIAL = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 0.3,
+    });
+  }
+  return SHARED_ENDING_BG_STARS_MATERIAL;
+}
+
+/**
+ * テスト用フック: モジュールレベルキャッシュをクリアする。
+ * 本番コードからは呼ばない。
+ */
+export function __resetEndingSceneSharedAssetsForTest(): void {
+  SHARED_ENDING_BG_STARS_GEOMETRY = null;
+  SHARED_ENDING_BG_STARS_MATERIAL = null;
+}
+
+/**
+ * テスト用フック: 内部キャッシュへ直接アクセスする。
+ */
+export const __endingSceneSharedAssetsForTest = {
+  getBgStarsGeometry: (): THREE.BufferGeometry | null => SHARED_ENDING_BG_STARS_GEOMETRY,
+  getBgStarsMaterial: (): THREE.PointsMaterial | null => SHARED_ENDING_BG_STARS_MATERIAL,
+};
+
 export class EndingScene implements Scene {
   private static readonly CIRCLE_RADIUS = 3.0;
   private static readonly POPIN_DELAY = 0.2;
@@ -49,15 +100,10 @@ export class EndingScene implements Scene {
     this.threeScene = new THREE.Scene();
     this.threeScene.background = new THREE.Color(0x000030);
 
-    // Starfield
-    const geo = new THREE.BufferGeometry();
-    const positions = new Float32Array(3000);
-    for (let i = 0; i < 3000; i++) {
-      positions[i] = (Math.random() - 0.5) * 200;
-    }
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const mat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.3 });
-    this.bgStars = new THREE.Points(geo, mat);
+    // Starfield (SHARED: 共有 geometry / material は dispose しない)
+    this.bgStars = new THREE.Points(getEndingBgStarsGeometry(), getEndingBgStarsMaterial());
+    this.bgStars.userData.sharedAssets = true;
+    this.bgStars.rotation.set(0, 0, 0);
     this.threeScene.add(this.bgStars);
     this.threeScene.add(new THREE.AmbientLight(0xffffff, 1));
 
@@ -260,6 +306,12 @@ export class EndingScene implements Scene {
 
   exit(): void {
     this.audioManager.stopBGM();
+
+    if (this.bgStars) {
+      // SHARED: geometry / material はモジュールキャッシュで使い回すため dispose しない。
+      this.threeScene.remove(this.bgStars);
+      this.bgStars = null;
+    }
 
     if (this.companionGroup) {
       this.threeScene.remove(this.companionGroup);
