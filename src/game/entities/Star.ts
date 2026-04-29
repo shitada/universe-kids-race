@@ -57,8 +57,9 @@ export class Star {
       this.hueOffset += deltaTime * 0.5;
       const hue = this.hueOffset % 1;
       const mat = this.mesh.material as THREE.MeshToonMaterial;
+      // emissive は color と完全同期するため、HSL→RGB 変換は1回に抑え copy で再利用する
       mat.color.setHSL(hue, 1, 0.5);
-      mat.emissive.setHSL(hue, 1, 0.5);
+      mat.emissive.copy(mat.color);
     }
   }
 

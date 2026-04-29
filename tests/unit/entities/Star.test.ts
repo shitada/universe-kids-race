@@ -177,4 +177,36 @@ describe('Star', () => {
     mat.color.getHSL(tickHsl);
     expect(tickHsl.h).toBeLessThan(movedHsl.h);
   });
+
+  it('RAINBOW update keeps emissive RGB in sync with color and advances from initial red', () => {
+    const star = new Star(0, 0, -10, 'RAINBOW');
+    const mat = star.mesh.material as THREE.MeshToonMaterial;
+    expect(mat.color.r).toBe(1);
+    expect(mat.color.g).toBe(0);
+    expect(mat.color.b).toBe(0);
+
+    star.update(0.5);
+
+    expect(mat.color.r === 1 && mat.color.g === 0 && mat.color.b === 0).toBe(false);
+    expect(mat.emissive.r).toBe(mat.color.r);
+    expect(mat.emissive.g).toBe(mat.color.g);
+    expect(mat.emissive.b).toBe(mat.color.b);
+
+    star.update(0.5);
+    expect(mat.emissive.r).toBe(mat.color.r);
+    expect(mat.emissive.g).toBe(mat.color.g);
+    expect(mat.emissive.b).toBe(mat.color.b);
+  });
+
+  it('RAINBOW update calls setHSL only once per frame (color), not on emissive', () => {
+    const star = new Star(0, 0, -10, 'RAINBOW');
+    const mat = star.mesh.material as THREE.MeshToonMaterial;
+    const colorSpy = vi.spyOn(mat.color, 'setHSL');
+    const emissiveSpy = vi.spyOn(mat.emissive, 'setHSL');
+
+    star.update(0.016);
+
+    expect(colorSpy).toHaveBeenCalledTimes(1);
+    expect(emissiveSpy).not.toHaveBeenCalled();
+  });
 });
