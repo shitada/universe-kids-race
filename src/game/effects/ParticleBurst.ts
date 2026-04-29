@@ -148,10 +148,32 @@ export class ParticleBurst {
     );
   }
 
-  update(deltaTime: number): void {
-    if (!this.active) return;
+  /**
+   * Advances the burst by `deltaTime` seconds.
+   *
+   * Returns `true` if the burst expired during this call so the caller
+   * (typically `ParticleBurstManager`) can detach it from the scene
+   * immediately, avoiding the prior pattern of running a second pool
+   * sweep in `cleanup()`.
+   *
+   * On the expire frame we skip the per-particle position/size loop and
+   * the `needsUpdate` flags entirely: the geometry is about to be hidden
+   * via `setDrawRange(0, 0)` + `visible = false`, so uploading the final
+   * frame to the GPU would be pure waste. This is measurable when several
+   * bursts expire on the same frame (e.g. star pickup, rainbow, crash).
+   */
+  update(deltaTime: number): boolean {
+    if (!this.active) return false;
     this.elapsed += deltaTime;
-    const remaining = Math.max(0, 1 - this.elapsed / this.maxLifetime);
+    if (this.elapsed >= this.maxLifetime) {
+      // Expired this frame: stop drawing without uploading a discarded buffer.
+      this.geometry.setDrawRange(0, 0);
+      this.points.visible = false;
+      this.active = false;
+      return true;
+    }
+
+    const remaining = 1 - this.elapsed / this.maxLifetime;
 
     for (let i = 0; i < this.count; i++) {
       const i3 = i * 3;
@@ -169,6 +191,7 @@ export class ParticleBurst {
     this.positionAttr.needsUpdate = true;
     this.sizeAttr.needsUpdate = true;
     this.material.opacity = remaining;
+    return false;
   }
 
   isExpired(): boolean {
@@ -262,12 +285,26 @@ export class ParticleBurstManager {
     slot.reset(scene, x, y, z, color, particleCount, isRainbow);
   }
 
-  update(deltaTime: number): void {
+  /**
+   * Steps every active burst and detaches any that expired during this
+   * call. Replaces the previous `update()` + `cleanup()` two-pass scheme
+   * so expired bursts no longer get an extra GPU upload before being
+   * removed from the scene.
+   */
+  update(scene: THREE.Scene, deltaTime: number): void {
     for (const burst of this.pool) {
-      if (burst.isActive()) burst.update(deltaTime);
+      if (!burst.isActive()) continue;
+      const expired = burst.update(deltaTime);
+      if (expired) burst.deactivate(scene);
     }
   }
 
+  /**
+   * @deprecated Expired bursts are now detached from the scene directly
+   * inside `update(scene, deltaTime)`. Retained as a no-op safety net for
+   * call sites that still invoke it, and to catch any burst that became
+   * inactive without going through `update()`.
+   */
   cleanup(scene: THREE.Scene): void {
     for (const burst of this.pool) {
       if (burst.isActive() && burst.isExpired()) {
