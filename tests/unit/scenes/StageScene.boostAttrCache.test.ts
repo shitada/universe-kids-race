@@ -17,11 +17,14 @@ interface StageInternal {
   boostLinePositionAttr: THREE.BufferAttribute | null;
   boostFlamePositionAttr: THREE.BufferAttribute | null;
   boostFlameColorAttr: THREE.BufferAttribute | null;
+  flameEmitting: boolean;
   initBoostLines(): void;
   initBoostFlame(): void;
+  resetBoostFlame(): void;
   updateBoostEffects(): void;
   updateFlameParticles(deltaTime: number): void;
   removeBoostFlame(): void;
+  disposeBoostFlame(): void;
 }
 
 function createScene(): StageInternal {
@@ -68,6 +71,7 @@ describe('StageScene boost BufferAttribute caching', () => {
     const internal = createScene();
     internal.boostSystem.activate();
     internal.initBoostFlame();
+    internal.resetBoostFlame();
 
     const cachedPos = internal.boostFlamePositionAttr;
     const cachedColor = internal.boostFlameColorAttr;
@@ -92,26 +96,40 @@ describe('StageScene boost BufferAttribute caching', () => {
     getAttrSpy.mockRestore();
   });
 
-  it('clears cached boostFlame attributes on removeBoostFlame and re-creates fresh instances on re-init', () => {
+  it('reuses boostFlame Points/attributes across removeBoostFlame and only releases them on disposeBoostFlame', () => {
     const internal = createScene();
     internal.boostSystem.activate();
     internal.initBoostFlame();
+    internal.resetBoostFlame();
 
+    const firstFlame = internal.boostFlame;
     const firstPos = internal.boostFlamePositionAttr;
     const firstColor = internal.boostFlameColorAttr;
+    expect(firstFlame).not.toBeNull();
     expect(firstPos).not.toBeNull();
     expect(firstColor).not.toBeNull();
 
+    // removeBoostFlame is a soft-disable: keep GPU resources, just hide & reset state.
     internal.removeBoostFlame();
+    expect(internal.boostFlame).toBe(firstFlame);
+    expect(internal.boostFlamePositionAttr).toBe(firstPos);
+    expect(internal.boostFlameColorAttr).toBe(firstColor);
+    expect(internal.boostFlame!.visible).toBe(false);
+    expect(internal.flameEmitting).toBe(false);
+
+    // Reset re-uses the same Points/attributes for the next boost.
+    internal.resetBoostFlame();
+    expect(internal.boostFlame).toBe(firstFlame);
+    expect(internal.boostFlamePositionAttr).toBe(firstPos);
+    expect(internal.boostFlameColorAttr).toBe(firstColor);
+    expect(internal.boostFlame!.visible).toBe(true);
+    expect(internal.flameEmitting).toBe(true);
+
+    // Only disposeBoostFlame tears everything down.
+    internal.disposeBoostFlame();
+    expect(internal.boostFlame).toBeNull();
     expect(internal.boostFlamePositionAttr).toBeNull();
     expect(internal.boostFlameColorAttr).toBeNull();
-    expect(internal.boostFlame).toBeNull();
-
-    internal.initBoostFlame();
-    expect(internal.boostFlamePositionAttr).not.toBeNull();
-    expect(internal.boostFlameColorAttr).not.toBeNull();
-    expect(internal.boostFlamePositionAttr).not.toBe(firstPos);
-    expect(internal.boostFlameColorAttr).not.toBe(firstColor);
   });
 
   it('keeps the same boostLines position attribute across boost on/off cycles', () => {

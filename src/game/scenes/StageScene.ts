@@ -167,6 +167,9 @@ export class StageScene implements Scene {
     // Boost line effect (created once, reused per frame)
     this.initBoostLines();
 
+    // Boost flame particles (allocated once per stage, reused per boost)
+    this.initBoostFlame();
+
     // BGM
     this.audioManager.playBGM(this.stageNumber);
   }
@@ -401,7 +404,7 @@ export class StageScene implements Scene {
       if (this.boostSystem.activate()) {
         this.audioManager.playSFX('boost');
         this.audioManager.startBoostSFX();
-        this.initBoostFlame();
+        this.resetBoostFlame();
       }
       this.inputSystem.setBoostPressed(false);
     }
@@ -650,8 +653,16 @@ export class StageScene implements Scene {
     this.flameColors = new Float32Array(MAX * 3);
     this.flameLifetimes = new Float32Array(MAX);
     this.flameVelocities = new Float32Array(MAX * 2);
+
+    // Park all particles offscreen on z=99999 until first emission.
+    for (let i = 0; i < MAX; i++) {
+      this.flamePositions[i * 3 + 2] = 99999;
+    }
+    this.flameLifetimes.fill(0);
+    this.flameColors.fill(0);
+    this.flameVelocities.fill(0);
     this.flameIndex = 0;
-    this.flameEmitting = true;
+    this.flameEmitting = false;
 
     const geometry = new THREE.BufferGeometry();
     const positionAttr = new THREE.BufferAttribute(this.flamePositions, 3);
@@ -672,7 +683,36 @@ export class StageScene implements Scene {
 
     this.boostFlame = new THREE.Points(geometry, material);
     this.boostFlame.frustumCulled = false;
+    this.boostFlame.visible = false;
     this.threeScene.add(this.boostFlame);
+  }
+
+  private resetBoostFlame(): void {
+    if (
+      !this.boostFlame
+      || !this.flamePositions
+      || !this.flameColors
+      || !this.flameLifetimes
+      || !this.flameVelocities
+    ) {
+      return;
+    }
+    const MAX = StageScene.MAX_FLAME_PARTICLES;
+    this.flameLifetimes.fill(0);
+    this.flameColors.fill(0);
+    this.flameVelocities.fill(0);
+    for (let i = 0; i < MAX; i++) {
+      const i3 = i * 3;
+      this.flamePositions[i3] = 0;
+      this.flamePositions[i3 + 1] = 0;
+      this.flamePositions[i3 + 2] = 99999;
+    }
+    (this.boostFlame.material as THREE.PointsMaterial).size = 0.5;
+    this.flameIndex = 0;
+    this.flameEmitting = true;
+    this.boostFlame.visible = true;
+    if (this.boostFlamePositionAttr) this.boostFlamePositionAttr.needsUpdate = true;
+    if (this.boostFlameColorAttr) this.boostFlameColorAttr.needsUpdate = true;
   }
 
   private emitFlameParticles(): void {
@@ -750,6 +790,27 @@ export class StageScene implements Scene {
   }
 
   private removeBoostFlame(): void {
+    if (!this.boostFlame) return;
+    const MAX = StageScene.MAX_FLAME_PARTICLES;
+    if (this.flameLifetimes) this.flameLifetimes.fill(0);
+    if (this.flameColors) this.flameColors.fill(0);
+    if (this.flameVelocities) this.flameVelocities.fill(0);
+    if (this.flamePositions) {
+      for (let i = 0; i < MAX; i++) {
+        const i3 = i * 3;
+        this.flamePositions[i3] = 0;
+        this.flamePositions[i3 + 1] = 0;
+        this.flamePositions[i3 + 2] = 99999;
+      }
+    }
+    if (this.boostFlamePositionAttr) this.boostFlamePositionAttr.needsUpdate = true;
+    if (this.boostFlameColorAttr) this.boostFlameColorAttr.needsUpdate = true;
+    this.flameIndex = 0;
+    this.flameEmitting = false;
+    this.boostFlame.visible = false;
+  }
+
+  private disposeBoostFlame(): void {
     if (this.boostFlame) {
       this.threeScene.remove(this.boostFlame);
       this.boostFlame.geometry.dispose();
@@ -872,7 +933,7 @@ export class StageScene implements Scene {
     this.hud.hide();
     this.audioManager.stopBGM();
     this.audioManager.stopBoostSFX();
-    this.removeBoostFlame();
+    this.disposeBoostFlame();
     this.companionManager?.dispose();
     this.companionManager = null;
     this.airShield.dispose();
