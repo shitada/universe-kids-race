@@ -60,6 +60,7 @@ export class StageScene implements Scene {
   // Boost effects (retained: single instance reused per frame; do not dispose per instance)
   private boostLines: THREE.LineSegments | null = null;
   private boostLinePositions: Float32Array | null = null;
+  private boostLinePositionAttr: THREE.BufferAttribute | null = null;
 
   // Companion manager
   private companionManager: CompanionManager | null = null;
@@ -73,6 +74,8 @@ export class StageScene implements Scene {
   private flameColors: Float32Array | null = null;
   private flameLifetimes: Float32Array | null = null;
   private flameVelocities: Float32Array | null = null;
+  private boostFlamePositionAttr: THREE.BufferAttribute | null = null;
+  private boostFlameColorAttr: THREE.BufferAttribute | null = null;
   private flameIndex = 0;
   private flameEmitting = false;
   private static readonly MAX_FLAME_PARTICLES = 150;
@@ -571,7 +574,9 @@ export class StageScene implements Scene {
     // 20 line segments × 2 endpoints × 3 floats = 120
     this.boostLinePositions = new Float32Array(120);
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(this.boostLinePositions, 3));
+    const positionAttr = new THREE.BufferAttribute(this.boostLinePositions, 3);
+    geo.setAttribute('position', positionAttr);
+    this.boostLinePositionAttr = positionAttr;
     const mat = new THREE.LineBasicMaterial({ color: 0x00ddff, transparent: true, opacity: 0.6 });
     this.boostLines = new THREE.LineSegments(geo, mat);
     this.boostLines.frustumCulled = false;
@@ -602,7 +607,7 @@ export class StageScene implements Scene {
       pos[base + 4] = y;
       pos[base + 5] = z + 2 + Math.random() * 3;
     }
-    (this.boostLines.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+    this.boostLinePositionAttr!.needsUpdate = true;
     this.boostLines.visible = true;
   }
 
@@ -649,8 +654,12 @@ export class StageScene implements Scene {
     this.flameEmitting = true;
 
     const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(this.flamePositions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(this.flameColors, 3));
+    const positionAttr = new THREE.BufferAttribute(this.flamePositions, 3);
+    const colorAttr = new THREE.BufferAttribute(this.flameColors, 3);
+    geometry.setAttribute('position', positionAttr);
+    geometry.setAttribute('color', colorAttr);
+    this.boostFlamePositionAttr = positionAttr;
+    this.boostFlameColorAttr = colorAttr;
 
     const material = new THREE.PointsMaterial({
       vertexColors: true,
@@ -732,8 +741,8 @@ export class StageScene implements Scene {
       this.flamePositions[i3 + 1] += this.flameVelocities[i2 + 1] * deltaTime;
     }
 
-    (this.boostFlame.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
-    (this.boostFlame.geometry.attributes.color as THREE.BufferAttribute).needsUpdate = true;
+    this.boostFlamePositionAttr!.needsUpdate = true;
+    this.boostFlameColorAttr!.needsUpdate = true;
 
     if (!this.flameEmitting && !hasLive) {
       this.removeBoostFlame();
@@ -751,6 +760,8 @@ export class StageScene implements Scene {
     this.flameColors = null;
     this.flameLifetimes = null;
     this.flameVelocities = null;
+    this.boostFlamePositionAttr = null;
+    this.boostFlameColorAttr = null;
     this.flameIndex = 0;
     this.flameEmitting = false;
   }
@@ -889,6 +900,7 @@ export class StageScene implements Scene {
       this.boostLines = null;
     }
     this.boostLinePositions = null;
+    this.boostLinePositionAttr = null;
     if (this.bgStars) {
       this.bgStars.geometry.dispose();
       (this.bgStars.material as THREE.Material).dispose();
