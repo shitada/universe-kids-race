@@ -18,11 +18,13 @@ interface StageInternal {
   boostFlamePositionAttr: THREE.BufferAttribute | null;
   boostFlameColorAttr: THREE.BufferAttribute | null;
   flameEmitting: boolean;
+  flameLifetimes: Float32Array | null;
   initBoostLines(): void;
   initBoostFlame(): void;
   resetBoostFlame(): void;
   updateBoostEffects(): void;
   updateFlameParticles(deltaTime: number): void;
+  emitFlameParticles(): void;
   removeBoostFlame(): void;
   disposeBoostFlame(): void;
 }
@@ -82,14 +84,16 @@ describe('StageScene boost BufferAttribute caching', () => {
 
     const getAttrSpy = vi.spyOn(THREE.BufferGeometry.prototype, 'getAttribute');
 
+    // Emit some particles so updateFlameParticles has live work to do.
+    (internal as unknown as { emitFlameParticles(): void }).emitFlameParticles();
+
     for (let i = 0; i < 5; i++) {
       const prevPosVer = cachedPos!.version;
-      const prevColorVer = cachedColor!.version;
       internal.updateFlameParticles(0.016);
       expect(internal.boostFlamePositionAttr).toBe(cachedPos);
       expect(internal.boostFlameColorAttr).toBe(cachedColor);
+      // Live particles move every frame -> position version must advance.
       expect(cachedPos!.version).toBe(prevPosVer + 1);
-      expect(cachedColor!.version).toBe(prevColorVer + 1);
     }
 
     expect(getAttrSpy).not.toHaveBeenCalled();
@@ -153,5 +157,92 @@ describe('StageScene boost BufferAttribute caching', () => {
     internal.boostSystem.activate();
     internal.updateBoostEffects();
     expect(internal.boostLinePositionAttr).toBe(attr);
+  });
+
+  it('does not bump position/color attribute versions when boostFlame is invisible', () => {
+    const internal = createScene();
+    internal.boostSystem.activate();
+    internal.initBoostFlame();
+    internal.resetBoostFlame();
+    // Soft-disable: keeps GPU resources but visible=false and lifetimes all 0.
+    internal.removeBoostFlame();
+    expect(internal.boostFlame!.visible).toBe(false);
+
+    const cachedPos = internal.boostFlamePositionAttr!;
+    const cachedColor = internal.boostFlameColorAttr!;
+    const startPosVer = cachedPos.version;
+    const startColorVer = cachedColor.version;
+
+    for (let i = 0; i < 10; i++) {
+      internal.updateFlameParticles(0.016);
+    }
+
+    expect(cachedPos.version).toBe(startPosVer);
+    expect(cachedColor.version).toBe(startColorVer);
+  });
+
+  it('does not bump color version when no particles die in updateFlameParticles', () => {
+    const internal = createScene();
+    internal.boostSystem.activate();
+    internal.initBoostFlame();
+    internal.resetBoostFlame();
+    internal.emitFlameParticles();
+
+    const cachedPos = internal.boostFlamePositionAttr!;
+    const cachedColor = internal.boostFlameColorAttr!;
+
+    // Single small step: lifetimes 0.7 -> ~0.684, nobody dies.
+    const prevPosVer = cachedPos.version;
+    const prevColorVer = cachedColor.version;
+    internal.updateFlameParticles(0.016);
+
+    // Live particles moved -> position version advances.
+    expect(cachedPos.version).toBe(prevPosVer + 1);
+    // No deaths -> color buffer untouched -> no GPU re-upload scheduled.
+    expect(cachedColor.version).toBe(prevColorVer);
+  });
+
+  it('bumps both position and color versions when at least one particle dies', () => {
+    const internal = createScene();
+    internal.boostSystem.activate();
+    internal.initBoostFlame();
+    internal.resetBoostFlame();
+    internal.emitFlameParticles();
+
+    const cachedPos = internal.boostFlamePositionAttr!;
+    const cachedColor = internal.boostFlameColorAttr!;
+    const prevPosVer = cachedPos.version;
+    const prevColorVer = cachedColor.version;
+
+    // Big enough deltaTime to drop every live particle's lifetime <= 0 (lifetimes start at 0.7).
+    internal.updateFlameParticles(1.0);
+
+    expect(cachedPos.version).toBe(prevPosVer + 1);
+    expect(cachedColor.version).toBe(prevColorVer + 1);
+  });
+
+  it('bumps position/color versions in emitFlameParticles only when at least one particle is emitted', () => {
+    const internal = createScene();
+    internal.boostSystem.activate();
+    internal.initBoostFlame();
+    internal.resetBoostFlame();
+
+    const cachedPos = internal.boostFlamePositionAttr!;
+    const cachedColor = internal.boostFlameColorAttr!;
+
+    // Normal emit during boost -> emitCount > 0 -> versions advance.
+    const prevPosVer = cachedPos.version;
+    const prevColorVer = cachedColor.version;
+    internal.emitFlameParticles();
+    expect(cachedPos.version).toBe(prevPosVer + 1);
+    expect(cachedColor.version).toBe(prevColorVer + 1);
+
+    // Force progress past the fadeout window so emitCount == 0.
+    internal.boostSystem.update(10);
+    const stalePosVer = cachedPos.version;
+    const staleColorVer = cachedColor.version;
+    internal.emitFlameParticles();
+    expect(cachedPos.version).toBe(stalePosVer);
+    expect(cachedColor.version).toBe(staleColorVer);
   });
 });

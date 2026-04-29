@@ -774,6 +774,11 @@ export class StageScene implements Scene {
       this.flameIndex++;
     }
 
+    if (emitCount > 0) {
+      if (this.boostFlamePositionAttr) this.boostFlamePositionAttr.needsUpdate = true;
+      if (this.boostFlameColorAttr) this.boostFlameColorAttr.needsUpdate = true;
+    }
+
     // Scale particle size during fade phase
     if (this.boostFlame) {
       (this.boostFlame.material as THREE.PointsMaterial).size = 0.5 * sizeFraction;
@@ -782,8 +787,11 @@ export class StageScene implements Scene {
 
   private updateFlameParticles(deltaTime: number): void {
     if (!this.flamePositions || !this.flameColors || !this.flameLifetimes || !this.flameVelocities || !this.boostFlame) return;
+    if (!this.boostFlame.visible) return;
     const MAX = StageScene.MAX_FLAME_PARTICLES;
     let hasLive = false;
+    let positionsChanged = false;
+    let colorsChanged = false;
 
     for (let i = 0; i < MAX; i++) {
       if (this.flameLifetimes[i] <= 0) continue;
@@ -796,16 +804,19 @@ export class StageScene implements Scene {
         this.flameColors[i3] = 0;
         this.flameColors[i3 + 1] = 0;
         this.flameColors[i3 + 2] = 0;
+        positionsChanged = true;
+        colorsChanged = true;
         continue;
       }
 
       hasLive = true;
       this.flamePositions[i3 + 2] += this.flameVelocities[i2] * deltaTime;
       this.flamePositions[i3 + 1] += this.flameVelocities[i2 + 1] * deltaTime;
+      positionsChanged = true;
     }
 
-    this.boostFlamePositionAttr!.needsUpdate = true;
-    this.boostFlameColorAttr!.needsUpdate = true;
+    if (positionsChanged) this.boostFlamePositionAttr!.needsUpdate = true;
+    if (colorsChanged) this.boostFlameColorAttr!.needsUpdate = true;
 
     if (!this.flameEmitting && !hasLive) {
       this.removeBoostFlame();
