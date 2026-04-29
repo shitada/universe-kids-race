@@ -101,9 +101,14 @@ export class ParticleBurst {
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
       const speed = speedMin + Math.random() * (speedMax - speedMin);
-      this.velocities[i3] = Math.sin(phi) * Math.cos(theta) * speed;
-      this.velocities[i3 + 1] = Math.sin(phi) * Math.sin(theta) * speed;
-      this.velocities[i3 + 2] = Math.cos(phi) * speed;
+      // ホットループから三角関数の不変計算をホイスト
+      const sinPhi = Math.sin(phi);
+      const cosPhi = Math.cos(phi);
+      const cosTheta = Math.cos(theta);
+      const sinTheta = Math.sin(theta);
+      this.velocities[i3] = sinPhi * cosTheta * speed;
+      this.velocities[i3 + 1] = sinPhi * sinTheta * speed;
+      this.velocities[i3 + 2] = cosPhi * speed;
 
       if (isRainbow && tempColor) {
         tempColor.setHSL(Math.random(), 1, 0.5);
