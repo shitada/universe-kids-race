@@ -25,6 +25,11 @@ export class CollisionSystem {
    * - Returns a reusable buffer; the result is only valid until the next
    *   `check()` call. Do not store references to the returned object or its
    *   `starCollisions` array beyond the current frame.
+   * - `Star.radius` (0.6) and `Meteorite.radius` (1.0) are constant for every
+   *   instance and never mutated, and `companionBonus` is fixed for a single
+   *   `check()` call. We exploit that invariance by hoisting `collisionDist`
+   *   and its square out of the per-entity loops, replacing N additions and N
+   *   multiplications per loop with a single computation.
    */
   check(spaceship: Spaceship, stars: Star[], meteorites: Meteorite[], companionBonus = 0): CollisionResult {
     const result = this.result;
@@ -36,33 +41,40 @@ export class CollisionSystem {
     // Star collisions (expanded by companion bonus) — squared distance comparison.
     // Per-frame perf: most stars within spawnAheadDistance are far on the Z axis
     // and cannot collide. Compute dz first and skip dx/dy/distSq when |dz| already
-    // exceeds the collision radius.
-    for (const star of stars) {
-      if (star.isCollected) continue;
-      const dz = sp.z - star.position.z;
-      const collisionDist = 1.0 + star.radius + companionBonus;
-      if (dz > collisionDist || dz < -collisionDist) continue;
-      const dx = sp.x - star.position.x;
-      const dy = sp.y - star.position.y;
-      const distSq = dx * dx + dy * dy + dz * dz;
-      if (distSq < collisionDist * collisionDist) {
-        star.collect();
-        result.starCollisions.push(star);
+    // exceeds the collision radius. `starCollisionDist(Sq)` is loop-invariant
+    // because `Star.radius` is constant across all instances and `companionBonus`
+    // is fixed within this call.
+    if (stars.length > 0) {
+      const starCollisionDist = 1.0 + stars[0].radius + companionBonus;
+      const starCollisionDistSq = starCollisionDist * starCollisionDist;
+      for (const star of stars) {
+        if (star.isCollected) continue;
+        const dz = sp.z - star.position.z;
+        if (dz > starCollisionDist || dz < -starCollisionDist) continue;
+        const dx = sp.x - star.position.x;
+        const dy = sp.y - star.position.y;
+        const distSq = dx * dx + dy * dy + dz * dz;
+        if (distSq < starCollisionDistSq) {
+          star.collect();
+          result.starCollisions.push(star);
+        }
       }
     }
 
     // Meteorite collisions (skip during SLOWDOWN invincibility) — squared distance comparison.
-    // Same Z-axis early-skip optimization as the star loop.
-    if (spaceship.speedState !== 'SLOWDOWN') {
+    // Same Z-axis early-skip optimization as the star loop. `meteoriteCollisionDist(Sq)`
+    // is loop-invariant because `Meteorite.radius` is constant across all instances.
+    if (spaceship.speedState !== 'SLOWDOWN' && meteorites.length > 0) {
+      const meteoriteCollisionDist = 1.0 + meteorites[0].radius;
+      const meteoriteCollisionDistSq = meteoriteCollisionDist * meteoriteCollisionDist;
       for (const met of meteorites) {
         if (!met.isActive) continue;
         const dz = sp.z - met.position.z;
-        const collisionDist = 1.0 + met.radius;
-        if (dz > collisionDist || dz < -collisionDist) continue;
+        if (dz > meteoriteCollisionDist || dz < -meteoriteCollisionDist) continue;
         const dx = sp.x - met.position.x;
         const dy = sp.y - met.position.y;
         const distSq = dx * dx + dy * dy + dz * dz;
-        if (distSq < collisionDist * collisionDist) {
+        if (distSq < meteoriteCollisionDistSq) {
           result.meteoriteCollision = true;
           break;
         }
