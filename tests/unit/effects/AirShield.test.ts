@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import * as THREE from 'three';
 
 const { AirShield } = await import('../../../src/game/effects/AirShield');
@@ -118,5 +118,72 @@ describe('AirShield', () => {
 
     expect(geoDispose).toHaveBeenCalled();
     expect(matDispose).toHaveBeenCalled();
+  });
+
+  it('skips redundant writes when setBoostMode is called with the same value consecutively', () => {
+    const shield = new AirShield();
+    const mesh = shield.getMesh();
+    const mat = mesh.material as THREE.MeshBasicMaterial;
+
+    shield.setBoostMode(true);
+
+    const colorSetHexSpy = vi.spyOn(mat.color, 'setHex');
+    const scaleSetSpy = vi.spyOn(mesh.scale, 'set');
+
+    shield.setBoostMode(true);
+    shield.setBoostMode(true);
+    shield.setBoostMode(true);
+
+    expect(colorSetHexSpy).not.toHaveBeenCalled();
+    expect(scaleSetSpy).not.toHaveBeenCalled();
+
+    shield.dispose();
+  });
+
+  it('skips redundant writes when setBoostMode(false) is called repeatedly', () => {
+    const shield = new AirShield();
+    const mesh = shield.getMesh();
+    const mat = mesh.material as THREE.MeshBasicMaterial;
+
+    shield.setBoostMode(false);
+
+    const colorSetHexSpy = vi.spyOn(mat.color, 'setHex');
+    const scaleSetSpy = vi.spyOn(mesh.scale, 'set');
+
+    for (let i = 0; i < 10; i++) {
+      shield.setBoostMode(false);
+    }
+
+    expect(colorSetHexSpy).not.toHaveBeenCalled();
+    expect(scaleSetSpy).not.toHaveBeenCalled();
+
+    shield.dispose();
+  });
+
+  it('applies state correctly across false → true → false → true transitions', () => {
+    const shield = new AirShield();
+    const mesh = shield.getMesh();
+    const mat = mesh.material as THREE.MeshBasicMaterial;
+
+    shield.setBoostMode(false);
+    expect(mesh.visible).toBe(false);
+    expect(mat.color.getHex()).toBe(0x44aaff);
+
+    shield.setBoostMode(true);
+    expect(mesh.visible).toBe(true);
+    expect(mat.color.getHex()).toBe(0x88ddff);
+    expect(mesh.scale.x).toBeCloseTo(1.0);
+    expect(mesh.scale.y).toBeCloseTo(0.8);
+    expect(mesh.scale.z).toBeCloseTo(2.0);
+
+    shield.setBoostMode(false);
+    expect(mesh.visible).toBe(false);
+    expect(mat.color.getHex()).toBe(0x44aaff);
+
+    shield.setBoostMode(true);
+    expect(mesh.visible).toBe(true);
+    expect(mat.color.getHex()).toBe(0x88ddff);
+
+    shield.dispose();
   });
 });
