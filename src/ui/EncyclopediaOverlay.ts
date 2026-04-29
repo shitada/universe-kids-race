@@ -5,9 +5,15 @@ export class EncyclopediaOverlay {
   private overlayEl: HTMLDivElement | null = null;
   private detailEl: HTMLDivElement | null = null;
   private isShowingDetail = false;
+  private onSelectStage: ((stageNumber: number) => void) | null = null;
 
-  show(unlockedPlanets: number[], onClose: () => void): void {
+  show(
+    unlockedPlanets: number[],
+    onClose: () => void,
+    onSelectStage?: (stageNumber: number) => void,
+  ): void {
     if (this.overlayEl) return;
+    this.onSelectStage = onSelectStage ?? null;
 
     const uiOverlay = document.getElementById('ui-overlay');
     if (!uiOverlay) return;
@@ -93,11 +99,13 @@ export class EncyclopediaOverlay {
       this.overlayEl = null;
     }
     this.isShowingDetail = false;
+    this.onSelectStage = null;
   }
 
   private createCard(entry: PlanetEncyclopediaEntry, isUnlocked: boolean): HTMLDivElement {
     const card = document.createElement('div');
     card.setAttribute('data-card', '');
+    card.setAttribute('data-stage', String(entry.stageNumber));
     card.style.cssText = `
       min-height: 120px;
       border-radius: 16px;
@@ -108,6 +116,7 @@ export class EncyclopediaOverlay {
       padding: 0.8rem;
       width: 100%;
       box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      transition: transform 0.12s ease-out;
     `;
 
     if (isUnlocked) {
@@ -133,8 +142,22 @@ export class EncyclopediaOverlay {
 
       card.addEventListener('pointerdown', (e) => {
         e.stopPropagation();
-        this.showDetail(entry);
+        card.style.transform = 'scale(0.95)';
+        if (this.onSelectStage) {
+          const cb = this.onSelectStage;
+          const stageNumber = entry.stageNumber;
+          this.hide();
+          cb(stageNumber);
+        } else {
+          this.showDetail(entry);
+        }
       });
+      const resetScale = () => {
+        card.style.transform = '';
+      };
+      card.addEventListener('pointerup', resetScale);
+      card.addEventListener('pointerleave', resetScale);
+      card.addEventListener('pointercancel', resetScale);
     } else {
       card.style.background = '#444';
       card.style.opacity = '0.6';

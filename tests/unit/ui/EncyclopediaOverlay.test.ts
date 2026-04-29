@@ -95,4 +95,48 @@ describe('EncyclopediaOverlay', () => {
     backBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     expect(closed).toBe(true);
   });
+
+  it('cards have data-stage attribute matching stageNumber', () => {
+    overlay.show([1, 2], () => {});
+    const cards = uiOverlay.querySelectorAll('[data-card]');
+    expect(cards[0].getAttribute('data-stage')).toBe('1');
+    expect(cards[1].getAttribute('data-stage')).toBe('2');
+  });
+
+  it('onSelectStage callback is called when unlocked card is tapped', () => {
+    const selected: number[] = [];
+    overlay.show([2], () => {}, (stageNumber) => {
+      selected.push(stageNumber);
+    });
+    const card = uiOverlay.querySelector('[data-card][data-stage="2"]') as HTMLElement;
+    expect(card).not.toBeNull();
+    card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(selected).toEqual([2]);
+  });
+
+  it('overlay is hidden after stage select callback fires', () => {
+    overlay.show([1], () => {}, () => {});
+    expect(uiOverlay.children.length).toBe(1);
+    const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
+    card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(uiOverlay.children.length).toBe(0);
+  });
+
+  it('locked card does not invoke onSelectStage', () => {
+    let called = false;
+    overlay.show([], () => {}, () => { called = true; });
+    const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
+    // Locked cards have pointer-events: none, but verify no listener side-effect
+    card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(called).toBe(false);
+    expect(card.style.pointerEvents).toBe('none');
+  });
+
+  it('without onSelectStage, unlocked card still opens detail (backward compat)', () => {
+    overlay.show([1], () => {});
+    const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
+    card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    const detail = uiOverlay.querySelector('[data-detail]');
+    expect(detail).not.toBeNull();
+  });
 });
