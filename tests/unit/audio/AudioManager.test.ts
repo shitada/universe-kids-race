@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // Mock Web Audio API
 class MockGainNode {
-  gain = { value: 0, setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), cancelScheduledValues: vi.fn() };
+  gain = { value: 0, setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), cancelScheduledValues: vi.fn(), setTargetAtTime: vi.fn() };
   connect = vi.fn().mockReturnThis();
   disconnect = vi.fn();
 }
@@ -261,11 +261,11 @@ describe('AudioManager', () => {
       am.playBGM(1);
 
       // Stage 1 has 3-note chords:
-      // Persistent: bass(1) + pad(3) = 4
+      // Master gain (1) + Persistent: bass(1) + pad(3) = 5
       // First tick (synchronous): arpeggio(1) + melody(1) = 2
-      // Total: 6 oscillators and 6 gain nodes
+      // Total: 6 oscillators and 7 gain nodes (master + 6 voices)
       expect(ctx.createOscillator).toHaveBeenCalledTimes(6);
-      expect(ctx.createGain).toHaveBeenCalledTimes(6);
+      expect(ctx.createGain).toHaveBeenCalledTimes(7);
       am.dispose();
     });
 
@@ -310,9 +310,10 @@ describe('AudioManager', () => {
       am.playBGM(1);
 
       const gains = ctx.createGain.mock.results.map((r: any) => r.value);
-      // Arpeggio gain (index 4) and melody gain (index 5) should have linearRamp
-      expect(gains[4].gain.linearRampToValueAtTime).toHaveBeenCalled();
+      // Index 0 is the master gain. Arpeggio gain (index 5) and melody gain
+      // (index 6) should have linearRamp.
       expect(gains[5].gain.linearRampToValueAtTime).toHaveBeenCalled();
+      expect(gains[6].gain.linearRampToValueAtTime).toHaveBeenCalled();
       am.dispose();
     });
   });
@@ -571,7 +572,7 @@ describe('AudioManager', () => {
       expect(filter.type).toBe('lowpass');
       expect(filter.frequency.value).toBe(800);
 
-      const gain = ctx.createGain.mock.results[0].value;
+      const gain = ctx.createGain.mock.results[1].value;
       expect(gain.gain.value).toBe(0.15);
 
       am.dispose();
@@ -702,7 +703,7 @@ describe('AudioManager', () => {
       expect(osc.frequency.setValueAtTime).toHaveBeenCalledWith(880, expect.any(Number));
       expect(osc.frequency.exponentialRampToValueAtTime).toHaveBeenCalledWith(1760, expect.any(Number));
 
-      const gain = ctx.createGain.mock.results[0].value;
+      const gain = ctx.createGain.mock.results[1].value;
       expect(gain.gain.setValueAtTime).toHaveBeenCalledWith(0.15, expect.any(Number));
 
       expect(osc.start).toHaveBeenCalled();

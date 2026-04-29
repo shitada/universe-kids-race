@@ -3,16 +3,20 @@ import { TOTAL_STAGES } from '../config/StageConfig';
 
 const STORAGE_KEY = 'universe-kids-race-save';
 const SESSION_KEY = 'universe-kids-race-session';
-const DEFAULT_DATA: SaveData = { clearedStage: 0, unlockedPlanets: [] };
+const DEFAULT_DATA: SaveData = { clearedStage: 0, unlockedPlanets: [], muted: false };
+
+function defaults(): SaveData {
+  return { ...DEFAULT_DATA, unlockedPlanets: [] };
+}
 
 export class SaveManager {
   load(): SaveData {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return { ...DEFAULT_DATA, unlockedPlanets: [] };
+      if (!raw) return defaults();
       const data = JSON.parse(raw) as SaveData;
       if (typeof data.clearedStage !== 'number' || data.clearedStage < 0 || data.clearedStage > TOTAL_STAGES) {
-        return { ...DEFAULT_DATA, unlockedPlanets: [] };
+        return defaults();
       }
 
       // Validate unlockedPlanets
@@ -26,9 +30,12 @@ export class SaveManager {
         )];
       }
 
+      // Validate muted (default false; backward compatible with saves missing the field)
+      data.muted = data.muted === true;
+
       return data;
     } catch {
-      return { ...DEFAULT_DATA, unlockedPlanets: [] };
+      return defaults();
     }
   }
 

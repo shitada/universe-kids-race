@@ -24,6 +24,9 @@ function createScene(): StageInternal {
   const inputSystem = {} as InputSystem;
   const audioManager = {
     stopBGM: vi.fn(),
+    isMuted: vi.fn(() => false),
+    toggleMute: vi.fn(() => false),
+    setMuted: vi.fn(),
     stopBoostSFX: vi.fn(),
   } as unknown as AudioManager;
   const saveManager = {} as SaveManager;

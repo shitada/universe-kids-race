@@ -74,6 +74,10 @@ if (saveManager.isFreshSession()) {
   saveManager.clear();
 }
 
+// Restore persisted mute state before any audio is initialised so the very
+// first BGM/SFX honours it without an audible blip.
+audioManager.setMuted(saveManager.load().muted === true);
+
 const titleScene = new TitleScene(sceneManager, saveManager, audioManager);
 const stageScene = new StageScene(sceneManager, inputSystem, audioManager, saveManager);
 const endingScene = new EndingScene(sceneManager, saveManager, audioManager);

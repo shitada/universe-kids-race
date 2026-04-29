@@ -13,6 +13,9 @@ function createScene(): StageScene {
   const audioManager = {
     playBGM: vi.fn(),
     stopBGM: vi.fn(),
+    isMuted: vi.fn(() => false),
+    toggleMute: vi.fn(() => false),
+    setMuted: vi.fn(),
     playSFX: vi.fn(),
     startBoostSFX: vi.fn(),
     stopBoostSFX: vi.fn(),

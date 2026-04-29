@@ -150,6 +150,47 @@ describe('SaveManager', () => {
     });
   });
 
+  describe('muted persistence', () => {
+    it('defaults muted to false when no save exists', () => {
+      const manager = new SaveManager();
+      expect(manager.load().muted).toBe(false);
+    });
+
+    it('defaults muted to false for legacy saves missing the field', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({ clearedStage: 3, unlockedPlanets: [1, 2] }));
+      const manager = new SaveManager();
+      expect(manager.load().muted).toBe(false);
+    });
+
+    it('persists muted=true through save/load roundtrip', () => {
+      const manager = new SaveManager();
+      manager.save({ clearedStage: 4, unlockedPlanets: [1, 2, 3], muted: true });
+      const data = manager.load();
+      expect(data.muted).toBe(true);
+      // Other fields remain intact
+      expect(data.clearedStage).toBe(4);
+      expect(data.unlockedPlanets).toEqual([1, 2, 3]);
+    });
+
+    it('persists muted=false through save/load roundtrip', () => {
+      const manager = new SaveManager();
+      manager.save({ clearedStage: 1, unlockedPlanets: [1], muted: false });
+      expect(manager.load().muted).toBe(false);
+    });
+
+    it('coerces non-boolean muted values to false', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({ clearedStage: 2, unlockedPlanets: [1], muted: 'yes' }));
+      const manager = new SaveManager();
+      expect(manager.load().muted).toBe(false);
+    });
+
+    it('coerces null muted to false', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({ clearedStage: 2, unlockedPlanets: [1], muted: null }));
+      const manager = new SaveManager();
+      expect(manager.load().muted).toBe(false);
+    });
+  });
+
   describe('storage failure resilience', () => {
     afterEach(() => {
       vi.restoreAllMocks();
