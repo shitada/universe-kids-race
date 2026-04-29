@@ -651,16 +651,17 @@ export class StageScene implements Scene {
       this.removeBoostFlame();
     }
 
-    // Damage animation
+    // Damage animation (overrides bank rotation while active)
     if (this.damageTimer > 0) {
       this.damageTimer -= deltaTime;
       const wobble = Math.sin(this.damageTimer * 30) * 0.3;
       this.spaceship.mesh.rotation.z = wobble;
+      this.spaceship.mesh.rotation.y = 0;
       // Flash effect
       const flash = Math.sin(this.damageTimer * 20) > 0;
       this.spaceship.mesh.visible = flash || this.damageTimer <= 0;
     } else {
-      this.spaceship.mesh.rotation.z = 0;
+      // Bank rotations are managed by Spaceship.update(); only ensure visibility.
       this.spaceship.mesh.visible = true;
     }
 

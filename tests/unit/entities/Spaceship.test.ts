@@ -150,6 +150,92 @@ describe('Spaceship', () => {
     });
   });
 
+  describe('bank animation', () => {
+    it('rolls negative (left) when moveLeft is held over several frames', () => {
+      const ship = new Spaceship();
+      const dt = 1 / 60;
+      for (let i = 0; i < 10; i++) {
+        ship.moveLeft(dt);
+        ship.update(dt);
+      }
+      expect(ship.bankAngle).toBeLessThan(0);
+      expect(ship.mesh.rotation.z).toBeLessThan(0);
+      expect(ship.mesh.rotation.y).toBeLessThan(0);
+    });
+
+    it('rolls positive (right) when moveRight is held over several frames', () => {
+      const ship = new Spaceship();
+      const dt = 1 / 60;
+      for (let i = 0; i < 10; i++) {
+        ship.moveRight(dt);
+        ship.update(dt);
+      }
+      expect(ship.bankAngle).toBeGreaterThan(0);
+      expect(ship.mesh.rotation.z).toBeGreaterThan(0);
+      expect(ship.mesh.rotation.y).toBeGreaterThan(0);
+    });
+
+    it('does not exceed the maximum bank angle of ~20°', () => {
+      const ship = new Spaceship();
+      const dt = 1 / 60;
+      for (let i = 0; i < 600; i++) {
+        ship.moveRight(dt);
+        ship.update(dt);
+      }
+      expect(Math.abs(ship.bankAngle)).toBeLessThanOrEqual(0.36);
+    });
+
+    it('decays bank angle back toward 0 when input stops', () => {
+      const ship = new Spaceship();
+      const dt = 1 / 60;
+      for (let i = 0; i < 30; i++) {
+        ship.moveLeft(dt);
+        ship.update(dt);
+      }
+      const banked = ship.bankAngle;
+      expect(banked).toBeLessThan(0);
+      // No input for half a second
+      for (let i = 0; i < 30; i++) {
+        ship.update(dt);
+      }
+      expect(Math.abs(ship.bankAngle)).toBeLessThan(Math.abs(banked));
+      expect(Math.abs(ship.bankAngle)).toBeLessThan(0.05);
+    });
+
+    it('reset clears bank angle and mesh rotation', () => {
+      const ship = new Spaceship();
+      const dt = 1 / 60;
+      for (let i = 0; i < 20; i++) {
+        ship.moveLeft(dt);
+        ship.update(dt);
+      }
+      expect(ship.bankAngle).not.toBe(0);
+      expect(ship.mesh.rotation.z).not.toBe(0);
+
+      ship.reset();
+      expect(ship.bankAngle).toBe(0);
+      expect(ship.bankTarget).toBe(0);
+      expect(ship.mesh.rotation.x).toBe(0);
+      expect(ship.mesh.rotation.y).toBe(0);
+      expect(ship.mesh.rotation.z).toBe(0);
+    });
+
+    it('does not affect lateral position clamping (boundary still ±8)', () => {
+      const ship = new Spaceship();
+      const dt = 1 / 60;
+      for (let i = 0; i < 200; i++) {
+        ship.moveLeft(dt);
+        ship.update(dt);
+      }
+      expect(ship.position.x).toBe(ship.boundaryMin);
+      for (let i = 0; i < 400; i++) {
+        ship.moveRight(dt);
+        ship.update(dt);
+      }
+      expect(ship.position.x).toBe(ship.boundaryMax);
+    });
+  });
+
   describe('dispose', () => {
     it('disposes all child mesh geometry and materials recursively', () => {
       const ship = new Spaceship();

@@ -9,6 +9,12 @@ const BOOST_MULTIPLIER = 2.0;
 const SPEED_STATE_DURATION = 3.0;
 const RECOVERY_DURATION = 1.0;
 
+const MAX_BANK = 0.35;
+const BANK_SMOOTHING = 8;
+const BANK_YAW_RATIO = 0.3;
+const BANK_BOOST_SCALE = 1.2;
+const BANK_SLOWDOWN_SCALE = 0.5;
+
 export class Spaceship {
   position = { x: 0, y: 0, z: 0 };
   speed = BASE_SPEED;
@@ -18,6 +24,8 @@ export class Spaceship {
   boundaryMax = 8;
 
   mesh: THREE.Group;
+  bankAngle = 0;
+  bankTarget = 0;
   private startZ = 0;
 
   constructor() {
@@ -56,11 +64,24 @@ export class Spaceship {
   moveLeft(deltaTime: number): void {
     this.position.x -= LATERAL_SPEED * deltaTime;
     this.position.x = Math.max(this.position.x, this.boundaryMin);
+    this.bankTarget = -this.getMaxBankForState();
   }
 
   moveRight(deltaTime: number): void {
     this.position.x += LATERAL_SPEED * deltaTime;
     this.position.x = Math.min(this.position.x, this.boundaryMax);
+    this.bankTarget = this.getMaxBankForState();
+  }
+
+  private getMaxBankForState(): number {
+    switch (this.speedState) {
+      case 'BOOST':
+        return MAX_BANK * BANK_BOOST_SCALE;
+      case 'SLOWDOWN':
+        return MAX_BANK * BANK_SLOWDOWN_SCALE;
+      default:
+        return MAX_BANK;
+    }
   }
 
   getForwardSpeed(): number {
@@ -98,8 +119,16 @@ export class Spaceship {
       }
     }
 
+    // Bank animation: smoothly approach target, then reset target so that
+    // a frame without left/right input naturally decays back to level.
+    const t = 1 - Math.exp(-deltaTime * BANK_SMOOTHING);
+    this.bankAngle += (this.bankTarget - this.bankAngle) * t;
+    this.bankTarget = 0;
+
     // Sync mesh
     this.mesh.position.set(this.position.x, this.position.y, this.position.z);
+    this.mesh.rotation.z = this.bankAngle;
+    this.mesh.rotation.y = this.bankAngle * BANK_YAW_RATIO;
   }
 
   onMeteoriteHit(): void {
@@ -130,7 +159,10 @@ export class Spaceship {
     this.startZ = 0;
     this.speedState = 'NORMAL';
     this.speedStateTimer = 0;
+    this.bankAngle = 0;
+    this.bankTarget = 0;
     this.mesh.position.set(0, 0, 0);
+    this.mesh.rotation.set(0, 0, 0);
   }
 
   dispose(): void {
