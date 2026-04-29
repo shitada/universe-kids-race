@@ -5,6 +5,7 @@ export class AirShield {
   private material: THREE.MeshBasicMaterial;
   private elapsedTime = 0;
   private isBoosting = false;
+  private lastBoostMode: boolean | null = null;
 
   constructor() {
     const geometry = new THREE.SphereGeometry(1.5, 16, 16);
@@ -29,6 +30,8 @@ export class AirShield {
   }
 
   setBoostMode(active: boolean): void {
+    if (active === this.lastBoostMode) return;
+    this.lastBoostMode = active;
     this.isBoosting = active;
     if (active) {
       this.mesh.visible = true;
