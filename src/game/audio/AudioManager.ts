@@ -240,6 +240,7 @@ export class AudioManager {
   private initialized = false;
   private bgmOscillators: OscillatorNode[] = [];
   private bgmGains: GainNode[] = [];
+  private bgmShortVoices: { osc: OscillatorNode; gain: GainNode }[] = [];
   private bgmTimer: ReturnType<typeof setTimeout> | null = null;
   private boostNoiseSource: AudioBufferSourceNode | null = null;
   private boostNoiseGain: GainNode | null = null;
@@ -382,6 +383,7 @@ export class AudioManager {
         gain.connect(this.ctx!.destination);
         osc.start(now);
         osc.stop(now + beatInterval * 0.95);
+        this.trackShortVoice(osc, gain);
       } catch {
         // Ignore arpeggio errors
       }
@@ -401,6 +403,7 @@ export class AudioManager {
         gain.connect(this.ctx!.destination);
         osc.start(now);
         osc.stop(now + beatInterval * 0.95);
+        this.trackShortVoice(osc, gain);
       } catch {
         // Ignore melody errors
       }
@@ -412,6 +415,19 @@ export class AudioManager {
     tick();
   }
 
+  private trackShortVoice(osc: OscillatorNode, gain: GainNode): void {
+    const entry = { osc, gain };
+    this.bgmShortVoices.push(entry);
+    osc.onended = () => {
+      const idx = this.bgmShortVoices.indexOf(entry);
+      if (idx !== -1) {
+        this.bgmShortVoices.splice(idx, 1);
+      }
+      try { osc.disconnect(); } catch { /* ignore */ }
+      try { gain.disconnect(); } catch { /* ignore */ }
+    };
+  }
+
   stopBGM(): void {
     this.bgmGeneration++;
     this.bgmPlaying = false;
@@ -419,6 +435,16 @@ export class AudioManager {
       clearTimeout(this.bgmTimer);
       this.bgmTimer = null;
     }
+    const now = this.ctx ? this.ctx.currentTime : 0;
+    for (const { osc, gain } of this.bgmShortVoices) {
+      try { gain.gain.cancelScheduledValues(now); } catch { /* ignore */ }
+      try { gain.gain.setValueAtTime(gain.gain.value, now); } catch { /* ignore */ }
+      try { gain.gain.linearRampToValueAtTime(0, now + 0.02); } catch { /* ignore */ }
+      try { osc.stop(now + 0.03); } catch { /* already stopped */ }
+      try { osc.disconnect(); } catch { /* ignore */ }
+      try { gain.disconnect(); } catch { /* ignore */ }
+    }
+    this.bgmShortVoices = [];
     for (const osc of this.bgmOscillators) {
       try { osc.stop(); } catch { /* already stopped */ }
       try { osc.disconnect(); } catch { /* ignore */ }
