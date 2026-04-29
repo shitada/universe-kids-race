@@ -87,6 +87,75 @@ describe('StageScene cleanupPassedObjects', () => {
     expect(passedGeoSpy).not.toHaveBeenCalled();
   });
 
+  it('rotates retained meteorites on X/Z each cleanup pass and skips released ones', () => {
+    const scene = createScene();
+    const internal = scene as unknown as {
+      stars: Star[];
+      meteorites: Meteorite[];
+      threeScene: THREE.Scene;
+      spaceship: { position: { x: number; y: number; z: number } };
+      cleanupPassedObjects(deltaTime: number): void;
+    };
+
+    internal.threeScene = new THREE.Scene();
+    internal.spaceship = { position: { x: 0, y: 0, z: 0 } };
+    internal.stars = [];
+
+    const aheadMets = [
+      new Meteorite(0, 0, -10),
+      new Meteorite(0, 0, -20),
+      new Meteorite(0, 0, -30),
+    ];
+    const passedMet = new Meteorite(0, 0, 50);
+    for (const m of [...aheadMets, passedMet]) internal.threeScene.add(m.mesh);
+    internal.meteorites = [...aheadMets, passedMet];
+
+    // Pre-conditions: all rotations start at 0.
+    for (const m of [...aheadMets, passedMet]) {
+      expect(m.mesh.rotation.x).toBe(0);
+      expect(m.mesh.rotation.z).toBe(0);
+    }
+
+    internal.cleanupPassedObjects(0.1);
+
+    // Active meteorites must have rotated on both axes.
+    for (const m of aheadMets) {
+      expect(m.mesh.rotation.x).toBeGreaterThan(0);
+      expect(m.mesh.rotation.z).toBeGreaterThan(0);
+    }
+    // Released meteorite was reset/recycled and must NOT show rotation growth
+    // from update(); recycle() resets rotation to 0.
+    expect(passedMet.mesh.rotation.x).toBe(0);
+    expect(passedMet.mesh.rotation.z).toBe(0);
+    expect(internal.meteorites).toHaveLength(3);
+  });
+
+  it('skips meteorite update when isActive is false', () => {
+    const scene = createScene();
+    const internal = scene as unknown as {
+      stars: Star[];
+      meteorites: Meteorite[];
+      threeScene: THREE.Scene;
+      spaceship: { position: { x: number; y: number; z: number } };
+      cleanupPassedObjects(deltaTime: number): void;
+    };
+
+    internal.threeScene = new THREE.Scene();
+    internal.spaceship = { position: { x: 0, y: 0, z: 0 } };
+    internal.stars = [];
+
+    const inactiveMet = new Meteorite(0, 0, -10);
+    inactiveMet.isActive = false;
+    internal.threeScene.add(inactiveMet.mesh);
+    internal.meteorites = [inactiveMet];
+
+    internal.cleanupPassedObjects(0.1);
+
+    expect(inactiveMet.mesh.rotation.x).toBe(0);
+    expect(inactiveMet.mesh.rotation.z).toBe(0);
+    expect(internal.meteorites).toHaveLength(1);
+  });
+
   it('does not let scene children grow unboundedly across many cleanup cycles', () => {
     const scene = createScene();
     const internal = scene as unknown as {
