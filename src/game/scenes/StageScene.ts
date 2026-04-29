@@ -18,6 +18,9 @@ import { AirShield } from '../effects/AirShield';
 import { CompanionManager } from '../entities/CompanionManager';
 import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
 import { disposeObject3D } from '../utils/disposeObject3D';
+import { followCameraZ } from '../utils/followCameraZ';
+
+const BG_STAR_PARALLAX = 1.0;
 
 export class StageScene implements Scene {
   private threeScene: THREE.Scene;
@@ -184,7 +187,7 @@ export class StageScene implements Scene {
     for (let i = 0; i < 6000; i += 3) {
       positions[i] = (Math.random() - 0.5) * 200;
       positions[i + 1] = (Math.random() - 0.5) * 200;
-      positions[i + 2] = (Math.random() - 0.5) * 400 - 200;
+      positions[i + 2] = (Math.random() - 0.5) * 400;
     }
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     const mat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.2, sizeAttenuation: true });
@@ -546,6 +549,12 @@ export class StageScene implements Scene {
       this.destinationPlanet.scale.set(s, s, s);
     }
     this.elapsedTime += deltaTime;
+
+    // Keep background star field centered around the spaceship so the
+    // sky doesn't appear empty deep into the stage (Constitution IV).
+    if (this.bgStars) {
+      followCameraZ(this.bgStars, this.spaceship.position.z, BG_STAR_PARALLAX);
+    }
 
     // Boost visual effects
     this.updateBoostEffects();
