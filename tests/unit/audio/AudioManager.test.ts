@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // Mock Web Audio API
 class MockGainNode {
-  gain = { value: 0, setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn() };
+  gain = { value: 0, setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), cancelScheduledValues: vi.fn() };
   connect = vi.fn().mockReturnThis();
   disconnect = vi.fn();
 }
@@ -350,6 +350,91 @@ describe('AudioManager', () => {
       expect((am as any).bgmOscillators).toHaveLength(0);
       expect((am as any).bgmGains).toHaveLength(0);
       expect((am as any).bgmTimer).toBeNull();
+      am.dispose();
+    });
+  });
+
+  describe('stopBGM() cleans up short-lived arpeggio/melody voices', () => {
+    it('tracks short-lived voices in bgmShortVoices on each tick', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+
+      am.playBGM(1);
+
+      // First synchronous tick produces 1 arpeggio + 1 melody short-lived voice
+      const shortVoices = (am as any).bgmShortVoices as Array<{ osc: any; gain: any }>;
+      expect(shortVoices).toHaveLength(2);
+      // Each should have an onended callback assigned
+      for (const { osc } of shortVoices) {
+        expect(typeof osc.onended).toBe('function');
+      }
+      am.dispose();
+    });
+
+    it('stops, disconnects, and cancels schedules of short-lived voices on stopBGM()', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      am.playBGM(1);
+
+      const shortVoiceCopies = [...((am as any).bgmShortVoices as Array<{ osc: any; gain: any }>)];
+      expect(shortVoiceCopies.length).toBeGreaterThan(0);
+
+      am.stopBGM();
+
+      for (const { osc, gain } of shortVoiceCopies) {
+        expect(osc.stop).toHaveBeenCalled();
+        expect(osc.disconnect).toHaveBeenCalled();
+        expect(gain.disconnect).toHaveBeenCalled();
+        expect(gain.gain.cancelScheduledValues).toHaveBeenCalled();
+      }
+      expect((am as any).bgmShortVoices).toHaveLength(0);
+      am.dispose();
+    });
+
+    it('removes a short-lived voice from bgmShortVoices when its onended fires', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      am.playBGM(1);
+
+      const shortVoices = (am as any).bgmShortVoices as Array<{ osc: any; gain: any }>;
+      const initialLength = shortVoices.length;
+      expect(initialLength).toBeGreaterThan(0);
+
+      const first = shortVoices[0];
+      first.osc.onended?.();
+
+      expect(shortVoices).toHaveLength(initialLength - 1);
+      expect(first.osc.disconnect).toHaveBeenCalled();
+      expect(first.gain.disconnect).toHaveBeenCalled();
+      am.dispose();
+    });
+
+    it('after switching playBGM(1) -> playBGM(2), no old-generation short voices remain', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+
+      am.playBGM(1);
+      const oldShortVoices = [...((am as any).bgmShortVoices as Array<{ osc: any; gain: any }>)];
+      expect(oldShortVoices.length).toBeGreaterThan(0);
+
+      am.playBGM(2);
+
+      // Old voices must be stopped/disconnected (cleaned by inner stopBGM())
+      for (const { osc, gain } of oldShortVoices) {
+        expect(osc.stop).toHaveBeenCalled();
+        expect(osc.disconnect).toHaveBeenCalled();
+        expect(gain.disconnect).toHaveBeenCalled();
+      }
+
+      // The current bgmShortVoices array contains only fresh entries from the new generation.
+      const currentShortVoices = (am as any).bgmShortVoices as Array<{ osc: any; gain: any }>;
+      for (const oldEntry of oldShortVoices) {
+        expect(currentShortVoices.includes(oldEntry)).toBe(false);
+      }
       am.dispose();
     });
   });
