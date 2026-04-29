@@ -4,6 +4,7 @@ const FPS_SAMPLE_INTERVAL_MS = 100;
 
 export class GameLoop {
   private running = false;
+  private paused = false;
   private lastTime = 0;
   private lastFpsSampleAt = 0;
   private animationId = 0;
@@ -17,10 +18,12 @@ export class GameLoop {
     onRender: () => void,
     onFpsSample?: (fps: number) => void,
   ): void {
+    if (this.running) return;
     this.updateCallback = onUpdate;
     this.renderCallback = onRender;
     this.fpsSampleCallback = onFpsSample ?? null;
     this.running = true;
+    this.paused = false;
     this.monitor.reset();
     this.lastTime = performance.now();
     this.lastFpsSampleAt = this.lastTime;
@@ -29,14 +32,20 @@ export class GameLoop {
 
   stop(): void {
     this.running = false;
+    this.paused = false;
     if (this.animationId) {
       cancelAnimationFrame(this.animationId);
       this.animationId = 0;
     }
+    this.updateCallback = null;
+    this.renderCallback = null;
+    this.fpsSampleCallback = null;
   }
 
   pause(): void {
+    if (!this.running) return;
     this.running = false;
+    this.paused = true;
     if (this.animationId) {
       cancelAnimationFrame(this.animationId);
       this.animationId = 0;
@@ -44,13 +53,14 @@ export class GameLoop {
   }
 
   resume(): void {
-    if (!this.running && this.updateCallback && this.renderCallback) {
-      this.running = true;
-      this.monitor.reset();
-      this.lastTime = performance.now();
-      this.lastFpsSampleAt = this.lastTime;
-      this.loop(this.lastTime);
-    }
+    if (!this.paused) return;
+    if (!this.updateCallback || !this.renderCallback) return;
+    this.paused = false;
+    this.running = true;
+    this.monitor.reset();
+    this.lastTime = performance.now();
+    this.lastFpsSampleAt = this.lastTime;
+    this.loop(this.lastTime);
   }
 
   isRunning(): boolean {

@@ -162,4 +162,78 @@ describe('GameLoop', () => {
 
     loop.stop();
   });
+
+  it('start() is a no-op while already running', () => {
+    const loop = new GameLoop();
+    const onUpdate = vi.fn();
+    const onRender = vi.fn();
+    loop.start(onUpdate, onRender);
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+
+    const onUpdate2 = vi.fn();
+    const onRender2 = vi.fn();
+    loop.start(onUpdate2, onRender2);
+    // Second start should not run an extra synchronous frame nor swap callbacks.
+    expect(onUpdate2).not.toHaveBeenCalled();
+    expect(onRender2).not.toHaveBeenCalled();
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+
+    advance(16);
+    expect(onUpdate).toHaveBeenCalledTimes(2);
+    expect(onUpdate2).not.toHaveBeenCalled();
+
+    loop.stop();
+  });
+
+  it('resume() after stop() does not restart the loop', () => {
+    const loop = new GameLoop();
+    const onUpdate = vi.fn();
+    const onRender = vi.fn();
+    loop.start(onUpdate, onRender);
+    advance(16);
+    expect(onUpdate).toHaveBeenCalledTimes(2);
+
+    loop.stop();
+    expect(loop.isRunning()).toBe(false);
+
+    loop.resume();
+    expect(loop.isRunning()).toBe(false);
+    expect(rafCallback).toBeNull();
+
+    const callsBefore = onUpdate.mock.calls.length;
+    advance(16);
+    expect(onUpdate.mock.calls.length).toBe(callsBefore);
+  });
+
+  it('pause() called twice does not throw and resume() still works', () => {
+    const loop = new GameLoop();
+    const onUpdate = vi.fn();
+    const onRender = vi.fn();
+    loop.start(onUpdate, onRender);
+    advance(16);
+
+    expect(() => {
+      loop.pause();
+      loop.pause();
+    }).not.toThrow();
+    expect(loop.isRunning()).toBe(false);
+
+    loop.resume();
+    expect(loop.isRunning()).toBe(true);
+    const callsBefore = onUpdate.mock.calls.length;
+    advance(16);
+    expect(onUpdate.mock.calls.length).toBe(callsBefore + 1);
+
+    loop.stop();
+  });
+
+  it('pause() before start() is a no-op and resume() does not start', () => {
+    const loop = new GameLoop();
+    expect(() => loop.pause()).not.toThrow();
+    expect(loop.isRunning()).toBe(false);
+
+    loop.resume();
+    expect(loop.isRunning()).toBe(false);
+    expect(rafCallback).toBeNull();
+  });
 });
