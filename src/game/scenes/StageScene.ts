@@ -492,6 +492,13 @@ export class StageScene implements Scene {
       }
     }
 
+    // Immediately release collected stars back to the pool so subsequent
+    // per-frame Star.update / cleanupPassedObjects walks skip them. Score/SFX/
+    // particle emit above already consumed the star's position, so recycling
+    // now does not affect any visible behavior. cleanupPassedObjects remains
+    // as a safety net for stars that pass behind without being collected.
+    this.releaseCollectedStars(collisionResult.starCollisions);
+
     // Meteorite hit
     if (collisionResult.meteoriteCollision) {
       this.spaceship.onMeteoriteHit();
@@ -612,6 +619,22 @@ export class StageScene implements Scene {
     }
     this.boostLinePositionAttr!.needsUpdate = true;
     this.boostLines.visible = true;
+  }
+
+  private releaseCollectedStars(collected: readonly Star[]): void {
+    if (collected.length === 0) return;
+    const stars = this.stars;
+    let write = 0;
+    for (let read = 0; read < stars.length; read++) {
+      const s = stars[read];
+      if (s.isCollected) continue;
+      if (write !== read) stars[write] = s;
+      write++;
+    }
+    stars.length = write;
+    for (const star of collected) {
+      this.spawnSystem.releaseStar(star);
+    }
   }
 
   private cleanupPassedObjects(): void {
