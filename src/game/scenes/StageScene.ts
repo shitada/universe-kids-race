@@ -12,7 +12,7 @@ import { ScoreSystem } from '../systems/ScoreSystem';
 import { SpawnSystem } from '../systems/SpawnSystem';
 import { BoostSystem } from '../systems/BoostSystem';
 import { HUD } from '../../ui/HUD';
-import { getStageConfig } from '../config/StageConfig';
+import { getStageConfig, TOTAL_STAGES } from '../config/StageConfig';
 import { ParticleBurstManager } from '../effects/ParticleBurst';
 import { AirShield } from '../effects/AirShield';
 import { CompanionManager } from '../entities/CompanionManager';
@@ -482,7 +482,9 @@ export class StageScene implements Scene {
         break;
       }
       case 11: {
-        // Earth — blue ocean + brown continents canvas texture + cloud layer
+        // Earth — stage ID 11 (happens to equal TOTAL_STAGES). This is a per-stage
+        // visual branch keyed by stage number, not a "last stage" check.
+        // blue ocean + brown continents canvas texture + cloud layer
         const tex = getPlanetTexture('earth', buildEarthTexture);
         const geo = getPlanetGeometry('earth:sphere', () => new THREE.SphereGeometry(15, 32, 32));
         const mat = getPlanetMaterial('earth:mat', () => new THREE.MeshToonMaterial({ map: tex }));
@@ -1095,7 +1097,7 @@ export class StageScene implements Scene {
   private handleStageComplete(): void {
     const { totalScore, totalStarCount } = this.scoreSystem.finalizeStage();
 
-    if (this.stageNumber >= 11) {
+    if (this.stageNumber >= TOTAL_STAGES) {
       this.sceneManager.requestTransition('ending', { totalScore, totalStarCount });
     } else {
       this.sceneManager.requestTransition('stage', {
