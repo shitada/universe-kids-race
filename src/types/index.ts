@@ -48,6 +48,7 @@ export type SFXType = 'starCollect' | 'rainbowCollect' | 'meteoriteHit' | 'boost
 export interface SaveData {
   clearedStage: number;
   unlockedPlanets: number[];
+  muted?: boolean;
 }
 
 // Planet encyclopedia

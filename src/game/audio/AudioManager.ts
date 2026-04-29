@@ -238,6 +238,8 @@ export const BGM_CONFIGS: Record<number, BGMConfig> = {
 export class AudioManager {
   private ctx: AudioContext | null = null;
   private initialized = false;
+  private masterGain: GainNode | null = null;
+  private muted = false;
   private bgmOscillators: OscillatorNode[] = [];
   private bgmGains: GainNode[] = [];
   private bgmShortVoices: { osc: OscillatorNode; gain: GainNode }[] = [];
@@ -255,6 +257,7 @@ export class AudioManager {
       if (this.ctx.state === 'suspended') {
         await this.ctx.resume();
       }
+      this.setupMasterGain();
       this.initialized = true;
     } catch {
       this.initialized = false;
@@ -289,10 +292,60 @@ export class AudioManager {
       const AudioCtx = globalThis.AudioContext || (globalThis as any).webkitAudioContext;
       this.ctx = new AudioCtx();
       this.ctx.resume(); // Call in sync callstack; don't await the Promise
+      this.setupMasterGain();
       this.initialized = true;
     } catch {
       this.initialized = false;
     }
+  }
+
+  private setupMasterGain(): void {
+    if (!this.ctx) return;
+    try {
+      this.masterGain = this.ctx.createGain();
+      this.masterGain.gain.value = this.muted ? 0 : 1;
+      this.masterGain.connect(this.ctx.destination);
+    } catch {
+      this.masterGain = null;
+    }
+  }
+
+  /**
+   * Returns the current sink for any audio source. Falls back to ctx.destination
+   * if the master gain failed to initialize, so audio still plays in degraded mode.
+   */
+  private sink(): AudioNode | null {
+    if (this.masterGain) return this.masterGain;
+    return this.ctx ? this.ctx.destination : null;
+  }
+
+  /**
+   * Mute or unmute all audio routed through the master gain.
+   * Uses setTargetAtTime with a ~10ms time-constant to avoid pop noise.
+   * Safe to call before initialization; the state is remembered and applied
+   * once the AudioContext is created.
+   */
+  setMuted(muted: boolean): void {
+    this.muted = muted;
+    if (!this.ctx || !this.masterGain) return;
+    const target = muted ? 0 : 1;
+    try {
+      this.masterGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.01);
+    } catch {
+      try {
+        this.masterGain.gain.value = target;
+      } catch { /* ignore */ }
+    }
+  }
+
+  isMuted(): boolean {
+    return this.muted;
+  }
+
+  /** Toggle mute state and return the new value. */
+  toggleMute(): boolean {
+    this.setMuted(!this.muted);
+    return this.muted;
   }
 
   playBGM(stageNumber: number): void {
@@ -314,7 +367,7 @@ export class AudioManager {
       bassOsc.frequency.value = config.bassNotes[0];
       bassGain.gain.value = config.volumes.bass;
       bassOsc.connect(bassGain);
-      bassGain.connect(this.ctx.destination);
+      bassGain.connect(this.sink()!);
       bassOsc.start();
       this.bgmOscillators.push(bassOsc);
       this.bgmGains.push(bassGain);
@@ -333,7 +386,7 @@ export class AudioManager {
         padOsc.frequency.value = firstChord[i];
         padGain.gain.value = config.volumes.pad;
         padOsc.connect(padGain);
-        padGain.connect(this.ctx.destination);
+        padGain.connect(this.sink()!);
         padOsc.start();
         padOscs.push(padOsc);
         this.bgmOscillators.push(padOsc);
@@ -380,7 +433,7 @@ export class AudioManager {
         gain.gain.setValueAtTime(config.volumes.arpeggio, now);
         gain.gain.linearRampToValueAtTime(0.001, now + beatInterval * 0.9);
         osc.connect(gain);
-        gain.connect(this.ctx!.destination);
+        gain.connect(this.sink()!);
         osc.start(now);
         osc.stop(now + beatInterval * 0.95);
         this.trackShortVoice(osc, gain);
@@ -400,7 +453,7 @@ export class AudioManager {
         gain.gain.setValueAtTime(config.volumes.melody, now);
         gain.gain.linearRampToValueAtTime(0.001, now + beatInterval * 0.9);
         osc.connect(gain);
-        gain.connect(this.ctx!.destination);
+        gain.connect(this.sink()!);
         osc.start(now);
         osc.stop(now + beatInterval * 0.95);
         this.trackShortVoice(osc, gain);
@@ -477,7 +530,7 @@ export class AudioManager {
       this.boostNoiseGain.gain.value = 0.15;
       this.boostNoiseSource.connect(this.boostNoiseFilter);
       this.boostNoiseFilter.connect(this.boostNoiseGain);
-      this.boostNoiseGain.connect(this.ctx.destination);
+      this.boostNoiseGain.connect(this.sink()!);
       this.boostNoiseSource.start();
     } catch {
       this.boostNoiseSource = null;
@@ -543,6 +596,10 @@ export class AudioManager {
   dispose(): void {
     this.stopBGM();
     this.stopBoostSFX();
+    if (this.masterGain) {
+      try { this.masterGain.disconnect(); } catch { /* ignore */ }
+      this.masterGain = null;
+    }
     if (this.ctx) {
       try { this.ctx.close(); } catch { /* ignore */ }
       this.ctx = null;
@@ -561,7 +618,7 @@ export class AudioManager {
     gain.gain.setValueAtTime(volume, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
     osc.connect(gain);
-    gain.connect(this.ctx.destination);
+    gain.connect(this.sink()!);
     osc.start(now);
     osc.stop(now + duration + 0.01);
   }
@@ -578,7 +635,7 @@ export class AudioManager {
       gain.gain.setValueAtTime(volume, startTime);
       gain.gain.exponentialRampToValueAtTime(0.001, startTime + noteLength * 0.9);
       osc.connect(gain);
-      gain.connect(this.ctx.destination);
+      gain.connect(this.sink()!);
       osc.start(startTime);
       osc.stop(startTime + noteLength);
     }

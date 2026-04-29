@@ -5,10 +5,13 @@ export class HUD {
   private starCountEl: HTMLSpanElement | null = null;
   private boostButton: HTMLButtonElement | null = null;
   private homeButton: HTMLButtonElement | null = null;
+  private muteButton: HTMLButtonElement | null = null;
   private cooldownContainer: HTMLDivElement | null = null;
   private cooldownBar: HTMLDivElement | null = null;
   private onBoostCallback: (() => void) | null = null;
   private onHomeCallback: (() => void) | null = null;
+  private onMuteCallback: (() => void) | null = null;
+  private muted = false;
   private lastCooldownProgress = 1.0;
   // Differential write caches for updateCooldown.
   // NOTE: If a future code path mutates cooldownBar / boostButton styles
@@ -100,6 +103,40 @@ export class HUD {
 
     // Boost button on ui-overlay
     this.createBoostButton();
+
+    // Mute toggle button on HUD root (top-right) — created after stage name
+    // and other elements so existing children indices remain stable.
+    this.createMuteButton();
+  }
+
+  private createMuteButton(): void {
+    const hudRoot = document.getElementById('hud');
+    if (!hudRoot) return;
+
+    this.muteButton = document.createElement('button');
+    this.muteButton.textContent = this.muted ? '🔇' : '🔊';
+    this.muteButton.setAttribute('aria-label', this.muted ? 'サウンド オフ' : 'サウンド オン');
+    this.muteButton.setAttribute('data-mute-button', '');
+    this.muteButton.style.position = 'absolute';
+    this.muteButton.style.top = '0.8rem';
+    this.muteButton.style.right = 'max(1rem, calc(env(safe-area-inset-right, 0px) + 0.5rem))';
+    this.muteButton.style.fontSize = 'clamp(1.4rem, 4vmin, 1.8rem)';
+    this.muteButton.style.background = 'rgba(255, 255, 255, 0.15)';
+    this.muteButton.style.border = 'none';
+    this.muteButton.style.borderRadius = '50%';
+    this.muteButton.style.width = '3rem';
+    this.muteButton.style.height = '3rem';
+    this.muteButton.style.display = 'flex';
+    this.muteButton.style.alignItems = 'center';
+    this.muteButton.style.justifyContent = 'center';
+    this.muteButton.style.cursor = 'pointer';
+    this.muteButton.style.pointerEvents = 'auto';
+    this.muteButton.style.touchAction = 'manipulation';
+    this.muteButton.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      this.onMuteCallback?.();
+    });
+    hudRoot.appendChild(this.muteButton);
   }
 
   private createBoostButton(): void {
@@ -215,6 +252,27 @@ export class HUD {
     this.onHomeCallback = callback;
   }
 
+  setMuteCallback(callback: () => void): void {
+    this.onMuteCallback = callback;
+  }
+
+  /**
+   * Update the mute button display to reflect the given state.
+   * Safe to call before or after show(); the latest value is used the next
+   * time the button is created.
+   */
+  setMuteState(muted: boolean): void {
+    this.muted = muted;
+    if (this.muteButton) {
+      this.muteButton.textContent = muted ? '🔇' : '🔊';
+      this.muteButton.setAttribute('aria-label', muted ? 'サウンド オフ' : 'サウンド オン');
+    }
+  }
+
+  isMuted(): boolean {
+    return this.muted;
+  }
+
   update(score: number, starCount: number): void {
     if (this.scoreEl && score !== this.lastScore) {
       this.scoreEl.textContent = String(score);
@@ -259,6 +317,10 @@ export class HUD {
     if (this.homeButton) {
       this.homeButton.remove();
       this.homeButton = null;
+    }
+    if (this.muteButton) {
+      this.muteButton.remove();
+      this.muteButton = null;
     }
     if (this.stageNameEl) {
       this.stageNameEl.remove();

@@ -350,6 +350,14 @@ export class StageScene implements Scene {
     this.hud.setHomeCallback(() => {
       this.sceneManager.requestTransition('title');
     });
+    this.hud.setMuteState(this.audioManager.isMuted());
+    this.hud.setMuteCallback(() => {
+      const newMuted = this.audioManager.toggleMute();
+      this.hud.setMuteState(newMuted);
+      const data = this.saveManager.load();
+      data.muted = newMuted;
+      this.saveManager.save(data);
+    });
     this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
 
     // Companions

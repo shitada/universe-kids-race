@@ -25,6 +25,9 @@ function createMockAudioManager(): AudioManager {
   return {
     playBGM: vi.fn(),
     stopBGM: vi.fn(),
+    isMuted: vi.fn(() => false),
+    toggleMute: vi.fn(() => false),
+    setMuted: vi.fn(),
     playSFX: vi.fn(),
     initFromInteraction: vi.fn(),
   } as unknown as AudioManager;
