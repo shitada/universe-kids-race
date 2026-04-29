@@ -632,6 +632,7 @@ export class AudioManager {
     gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
     osc.connect(gain);
     gain.connect(this.sink()!);
+    this.attachOneShotCleanup(osc, gain);
     osc.start(now);
     osc.stop(now + duration + 0.01);
   }
@@ -649,8 +650,16 @@ export class AudioManager {
       gain.gain.exponentialRampToValueAtTime(0.001, startTime + noteLength * 0.9);
       osc.connect(gain);
       gain.connect(this.sink()!);
+      this.attachOneShotCleanup(osc, gain);
       osc.start(startTime);
       osc.stop(startTime + noteLength);
     }
+  }
+
+  private attachOneShotCleanup(osc: OscillatorNode, gain: GainNode): void {
+    osc.onended = () => {
+      try { osc.disconnect(); } catch { /* ignore */ }
+      try { gain.disconnect(); } catch { /* ignore */ }
+    };
   }
 }
