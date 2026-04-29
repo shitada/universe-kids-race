@@ -21,6 +21,14 @@ const MAX_TIER = PIXEL_RATIO_TIERS.length - 1;
 let lastAppliedWidth = 0;
 let lastAppliedHeight = 0;
 
+// Construct early so applyRendererSize() can safely reference it during the
+// initial applyPixelRatioTier() call below. SceneManager's constructor has
+// no side effects; on iOS WebKit, the bundler-minified output of `const`
+// hoisting + early access produced a TDZ "Cannot access 'X' before
+// initialization" runtime error when sceneManager was declared after this
+// point (caught by Playwright smoke test on iPad emulation).
+const sceneManager = new SceneManager();
+
 function applyRendererSize(width: number, height: number): void {
   if (width !== lastAppliedWidth || height !== lastAppliedHeight) {
     renderer.setSize(width, height);
@@ -56,7 +64,6 @@ renderer.setClearColor(0x000020);
 const inputSystem = new InputSystem();
 inputSystem.setup(canvas);
 
-const sceneManager = new SceneManager();
 const gameLoop = new GameLoop();
 const saveManager = new SaveManager();
 const audioManager = new AudioManager();
