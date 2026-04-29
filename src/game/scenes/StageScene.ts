@@ -61,6 +61,9 @@ export class StageScene implements Scene {
   private boostLines: THREE.LineSegments | null = null;
   private boostLinePositions: Float32Array | null = null;
   private boostLinePositionAttr: THREE.BufferAttribute | null = null;
+  // Cache last value written to boostLines.visible to skip redundant per-frame writes.
+  // null means "unknown / needs to be re-asserted on the next write".
+  private lastBoostLinesVisible: boolean | null = null;
 
   // Companion manager
   private companionManager: CompanionManager | null = null;
@@ -592,6 +595,7 @@ export class StageScene implements Scene {
     this.boostLines = new THREE.LineSegments(geo, mat);
     this.boostLines.frustumCulled = false;
     this.boostLines.visible = false;
+    this.lastBoostLinesVisible = false;
     this.threeScene.add(this.boostLines);
   }
 
@@ -599,7 +603,10 @@ export class StageScene implements Scene {
     if (!this.boostLines || !this.boostLinePositions) return;
 
     if (!this.boostSystem.isActive()) {
-      this.boostLines.visible = false;
+      if (this.lastBoostLinesVisible !== false) {
+        this.boostLines.visible = false;
+        this.lastBoostLinesVisible = false;
+      }
       return;
     }
 
@@ -619,7 +626,10 @@ export class StageScene implements Scene {
       pos[base + 5] = z + 2 + Math.random() * 3;
     }
     this.boostLinePositionAttr!.needsUpdate = true;
-    this.boostLines.visible = true;
+    if (this.lastBoostLinesVisible !== true) {
+      this.boostLines.visible = true;
+      this.lastBoostLinesVisible = true;
+    }
   }
 
   private releaseCollectedStars(collected: readonly Star[]): void {
@@ -1000,6 +1010,7 @@ export class StageScene implements Scene {
     }
     this.boostLinePositions = null;
     this.boostLinePositionAttr = null;
+    this.lastBoostLinesVisible = null;
     if (this.bgStars) {
       this.bgStars.geometry.dispose();
       (this.bgStars.material as THREE.Material).dispose();
