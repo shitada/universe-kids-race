@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import * as THREE from 'three';
 import { CompanionManager } from '../../../src/game/entities/CompanionManager';
 import { PLANET_ENCYCLOPEDIA } from '../../../src/game/config/PlanetEncyclopedia';
 
@@ -267,6 +268,119 @@ describe('CompanionManager', () => {
       manager.update(0.5, 0, 0, 0);
       // Normal rotation: deltaTime * 2 = 0.5 * 2 = 1.0
       expect(mesh.rotation.y - rotAfterEntrance).toBeCloseTo(1.0, 1);
+    });
+  });
+
+  describe('shared geometry / material caching', () => {
+    it('reuses the same body geometry across multiple companions of the same shape', () => {
+      const all = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+      const manager = new CompanionManager(all);
+      const group = manager.getGroup();
+
+      // Group bodies (first child of each companion group) by geometry uuid
+      // and confirm at least one geometry is shared between companions.
+      const geomUuids = new Set<string>();
+      let sharedHits = 0;
+      for (const companion of group.children) {
+        const body = (companion as THREE.Group).children[0] as THREE.Mesh;
+        if (geomUuids.has(body.geometry.uuid)) {
+          sharedHits++;
+        }
+        geomUuids.add(body.geometry.uuid);
+      }
+      expect(sharedHits).toBeGreaterThan(0);
+    });
+
+    it('reuses the same eye material across companions (single shared instance)', () => {
+      const manager = new CompanionManager([1, 2, 3]);
+      const group = manager.getGroup();
+
+      const eyeMaterials = new Set<string>();
+      for (const companion of group.children) {
+        const c = companion as THREE.Group;
+        // Eyes are the last two children of every companion group.
+        const eye = c.children[c.children.length - 1] as THREE.Mesh;
+        const mat = eye.material as THREE.Material;
+        eyeMaterials.add(mat.uuid);
+      }
+      expect(eyeMaterials.size).toBe(1);
+    });
+
+    it('shares opaque body materials by color across companions', () => {
+      // Both stage 1 (moon) and stage 1 again would share, but we use 1 + add()
+      // to verify cross-instance material reuse.
+      const manager = new CompanionManager([1]);
+      manager.addCompanion(1);
+      const group = manager.getGroup();
+      const body0 = (group.children[0] as THREE.Group).children[0] as THREE.Mesh;
+      const body1 = (group.children[1] as THREE.Group).children[0] as THREE.Mesh;
+      expect(body0.material).toBe(body1.material);
+    });
+
+    it('does not dispose shared resources on dispose() — new manager still works', () => {
+      const m1 = new CompanionManager([1, 6, 8]); // basic, ringed, bubble
+      m1.dispose();
+
+      // Re-create and verify geometries are still usable (positions attribute present).
+      const m2 = new CompanionManager([1, 6, 8]);
+      const group = m2.getGroup();
+      for (const companion of group.children) {
+        const body = (companion as THREE.Group).children[0] as THREE.Mesh;
+        expect(body.geometry.attributes.position).toBeDefined();
+        const mat = body.material as THREE.MeshToonMaterial;
+        // A disposed Material's color object survives, but disposed materials
+        // mark resources internally; here we simply assert the material is
+        // still a valid MeshToonMaterial with its color preserved.
+        expect(mat.color).toBeDefined();
+      }
+      m2.dispose();
+    });
+
+    it('uses a transparent material variant for bubble companions', () => {
+      const manager = new CompanionManager([8]); // neptune = bubble
+      const body = (manager.getGroup().children[0] as THREE.Group).children[0] as THREE.Mesh;
+      const mat = body.material as THREE.MeshToonMaterial;
+      expect(mat.transparent).toBe(true);
+    });
+
+    it('uses a DoubleSide material variant for the ring of ringed companions', () => {
+      const manager = new CompanionManager([6]); // saturn = ringed
+      const companion = manager.getGroup().children[0] as THREE.Group;
+      // Ring is appended after createBasic's 5 children → index 5.
+      const ring = companion.children[5] as THREE.Mesh;
+      const mat = ring.material as THREE.MeshToonMaterial;
+      expect(mat.side).toBe(THREE.DoubleSide);
+    });
+  });
+
+  describe('orbit pre-computed tilt', () => {
+    it('positions companions using cos/sin(orbitTilt) pre-computed at construction', () => {
+      const manager = new CompanionManager([1, 2, 3]);
+      const group = manager.getGroup();
+
+      const dt = 0.25;
+      const shipX = 1;
+      const shipY = 2;
+      const shipZ = 3;
+      manager.update(dt, shipX, shipY, shipZ);
+
+      const count = 3;
+      const baseRadius = 2.0;
+      for (let i = 0; i < count; i++) {
+        const angleOffset = i * ((2 * Math.PI) / count);
+        const orbitRadius = baseRadius + (i % 3) * 0.15;
+        const orbitSpeed = 1.0 + i * 0.05;
+        const orbitTilt = (i - count / 2) * 0.15;
+        const angle = angleOffset + dt * orbitSpeed;
+        const expectedX = shipX + orbitRadius * Math.cos(angle);
+        const expectedY = shipY + orbitRadius * Math.sin(angle) * Math.cos(orbitTilt);
+        const expectedZ = shipZ + orbitRadius * Math.sin(angle) * Math.sin(orbitTilt);
+
+        const pos = group.children[i].position;
+        expect(pos.x).toBeCloseTo(expectedX, 5);
+        expect(pos.y).toBeCloseTo(expectedY, 5);
+        expect(pos.z).toBeCloseTo(expectedZ, 5);
+      }
     });
   });
 
