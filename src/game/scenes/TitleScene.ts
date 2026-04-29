@@ -7,6 +7,65 @@ import { TutorialOverlay } from '../../ui/TutorialOverlay';
 import { EncyclopediaOverlay } from '../../ui/EncyclopediaOverlay';
 import { TOTAL_STAGES } from '../config/StageConfig';
 
+// ──────────────────────────────────────────────────────────────────────────────
+// SHARED background-star resources for TitleScene
+//
+// `enter()` は毎回 `Float32Array(3000)` の `BufferGeometry` と
+// `PointsMaterial` を新規生成していたが、対応する `exit()` で dispose されず
+// GPU バッファが滞留していた。HUD の 🏠 ボタンでタイトルへ何度も戻る構成のため
+// 再入場ごとに VBO アップロードと Math.random ループが走り、60fps 維持上の
+// 不利益となる。
+//
+// `StageScene` の SHARED_BG_STARS_* と同じ「SHARED 資源は dispose しない」
+// 規約に従い、モジュールレベルでキャッシュする。共有 Mesh には
+// `userData.sharedAssets = true` を付与し、将来 `disposeObject3D` 経由で
+// クリーンされた場合の安全網とする。
+// ──────────────────────────────────────────────────────────────────────────────
+
+let SHARED_TITLE_BG_STARS_GEOMETRY: THREE.BufferGeometry | null = null;
+let SHARED_TITLE_BG_STARS_MATERIAL: THREE.PointsMaterial | null = null;
+
+function getTitleBgStarsGeometry(): THREE.BufferGeometry {
+  if (!SHARED_TITLE_BG_STARS_GEOMETRY) {
+    const geo = new THREE.BufferGeometry();
+    const positions = new Float32Array(3000);
+    for (let i = 0; i < 3000; i++) {
+      positions[i] = (Math.random() - 0.5) * 200;
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    SHARED_TITLE_BG_STARS_GEOMETRY = geo;
+  }
+  return SHARED_TITLE_BG_STARS_GEOMETRY;
+}
+
+function getTitleBgStarsMaterial(): THREE.PointsMaterial {
+  if (!SHARED_TITLE_BG_STARS_MATERIAL) {
+    SHARED_TITLE_BG_STARS_MATERIAL = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 0.3,
+      sizeAttenuation: true,
+    });
+  }
+  return SHARED_TITLE_BG_STARS_MATERIAL;
+}
+
+/**
+ * テスト用フック: モジュールレベルキャッシュをクリアする。
+ * 本番コードからは呼ばない。
+ */
+export function __resetTitleSceneSharedAssetsForTest(): void {
+  SHARED_TITLE_BG_STARS_GEOMETRY = null;
+  SHARED_TITLE_BG_STARS_MATERIAL = null;
+}
+
+/**
+ * テスト用フック: 内部キャッシュへ直接アクセスする。
+ */
+export const __titleSceneSharedAssetsForTest = {
+  getBgStarsGeometry: (): THREE.BufferGeometry | null => SHARED_TITLE_BG_STARS_GEOMETRY,
+  getBgStarsMaterial: (): THREE.PointsMaterial | null => SHARED_TITLE_BG_STARS_MATERIAL,
+};
+
 export class TitleScene implements Scene {
   private threeScene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
@@ -38,19 +97,10 @@ export class TitleScene implements Scene {
     this.threeScene = new THREE.Scene();
     this.threeScene.background = new THREE.Color(0x000020);
 
-    // Starfield background
-    const starGeo = new THREE.BufferGeometry();
-    const positions = new Float32Array(3000);
-    for (let i = 0; i < 3000; i++) {
-      positions[i] = (Math.random() - 0.5) * 200;
-    }
-    starGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const starMat = new THREE.PointsMaterial({
-      color: 0xffffff,
-      size: 0.3,
-      sizeAttenuation: true,
-    });
-    this.stars = new THREE.Points(starGeo, starMat);
+    // Starfield background (SHARED: 共有 geometry / material は dispose しない)
+    this.stars = new THREE.Points(getTitleBgStarsGeometry(), getTitleBgStarsMaterial());
+    this.stars.userData.sharedAssets = true;
+    this.stars.rotation.set(0, 0, 0);
     this.threeScene.add(this.stars);
 
     // Ambient light
@@ -193,6 +243,11 @@ export class TitleScene implements Scene {
   exit(): void {
     this.tutorialOverlay.hide();
     this.encyclopediaOverlay.hide();
+    if (this.stars) {
+      // SHARED: geometry / material はモジュールキャッシュで使い回すため dispose しない。
+      this.stars.parent?.remove(this.stars);
+      this.stars = null;
+    }
     if (this.overlay) {
       this.overlay.remove();
       this.overlay = null;
