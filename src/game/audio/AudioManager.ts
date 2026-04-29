@@ -599,6 +599,9 @@ export class AudioManager {
         case 'boostReady':
           this.playSweep('sine', 880, 1760, 0.2, 0.15);
           break;
+        case 'boostDenied':
+          this.playSweep('triangle', 320, 260, 0.08, 0.12);
+          break;
       }
     } catch {
       // Ignore SFX errors

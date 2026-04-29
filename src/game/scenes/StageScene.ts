@@ -347,6 +347,9 @@ export class StageScene implements Scene {
     this.hud.setBoostCallback(() => {
       this.inputSystem.setBoostPressed(true);
     });
+    this.hud.setBoostDeniedCallback(() => {
+      this.audioManager.playSFX('boostDenied');
+    });
     this.hud.setHomeCallback(() => {
       this.sceneManager.requestTransition('title');
     });

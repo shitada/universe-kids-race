@@ -166,6 +166,8 @@ describe('AudioManager', () => {
       audioManager.playSFX('meteoriteHit');
       audioManager.playSFX('boost');
       audioManager.playSFX('stageClear');
+      audioManager.playSFX('boostReady');
+      audioManager.playSFX('boostDenied');
       // All should play without error
     });
   });

@@ -9,6 +9,7 @@ export class HUD {
   private cooldownContainer: HTMLDivElement | null = null;
   private cooldownBar: HTMLDivElement | null = null;
   private onBoostCallback: (() => void) | null = null;
+  private onBoostDeniedCallback: (() => void) | null = null;
   private onHomeCallback: (() => void) | null = null;
   private onMuteCallback: (() => void) | null = null;
   private muted = false;
@@ -177,6 +178,7 @@ export class HUD {
             this.boostButton.removeAttribute('data-boost-shake');
           }
         }, 250);
+        this.onBoostDeniedCallback?.();
         return;
       }
 
@@ -246,6 +248,10 @@ export class HUD {
 
   setBoostCallback(callback: () => void): void {
     this.onBoostCallback = callback;
+  }
+
+  setBoostDeniedCallback(callback: () => void): void {
+    this.onBoostDeniedCallback = callback;
   }
 
   setHomeCallback(callback: () => void): void {

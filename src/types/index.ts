@@ -42,7 +42,7 @@ export interface StageConfig {
 }
 
 // Sound effects
-export type SFXType = 'starCollect' | 'rainbowCollect' | 'meteoriteHit' | 'boost' | 'stageClear' | 'boostReady';
+export type SFXType = 'starCollect' | 'rainbowCollect' | 'meteoriteHit' | 'boost' | 'stageClear' | 'boostReady' | 'boostDenied';
 
 // Save data
 export interface SaveData {
