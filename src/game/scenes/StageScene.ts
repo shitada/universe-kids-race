@@ -590,10 +590,10 @@ export class StageScene implements Scene {
       this.threeScene.add(met.mesh);
     }
 
-    // Animate stars (rainbow hue cycling)
-    for (const star of this.stars) {
-      star.update(deltaTime);
-    }
+    // Note: star.update() (rainbow hue / Y rotation) is folded into the
+    // retain branch of cleanupPassedObjects() below so this.stars is walked
+    // only once per frame. Collision detection does not depend on per-frame
+    // rotation/hue, so the reordering is visually equivalent.
 
     // Companion orbit update
     this.companionManager?.update(
@@ -666,7 +666,7 @@ export class StageScene implements Scene {
     }
 
     // Deactivate passed objects
-    this.cleanupPassedObjects();
+    this.cleanupPassedObjects(deltaTime);
 
     // Camera follow
     this.camera.position.set(
@@ -776,7 +776,7 @@ export class StageScene implements Scene {
     }
   }
 
-  private cleanupPassedObjects(): void {
+  private cleanupPassedObjects(deltaTime: number): void {
     const shipZ = this.spaceship.position.z;
     const behindThreshold = shipZ + 30;
 
@@ -788,6 +788,9 @@ export class StageScene implements Scene {
         // releaseStar handles scene detach (via recycle) and pool re-use.
         this.spawnSystem.releaseStar(star);
       } else {
+        // Animate retained stars (rainbow hue cycling / Y rotation) here so
+        // this.stars is walked only once per frame.
+        star.update(deltaTime);
         if (starWrite !== read) stars[starWrite] = star;
         starWrite++;
       }
