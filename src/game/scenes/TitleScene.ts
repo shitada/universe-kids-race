@@ -5,6 +5,7 @@ import type { SaveManager } from '../storage/SaveManager';
 import type { AudioManager } from '../audio/AudioManager';
 import { TutorialOverlay } from '../../ui/TutorialOverlay';
 import { EncyclopediaOverlay } from '../../ui/EncyclopediaOverlay';
+import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButton';
 import { TOTAL_STAGES } from '../config/StageConfig';
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -75,6 +76,7 @@ export class TitleScene implements Scene {
   private audioManager: AudioManager;
   private stars: THREE.Points | null = null;
   private overlay: HTMLDivElement | null = null;
+  private muteHandle: MuteButtonHandle | null = null;
   private tutorialOverlay = new TutorialOverlay();
   private encyclopediaOverlay = new EncyclopediaOverlay();
 
@@ -107,6 +109,23 @@ export class TitleScene implements Scene {
     this.threeScene.add(new THREE.AmbientLight(0xffffff, 1));
 
     this.createOverlay();
+    this.createMuteButton();
+  }
+
+  private createMuteButton(): void {
+    const container = document.getElementById('hud') ?? document.getElementById('ui-overlay');
+    if (!container) return;
+    this.muteHandle = createMuteButton({
+      initialMuted: this.audioManager.isMuted(),
+      container,
+      onToggle: () => {
+        const newMuted = this.audioManager.toggleMute();
+        this.muteHandle?.setMuted(newMuted);
+        const data = this.saveManager.load();
+        data.muted = newMuted;
+        this.saveManager.save(data);
+      },
+    });
   }
 
   private createOverlay(): void {
@@ -251,6 +270,10 @@ export class TitleScene implements Scene {
     if (this.overlay) {
       this.overlay.remove();
       this.overlay = null;
+    }
+    if (this.muteHandle) {
+      this.muteHandle.remove();
+      this.muteHandle = null;
     }
   }
 

@@ -5,6 +5,7 @@ import type { SaveManager } from '../storage/SaveManager';
 import type { AudioManager } from '../audio/AudioManager';
 import { CompanionManager } from '../entities/CompanionManager';
 import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
+import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButton';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // SHARED background-star resources for EndingScene
@@ -72,6 +73,7 @@ export class EndingScene implements Scene {
   private saveManager: SaveManager;
   private audioManager: AudioManager;
   private overlay: HTMLDivElement | null = null;
+  private muteHandle: MuteButtonHandle | null = null;
   private bgStars: THREE.Points | null = null;
   private companionMeshes: THREE.Group[] = [];
   private companionGroup: THREE.Group | null = null;
@@ -119,6 +121,23 @@ export class EndingScene implements Scene {
     this.setupCelebration();
 
     this.createOverlay(totalScore, totalStarCount);
+    this.createMuteButton();
+  }
+
+  private createMuteButton(): void {
+    const container = document.getElementById('hud') ?? document.getElementById('ui-overlay');
+    if (!container) return;
+    this.muteHandle = createMuteButton({
+      initialMuted: this.audioManager.isMuted(),
+      container,
+      onToggle: () => {
+        const newMuted = this.audioManager.toggleMute();
+        this.muteHandle?.setMuted(newMuted);
+        const data = this.saveManager.load();
+        data.muted = newMuted;
+        this.saveManager.save(data);
+      },
+    });
   }
 
   private createOverlay(totalScore: number, totalStarCount: number): void {
@@ -334,6 +353,10 @@ export class EndingScene implements Scene {
     if (this.overlay) {
       this.overlay.remove();
       this.overlay = null;
+    }
+    if (this.muteHandle) {
+      this.muteHandle.remove();
+      this.muteHandle = null;
     }
   }
 
