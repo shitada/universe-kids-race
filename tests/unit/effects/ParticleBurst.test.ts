@@ -68,7 +68,7 @@ describe('ParticleBurstManager', () => {
       manager.emit(scene, i, 0, 0, 0xffdd00, 20, false);
     }
     // Still functions correctly
-    manager.update(0.016);
+    manager.update(scene, 0.016);
     manager.cleanup(scene);
   });
 
@@ -103,7 +103,7 @@ describe('ParticleBurstManager', () => {
       for (let i = 0; i < 10; i++) {
         manager.emit(scene, 0, 0, 0, 0xffdd00, 20, false);
       }
-      manager.update(1.0); // longer than maxLifetime → all expired
+      manager.update(scene, 1.0); // longer than maxLifetime → all expired
       manager.cleanup(scene);
       expect(manager.getActiveCount()).toBe(0);
       expect(scene.children.length).toBe(0);
@@ -113,7 +113,7 @@ describe('ParticleBurstManager', () => {
   it('cleanup deactivates expired bursts without disposing pool resources', () => {
     const manager = new ParticleBurstManager();
     manager.emit(scene, 0, 0, 0, 0xffdd00, 10, false);
-    manager.update(1.0);
+    manager.update(scene, 1.0);
     manager.cleanup(scene);
     expect(scene.children.length).toBe(0);
 
@@ -130,6 +130,69 @@ describe('ParticleBurstManager', () => {
     expect(scene.children.length).toBe(0);
   });
 
+  it('update detaches expired bursts in a single pass without needing cleanup', () => {
+    const manager = new ParticleBurstManager();
+    manager.emit(scene, 0, 0, 0, 0xffdd00, 10, false);
+    expect(scene.children.length).toBe(1);
+
+    // One update past the lifetime should both expire AND detach the burst.
+    manager.update(scene, 1.0);
+    expect(manager.getActiveCount()).toBe(0);
+    expect(scene.children.length).toBe(0);
+
+    // A redundant cleanup call must remain a safe no-op.
+    manager.cleanup(scene);
+    expect(scene.children.length).toBe(0);
+  });
+
+  it('update on the expire frame skips per-particle GPU uploads', () => {
+    const burst = new ParticleBurst();
+    burst.reset(scene, 0, 0, 0, 0xffdd00, 20, false);
+    const points = scene.children[0] as THREE.Points;
+    const positionAttr = points.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const sizeAttr = points.geometry.getAttribute('size') as THREE.BufferAttribute;
+
+    // Snapshot the upload version after the initial reset (which marks dirty).
+    const positionVersionBefore = positionAttr.version;
+    const sizeVersionBefore = sizeAttr.version;
+
+    // Step past the lifetime in a single frame; expired path must not bump
+    // the version (otherwise WebGL would re-upload a buffer that is about
+    // to be hidden via setDrawRange(0, 0)).
+    const expired = burst.update(1.0);
+    expect(expired).toBe(true);
+    expect(positionAttr.version).toBe(positionVersionBefore);
+    expect(sizeAttr.version).toBe(sizeVersionBefore);
+    expect(burst.isActive()).toBe(false);
+    expect(points.visible).toBe(false);
+    expect(points.geometry.drawRange.count).toBe(0);
+  });
+
+  it('manager.update detaches expired bursts immediately so cleanup becomes redundant', () => {
+    const manager = new ParticleBurstManager();
+    manager.emit(scene, 0, 0, 0, 0xffdd00, 10, false);
+    const points = scene.children[0] as THREE.Points;
+    const positionAttr = points.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const versionBefore = positionAttr.version;
+
+    manager.update(scene, 1.0);
+
+    expect(scene.children.length).toBe(0);
+    expect(manager.getActiveCount()).toBe(0);
+    expect(points.visible).toBe(false);
+    expect(points.geometry.drawRange.count).toBe(0);
+    // No GPU upload requested for the expired buffer.
+    expect(positionAttr.version).toBe(versionBefore);
+  });
+});
+
+describe('ParticleBurst rendering invariants (legacy block)', () => {
+  let scene: THREE.Scene;
+
+  beforeEach(() => {
+    scene = new THREE.Scene();
+  });
+
   it('emit beyond pool capacity recycles the most-progressed slot', () => {
     const manager = new ParticleBurstManager();
     // Saturate the pool.
@@ -139,7 +202,7 @@ describe('ParticleBurstManager', () => {
     expect(manager.getActiveCount()).toBe(10);
 
     // Advance the oldest a bit so it's most progressed.
-    manager.update(0.1);
+    manager.update(scene, 0.1);
 
     // One more emit; pool should still have 10 active slots, no extra Points added.
     manager.emit(scene, 99, 0, 0, 0x00ff00, 10, false);

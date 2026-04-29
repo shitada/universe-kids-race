@@ -568,8 +568,7 @@ export class StageScene implements Scene {
     this.airShield.update(deltaTime);
 
     // Particle effects
-    this.particleBurstManager.update(deltaTime);
-    this.particleBurstManager.cleanup(this.threeScene);
+    this.particleBurstManager.update(this.threeScene, deltaTime);
 
     // HUD update
     this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
