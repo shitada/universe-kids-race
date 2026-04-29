@@ -157,4 +157,52 @@ describe('AdaptivePixelRatioController', () => {
     controller.reset();
     expect(controller.getCurrentTier()).toBe(2);
   });
+
+  it('after reset, a single low FPS sample does not immediately downscale', () => {
+    const { controller, onTierChange } = makeController(2);
+    // First, sustain low FPS to drop to tier 1.
+    let now = 10_000;
+    controller.sample(40, now);
+    now += T.downscaleSustainMs;
+    controller.sample(40, now);
+    expect(controller.getCurrentTier()).toBe(1);
+    expect(onTierChange).toHaveBeenCalledTimes(1);
+
+    // Reset back to maxTier.
+    controller.reset();
+    expect(controller.getCurrentTier()).toBe(2);
+
+    // A single low-fps sample shortly after reset must not change the tier:
+    // the downscaleSustainMs window has not elapsed yet.
+    now += 100;
+    controller.sample(30, now);
+    expect(controller.getCurrentTier()).toBe(2);
+    expect(onTierChange).toHaveBeenCalledTimes(1); // unchanged
+  });
+
+  it('after reset, downscaling requires re-satisfying the sustain window', () => {
+    const { controller, onTierChange } = makeController(2);
+    // Drop to tier 1.
+    let now = 10_000;
+    controller.sample(40, now);
+    now += T.downscaleSustainMs;
+    controller.sample(40, now);
+    expect(controller.getCurrentTier()).toBe(1);
+
+    controller.reset();
+    expect(controller.getCurrentTier()).toBe(2);
+
+    // Begin a fresh low-fps streak.
+    now += T.tierChangeCooldownMs + 1;
+    controller.sample(40, now);
+    // Just shy of sustain: still no downscale.
+    controller.sample(40, now + T.downscaleSustainMs - 1);
+    expect(controller.getCurrentTier()).toBe(2);
+    // Cross the sustain threshold: now downscale is allowed.
+    controller.sample(40, now + T.downscaleSustainMs);
+    expect(controller.getCurrentTier()).toBe(1);
+    // Two onTierChange invocations total: the original drop + the post-reset drop.
+    expect(onTierChange).toHaveBeenCalledTimes(2);
+    expect(onTierChange).toHaveBeenLastCalledWith(1);
+  });
 });
