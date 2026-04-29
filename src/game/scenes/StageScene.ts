@@ -76,6 +76,7 @@ export class StageScene implements Scene {
   private flameVelocities: Float32Array | null = null;
   private boostFlamePositionAttr: THREE.BufferAttribute | null = null;
   private boostFlameColorAttr: THREE.BufferAttribute | null = null;
+  private lastBoostFlameSize = -1;
   private flameIndex = 0;
   private flameEmitting = false;
   private static readonly MAX_FLAME_PARTICLES = 150;
@@ -731,6 +732,7 @@ export class StageScene implements Scene {
       this.flamePositions[i3 + 2] = 99999;
     }
     (this.boostFlame.material as THREE.PointsMaterial).size = 0.5;
+    this.lastBoostFlameSize = 0.5;
     this.flameIndex = 0;
     this.flameEmitting = true;
     this.boostFlame.visible = true;
@@ -781,7 +783,11 @@ export class StageScene implements Scene {
 
     // Scale particle size during fade phase
     if (this.boostFlame) {
-      (this.boostFlame.material as THREE.PointsMaterial).size = 0.5 * sizeFraction;
+      const desiredSize = 0.5 * sizeFraction;
+      if (desiredSize !== this.lastBoostFlameSize) {
+        (this.boostFlame.material as THREE.PointsMaterial).size = desiredSize;
+        this.lastBoostFlameSize = desiredSize;
+      }
     }
   }
 
@@ -842,6 +848,7 @@ export class StageScene implements Scene {
     this.flameIndex = 0;
     this.flameEmitting = false;
     this.boostFlame.visible = false;
+    this.lastBoostFlameSize = -1;
   }
 
   private disposeBoostFlame(): void {
@@ -859,6 +866,7 @@ export class StageScene implements Scene {
     this.boostFlameColorAttr = null;
     this.flameIndex = 0;
     this.flameEmitting = false;
+    this.lastBoostFlameSize = -1;
   }
 
   private onStageClear(): void {
