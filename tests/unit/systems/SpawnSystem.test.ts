@@ -97,7 +97,7 @@ describe('SpawnSystem', () => {
     expect(system.getMeteoritePoolSize()).toBe(initialPoolSize);
   });
 
-  it('releaseStar disposes RAINBOW material instead of pooling it', () => {
+  it('releaseStar pools RAINBOW stars instead of disposing the material', () => {
     const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.05); // < 0.1 → RAINBOW
     try {
       const system = new SpawnSystem();
@@ -106,9 +106,71 @@ describe('SpawnSystem', () => {
       expect(rainbow).toBeDefined();
       const matSpy = vi.spyOn(rainbow!.mesh.material as THREE.Material, 'dispose');
       system.releaseStar(rainbow!);
-      expect(matSpy).toHaveBeenCalledTimes(1);
-      // RAINBOW must NOT be added to the NORMAL star pool.
+      // Material must be preserved for re-use.
+      expect(matSpy).not.toHaveBeenCalled();
+      // RAINBOW must be pooled in the rainbow pool, not the NORMAL pool.
+      expect(system.getRainbowStarPoolSize()).toBeGreaterThan(0);
       expect(system.getNormalStarPoolSize()).toBe(0);
+    } finally {
+      randSpy.mockRestore();
+    }
+  });
+
+  it('re-uses the same RAINBOW Star mesh and material after releaseStar', () => {
+    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.05); // < 0.1 → RAINBOW
+    try {
+      const system = new SpawnSystem();
+      const first = system.update(0.016, -10, testConfig);
+      const rainbowStars = first.newStars.filter((s) => s.starType === 'RAINBOW');
+      expect(rainbowStars.length).toBeGreaterThan(0);
+      const initialPoolSize = system.getRainbowStarPoolSize();
+      const meshRefs = rainbowStars.map((s) => s.mesh);
+      const matRefs = rainbowStars.map((s) => s.mesh.material);
+
+      for (const s of rainbowStars) system.releaseStar(s);
+      system.reset();
+
+      const second = system.update(0.016, -10, testConfig);
+      const reused = second.newStars.filter((s) => s.starType === 'RAINBOW');
+      for (const s of reused) {
+        expect(rainbowStars).toContain(s);
+        expect(meshRefs).toContain(s.mesh);
+        expect(matRefs).toContain(s.mesh.material);
+      }
+      // Pool must NOT grow when released slots are re-used.
+      expect(system.getRainbowStarPoolSize()).toBe(initialPoolSize);
+    } finally {
+      randSpy.mockRestore();
+    }
+  });
+
+  it('reused RAINBOW star resumes hue animation from the initial color', () => {
+    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.05);
+    try {
+      const system = new SpawnSystem();
+      const first = system.update(0.016, -10, testConfig);
+      const rainbow = first.newStars.find((s) => s.starType === 'RAINBOW');
+      expect(rainbow).toBeDefined();
+      // Advance hue significantly during the first lifetime.
+      for (let i = 0; i < 30; i++) rainbow!.update(0.1);
+      const beforeHsl = { h: 0, s: 0, l: 0 };
+      (rainbow!.mesh.material as THREE.MeshToonMaterial).color.getHSL(beforeHsl);
+      expect(beforeHsl.h).toBeGreaterThan(0);
+
+      system.releaseStar(rainbow!);
+      system.reset();
+      const second = system.update(0.016, -10, testConfig);
+      const reused = second.newStars.find((s) => s === rainbow);
+      expect(reused).toBeDefined();
+      // After reset, color should be back to the initial red (hue ~0).
+      const afterHsl = { h: 0.5, s: 0, l: 0 };
+      (reused!.mesh.material as THREE.MeshToonMaterial).color.getHSL(afterHsl);
+      expect(afterHsl.h).toBe(0);
+      // A single small update advances hue from 0, not from the previous value.
+      reused!.update(0.016);
+      const tickHsl = { h: -1, s: 0, l: 0 };
+      (reused!.mesh.material as THREE.MeshToonMaterial).color.getHSL(tickHsl);
+      expect(tickHsl.h).toBeLessThan(beforeHsl.h);
     } finally {
       randSpy.mockRestore();
     }
@@ -150,5 +212,22 @@ describe('SpawnSystem', () => {
     expect(met.mesh.parent).toBeNull();
     expect(system.getMeteoritePoolSize()).toBe(0);
     expect(system.getNormalStarPoolSize()).toBe(0);
+    expect(system.getRainbowStarPoolSize()).toBe(0);
+  });
+
+  it('dispose() disposes the per-instance material of pooled RAINBOW stars', () => {
+    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.05);
+    try {
+      const system = new SpawnSystem();
+      const result = system.update(0.016, -10, testConfig);
+      const rainbow = result.newStars.find((s) => s.starType === 'RAINBOW');
+      expect(rainbow).toBeDefined();
+      const matSpy = vi.spyOn(rainbow!.mesh.material as THREE.Material, 'dispose');
+      system.dispose();
+      expect(matSpy).toHaveBeenCalledTimes(1);
+      expect(system.getRainbowStarPoolSize()).toBe(0);
+    } finally {
+      randSpy.mockRestore();
+    }
   });
 });

@@ -152,4 +152,29 @@ describe('Star', () => {
     expect(geoSpy).not.toHaveBeenCalled();
     expect(matSpy).not.toHaveBeenCalled();
   });
+
+  it('reset() restores RAINBOW hue and color to the initial red', () => {
+    const star = new Star(0, 0, -10, 'RAINBOW');
+    const mat = star.mesh.material as THREE.MeshToonMaterial;
+    const colorRef = mat.color;
+    const emissiveRef = mat.emissive;
+    // Drive hue forward.
+    for (let i = 0; i < 30; i++) star.update(0.1);
+    const movedHsl = { h: 0, s: 0, l: 0 };
+    mat.color.getHSL(movedHsl);
+    expect(movedHsl.h).toBeGreaterThan(0);
+
+    star.reset(1, 2, -3);
+
+    // Color/emissive references must be mutated in place, not replaced.
+    expect(mat.color).toBe(colorRef);
+    expect(mat.emissive).toBe(emissiveRef);
+    expect(mat.color.getHex()).toBe(0xff0000);
+    expect(mat.emissive.getHex()).toBe(0xff0000);
+    // Subsequent update() resumes hue progression from 0.
+    star.update(0.016);
+    const tickHsl = { h: -1, s: 0, l: 0 };
+    mat.color.getHSL(tickHsl);
+    expect(tickHsl.h).toBeLessThan(movedHsl.h);
+  });
 });

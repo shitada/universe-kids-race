@@ -30,11 +30,19 @@ export class SpawnSystem {
     newMeteorites: [],
   };
 
-  // NORMAL stars and meteorites are pooled to eliminate per-spawn Mesh
-  // allocations on iPad Safari. RAINBOW stars are NOT pooled because they
-  // own a per-instance animated material; their volume is also low (~10%).
+  // NORMAL stars, RAINBOW stars, and meteorites are all pooled to eliminate
+  // per-spawn Mesh / Material allocations on iPad Safari. RAINBOW stars own a
+  // per-instance animated MeshToonMaterial; pooling preserves that material
+  // across the instance's lifetime so hue animation reuses the same color
+  // buffers and avoids GC churn from repeated material construction/disposal.
   private readonly normalStarPool = new EntityPool<Star, readonly [number, number, number]>(
     (x, y, z) => new Star(x, y, z, 'NORMAL'),
+    (star, x, y, z) => star.reset(x, y, z),
+    (star) => star.recycle(),
+    (star) => star.dispose(),
+  );
+  private readonly rainbowStarPool = new EntityPool<Star, readonly [number, number, number]>(
+    (x, y, z) => new Star(x, y, z, 'RAINBOW'),
     (star, x, y, z) => star.reset(x, y, z),
     (star) => star.recycle(),
     (star) => star.dispose(),
@@ -70,7 +78,7 @@ export class SpawnSystem {
       const y = (Math.random() - 0.5) * 4;
       const isRainbow = Math.random() < 0.1;
       const star = isRainbow
-        ? new Star(x, y, this.lastStarSpawnZ, 'RAINBOW')
+        ? this.rainbowStarPool.acquire(x, y, this.lastStarSpawnZ)
         : this.normalStarPool.acquire(x, y, this.lastStarSpawnZ);
       result.newStars.push(star);
     }
@@ -90,13 +98,14 @@ export class SpawnSystem {
   }
 
   /**
-   * Return a star to its pool (NORMAL) or fully dispose it (RAINBOW).
-   * Use this in place of `star.dispose()` when the star leaves the play
-   * area but the scene continues running.
+   * Return a star to its pool. Both NORMAL and RAINBOW stars are pooled;
+   * the per-instance RAINBOW material is preserved across reuses to avoid
+   * per-spawn allocation churn. Use this in place of `star.dispose()` when
+   * the star leaves the play area but the scene continues running.
    */
   releaseStar(star: Star): void {
     if (star.starType === 'RAINBOW') {
-      star.dispose();
+      this.rainbowStarPool.release(star);
       return;
     }
     this.normalStarPool.release(star);
@@ -114,12 +123,18 @@ export class SpawnSystem {
   /** Permanently free all pooled GPU resources. Call from scene teardown. */
   dispose(): void {
     this.normalStarPool.dispose();
+    this.rainbowStarPool.dispose();
     this.meteoritePool.dispose();
   }
 
   /** Test/diagnostic helper: number of NORMAL stars allocated by the pool. */
   getNormalStarPoolSize(): number {
     return this.normalStarPool.getPoolSize();
+  }
+
+  /** Test/diagnostic helper: number of RAINBOW stars allocated by the pool. */
+  getRainbowStarPoolSize(): number {
+    return this.rainbowStarPool.getPoolSize();
   }
 
   /** Test/diagnostic helper: number of meteorites allocated by the pool. */
