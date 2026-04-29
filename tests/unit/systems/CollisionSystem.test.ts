@@ -173,4 +173,77 @@ describe('CollisionSystem', () => {
       expect(r2.meteoriteCollision).toBe(false);
     });
   });
+
+  describe('Z-axis early-skip behavior', () => {
+    it('detects star collision when Z is identical and x/y close', () => {
+      const ship = new Spaceship();
+      ship.position = { x: 0, y: 0, z: 5 };
+      const star = new Star(0.3, 0.2, 5);
+      const result = system.check(ship, [star], []);
+      expect(result.starCollisions).toHaveLength(1);
+    });
+
+    it('detects star collision when star is +1.4 ahead in Z (within radius)', () => {
+      const ship = new Spaceship();
+      ship.position = { x: 0, y: 0, z: 0 };
+      const star = new Star(0, 0, 1.4);
+      const result = system.check(ship, [star], []);
+      expect(result.starCollisions).toHaveLength(1);
+    });
+
+    it('detects star collision when star is -1.4 behind in Z (within radius)', () => {
+      const ship = new Spaceship();
+      ship.position = { x: 0, y: 0, z: 0 };
+      const star = new Star(0, 0, -1.4);
+      const result = system.check(ship, [star], []);
+      expect(result.starCollisions).toHaveLength(1);
+    });
+
+    it('skips star far ahead in Z (+5) even when x/y are close', () => {
+      const ship = new Spaceship();
+      ship.position = { x: 0, y: 0, z: 0 };
+      const star = new Star(0, 0, 5);
+      const result = system.check(ship, [star], []);
+      expect(result.starCollisions).toHaveLength(0);
+      expect(star.isCollected).toBe(false);
+    });
+
+    it('skips star far behind in Z (-5) even when x/y are close', () => {
+      const ship = new Spaceship();
+      ship.position = { x: 0, y: 0, z: 0 };
+      const star = new Star(0, 0, -5);
+      const result = system.check(ship, [star], []);
+      expect(result.starCollisions).toHaveLength(0);
+    });
+
+    it('respects companionBonus when computing Z early-skip threshold', () => {
+      const ship = new Spaceship();
+      ship.position = { x: 0, y: 0, z: 0 };
+      // collisionDist without bonus = 1.6; with bonus 0.4 = 2.0.
+      // Place star at z=1.9 → outside without bonus, inside with bonus.
+      const star = new Star(0, 0, 1.9);
+      const noBonus = system.check(ship, [star], []);
+      expect(noBonus.starCollisions).toHaveLength(0);
+
+      star.isCollected = false;
+      const withBonus = system.check(ship, [star], [], 0.4);
+      expect(withBonus.starCollisions).toHaveLength(1);
+    });
+
+    it('skips meteorite far ahead in Z (+5) even when x/y are close', () => {
+      const ship = new Spaceship();
+      ship.position = { x: 0, y: 0, z: 0 };
+      const met = new Meteorite(0, 0, 5);
+      const result = system.check(ship, [], [met]);
+      expect(result.meteoriteCollision).toBe(false);
+    });
+
+    it('detects meteorite collision when Z within radius (collisionDist=2.0)', () => {
+      const ship = new Spaceship();
+      ship.position = { x: 0, y: 0, z: 0 };
+      const met = new Meteorite(0, 0, 1.9);
+      const result = system.check(ship, [], [met]);
+      expect(result.meteoriteCollision).toBe(true);
+    });
+  });
 });
