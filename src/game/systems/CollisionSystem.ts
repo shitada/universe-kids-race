@@ -34,13 +34,17 @@ export class CollisionSystem {
     const sp = spaceship.position;
 
     // Star collisions (expanded by companion bonus) — squared distance comparison.
+    // Per-frame perf: most stars within spawnAheadDistance are far on the Z axis
+    // and cannot collide. Compute dz first and skip dx/dy/distSq when |dz| already
+    // exceeds the collision radius.
     for (const star of stars) {
       if (star.isCollected) continue;
+      const dz = sp.z - star.position.z;
+      const collisionDist = 1.0 + star.radius + companionBonus;
+      if (dz > collisionDist || dz < -collisionDist) continue;
       const dx = sp.x - star.position.x;
       const dy = sp.y - star.position.y;
-      const dz = sp.z - star.position.z;
       const distSq = dx * dx + dy * dy + dz * dz;
-      const collisionDist = 1.0 + star.radius + companionBonus;
       if (distSq < collisionDist * collisionDist) {
         star.collect();
         result.starCollisions.push(star);
@@ -48,14 +52,16 @@ export class CollisionSystem {
     }
 
     // Meteorite collisions (skip during SLOWDOWN invincibility) — squared distance comparison.
+    // Same Z-axis early-skip optimization as the star loop.
     if (spaceship.speedState !== 'SLOWDOWN') {
       for (const met of meteorites) {
         if (!met.isActive) continue;
+        const dz = sp.z - met.position.z;
+        const collisionDist = 1.0 + met.radius;
+        if (dz > collisionDist || dz < -collisionDist) continue;
         const dx = sp.x - met.position.x;
         const dy = sp.y - met.position.y;
-        const dz = sp.z - met.position.z;
         const distSq = dx * dx + dy * dy + dz * dz;
-        const collisionDist = 1.0 + met.radius;
         if (distSq < collisionDist * collisionDist) {
           result.meteoriteCollision = true;
           break;
