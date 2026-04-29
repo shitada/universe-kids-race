@@ -18,6 +18,8 @@
 export class EntityPool<T, A extends readonly unknown[] = readonly []> {
   private readonly available: T[] = [];
   private readonly all: T[] = [];
+  // Mirrors `available` for O(1) membership checks in release()/releaseAll().
+  private readonly availableSet = new Set<T>();
 
   constructor(
     private readonly factory: (...args: A) => T,
@@ -29,6 +31,7 @@ export class EntityPool<T, A extends readonly unknown[] = readonly []> {
   acquire(...args: A): T {
     const reused = this.available.pop();
     if (reused !== undefined) {
+      this.availableSet.delete(reused);
       this.resetFn(reused, ...args);
       return reused;
     }
@@ -37,16 +40,27 @@ export class EntityPool<T, A extends readonly unknown[] = readonly []> {
     return created;
   }
 
+  /**
+   * Returns an entity to the pool. Calling release() twice on the same
+   * instance is a no-op: the second call neither pushes a duplicate onto
+   * `available` nor invokes `releaseFn` again. This guards against the
+   * acquire→acquire aliasing bug that a duplicated entry would cause.
+   */
   release(entity: T): void {
+    if (this.availableSet.has(entity)) {
+      return;
+    }
     this.releaseFn?.(entity);
     this.available.push(entity);
+    this.availableSet.add(entity);
   }
 
   releaseAll(): void {
     for (const entity of this.all) {
-      if (!this.available.includes(entity)) {
+      if (!this.availableSet.has(entity)) {
         this.releaseFn?.(entity);
         this.available.push(entity);
+        this.availableSet.add(entity);
       }
     }
   }
@@ -59,6 +73,7 @@ export class EntityPool<T, A extends readonly unknown[] = readonly []> {
     }
     this.all.length = 0;
     this.available.length = 0;
+    this.availableSet.clear();
   }
 
   /** Diagnostic: total instances ever allocated by this pool. */
