@@ -156,7 +156,18 @@ export class TitleScene implements Scene {
     encyclopediaBtn.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
       const saveData = this.saveManager.load();
-      this.encyclopediaOverlay.show(saveData.unlockedPlanets, () => {});
+      this.encyclopediaOverlay.show(
+        saveData.unlockedPlanets,
+        () => {},
+        (stageNumber) => {
+          this.audioManager.initSync();
+          this.sceneManager.requestTransition('stage', {
+            stageNumber,
+            totalScore: 0,
+            totalStarCount: 0,
+          });
+        },
+      );
     });
 
     this.overlay.appendChild(title);
