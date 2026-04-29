@@ -132,6 +132,35 @@ describe('StageScene.cleanupPassedObjects', () => {
     expect(inactivePassed.mesh.parent).toBeNull();
   });
 
+  it('removes already-collected Stars even when still ahead of the behind-threshold', () => {
+    const scene = createScene();
+    const internals = scene as unknown as StageSceneInternals;
+
+    const threeScene = new THREE.Scene();
+    internals.threeScene = threeScene;
+    internals.spaceship = { position: { x: 0, y: 0, z: 0 } };
+
+    // Collected star still ahead of the ship -> should still be released this frame
+    const collectedAhead = new Star(0, 0, -5);
+    collectedAhead.isCollected = true;
+    threeScene.add(collectedAhead.mesh);
+    const recycleSpy = vi.spyOn(collectedAhead, 'recycle');
+
+    const aliveAhead = new Star(0, 0, -10);
+    threeScene.add(aliveAhead.mesh);
+
+    internals.stars = [collectedAhead, aliveAhead];
+    internals.meteorites = [];
+
+    internals.cleanupPassedObjects();
+
+    expect(internals.stars).toHaveLength(1);
+    expect(internals.stars).toContain(aliveAhead);
+    expect(internals.stars).not.toContain(collectedAhead);
+    expect(collectedAhead.mesh.parent).toBeNull();
+    expect(recycleSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps unrelated objects untouched when cleaning passed objects', () => {
     const scene = createScene();
     const internals = scene as unknown as StageSceneInternals;
