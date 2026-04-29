@@ -118,3 +118,5 @@ export function getStageConfig(stageNumber: number): StageConfig {
   if (!config) throw new Error(`Invalid stage number: ${stageNumber}`);
   return config;
 }
+
+export const TOTAL_STAGES = STAGE_CONFIGS.length;

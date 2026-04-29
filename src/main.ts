@@ -8,6 +8,7 @@ import { EndingScene } from './game/scenes/EndingScene';
 import { SaveManager } from './game/storage/SaveManager';
 import { AudioManager } from './game/audio/AudioManager';
 import { AdaptivePixelRatioController } from './game/utils/AdaptivePixelRatioController';
+import { TOTAL_STAGES } from './game/config/StageConfig';
 import { createResizeCoalescer } from './game/utils/ResizeCoalescer';
 import type { SceneType, SceneContext } from './types';
 
@@ -93,9 +94,9 @@ sceneManager.setTransitionHandler((sceneType: SceneType, context?: SceneContext)
     saveManager.save(saveData);
   } else if (sceneType === 'ending') {
     const saveData = saveManager.load();
-    saveData.clearedStage = Math.max(saveData.clearedStage, 11);
-    if (!saveData.unlockedPlanets.includes(11)) {
-      saveData.unlockedPlanets.push(11);
+    saveData.clearedStage = Math.max(saveData.clearedStage, TOTAL_STAGES);
+    if (!saveData.unlockedPlanets.includes(TOTAL_STAGES)) {
+      saveData.unlockedPlanets.push(TOTAL_STAGES);
     }
     saveManager.save(saveData);
   }

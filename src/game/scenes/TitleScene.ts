@@ -5,6 +5,7 @@ import type { SaveManager } from '../storage/SaveManager';
 import type { AudioManager } from '../audio/AudioManager';
 import { TutorialOverlay } from '../../ui/TutorialOverlay';
 import { EncyclopediaOverlay } from '../../ui/EncyclopediaOverlay';
+import { TOTAL_STAGES } from '../config/StageConfig';
 
 export class TitleScene implements Scene {
   private threeScene: THREE.Scene;
@@ -106,7 +107,7 @@ export class TitleScene implements Scene {
       this.audioManager.initSync();
       this.audioManager.playBGM(0);
       const saveData = this.saveManager.load();
-      const startStage = Math.min(saveData.clearedStage + 1, 11);
+      const startStage = Math.min(saveData.clearedStage + 1, TOTAL_STAGES);
       this.sceneManager.requestTransition('stage', { stageNumber: startStage });
     });
 

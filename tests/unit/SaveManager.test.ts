@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SaveManager } from '../../src/game/storage/SaveManager';
+import { TOTAL_STAGES } from '../../src/game/config/StageConfig';
 
 // Mock localStorage
 const storage = new Map<string, string>();
@@ -64,23 +65,23 @@ describe('SaveManager', () => {
     expect(data.clearedStage).toBe(0);
   });
 
-  it('accepts clearedStage up to 11', () => {
+  it('accepts clearedStage up to TOTAL_STAGES', () => {
     const manager = new SaveManager();
-    manager.save({ clearedStage: 11, unlockedPlanets: [] });
+    manager.save({ clearedStage: TOTAL_STAGES, unlockedPlanets: [] });
     const data = manager.load();
-    expect(data.clearedStage).toBe(11);
+    expect(data.clearedStage).toBe(TOTAL_STAGES);
   });
 
-  it('rejects clearedStage greater than 11', () => {
-    storage.set('universe-kids-race-save', JSON.stringify({ clearedStage: 12 }));
+  it('rejects clearedStage greater than TOTAL_STAGES', () => {
+    storage.set('universe-kids-race-save', JSON.stringify({ clearedStage: TOTAL_STAGES + 1 }));
     const manager = new SaveManager();
     const data = manager.load();
     expect(data.clearedStage).toBe(0);
   });
 
-  it('accepts all valid clearedStage values 0 through 11', () => {
+  it('accepts all valid clearedStage values 0 through TOTAL_STAGES', () => {
     const manager = new SaveManager();
-    for (let i = 0; i <= 11; i++) {
+    for (let i = 0; i <= TOTAL_STAGES; i++) {
       manager.save({ clearedStage: i, unlockedPlanets: [] });
       const data = manager.load();
       expect(data.clearedStage).toBe(i);

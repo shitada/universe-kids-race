@@ -1,4 +1,5 @@
 import type { SaveData } from '../../types';
+import { TOTAL_STAGES } from '../config/StageConfig';
 
 const STORAGE_KEY = 'universe-kids-race-save';
 const SESSION_KEY = 'universe-kids-race-session';
@@ -10,7 +11,7 @@ export class SaveManager {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return { ...DEFAULT_DATA, unlockedPlanets: [] };
       const data = JSON.parse(raw) as SaveData;
-      if (typeof data.clearedStage !== 'number' || data.clearedStage < 0 || data.clearedStage > 11) {
+      if (typeof data.clearedStage !== 'number' || data.clearedStage < 0 || data.clearedStage > TOTAL_STAGES) {
         return { ...DEFAULT_DATA, unlockedPlanets: [] };
       }
 
@@ -20,7 +21,7 @@ export class SaveManager {
       } else {
         data.unlockedPlanets = [...new Set(
           data.unlockedPlanets.filter(
-            (v): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 11,
+            (v): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= TOTAL_STAGES,
           ),
         )];
       }
