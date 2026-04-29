@@ -944,13 +944,9 @@ export class StageScene implements Scene {
     // Cleanup Three.js objects (dispose geometry/material before clearing the scene)
     this.particleBurstManager.clear(this.threeScene);
 
-    // Dispose entities. RAINBOW stars own per-instance materials and are not
-    // pooled, so dispose them explicitly. Pooled NORMAL stars and meteorites
-    // (both still-active and previously released) are freed via spawnSystem.dispose().
+    // Dispose entities. All star types and meteorites (both still-active and
+    // previously released) are pooled and freed via spawnSystem.dispose().
     this.spaceship?.dispose();
-    for (const star of this.stars) {
-      if (star.starType === 'RAINBOW') star.dispose();
-    }
     this.spawnSystem.dispose();
 
     // Dispose retained scene resources

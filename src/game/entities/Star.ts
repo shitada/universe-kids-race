@@ -14,6 +14,11 @@ const SHARED_NORMAL_MATERIAL = new THREE.MeshToonMaterial({
   emissiveIntensity: 0.4,
 });
 
+// Initial color for a RAINBOW star. The per-instance MeshToonMaterial mutates
+// `color` / `emissive` in place to animate hue; reset() restores this baseline
+// so a pooled instance does not leak the previous lifetime's hue.
+const RAINBOW_INITIAL_COLOR = 0xff0000;
+
 export class Star {
   position: { x: number; y: number; z: number };
   radius = 0.6;
@@ -33,10 +38,9 @@ export class Star {
 
   private createMesh(): THREE.Mesh {
     if (this.starType === 'RAINBOW') {
-      const color = 0xff0000;
       const mat = new THREE.MeshToonMaterial({
-        color,
-        emissive: color,
+        color: RAINBOW_INITIAL_COLOR,
+        emissive: RAINBOW_INITIAL_COLOR,
         emissiveIntensity: 0.4,
       });
       return new THREE.Mesh(SHARED_GEOMETRY, mat);
@@ -64,9 +68,9 @@ export class Star {
   }
 
   /**
-   * Re-initialize a pooled NORMAL star for re-use at a new position.
-   * Not intended for RAINBOW stars (they are not pooled because of their
-   * per-instance animated material).
+   * Re-initialize a pooled star for re-use at a new position. For RAINBOW
+   * stars this also restores the initial hue so the per-instance material
+   * does not leak the previous lifetime's animated color.
    */
   reset(x: number, y: number, z: number): void {
     this.position.x = x;
@@ -77,6 +81,11 @@ export class Star {
     this.mesh.visible = true;
     this.isCollected = false;
     this.hueOffset = 0;
+    if (this.starType === 'RAINBOW') {
+      const mat = this.mesh.material as THREE.MeshToonMaterial;
+      mat.color.setHex(RAINBOW_INITIAL_COLOR);
+      mat.emissive.setHex(RAINBOW_INITIAL_COLOR);
+    }
   }
 
   /**
@@ -95,6 +104,8 @@ export class Star {
   dispose(): void {
     // Shared geometry and (NORMAL) material are NOT disposed here; only the
     // per-instance RAINBOW material is. Detach from parent so the mesh is GC'd.
+    // This is invoked by the SpawnSystem RAINBOW pool's disposeFn at scene
+    // teardown; per-spawn RAINBOW exits go through the pool, not here.
     if (this.starType === 'RAINBOW') {
       const mat = this.mesh.material as THREE.Material;
       mat.dispose();
