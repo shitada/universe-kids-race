@@ -245,6 +245,7 @@ export class AudioManager {
   private boostNoiseSource: AudioBufferSourceNode | null = null;
   private boostNoiseGain: GainNode | null = null;
   private boostNoiseFilter: BiquadFilterNode | null = null;
+  private noiseBuffer: AudioBuffer | null = null;
   private bgmPlaying = false;
   private bgmGeneration = 0;
 
@@ -461,12 +462,8 @@ export class AudioManager {
     if (!this.initialized || !this.ctx) return;
     if (this.boostNoiseSource) return;
     try {
-      const sampleRate = this.ctx.sampleRate;
-      const buffer = this.ctx.createBuffer(1, sampleRate, sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < data.length; i++) {
-        data[i] = Math.random() * 2 - 1;
-      }
+      const buffer = this.getOrCreateNoiseBuffer();
+      if (!buffer) return;
       this.boostNoiseSource = this.ctx.createBufferSource();
       this.boostNoiseSource.buffer = buffer;
       this.boostNoiseSource.loop = true;
@@ -484,6 +481,21 @@ export class AudioManager {
       this.boostNoiseGain = null;
       this.boostNoiseFilter = null;
     }
+  }
+
+  private getOrCreateNoiseBuffer(): AudioBuffer | null {
+    if (!this.ctx) return null;
+    const sampleRate = this.ctx.sampleRate;
+    if (this.noiseBuffer && this.noiseBuffer.sampleRate === sampleRate) {
+      return this.noiseBuffer;
+    }
+    const buffer = this.ctx.createBuffer(1, sampleRate, sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    this.noiseBuffer = buffer;
+    return buffer;
   }
 
   stopBoostSFX(): void {
@@ -547,6 +559,7 @@ export class AudioManager {
       try { this.ctx.close(); } catch { /* ignore */ }
       this.ctx = null;
     }
+    this.noiseBuffer = null;
     this.initialized = false;
   }
 
