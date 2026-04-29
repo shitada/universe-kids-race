@@ -139,8 +139,8 @@ export class StageScene implements Scene {
     this.createDestinationPlanet();
 
     // Clear systems
-    this.stars = [];
-    this.meteorites = [];
+    this.stars.length = 0;
+    this.meteorites.length = 0;
     this.spawnSystem.reset();
     this.boostSystem.reset();
     this.scoreSystem.resetStage();
@@ -610,26 +610,32 @@ export class StageScene implements Scene {
     const shipZ = this.spaceship.position.z;
     const behindThreshold = shipZ + 30;
 
-    const remainingStars: Star[] = [];
-    for (const star of this.stars) {
+    const stars = this.stars;
+    let starWrite = 0;
+    for (let read = 0; read < stars.length; read++) {
+      const star = stars[read];
       if (star.position.z > behindThreshold) {
         // releaseStar handles scene detach (via recycle) and pool re-use.
         this.spawnSystem.releaseStar(star);
       } else {
-        remainingStars.push(star);
+        if (starWrite !== read) stars[starWrite] = star;
+        starWrite++;
       }
     }
-    this.stars = remainingStars;
+    stars.length = starWrite;
 
-    const remainingMeteorites: Meteorite[] = [];
-    for (const met of this.meteorites) {
+    const meteorites = this.meteorites;
+    let metWrite = 0;
+    for (let read = 0; read < meteorites.length; read++) {
+      const met = meteorites[read];
       if (met.position.z > behindThreshold) {
         this.spawnSystem.releaseMeteorite(met);
       } else {
-        remainingMeteorites.push(met);
+        if (metWrite !== read) meteorites[metWrite] = met;
+        metWrite++;
       }
     }
-    this.meteorites = remainingMeteorites;
+    meteorites.length = metWrite;
   }
 
   private initBoostFlame(): void {
@@ -894,8 +900,8 @@ export class StageScene implements Scene {
     }
 
     this.threeScene.clear();
-    this.stars = [];
-    this.meteorites = [];
+    this.stars.length = 0;
+    this.meteorites.length = 0;
   }
 
   getThreeScene(): THREE.Scene {

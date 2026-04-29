@@ -152,4 +152,40 @@ describe('StageScene.cleanupPassedObjects', () => {
 
     expect(decoration.parent).toBe(threeScene);
   });
+
+  it('compacts arrays in-place, preserving array identity and order of survivors', () => {
+    const scene = createScene();
+    const internals = scene as unknown as StageSceneInternals;
+
+    const threeScene = new THREE.Scene();
+    internals.threeScene = threeScene;
+    internals.spaceship = { position: { x: 0, y: 0, z: 0 } };
+
+    const s1 = new Star(0, 0, -10);
+    const s2 = new Star(0, 0, 50); // passed
+    const s3 = new Star(0, 0, -5);
+    const s4 = new Star(0, 0, 80); // passed
+    const s5 = new Star(0, 0, 0);
+    [s1, s2, s3, s4, s5].forEach((s) => threeScene.add(s.mesh));
+
+    const m1 = new Meteorite(0, 0, 100); // passed
+    const m2 = new Meteorite(0, 0, -10);
+    const m3 = new Meteorite(0, 0, 90); // passed
+    [m1, m2, m3].forEach((m) => threeScene.add(m.mesh));
+
+    const starsRef = [s1, s2, s3, s4, s5];
+    const meteoritesRef = [m1, m2, m3];
+    internals.stars = starsRef;
+    internals.meteorites = meteoritesRef;
+
+    internals.cleanupPassedObjects();
+
+    // Same array instances are preserved (in-place compaction).
+    expect(internals.stars).toBe(starsRef);
+    expect(internals.meteorites).toBe(meteoritesRef);
+
+    // Order of survivors matches original insertion order.
+    expect(internals.stars).toEqual([s1, s3, s5]);
+    expect(internals.meteorites).toEqual([m2]);
+  });
 });
