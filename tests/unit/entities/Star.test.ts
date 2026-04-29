@@ -112,4 +112,44 @@ describe('Star', () => {
     expect(mat.color).toBe(colorRef);
     expect(mat.emissive).toBe(emissiveRef);
   });
+
+  it('reset() repositions the star and clears transient state', () => {
+    const star = new Star(1, 2, -3, 'NORMAL');
+    star.collect();
+    star.update(0.5);
+    expect(star.isCollected).toBe(true);
+    expect(star.mesh.visible).toBe(false);
+
+    star.reset(7, 8, -9);
+
+    expect(star.position).toEqual({ x: 7, y: 8, z: -9 });
+    expect(star.mesh.position.x).toBe(7);
+    expect(star.mesh.position.y).toBe(8);
+    expect(star.mesh.position.z).toBe(-9);
+    expect(star.mesh.rotation.x).toBe(0);
+    expect(star.mesh.rotation.y).toBe(0);
+    expect(star.mesh.rotation.z).toBe(0);
+    expect(star.mesh.visible).toBe(true);
+    expect(star.isCollected).toBe(false);
+  });
+
+  it('recycle() detaches mesh from parent and preserves shared resources', () => {
+    const star = new Star(0, 0, -10, 'NORMAL');
+    const parent = new THREE.Group();
+    parent.add(star.mesh);
+    star.update(0.5);
+    star.collect();
+
+    const geoSpy = vi.spyOn(star.mesh.geometry, 'dispose');
+    const matSpy = vi.spyOn(star.mesh.material as THREE.Material, 'dispose');
+
+    star.recycle();
+
+    expect(star.mesh.parent).toBeNull();
+    expect(star.mesh.rotation.y).toBe(0);
+    expect(star.mesh.visible).toBe(true);
+    expect(star.isCollected).toBe(false);
+    expect(geoSpy).not.toHaveBeenCalled();
+    expect(matSpy).not.toHaveBeenCalled();
+  });
 });

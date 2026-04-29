@@ -613,8 +613,8 @@ export class StageScene implements Scene {
     const remainingStars: Star[] = [];
     for (const star of this.stars) {
       if (star.position.z > behindThreshold) {
-        this.threeScene.remove(star.mesh);
-        star.dispose();
+        // releaseStar handles scene detach (via recycle) and pool re-use.
+        this.spawnSystem.releaseStar(star);
       } else {
         remainingStars.push(star);
       }
@@ -624,8 +624,7 @@ export class StageScene implements Scene {
     const remainingMeteorites: Meteorite[] = [];
     for (const met of this.meteorites) {
       if (met.position.z > behindThreshold) {
-        this.threeScene.remove(met.mesh);
-        met.dispose();
+        this.spawnSystem.releaseMeteorite(met);
       } else {
         remainingMeteorites.push(met);
       }
@@ -867,10 +866,14 @@ export class StageScene implements Scene {
     // Cleanup Three.js objects (dispose geometry/material before clearing the scene)
     this.particleBurstManager.clear(this.threeScene);
 
-    // Dispose entities
+    // Dispose entities. RAINBOW stars own per-instance materials and are not
+    // pooled, so dispose them explicitly. Pooled NORMAL stars and meteorites
+    // (both still-active and previously released) are freed via spawnSystem.dispose().
     this.spaceship?.dispose();
-    for (const star of this.stars) star.dispose();
-    for (const met of this.meteorites) met.dispose();
+    for (const star of this.stars) {
+      if (star.starType === 'RAINBOW') star.dispose();
+    }
+    this.spawnSystem.dispose();
 
     // Dispose retained scene resources
     if (this.boostLines) {
