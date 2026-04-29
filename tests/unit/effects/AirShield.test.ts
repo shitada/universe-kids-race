@@ -186,4 +186,128 @@ describe('AirShield', () => {
 
     shield.dispose();
   });
+
+  describe('INVINCIBLE mode', () => {
+    it('setShieldMode("INVINCIBLE") shows mesh with pink color and rounded scale', () => {
+      const shield = new AirShield();
+      shield.setShieldMode('INVINCIBLE', 1);
+      const mesh = shield.getMesh();
+      const mat = mesh.material as THREE.MeshBasicMaterial;
+      expect(mesh.visible).toBe(true);
+      expect(mat.color.getHex()).toBe(0xff88aa);
+      expect(mesh.scale.x).toBeCloseTo(1.2);
+      expect(mesh.scale.y).toBeCloseTo(1.0);
+      expect(mesh.scale.z).toBeCloseTo(1.6);
+      shield.dispose();
+    });
+
+    it('setShieldMode("OFF") after INVINCIBLE hides the mesh', () => {
+      const shield = new AirShield();
+      shield.setShieldMode('INVINCIBLE', 1);
+      shield.setShieldMode('OFF');
+      const mesh = shield.getMesh();
+      const mat = mesh.material as THREE.MeshBasicMaterial;
+      expect(mesh.visible).toBe(false);
+      expect(mat.color.getHex()).toBe(0x44aaff);
+      shield.dispose();
+    });
+
+    it('opacity scales with opacityScale parameter (full at 1, zero at 0)', () => {
+      const shieldFull = new AirShield();
+      shieldFull.setShieldMode('INVINCIBLE', 1);
+      const matFull = shieldFull.getMesh().material as THREE.MeshBasicMaterial;
+      const opacitiesFull: number[] = [];
+      for (let i = 0; i < 60; i++) {
+        shieldFull.update(1 / 60);
+        opacitiesFull.push(matFull.opacity);
+      }
+      const maxFull = Math.max(...opacitiesFull);
+      expect(maxFull).toBeGreaterThan(0.4); // pulses up to ~0.5
+
+      const shieldZero = new AirShield();
+      shieldZero.setShieldMode('INVINCIBLE', 0);
+      const matZero = shieldZero.getMesh().material as THREE.MeshBasicMaterial;
+      for (let i = 0; i < 60; i++) {
+        shieldZero.update(1 / 60);
+      }
+      expect(matZero.opacity).toBeCloseTo(0, 5);
+
+      shieldFull.dispose();
+      shieldZero.dispose();
+    });
+
+    it('opacity decreases monotonically as opacityScale ramps from 1 to 0', () => {
+      const shield = new AirShield();
+      const mat = shield.getMesh().material as THREE.MeshBasicMaterial;
+      // Sample peak opacity at several scales (skip pulse by sampling at the
+      // same phase of the sine wave: every full period at 3Hz = 1/3s).
+      const period = 1 / 3;
+      shield.setShieldMode('INVINCIBLE', 1);
+      // Advance by one period at scale=1 to settle phase, then capture.
+      shield.update(period);
+      const op1 = mat.opacity;
+      shield.setShieldMode('INVINCIBLE', 0.5);
+      shield.update(period);
+      const op05 = mat.opacity;
+      shield.setShieldMode('INVINCIBLE', 0);
+      shield.update(period);
+      const op0 = mat.opacity;
+      expect(op05).toBeLessThan(op1);
+      expect(op0).toBeLessThan(op05);
+      expect(op0).toBeCloseTo(0, 5);
+      shield.dispose();
+    });
+
+    it('clamps negative opacityScale to 0', () => {
+      const shield = new AirShield();
+      shield.setShieldMode('INVINCIBLE', -0.5);
+      const mat = shield.getMesh().material as THREE.MeshBasicMaterial;
+      shield.update(1 / 60);
+      expect(mat.opacity).toBeCloseTo(0, 5);
+      shield.dispose();
+    });
+
+    it('clamps opacityScale > 1 to 1', () => {
+      const shield = new AirShield();
+      shield.setShieldMode('INVINCIBLE', 5);
+      const mat = shield.getMesh().material as THREE.MeshBasicMaterial;
+      // Same phase trick to compare peaks deterministically.
+      shield.update(1 / 3);
+      const opHigh = mat.opacity;
+
+      const ref = new AirShield();
+      ref.setShieldMode('INVINCIBLE', 1);
+      const matRef = ref.getMesh().material as THREE.MeshBasicMaterial;
+      ref.update(1 / 3);
+      const opRef = matRef.opacity;
+
+      expect(opHigh).toBeCloseTo(opRef, 5);
+      shield.dispose();
+      ref.dispose();
+    });
+
+    it('transitions BOOST → INVINCIBLE updates color and scale', () => {
+      const shield = new AirShield();
+      shield.setShieldMode('BOOST');
+      shield.setShieldMode('INVINCIBLE', 1);
+      const mesh = shield.getMesh();
+      const mat = mesh.material as THREE.MeshBasicMaterial;
+      expect(mat.color.getHex()).toBe(0xff88aa);
+      expect(mesh.scale.x).toBeCloseTo(1.2);
+      expect(mesh.scale.z).toBeCloseTo(1.6);
+      shield.dispose();
+    });
+
+    it('getMode reflects the current shield mode', () => {
+      const shield = new AirShield();
+      expect(shield.getMode()).toBe('OFF');
+      shield.setShieldMode('BOOST');
+      expect(shield.getMode()).toBe('BOOST');
+      shield.setShieldMode('INVINCIBLE', 1);
+      expect(shield.getMode()).toBe('INVINCIBLE');
+      shield.setShieldMode('OFF');
+      expect(shield.getMode()).toBe('OFF');
+      shield.dispose();
+    });
+  });
 });

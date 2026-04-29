@@ -236,6 +236,66 @@ describe('Spaceship', () => {
     });
   });
 
+  describe('getSpeedStateRemainingRatio', () => {
+    it('returns 0 in NORMAL state', () => {
+      const ship = new Spaceship();
+      expect(ship.speedState).toBe('NORMAL');
+      expect(ship.getSpeedStateRemainingRatio()).toBe(0);
+    });
+
+    it('returns ~1 immediately after meteorite hit (start of SLOWDOWN)', () => {
+      const ship = new Spaceship();
+      ship.onMeteoriteHit();
+      expect(ship.speedState).toBe('SLOWDOWN');
+      expect(ship.getSpeedStateRemainingRatio()).toBeCloseTo(1, 5);
+    });
+
+    it('decreases monotonically through SLOWDOWN', () => {
+      const ship = new Spaceship();
+      ship.onMeteoriteHit();
+      const r0 = ship.getSpeedStateRemainingRatio();
+      ship.update(1.0);
+      const r1 = ship.getSpeedStateRemainingRatio();
+      ship.update(1.0);
+      const r2 = ship.getSpeedStateRemainingRatio();
+      expect(r1).toBeLessThan(r0);
+      expect(r2).toBeLessThan(r1);
+      expect(r2).toBeGreaterThan(0);
+    });
+
+    it('returns ~1 at the start of RECOVERING and ~0 at the end', () => {
+      const ship = new Spaceship();
+      ship.onMeteoriteHit();
+      ship.update(3.0001); // SLOWDOWN → RECOVERING
+      expect(ship.speedState).toBe('RECOVERING');
+      const start = ship.getSpeedStateRemainingRatio();
+      expect(start).toBeGreaterThan(0.99);
+      ship.update(0.5);
+      expect(ship.getSpeedStateRemainingRatio()).toBeCloseTo(0.5, 1);
+      ship.update(0.49);
+      expect(ship.getSpeedStateRemainingRatio()).toBeLessThan(0.05);
+      expect(ship.getSpeedStateRemainingRatio()).toBeGreaterThanOrEqual(0);
+    });
+
+    it('returns 0 once state returns to NORMAL', () => {
+      const ship = new Spaceship();
+      ship.onMeteoriteHit();
+      ship.update(3.01); // → RECOVERING
+      ship.update(1.01); // → NORMAL
+      expect(ship.speedState).toBe('NORMAL');
+      expect(ship.getSpeedStateRemainingRatio()).toBe(0);
+    });
+
+    it('returns a clamped value in [0, 1] during BOOST', () => {
+      const ship = new Spaceship();
+      ship.activateBoost();
+      const r = ship.getSpeedStateRemainingRatio();
+      expect(r).toBeGreaterThanOrEqual(0);
+      expect(r).toBeLessThanOrEqual(1);
+      expect(r).toBeCloseTo(1, 5);
+    });
+  });
+
   describe('dispose', () => {
     it('disposes all child mesh geometry and materials recursively', () => {
       const ship = new Spaceship();

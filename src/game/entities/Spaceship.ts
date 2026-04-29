@@ -149,6 +149,30 @@ export class Spaceship {
     }
   }
 
+  /**
+   * Returns the remaining ratio (0..1) of the current speed-state timer.
+   * BOOST/SLOWDOWN are normalized by SPEED_STATE_DURATION, RECOVERING by
+   * RECOVERY_DURATION. NORMAL returns 0. Used by visual effects (e.g. the
+   * invincibility shield) that need to fade out as the state progresses.
+   */
+  getSpeedStateRemainingRatio(): number {
+    let duration = 0;
+    switch (this.speedState) {
+      case 'BOOST':
+      case 'SLOWDOWN':
+        duration = SPEED_STATE_DURATION;
+        break;
+      case 'RECOVERING':
+        duration = RECOVERY_DURATION;
+        break;
+      default:
+        return 0;
+    }
+    if (duration <= 0) return 0;
+    const ratio = this.speedStateTimer / duration;
+    return Math.max(0, Math.min(1, ratio));
+  }
+
   getProgress(stageLength: number): number {
     const distanceTraveled = Math.abs(this.position.z - this.startZ);
     return Math.min(distanceTraveled / stageLength, 1);
