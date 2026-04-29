@@ -16,6 +16,10 @@ export class HUD {
   // be invalidated explicitly.
   private lastCooldownPct = -1;
   private lastReadyState: boolean | null = null;
+  // Differential write caches for update(score, starCount) to avoid
+  // redundant textContent writes (which can trigger layout/paint on iPad Safari).
+  private lastScore = -1;
+  private lastStarCount = -1;
 
   show(stageName?: string): void {
     const hudRoot = document.getElementById('hud');
@@ -212,8 +216,14 @@ export class HUD {
   }
 
   update(score: number, starCount: number): void {
-    if (this.scoreEl) this.scoreEl.textContent = String(score);
-    if (this.starCountEl) this.starCountEl.textContent = String(starCount);
+    if (this.scoreEl && score !== this.lastScore) {
+      this.scoreEl.textContent = String(score);
+      this.lastScore = score;
+    }
+    if (this.starCountEl && starCount !== this.lastStarCount) {
+      this.starCountEl.textContent = String(starCount);
+      this.lastStarCount = starCount;
+    }
   }
 
   updateCooldown(progress: number): void {
@@ -270,6 +280,8 @@ export class HUD {
     this.lastCooldownProgress = 1.0;
     this.lastCooldownPct = -1;
     this.lastReadyState = null;
+    this.lastScore = -1;
+    this.lastStarCount = -1;
     this.scoreEl = null;
     this.starCountEl = null;
   }

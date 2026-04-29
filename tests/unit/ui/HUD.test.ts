@@ -359,4 +359,91 @@ describe('HUD', () => {
       expect(boostBtn.style.opacity).toBe('0.5');
     });
   });
+
+  describe('update(score, starCount) differential writes (perf)', () => {
+    function spyTextContent(el: HTMLElement): { count: number; values: string[] } {
+      const tracker = { count: 0, values: [] as string[] };
+      let current = el.textContent ?? '';
+      Object.defineProperty(el, 'textContent', {
+        configurable: true,
+        get() { return current; },
+        set(v: string) {
+          tracker.count++;
+          tracker.values.push(v);
+          current = v;
+        },
+      });
+      return tracker;
+    }
+
+    function getScoreAndStarSpans(): { scoreEl: HTMLElement; starEl: HTMLElement } {
+      const hudRoot = document.getElementById('hud')!;
+      const spans = hudRoot.querySelectorAll('span');
+      // First span is score, second is star count (per show() construction order).
+      return {
+        scoreEl: spans[0] as HTMLElement,
+        starEl: spans[1] as HTMLElement,
+      };
+    }
+
+    it('does not rewrite score/star textContent when values are unchanged across frames', () => {
+      hud.show('Test');
+      // Prime with an initial value, then start spying.
+      hud.update(7, 3);
+      const { scoreEl, starEl } = getScoreAndStarSpans();
+      const scoreSpy = spyTextContent(scoreEl);
+      const starSpy = spyTextContent(starEl);
+      for (let i = 0; i < 10; i++) {
+        hud.update(7, 3);
+      }
+      expect(scoreSpy.count).toBe(0);
+      expect(starSpy.count).toBe(0);
+    });
+
+    it('writes immediately when score or starCount changes', () => {
+      hud.show('Test');
+      hud.update(0, 0);
+      const { scoreEl, starEl } = getScoreAndStarSpans();
+      const scoreSpy = spyTextContent(scoreEl);
+      const starSpy = spyTextContent(starEl);
+
+      hud.update(5, 0);
+      expect(scoreSpy.count).toBe(1);
+      expect(scoreSpy.values[0]).toBe('5');
+      expect(starSpy.count).toBe(0);
+
+      hud.update(5, 2);
+      expect(scoreSpy.count).toBe(1);
+      expect(starSpy.count).toBe(1);
+      expect(starSpy.values[0]).toBe('2');
+    });
+
+    it('reapplies score/star textContent on the first update after hide()/show() re-entry', () => {
+      hud.show('Test');
+      hud.update(42, 9);
+      hud.hide();
+
+      // Recreate DOM hosts (afterEach hasn't run yet inside the test).
+      document.getElementById('ui-overlay')?.remove();
+      document.getElementById('hud')?.remove();
+      const hudRoot = document.createElement('div');
+      hudRoot.id = 'hud';
+      const uiOverlay = document.createElement('div');
+      uiOverlay.id = 'ui-overlay';
+      document.body.appendChild(hudRoot);
+      document.body.appendChild(uiOverlay);
+
+      hud.show('Test');
+      // Spy BEFORE any update so we can confirm the very first update writes.
+      const { scoreEl, starEl } = getScoreAndStarSpans();
+      const scoreSpy = spyTextContent(scoreEl);
+      const starSpy = spyTextContent(starEl);
+
+      hud.update(42, 9);
+      expect(scoreSpy.count).toBe(1);
+      expect(scoreSpy.values[0]).toBe('42');
+      expect(starSpy.count).toBe(1);
+      expect(starSpy.values[0]).toBe('9');
+    });
+  });
 });
