@@ -496,12 +496,11 @@ export class StageScene implements Scene {
       }
     }
 
-    // Immediately release collected stars back to the pool so subsequent
-    // per-frame Star.update / cleanupPassedObjects walks skip them. Score/SFX/
-    // particle emit above already consumed the star's position, so recycling
-    // now does not affect any visible behavior. cleanupPassedObjects remains
-    // as a safety net for stars that pass behind without being collected.
-    this.releaseCollectedStars(collisionResult.starCollisions);
+    // Note: Score/SFX/particle emit above already consumed the collected
+    // star positions. The actual array compaction + pool release for both
+    // collected stars and stars that drifted behind happens in a single
+    // pass inside cleanupPassedObjects() below, so this.stars is only walked
+    // once per frame even when collisions occurred.
 
     // Meteorite hit
     if (collisionResult.meteoriteCollision) {
@@ -632,22 +631,6 @@ export class StageScene implements Scene {
     }
   }
 
-  private releaseCollectedStars(collected: readonly Star[]): void {
-    if (collected.length === 0) return;
-    const stars = this.stars;
-    let write = 0;
-    for (let read = 0; read < stars.length; read++) {
-      const s = stars[read];
-      if (s.isCollected) continue;
-      if (write !== read) stars[write] = s;
-      write++;
-    }
-    stars.length = write;
-    for (const star of collected) {
-      this.spawnSystem.releaseStar(star);
-    }
-  }
-
   private cleanupPassedObjects(): void {
     const shipZ = this.spaceship.position.z;
     const behindThreshold = shipZ + 30;
@@ -656,7 +639,7 @@ export class StageScene implements Scene {
     let starWrite = 0;
     for (let read = 0; read < stars.length; read++) {
       const star = stars[read];
-      if (star.position.z > behindThreshold) {
+      if (star.isCollected || star.position.z > behindThreshold) {
         // releaseStar handles scene detach (via recycle) and pool re-use.
         this.spawnSystem.releaseStar(star);
       } else {
