@@ -33,14 +33,16 @@ describe('SpawnSystem', () => {
 
   it('stars include roughly 10% rainbow type', () => {
     const system = new SpawnSystem();
-    // Generate many stars
-    const result = system.update(0.016, -200, testConfig);
-    const rainbowCount = result.newStars.filter(s => s.starType === 'RAINBOW').length;
-    // With 10% probability, expect at least some rainbow in a large sample
-    // This is probabilistic, so we just check they can exist
-    expect(result.newStars.length).toBeGreaterThan(5);
+    // Generate many stars across multiple frames (per-frame spawn count is
+    // capped to prevent frame time spikes; total density is unchanged).
+    const allStars: ReturnType<typeof system.update>['newStars'][number][] = [];
+    for (let i = 0; i < 10; i++) {
+      const r = system.update(0.016, -200, testConfig);
+      allStars.push(...r.newStars);
+    }
+    expect(allStars.length).toBeGreaterThan(5);
     // Allow 0 rainbow due to randomness, just verify type is set
-    for (const star of result.newStars) {
+    for (const star of allStars) {
       expect(['NORMAL', 'RAINBOW']).toContain(star.starType);
     }
   });
@@ -194,6 +196,12 @@ describe('SpawnSystem', () => {
     const first = system.update(3.5, -10, testConfig);
     expect(first.newMeteorites.length).toBeGreaterThan(0);
     expect(first.newStars.length).toBeGreaterThan(0);
+    // Drain any remaining queued star spawns so the next assertion is not
+    // affected by the per-frame spawn cap (advancing spaceshipZ=-10 keeps
+    // targetZ stable while consuming pending spawns).
+    while (system.update(0.0, -10, testConfig).newStars.length > 0) {
+      // pump until the queue is empty
+    }
     // Next call without enough delta to spawn a meteorite must reset the buffer.
     const second = system.update(0.0, -10, testConfig);
     expect(second.newMeteorites).toHaveLength(0);
@@ -229,5 +237,41 @@ describe('SpawnSystem', () => {
     } finally {
       randSpy.mockRestore();
     }
+  });
+
+  it('caps star spawns per frame to prevent frame time spikes (Constitution IV)', () => {
+    // Highest-density case: starDensity=10 → starSpacing=10.
+    // From lastStarSpawnZ=0 with spaceshipZ=0 and spawnAheadDistance=80,
+    // an unbounded loop would spawn 8 stars in a single update().
+    const denseConfig: StageConfig = {
+      stageNumber: 1,
+      destination: '月',
+      stageLength: 500,
+      meteoriteInterval: 9999, // disable meteorite spawn for this test
+      starDensity: 10,
+    };
+    const system = new SpawnSystem();
+    const result = system.update(0.016, 0, denseConfig);
+    expect(result.newStars.length).toBeLessThanOrEqual(4);
+    expect(result.newStars.length).toBeGreaterThan(0);
+  });
+
+  it('catches up across consecutive frames so total spawns equal the unbounded count', () => {
+    const denseConfig: StageConfig = {
+      stageNumber: 1,
+      destination: '月',
+      stageLength: 500,
+      meteoriteInterval: 9999,
+      starDensity: 10,
+    };
+    const system = new SpawnSystem();
+    let total = 0;
+    // 8 frames is enough to exceed the theoretical 8-spawn workload above.
+    for (let i = 0; i < 8; i++) {
+      total += system.update(0.016, 0, denseConfig).newStars.length;
+    }
+    // starSpacing=10, target=-80 → exactly 8 stars total when the spaceship
+    // does not advance between frames.
+    expect(total).toBe(8);
   });
 });
