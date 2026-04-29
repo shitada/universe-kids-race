@@ -17,6 +17,12 @@ export interface SpawnResult {
 }
 
 export class SpawnSystem {
+  // Constitution IV: 60fps 維持のためのフレーム時間スパイク防止。
+  // 1 フレームで Star プールが空のまま大量スポーンすると Mesh / Material 生成が
+  // 集中してフレーム時間が跳ねるため、1 update() あたりのスポーン数を制限する。
+  // 上限を超えた分は lastStarSpawnZ が保持されるので次フレーム以降で順次追いつく。
+  private static readonly MAX_STAR_SPAWNS_PER_FRAME = 4;
+
   private lastStarSpawnZ = 0;
   private meteoriteTimer = 0;
   private spawnAheadDistance = 80;
@@ -71,8 +77,10 @@ export class SpawnSystem {
     // Spawn stars ahead based on density
     const starSpacing = 100 / config.starDensity;
     const targetZ = spaceshipZ - this.spawnAheadDistance;
+    let spawned = 0;
 
     while (this.lastStarSpawnZ > targetZ) {
+      if (spawned >= SpawnSystem.MAX_STAR_SPAWNS_PER_FRAME) break;
       this.lastStarSpawnZ -= starSpacing;
       const x = (Math.random() - 0.5) * 14;
       const y = (Math.random() - 0.5) * 4;
@@ -81,6 +89,7 @@ export class SpawnSystem {
         ? this.rainbowStarPool.acquire(x, y, this.lastStarSpawnZ)
         : this.normalStarPool.acquire(x, y, this.lastStarSpawnZ);
       result.newStars.push(star);
+      spawned++;
     }
 
     // Spawn meteorites based on interval
