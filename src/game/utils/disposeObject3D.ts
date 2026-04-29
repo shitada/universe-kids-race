@@ -38,6 +38,11 @@ function disposeMaterial(material: THREE.Material): void {
  */
 export function disposeObject3D(object: THREE.Object3D): void {
   object.traverse((child) => {
+    // SHARED 資源（モジュールレベルでキャッシュされた geometry/material/texture を
+    // 持つ Mesh）は dispose しない。Star / Meteorite と同じ規約。
+    if (child.userData && (child.userData as { sharedAssets?: boolean }).sharedAssets) {
+      return;
+    }
     const mesh = child as THREE.Mesh & { material?: THREE.Material | THREE.Material[] };
     if ((mesh as { geometry?: THREE.BufferGeometry }).geometry) {
       (mesh as { geometry: THREE.BufferGeometry }).geometry.dispose();
