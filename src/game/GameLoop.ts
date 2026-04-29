@@ -1,8 +1,11 @@
 import { FrameRateMonitor } from './utils/FrameRateMonitor';
 
+const FPS_SAMPLE_INTERVAL_MS = 100;
+
 export class GameLoop {
   private running = false;
   private lastTime = 0;
+  private lastFpsSampleAt = 0;
   private animationId = 0;
   private updateCallback: ((deltaTime: number) => void) | null = null;
   private renderCallback: (() => void) | null = null;
@@ -20,6 +23,7 @@ export class GameLoop {
     this.running = true;
     this.monitor.reset();
     this.lastTime = performance.now();
+    this.lastFpsSampleAt = this.lastTime;
     this.loop(this.lastTime);
   }
 
@@ -44,6 +48,7 @@ export class GameLoop {
       this.running = true;
       this.monitor.reset();
       this.lastTime = performance.now();
+      this.lastFpsSampleAt = this.lastTime;
       this.loop(this.lastTime);
     }
   }
@@ -65,8 +70,9 @@ export class GameLoop {
     this.renderCallback?.();
 
     this.monitor.update(deltaTime);
-    if (this.fpsSampleCallback) {
+    if (this.fpsSampleCallback && now - this.lastFpsSampleAt >= FPS_SAMPLE_INTERVAL_MS) {
       this.fpsSampleCallback(this.monitor.getFps());
+      this.lastFpsSampleAt = now;
     }
 
     this.animationId = requestAnimationFrame(this.loop);

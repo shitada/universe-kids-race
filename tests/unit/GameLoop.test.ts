@@ -102,4 +102,64 @@ describe('GameLoop', () => {
     expect(loop.getFps()).toBeGreaterThanOrEqual(55);
     loop.stop();
   });
+
+  it('throttles fps sample callback to ~10Hz', () => {
+    const loop = new GameLoop();
+    const samples: number[] = [];
+    loop.start(
+      () => {},
+      () => {},
+      (fps) => samples.push(fps),
+    );
+    for (let i = 0; i < 5; i += 1) {
+      advance(16);
+    }
+    expect(samples.length).toBe(0);
+
+    advance(16);
+    expect(samples.length).toBe(0);
+
+    advance(16);
+    expect(samples.length).toBe(1);
+
+    advance(16);
+    advance(16);
+    expect(samples.length).toBe(1);
+
+    advance(70);
+    expect(samples.length).toBe(2);
+
+    loop.stop();
+  });
+
+  it('resets fps sampling interval on pause and resume', () => {
+    const loop = new GameLoop();
+    const samples: number[] = [];
+    loop.start(
+      () => {},
+      () => {},
+      (fps) => samples.push(fps),
+    );
+    for (let i = 0; i < 8; i += 1) {
+      advance(16);
+    }
+    const samplesBeforePause = samples.length;
+    expect(samplesBeforePause).toBeGreaterThanOrEqual(1);
+
+    loop.pause();
+    nowValue += 5000;
+    loop.resume();
+
+    advance(16);
+    expect(samples.length).toBe(samplesBeforePause);
+
+    for (let i = 0; i < 5; i += 1) {
+      advance(16);
+    }
+    expect(samples.length).toBe(samplesBeforePause);
+    advance(16);
+    expect(samples.length).toBe(samplesBeforePause + 1);
+
+    loop.stop();
+  });
 });
