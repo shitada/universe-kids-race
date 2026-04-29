@@ -594,6 +594,8 @@ export class StageScene implements Scene {
     // retain branch of cleanupPassedObjects() below so this.stars is walked
     // only once per frame. Collision detection does not depend on per-frame
     // rotation/hue, so the reordering is visually equivalent.
+    // The same single-pass folding is applied to meteorite.update() (X/Z
+    // rotation) inside cleanupPassedObjects(); do not call met.update() here.
 
     // Companion orbit update
     this.companionManager?.update(
@@ -804,6 +806,11 @@ export class StageScene implements Scene {
       if (met.position.z > behindThreshold) {
         this.spawnSystem.releaseMeteorite(met);
       } else {
+        // Animate retained meteorites (X/Z rotation) here so this.meteorites
+        // is walked only once per frame, mirroring the star retain branch.
+        if (met.isActive) {
+          met.update(deltaTime);
+        }
         if (metWrite !== read) meteorites[metWrite] = met;
         metWrite++;
       }
