@@ -266,6 +266,10 @@ export class ParticleBurst {
 export class ParticleBurstManager {
   static readonly MAX_BURSTS = 10;
   private readonly pool: ParticleBurst[];
+  // Cached count of currently active pool slots. Maintains the invariant
+  // `activeCount === pool.filter(b => b.isActive()).length` so update()
+  // can early-return on rest frames without scanning all 10 slots at 60Hz.
+  private activeCount = 0;
 
   constructor() {
     this.pool = [];
@@ -291,7 +295,13 @@ export class ParticleBurstManager {
       }
     }
 
-    if (!slot) {
+    if (slot) {
+      // Found an inactive slot — it's transitioning inactive→active, so
+      // increment the cached counter. The "recycle most-progressed" branch
+      // below intentionally does NOT increment because that slot is already
+      // counted as active.
+      this.activeCount++;
+    } else {
       // All slots in flight; recycle the most-progressed one to mimic
       // the previous "drop oldest" behaviour without allocating a new burst.
       slot = this.pool[0];
@@ -313,12 +323,20 @@ export class ParticleBurstManager {
    * call. Replaces the previous `update()` + `cleanup()` two-pass scheme
    * so expired bursts no longer get an extra GPU upload before being
    * removed from the scene.
+   *
+   * On rest frames (no active bursts) we early-return to skip the 10-slot
+   * pool scan entirely, matching the rest-skip optimization pattern used
+   * by AirShield (OFF) and Star/Meteorite (off-screen).
    */
   update(scene: THREE.Scene, deltaTime: number): void {
+    if (this.activeCount === 0) return;
     for (const burst of this.pool) {
       if (!burst.isActive()) continue;
       const expired = burst.update(deltaTime);
-      if (expired) burst.deactivate(scene);
+      if (expired) {
+        burst.deactivate(scene);
+        this.activeCount--;
+      }
     }
   }
 
@@ -332,6 +350,7 @@ export class ParticleBurstManager {
     for (const burst of this.pool) {
       if (burst.isActive() && burst.isExpired()) {
         burst.deactivate(scene);
+        this.activeCount--;
       }
     }
   }
@@ -340,6 +359,7 @@ export class ParticleBurstManager {
     for (const burst of this.pool) {
       if (burst.isActive()) burst.deactivate(scene);
     }
+    this.activeCount = 0;
   }
 
   /** Releases all pooled GPU resources. Call once when shutting the scene down for good. */
@@ -347,15 +367,12 @@ export class ParticleBurstManager {
     for (const burst of this.pool) {
       burst.dispose(scene);
     }
+    this.activeCount = 0;
   }
 
   /** Test/diagnostic helper: number of currently active bursts. */
   getActiveCount(): number {
-    let n = 0;
-    for (const burst of this.pool) {
-      if (burst.isActive()) n++;
-    }
-    return n;
+    return this.activeCount;
   }
 
   /** Test/diagnostic helper: total pool size (constant). */
