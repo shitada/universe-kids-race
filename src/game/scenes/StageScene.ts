@@ -593,7 +593,13 @@ export class StageScene implements Scene {
     this.spaceship.update(deltaTime);
 
     // Spawn
-    const spawnResult = this.spawnSystem.update(deltaTime, this.spaceship.position.z, this.stageConfig);
+    const spawnResult = this.spawnSystem.update(
+      deltaTime,
+      this.spaceship.position.z,
+      this.stageConfig,
+      this.stars,
+      this.meteorites,
+    );
     for (const star of spawnResult.newStars) {
       this.stars.push(star);
       this.threeScene.add(star.mesh);
