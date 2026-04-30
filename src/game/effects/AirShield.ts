@@ -20,6 +20,14 @@ export class AirShield {
   private mode: ShieldMode = 'OFF';
   private lastMode: ShieldMode | null = null;
   private opacityScale = 1;
+  // OFF 中は mesh.position.set を呼ばず、ここに最新位置をキャッシュする。
+  // 次に BOOST/INVINCIBLE へ遷移する瞬間に flush して可視化前に同期する。
+  // これにより通常プレイ（大半が OFF）の毎フレームの Object3D matrixWorld
+  // 連鎖無効化を 1 回分削減できる。
+  private pendingX = 0;
+  private pendingY = 0;
+  private pendingZ = 0;
+  private positionDirty = false;
 
   constructor() {
     const geometry = new THREE.SphereGeometry(1.5, 16, 16);
@@ -77,11 +85,13 @@ export class AirShield {
     this.mode = mode;
 
     if (mode === 'BOOST') {
+      this.flushPendingPosition();
       this.mesh.visible = true;
       this.mesh.scale.set(1.0, 0.8, 2.0);
       this.material.color.setHex(0x88ddff);
       this.material.opacity = BOOST_INITIAL_OPACITY;
     } else if (mode === 'INVINCIBLE') {
+      this.flushPendingPosition();
       this.mesh.visible = true;
       this.mesh.scale.set(1.2, 1.0, 1.6);
       this.material.color.setHex(0xff88aa);
@@ -97,7 +107,23 @@ export class AirShield {
   }
 
   setPosition(x: number, y: number, z: number): void {
+    if (this.mode === 'OFF') {
+      // OFF 中は不可視のため mesh.position.set を呼ばず、内部キャッシュにのみ
+      // 反映する。次回 setShieldMode で BOOST/INVINCIBLE になった瞬間に
+      // flushPendingPosition() で最新位置に同期される。
+      this.pendingX = x;
+      this.pendingY = y;
+      this.pendingZ = z;
+      this.positionDirty = true;
+      return;
+    }
     this.mesh.position.set(x, y, z);
+  }
+
+  private flushPendingPosition(): void {
+    if (!this.positionDirty) return;
+    this.mesh.position.set(this.pendingX, this.pendingY, this.pendingZ);
+    this.positionDirty = false;
   }
 
   getMesh(): THREE.Mesh {

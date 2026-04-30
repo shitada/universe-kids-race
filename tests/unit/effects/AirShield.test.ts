@@ -94,8 +94,9 @@ describe('AirShield', () => {
     shield.dispose();
   });
 
-  it('setPosition updates mesh position', () => {
+  it('setPosition immediately updates mesh position when shield is active (BOOST)', () => {
     const shield = new AirShield();
+    shield.setShieldMode('BOOST');
     shield.setPosition(3, 5, -10);
     const mesh = shield.getMesh();
     expect(mesh.position.x).toBe(3);
@@ -307,6 +308,110 @@ describe('AirShield', () => {
       expect(shield.getMode()).toBe('INVINCIBLE');
       shield.setShieldMode('OFF');
       expect(shield.getMode()).toBe('OFF');
+      shield.dispose();
+    });
+  });
+
+  describe('setPosition deferral while OFF (matrixWorld update reduction)', () => {
+    it('AC1: setPosition while mode === OFF does NOT mutate mesh.position', () => {
+      const shield = new AirShield();
+      const mesh = shield.getMesh();
+      const before = { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z };
+      const positionSetSpy = vi.spyOn(mesh.position, 'set');
+
+      shield.setPosition(7, 8, 9);
+
+      expect(positionSetSpy).not.toHaveBeenCalled();
+      expect(mesh.position.x).toBe(before.x);
+      expect(mesh.position.y).toBe(before.y);
+      expect(mesh.position.z).toBe(before.z);
+
+      shield.dispose();
+    });
+
+    it('AC2: OFF→BOOST transition flushes the latest pending position before becoming visible', () => {
+      const shield = new AirShield();
+      shield.setPosition(11, 22, 33);
+      shield.setPosition(44, 55, 66); // overwrite with the latest value
+      shield.setShieldMode('BOOST');
+      const mesh = shield.getMesh();
+      expect(mesh.position.x).toBe(44);
+      expect(mesh.position.y).toBe(55);
+      expect(mesh.position.z).toBe(66);
+      expect(mesh.visible).toBe(true);
+      shield.dispose();
+    });
+
+    it('AC2: OFF→INVINCIBLE transition also flushes the latest pending position', () => {
+      const shield = new AirShield();
+      shield.setPosition(-1, -2, -3);
+      shield.setShieldMode('INVINCIBLE', 1);
+      const mesh = shield.getMesh();
+      expect(mesh.position.x).toBe(-1);
+      expect(mesh.position.y).toBe(-2);
+      expect(mesh.position.z).toBe(-3);
+      expect(mesh.visible).toBe(true);
+      shield.dispose();
+    });
+
+    it('AC3: setPosition during BOOST is applied immediately to mesh.position', () => {
+      const shield = new AirShield();
+      shield.setShieldMode('BOOST');
+      shield.setPosition(1, 2, 3);
+      const mesh = shield.getMesh();
+      expect(mesh.position.x).toBe(1);
+      expect(mesh.position.y).toBe(2);
+      expect(mesh.position.z).toBe(3);
+
+      shield.setPosition(4, 5, 6);
+      expect(mesh.position.x).toBe(4);
+      expect(mesh.position.y).toBe(5);
+      expect(mesh.position.z).toBe(6);
+      shield.dispose();
+    });
+
+    it('AC3: setPosition during INVINCIBLE is applied immediately to mesh.position', () => {
+      const shield = new AirShield();
+      shield.setShieldMode('INVINCIBLE', 1);
+      shield.setPosition(9, 8, 7);
+      const mesh = shield.getMesh();
+      expect(mesh.position.x).toBe(9);
+      expect(mesh.position.y).toBe(8);
+      expect(mesh.position.z).toBe(7);
+      shield.dispose();
+    });
+
+    it('after BOOST→OFF, subsequent setPosition is again deferred (no mesh.position.set)', () => {
+      const shield = new AirShield();
+      shield.setShieldMode('BOOST');
+      shield.setPosition(1, 2, 3);
+      shield.setShieldMode('OFF');
+      const mesh = shield.getMesh();
+      const positionSetSpy = vi.spyOn(mesh.position, 'set');
+
+      shield.setPosition(10, 20, 30);
+
+      expect(positionSetSpy).not.toHaveBeenCalled();
+      // Still showing the last applied (pre-OFF) position.
+      expect(mesh.position.x).toBe(1);
+      expect(mesh.position.y).toBe(2);
+      expect(mesh.position.z).toBe(3);
+
+      // Re-activating flushes the new pending value.
+      positionSetSpy.mockRestore();
+      shield.setShieldMode('BOOST');
+      expect(mesh.position.x).toBe(10);
+      expect(mesh.position.y).toBe(20);
+      expect(mesh.position.z).toBe(30);
+
+      shield.dispose();
+    });
+
+    it('OFF→BOOST without any pending setPosition does not call mesh.position.set', () => {
+      const shield = new AirShield();
+      const positionSetSpy = vi.spyOn(shield.getMesh().position, 'set');
+      shield.setShieldMode('BOOST');
+      expect(positionSetSpy).not.toHaveBeenCalled();
       shield.dispose();
     });
   });
