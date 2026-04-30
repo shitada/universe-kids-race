@@ -52,6 +52,8 @@ describe('createSceneTransitionHandler', () => {
     expect(deps.sceneManager.transitionTo).toHaveBeenCalledWith('stage', { stageNumber: 3 });
     expect(deps.pixelRatioController.reset).not.toHaveBeenCalled();
     expect(deps.applyPixelRatioTier).not.toHaveBeenCalled();
+    expect(deps.pixelRatioController.notifyResume).toHaveBeenCalledTimes(1);
+    expect(deps.pixelRatioController.notifyResume).toHaveBeenCalledWith(12345);
   });
 
   it('does not record cleared stage when transitioning to stage 1', () => {
@@ -63,6 +65,8 @@ describe('createSceneTransitionHandler', () => {
     expect(deps.saveManager.save).not.toHaveBeenCalled();
     expect(deps.sceneManager.transitionTo).toHaveBeenCalledWith('stage', { stageNumber: 1 });
     expect(deps.pixelRatioController.reset).not.toHaveBeenCalled();
+    expect(deps.pixelRatioController.notifyResume).toHaveBeenCalledTimes(1);
+    expect(deps.pixelRatioController.notifyResume).toHaveBeenCalledWith(12345);
   });
 
   it('unlocks final stage when transitioning to ending', () => {
@@ -75,6 +79,8 @@ describe('createSceneTransitionHandler', () => {
     expect(deps.saveManager.current.unlockedPlanets).toContain(6);
     expect(deps.sceneManager.transitionTo).toHaveBeenCalledWith('ending', undefined);
     expect(deps.pixelRatioController.reset).not.toHaveBeenCalled();
+    expect(deps.pixelRatioController.notifyResume).toHaveBeenCalledTimes(1);
+    expect(deps.pixelRatioController.notifyResume).toHaveBeenCalledWith(12345);
   });
 
   it('does not duplicate already-unlocked planets', () => {
@@ -123,5 +129,38 @@ describe('createSceneTransitionHandler', () => {
 
     expect(saveManager.save).not.toHaveBeenCalled();
     expect(saveManager.current.clearedStage).toBe(4);
+  });
+
+  it('does not double-call notifyResume on title transition', () => {
+    const deps = makeDeps();
+    const handler = createSceneTransitionHandler(deps);
+
+    handler('title');
+
+    expect(deps.pixelRatioController.notifyResume).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes the value returned by now() to notifyResume on stage transitions', () => {
+    const now = vi.fn(() => 54321);
+    const deps = makeDeps({ now });
+    const handler = createSceneTransitionHandler(deps);
+
+    handler('stage', { stageNumber: 2 });
+
+    expect(deps.pixelRatioController.notifyResume).toHaveBeenCalledWith(54321);
+  });
+
+  it('calls transitionTo after notifyResume on non-title transitions', () => {
+    const order: string[] = [];
+    const deps = makeDeps();
+    deps.pixelRatioController.notifyResume.mockImplementation(() => order.push('resume'));
+    (deps.sceneManager.transitionTo as ReturnType<typeof vi.fn>).mockImplementation(() =>
+      order.push('transition'),
+    );
+    const handler = createSceneTransitionHandler(deps);
+
+    handler('stage', { stageNumber: 2 });
+
+    expect(order).toEqual(['resume', 'transition']);
   });
 });
