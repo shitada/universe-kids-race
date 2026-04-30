@@ -200,7 +200,6 @@ export class BoostFlameEffect {
     if (!this.points.visible) return;
     let hasLive = false;
     let positionsChanged = false;
-    let colorsChanged = false;
     let newMaxAlive = -1;
 
     const scanLimit = Math.min(BoostFlameEffect.MAX_PARTICLES, this.maxAliveIndex + 1);
@@ -211,12 +210,13 @@ export class BoostFlameEffect {
       const i2 = i * 2;
 
       if (this.lifetimes[i] <= 0) {
+        // 死亡パーティクルは OFFSCREEN_Z に退避するのみで色はクリアしない。
+        // sizeAttenuation: true の PointsMaterial では z=99999 への投影サイズが
+        // 事実上 0 となり、加算ブレンドでも色が画面に寄与しないため不可視。
+        // 次回 emit() でこのスロットが再利用される際に色は必ず上書きされる。
+        // これにより update() 経路での colorAttr GPU アップロードを除去する。
         this.positions[i3 + 2] = BoostFlameEffect.OFFSCREEN_Z;
-        this.colors[i3] = 0;
-        this.colors[i3 + 1] = 0;
-        this.colors[i3 + 2] = 0;
         positionsChanged = true;
-        colorsChanged = true;
         continue;
       }
 
@@ -233,11 +233,6 @@ export class BoostFlameEffect {
       this.positionAttr.clearUpdateRanges();
       if (uploadCount > 0) this.positionAttr.addUpdateRange(0, uploadCount);
       this.positionAttr.needsUpdate = true;
-    }
-    if (colorsChanged && this.colorAttr) {
-      this.colorAttr.clearUpdateRanges();
-      if (uploadCount > 0) this.colorAttr.addUpdateRange(0, uploadCount);
-      this.colorAttr.needsUpdate = true;
     }
     this.points.geometry.setDrawRange(0, newMaxAlive + 1);
 

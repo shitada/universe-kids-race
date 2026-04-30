@@ -137,7 +137,7 @@ describe('boost effect BufferAttribute caching', () => {
     fx.dispose();
   });
 
-  it('BoostFlameEffect.update bumps both position and color versions when at least one particle dies', () => {
+  it('BoostFlameEffect.update bumps position version but never color version when particles die', () => {
     const scene = new THREE.Scene();
     const fx = new BoostFlameEffect();
     fx.init(scene);
@@ -150,9 +150,11 @@ describe('boost effect BufferAttribute caching', () => {
     const prevColorVer = cachedColor.version;
 
     // Big enough deltaTime to kill all live particles (lifetimes start at 0.7).
+    // Color version must NOT bump: dead particles are parked at OFFSCREEN_Z and
+    // their color slots are reused on the next emit() rather than zeroed here.
     fx.update(1.0);
     expect(cachedPos.version).toBe(prevPosVer + 1);
-    expect(cachedColor.version).toBe(prevColorVer + 1);
+    expect(cachedColor.version).toBe(prevColorVer);
     fx.dispose();
   });
 
