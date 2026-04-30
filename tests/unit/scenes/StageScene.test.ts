@@ -188,3 +188,94 @@ describe('StageScene cleanupPassedObjects', () => {
     expect(internal.threeScene.children).toHaveLength(0);
   });
 });
+
+describe('StageScene boost activation SFX feedback (PC keyboard parity with HUD)', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '<div id="hud"></div><div id="ui-overlay"></div>';
+  });
+
+  function createSceneForBoost(): {
+    scene: StageScene;
+    inputState: { moveDirection: number; boostPressed: boolean };
+    audioManager: { playSFX: ReturnType<typeof vi.fn> };
+  } {
+    const sceneManager = { requestTransition: vi.fn() } as unknown as SceneManager;
+    const inputState = { moveDirection: 0, boostPressed: false };
+    const inputSystem = {
+      getState: () => inputState,
+      setBoostPressed: (v: boolean) => {
+        inputState.boostPressed = v;
+      },
+    } as unknown as InputSystem;
+    const audioManager = {
+      playBGM: vi.fn(),
+      stopBGM: vi.fn(),
+      isMuted: vi.fn(() => false),
+      toggleMute: vi.fn(() => false),
+      setMuted: vi.fn(),
+      playSFX: vi.fn(),
+      startBoostSFX: vi.fn(),
+      stopBoostSFX: vi.fn(),
+      initFromInteraction: vi.fn(),
+    } as unknown as AudioManager;
+    const saveManager = {
+      load: vi.fn(() => ({ clearedStage: 0, unlockedPlanets: [] })),
+      save: vi.fn(),
+      clear: vi.fn(),
+    } as unknown as SaveManager;
+    const scene = new StageScene(sceneManager, inputSystem, audioManager, saveManager);
+    scene.enter({ stageNumber: 1 });
+    return {
+      scene,
+      inputState,
+      audioManager: audioManager as unknown as { playSFX: ReturnType<typeof vi.fn> },
+    };
+  }
+
+  it('plays boostDenied SFX when Space is pressed while boost is unavailable', () => {
+    const { scene, inputState, audioManager } = createSceneForBoost();
+    const internal = scene as unknown as {
+      boostSystem: { activate: () => boolean; update: (dt: number) => void };
+      update: (dt: number) => void;
+    };
+
+    // Consume the boost so the next activate() returns false (cooldown/active).
+    expect(internal.boostSystem.activate()).toBe(true);
+
+    // Sanity: a second activate() now returns false.
+    expect(internal.boostSystem.activate()).toBe(false);
+
+    audioManager.playSFX.mockClear();
+
+    // Simulate PC keyboard Space press during cooldown.
+    inputState.boostPressed = true;
+    internal.update(0.016);
+
+    const sfxCalls = audioManager.playSFX.mock.calls.map((c) => c[0]);
+    expect(sfxCalls).toContain('boostDenied');
+    expect(sfxCalls).not.toContain('boost');
+    // Input flag must be consumed even when activation failed.
+    expect(inputState.boostPressed).toBe(false);
+  });
+
+  it('plays boost SFX (not boostDenied) when boost is available', () => {
+    const { scene, inputState, audioManager } = createSceneForBoost();
+    const internal = scene as unknown as {
+      boostSystem: { isAvailable: () => boolean };
+      update: (dt: number) => void;
+    };
+
+    // Boost should be available right after enter().
+    expect(internal.boostSystem.isAvailable()).toBe(true);
+
+    audioManager.playSFX.mockClear();
+
+    inputState.boostPressed = true;
+    internal.update(0.016);
+
+    const sfxCalls = audioManager.playSFX.mock.calls.map((c) => c[0]);
+    expect(sfxCalls).toContain('boost');
+    expect(sfxCalls).not.toContain('boostDenied');
+    expect(inputState.boostPressed).toBe(false);
+  });
+});
