@@ -129,11 +129,11 @@ export class SpawnSystem {
       const isRainbow = Math.random() < 0.1;
       let x = (Math.random() - 0.5) * 14;
       let y = (Math.random() - 0.5) * 2 * SpawnSystem.STAR_SPAWN_Y_HALF_RANGE;
-      let safe = this.isXySafeAgainstMeteorites(x, y, z, existingMeteorites, result.newMeteorites);
+      let safe = this.isXySafeAgainstEntities(x, y, z, existingMeteorites, result.newMeteorites);
       for (let attempt = 0; !safe && attempt < SpawnSystem.MAX_REROLL; attempt++) {
         x = (Math.random() - 0.5) * 14;
         y = (Math.random() - 0.5) * 2 * SpawnSystem.STAR_SPAWN_Y_HALF_RANGE;
-        safe = this.isXySafeAgainstMeteorites(x, y, z, existingMeteorites, result.newMeteorites);
+        safe = this.isXySafeAgainstEntities(x, y, z, existingMeteorites, result.newMeteorites);
       }
       // Count this slot regardless to advance lastStarSpawnZ (already decremented)
       // and avoid an infinite reroll loop. If no safe xy was found, drop this spawn
@@ -153,11 +153,11 @@ export class SpawnSystem {
       const z = spaceshipZ - this.spawnAheadDistance - Math.random() * 20;
       let x = (Math.random() - 0.5) * 14;
       let y = (Math.random() - 0.5) * 2 * SpawnSystem.METEORITE_SPAWN_Y_HALF_RANGE;
-      let safe = this.isXySafeAgainstStars(x, y, z, existingStars, result.newStars);
+      let safe = this.isXySafeAgainstEntities(x, y, z, existingStars, result.newStars);
       for (let attempt = 0; !safe && attempt < SpawnSystem.MAX_REROLL; attempt++) {
         x = (Math.random() - 0.5) * 14;
         y = (Math.random() - 0.5) * 2 * SpawnSystem.METEORITE_SPAWN_Y_HALF_RANGE;
-        safe = this.isXySafeAgainstStars(x, y, z, existingStars, result.newStars);
+        safe = this.isXySafeAgainstEntities(x, y, z, existingStars, result.newStars);
       }
       // If no safe xy was found, skip this meteorite. meteoriteTimer was already
       // reduced by one interval so the next meteorite arrives on the normal cadence.
@@ -170,53 +170,33 @@ export class SpawnSystem {
     return result;
   }
 
-  // NOTE on traversal order: `existing` (caller's live entity arrays) and
-  // `sameFrame` (this frame's freshly spawned entities) are both maintained in
-  // spawn order, which equals z-descending order — spawn z monotonically
-  // decreases (lastStarSpawnZ -= starSpacing; meteorites spawn at shipZ-80-jitter
-  // as the ship moves forward) and EntityScene's cleanupPassedObjects performs
-  // in-place compaction that preserves order. The candidate `z` is always at
-  // (or beyond) the head of the spawn frontier, so existing entries have z ≥ z.
-  // Traversing from the tail visits the smallest z (closest dz) first; once
-  // (p.z - z) > band, all earlier entries have even larger dz and can be
-  // skipped. The `dz < -band` branch is retained as a safety net in case the
-  // ordering invariant is ever violated by future changes.
-  private isXySafeAgainstMeteorites(
+  /**
+   * Constitution I (子供ファースト) safety margin check: returns true iff the
+   * candidate (x, y, z) is at least {@link SpawnSystem.SAFE_XY_DISTANCE} away
+   * in xy from every entity in `existing` (caller's live entities) and
+   * `sameFrame` (this frame's freshly spawned entities) within
+   * |dz| ≤ {@link SpawnSystem.SAFE_Z_BAND}. Used symmetrically for
+   * star↔meteorite separation: stars are checked against meteorites and
+   * vice-versa to prevent unavoidable "go grab a star → hit a meteorite right
+   * next to it" layouts under left/right-only input (Constitution III).
+   *
+   * Traversal order invariant: both arrays are maintained in spawn order,
+   * which equals z-descending order — spawn z monotonically decreases
+   * (lastStarSpawnZ -= starSpacing; meteorites spawn at shipZ-80-jitter as the
+   * ship moves forward) and EntityScene's cleanupPassedObjects performs
+   * in-place compaction that preserves order. The candidate `z` is always at
+   * (or beyond) the head of the spawn frontier, so existing entries have
+   * z ≥ z. Traversing from the tail visits the smallest z (closest dz) first;
+   * once (p.z - z) > band, all earlier entries have even larger dz and can be
+   * skipped. The `dz < -band` branch is retained as a safety net in case the
+   * ordering invariant is ever violated by future changes.
+   */
+  private isXySafeAgainstEntities<T extends { readonly position: { x: number; y: number; z: number } }>(
     x: number,
     y: number,
     z: number,
-    existing: readonly Meteorite[],
-    sameFrame: readonly Meteorite[],
-  ): boolean {
-    const minSq = SpawnSystem.SAFE_XY_DISTANCE * SpawnSystem.SAFE_XY_DISTANCE;
-    const band = SpawnSystem.SAFE_Z_BAND;
-    for (let i = existing.length - 1; i >= 0; i--) {
-      const p = existing[i].position;
-      const dz = p.z - z;
-      if (dz > band) break;
-      if (dz < -band) continue;
-      const dx = p.x - x;
-      const dy = p.y - y;
-      if (dx * dx + dy * dy < minSq) return false;
-    }
-    for (let i = sameFrame.length - 1; i >= 0; i--) {
-      const p = sameFrame[i].position;
-      const dz = p.z - z;
-      if (dz > band) break;
-      if (dz < -band) continue;
-      const dx = p.x - x;
-      const dy = p.y - y;
-      if (dx * dx + dy * dy < minSq) return false;
-    }
-    return true;
-  }
-
-  private isXySafeAgainstStars(
-    x: number,
-    y: number,
-    z: number,
-    existing: readonly Star[],
-    sameFrame: readonly Star[],
+    existing: readonly T[],
+    sameFrame: readonly T[],
   ): boolean {
     const minSq = SpawnSystem.SAFE_XY_DISTANCE * SpawnSystem.SAFE_XY_DISTANCE;
     const band = SpawnSystem.SAFE_Z_BAND;
