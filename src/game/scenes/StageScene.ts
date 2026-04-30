@@ -559,6 +559,8 @@ export class StageScene implements Scene {
         this.audioManager.playSFX('boost');
         this.audioManager.startBoostSFX();
         this.resetBoostFlame();
+      } else {
+        this.audioManager.playSFX('boostDenied');
       }
       this.inputSystem.setBoostPressed(false);
     }
