@@ -35,6 +35,7 @@ export class HUD {
     // Home button (top-left)
     this.homeButton = document.createElement('button');
     this.homeButton.textContent = '🏠';
+    this.homeButton.setAttribute('aria-label', 'ホームへ もどる');
     this.homeButton.style.position = 'absolute';
     this.homeButton.style.top = '0.8rem';
     this.homeButton.style.left = 'max(1rem, calc(env(safe-area-inset-left, 0px) + 0.5rem))';
@@ -149,6 +150,8 @@ export class HUD {
 
     this.boostButton = document.createElement('button');
     this.boostButton.textContent = '🚀 ブースト!';
+    this.boostButton.setAttribute('aria-label', 'ブースト');
+    this.boostButton.setAttribute('aria-disabled', 'false');
     this.boostButton.style.position = 'absolute';
     this.boostButton.style.bottom = 'max(2rem, calc(env(safe-area-inset-bottom, 0px) + 1rem))';
     this.boostButton.style.right = 'max(2rem, calc(env(safe-area-inset-right, 0px) + 1rem))';
@@ -307,11 +310,13 @@ export class HUD {
         this.boostButton.style.opacity = '1';
         this.boostButton.style.filter = 'none';
         this.boostButton.style.animation = 'boostBtnPulse 2s ease-in-out infinite';
+        this.boostButton.setAttribute('aria-disabled', 'false');
       } else {
         this.cooldownBar.style.boxShadow = 'none';
         this.boostButton.style.opacity = '0.5';
         this.boostButton.style.filter = 'grayscale(0.8)';
         this.boostButton.style.animation = 'none';
+        this.boostButton.setAttribute('aria-disabled', 'true');
       }
       this.lastReadyState = ready;
     }
