@@ -48,15 +48,23 @@ export class Star {
   }
 
   private createMesh(): THREE.Mesh {
+    // Both branches reuse SHARED_GEOMETRY at module scope. RAINBOW additionally
+    // uses a per-instance material (mutated per-frame for hue animation), but
+    // we still tag the mesh so disposeObject3D() never disposes the shared
+    // geometry. The per-instance RAINBOW material is disposed by Star.dispose().
     if (this.starType === 'RAINBOW') {
       const mat = new THREE.MeshToonMaterial({
         color: RAINBOW_INITIAL_COLOR,
         emissive: RAINBOW_INITIAL_COLOR,
         emissiveIntensity: 0.4,
       });
-      return new THREE.Mesh(SHARED_GEOMETRY, mat);
+      const mesh = new THREE.Mesh(SHARED_GEOMETRY, mat);
+      mesh.userData.sharedAssets = true;
+      return mesh;
     }
-    return new THREE.Mesh(SHARED_GEOMETRY, SHARED_NORMAL_MATERIAL);
+    const mesh = new THREE.Mesh(SHARED_GEOMETRY, SHARED_NORMAL_MATERIAL);
+    mesh.userData.sharedAssets = true;
+    return mesh;
   }
 
   update(deltaTime: number, cameraZ?: number): void {

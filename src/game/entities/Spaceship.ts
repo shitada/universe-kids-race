@@ -61,19 +61,27 @@ export class Spaceship {
   private createMesh(): THREE.Group {
     const group = new THREE.Group();
 
+    // Every child mesh below uses module-level SHARED_* geometry/material.
+    // We tag each Mesh with userData.sharedAssets = true so that if anyone
+    // ever passes this Group to disposeObject3D() (e.g. via a refactor), the
+    // shared GPU resources are NOT disposed. See src/game/utils/disposeObject3D.ts.
+
     // Body: cylinder
     const body = new THREE.Mesh(SHARED_BODY_GEOM, SHARED_BODY_MATERIAL);
+    body.userData.sharedAssets = true;
     body.rotation.x = Math.PI / 2;
     group.add(body);
 
     // Nose: cone
     const nose = new THREE.Mesh(SHARED_NOSE_GEOM, SHARED_NOSE_MATERIAL);
+    nose.userData.sharedAssets = true;
     nose.rotation.x = Math.PI / 2;
     nose.position.z = -1.4;
     group.add(nose);
 
     // Wings
     const wings = new THREE.Mesh(SHARED_WING_GEOM, SHARED_WING_MATERIAL);
+    wings.userData.sharedAssets = true;
     wings.position.z = 0.2;
     group.add(wings);
 

@@ -32,7 +32,11 @@ export class Meteorite {
   }
 
   private createMesh(): THREE.Mesh {
-    return new THREE.Mesh(SHARED_GEOMETRY, SHARED_MATERIAL);
+    // Tag with sharedAssets so disposeObject3D() never disposes the shared
+    // module-scope geometry/material. See src/game/utils/disposeObject3D.ts.
+    const mesh = new THREE.Mesh(SHARED_GEOMETRY, SHARED_MATERIAL);
+    mesh.userData.sharedAssets = true;
+    return mesh;
   }
 
   update(deltaTime: number, cameraZ?: number): void {
