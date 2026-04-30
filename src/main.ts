@@ -17,7 +17,9 @@ import { ContextLossOverlay } from './ui/ContextLossOverlay';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+// iPad Safari 高 DPR 端末では MSAA を切る（Constitution IV: 60fps 維持）
+const useMSAA = (window.devicePixelRatio ?? 1) < 2;
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: useMSAA });
 const maxPixelRatio = Math.min(window.devicePixelRatio, 2);
 const PIXEL_RATIO_TIERS = [1.0, 1.5, maxPixelRatio];
 const MAX_TIER = PIXEL_RATIO_TIERS.length - 1;
