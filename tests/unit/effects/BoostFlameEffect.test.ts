@@ -234,4 +234,63 @@ describe('BoostFlameEffect', () => {
     expect(() => fx.stopEmitting()).not.toThrow();
     expect(() => fx.dispose()).not.toThrow();
   });
+
+  it('update() never bumps colorAttr.version, even when particles die', () => {
+    const scene = new THREE.Scene();
+    const fx = new BoostFlameEffect();
+    fx.init(scene);
+    fx.start();
+    fx.emit(SHIP, 0);
+    const obj = fx.getObject()!;
+    const colorAttr = (obj.geometry as THREE.BufferGeometry).getAttribute('color') as THREE.BufferAttribute;
+
+    // Snapshot version after emit() (emit() legitimately bumps it).
+    const baseVersion = colorAttr.version;
+
+    // Multiple update() calls including ones that kill particles (lifetime=0.7s).
+    fx.update(0.1);
+    expect(colorAttr.version).toBe(baseVersion);
+    fx.update(0.5);
+    expect(colorAttr.version).toBe(baseVersion);
+    // This update kills the remaining live particles.
+    fx.update(0.5);
+    expect(colorAttr.version).toBe(baseVersion);
+
+    fx.dispose();
+  });
+
+  it('dead particle slots retain their color (not zeroed) and are reused on next emit', () => {
+    const scene = new THREE.Scene();
+    const fx = new BoostFlameEffect();
+    fx.init(scene);
+    fx.start();
+    fx.emit({ x: 5, y: 5, z: 5 }, 0);
+    const obj = fx.getObject()!;
+    const colors = (obj.geometry as THREE.BufferGeometry).getAttribute('color').array as Float32Array;
+    const positions = (obj.geometry as THREE.BufferGeometry).getAttribute('position').array as Float32Array;
+
+    // Snapshot color of slot 0 after first emit (8 particles fill slots 0..7).
+    const r0 = colors[0];
+    const g0 = colors[1];
+    const b0 = colors[2];
+    expect(r0).toBeCloseTo(1.0);
+
+    // Kill all live particles by advancing past lifetime; emission still on so no remove().
+    fx.update(1.0);
+
+    // Slot 0 is parked offscreen, but its color is preserved (not zeroed).
+    expect(positions[2]).toBe(99999);
+    expect(colors[0]).toBe(r0);
+    expect(colors[1]).toBe(g0);
+    expect(colors[2]).toBe(b0);
+
+    // Next emit reuses the next ring slots (8..15) with fresh colors.
+    fx.emit({ x: -5, y: -5, z: -5 }, 0);
+    expect(colors[8 * 3]).toBeCloseTo(1.0);
+    expect(positions[8 * 3 + 2]).not.toBe(99999);
+    // Slot 0 color is unchanged (not visited by the new emit).
+    expect(colors[0]).toBe(r0);
+
+    fx.dispose();
+  });
 });
