@@ -72,30 +72,25 @@ export class CompanionManager {
 
   constructor(unlockedPlanets: number[]) {
     const count = unlockedPlanets.length;
-    const baseRadius = count <= 3 ? 2.0 : count <= 7 ? 2.5 : 3.0;
 
     for (let i = 0; i < count; i++) {
       const entry = PLANET_ENCYCLOPEDIA.find((e) => e.stageNumber === unlockedPlanets[i]);
       if (!entry) continue;
 
       const mesh = CompanionManager.createCompanionMesh(entry);
-      const angleOffset = i * ((2 * Math.PI) / count);
-      const orbitRadius = baseRadius + (i % 3) * 0.15;
-      const orbitSpeed = 1.0 + i * 0.05;
-      const orbitTilt = (i - count / 2) * 0.15;
-
       this.companions.push({
         mesh,
-        angleOffset,
-        orbitRadius,
-        orbitSpeed,
-        orbitTilt,
-        cosTilt: Math.cos(orbitTilt),
-        sinTilt: Math.sin(orbitTilt),
+        angleOffset: 0,
+        orbitRadius: 0,
+        orbitSpeed: 0,
+        orbitTilt: 0,
+        cosTilt: 1,
+        sinTilt: 0,
         entranceTimer: 0,
       });
       this.group.add(mesh);
     }
+    this.redistributeOrbitParams();
   }
 
   addCompanion(stageNumber: number): boolean {
@@ -103,27 +98,44 @@ export class CompanionManager {
     if (!entry) return false;
 
     const mesh = CompanionManager.createCompanionMesh(entry);
-    const count = this.companions.length;
-    const newCount = count + 1;
-    const baseRadius = newCount <= 3 ? 2.0 : newCount <= 7 ? 2.5 : 3.0;
-    const angleOffset = count * ((2 * Math.PI) / newCount);
-    const orbitRadius = baseRadius + (count % 3) * 0.15;
-    const orbitSpeed = 1.0 + count * 0.05;
-    const orbitTilt = (count - newCount / 2) * 0.15;
-
     mesh.scale.set(0, 0, 0);
     this.companions.push({
       mesh,
-      angleOffset,
-      orbitRadius,
-      orbitSpeed,
-      orbitTilt,
-      cosTilt: Math.cos(orbitTilt),
-      sinTilt: Math.sin(orbitTilt),
+      angleOffset: 0,
+      orbitRadius: 0,
+      orbitSpeed: 0,
+      orbitTilt: 0,
+      cosTilt: 1,
+      sinTilt: 0,
       entranceTimer: 1.0,
     });
     this.group.add(mesh);
+    this.redistributeOrbitParams();
     return true;
+  }
+
+  // Recomputes orbit parameters (angleOffset / orbitRadius / orbitSpeed /
+  // orbitTilt and its cached cos/sin) for ALL companions using the current
+  // total count. This must be called whenever the companion count changes so
+  // that the orbit stays evenly spaced and uses the correct baseRadius —
+  // otherwise companions added incrementally end up at uneven angles and
+  // mismatched radii (see CompanionManager bugfix). entranceTimer is
+  // intentionally NOT touched so any in-progress entrance animation continues.
+  private redistributeOrbitParams(): void {
+    const count = this.companions.length;
+    if (count === 0) return;
+    const baseRadius = count <= 3 ? 2.0 : count <= 7 ? 2.5 : 3.0;
+
+    for (let i = 0; i < count; i++) {
+      const c = this.companions[i];
+      const orbitTilt = (i - count / 2) * 0.15;
+      c.angleOffset = i * ((2 * Math.PI) / count);
+      c.orbitRadius = baseRadius + (i % 3) * 0.15;
+      c.orbitSpeed = 1.0 + i * 0.05;
+      c.orbitTilt = orbitTilt;
+      c.cosTilt = Math.cos(orbitTilt);
+      c.sinTilt = Math.sin(orbitTilt);
+    }
   }
 
   update(deltaTime: number, shipX: number, shipY: number, shipZ: number): void {
