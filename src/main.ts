@@ -12,6 +12,7 @@ import { TOTAL_STAGES } from './game/config/StageConfig';
 import { createResizeCoalescer } from './game/utils/ResizeCoalescer';
 import { createSceneTransitionHandler } from './game/utils/createSceneTransitionHandler';
 import { createWebGLContextLossHandler } from './game/utils/createWebGLContextLossHandler';
+import { createWebGLContextRestoredHandler } from './game/utils/createWebGLContextRestoredHandler';
 import { getViewportSize, subscribeViewportResize } from './game/utils/getViewportSize';
 import { ContextLossOverlay } from './ui/ContextLossOverlay';
 
@@ -189,14 +190,16 @@ createWebGLContextLossHandler(canvas, {
       window.location.reload();
     });
   },
-  onRestored: () => {
-    contextLossOverlay.hide();
-    applyPixelRatioTier(MAX_TIER);
-    const { width, height } = getViewportSize();
-    resizeCoalescer.schedule(width, height);
-    resizeCoalescer.flush();
-    gameLoop.resume();
-    audioManager.ensureResumed();
-    pixelRatioController.notifyResume(performance.now());
-  },
+  onRestored: createWebGLContextRestoredHandler({
+    pixelRatioController,
+    applyPixelRatioTier,
+    maxTier: MAX_TIER,
+    getViewportSize,
+    scheduleResize: (w, h) => resizeCoalescer.schedule(w, h),
+    flushResize: () => resizeCoalescer.flush(),
+    gameLoopResume: () => gameLoop.resume(),
+    audioEnsureResumed: () => audioManager.ensureResumed(),
+    hideOverlay: () => contextLossOverlay.hide(),
+    now: () => performance.now(),
+  }),
 });
