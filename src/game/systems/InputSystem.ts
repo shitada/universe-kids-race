@@ -5,10 +5,30 @@ export class InputSystem {
   private canvas: HTMLCanvasElement | null = null;
   private activePointers = new Map<number, 'left' | 'right'>();
   private pressedKeys = new Set<string>();
+  // Cached canvas client width to avoid forced reflow on every pointer event
+  // (Constitution III/IV: iPad Safari touch latency / 60fps). Updated via
+  // notifyResize() from the main resize pipeline.
+  private canvasWidth = 0;
+  // pointermove listener options. Marked passive because the handler never
+  // calls preventDefault(); this lets iPad Safari run pointermove on the
+  // compositor fast path. DO NOT call preventDefault() inside onPointerMove.
+  private static readonly POINTERMOVE_OPTIONS: AddEventListenerOptions = { passive: true };
+
+  private getCanvasWidth(): number {
+    if (this.canvasWidth > 0) return this.canvasWidth;
+    // Defensive fallback: if notifyResize was never called or width is stale,
+    // re-read from the DOM (this triggers a reflow but only on the cold path).
+    if (this.canvas) {
+      const w = this.canvas.clientWidth;
+      if (w > 0) this.canvasWidth = w;
+      return w;
+    }
+    return 0;
+  }
 
   private sideOf(clientX: number): 'left' | 'right' | null {
     if (!this.canvas) return null;
-    const width = this.canvas.clientWidth;
+    const width = this.getCanvasWidth();
     if (width <= 0) return null;
     const half = width / 2;
     const deadZone = width * 0.02;
@@ -19,7 +39,7 @@ export class InputSystem {
   private onPointerDown = (e: PointerEvent): void => {
     e.preventDefault();
     if (!this.canvas) return;
-    const side = this.sideOf(e.clientX) ?? (e.clientX < this.canvas.clientWidth / 2 ? 'left' : 'right');
+    const side = this.sideOf(e.clientX) ?? (e.clientX < this.getCanvasWidth() / 2 ? 'left' : 'right');
     this.activePointers.set(e.pointerId, side);
     this.updateDirection();
   };
@@ -111,8 +131,10 @@ export class InputSystem {
 
   setup(canvas: HTMLCanvasElement): void {
     this.canvas = canvas;
+    this.canvasWidth = canvas.clientWidth;
     canvas.addEventListener('pointerdown', this.onPointerDown);
-    canvas.addEventListener('pointermove', this.onPointerMove);
+    // pointermove is registered passive — see POINTERMOVE_OPTIONS comment.
+    canvas.addEventListener('pointermove', this.onPointerMove, InputSystem.POINTERMOVE_OPTIONS);
     canvas.addEventListener('pointerup', this.onPointerUp);
     canvas.addEventListener('pointercancel', this.onPointerCancel);
     canvas.addEventListener('pointerleave', this.onPointerUp);
@@ -131,14 +153,26 @@ export class InputSystem {
     this.state.boostPressed = pressed;
   }
 
+  /**
+   * Notify the InputSystem of a canvas width change. Called from the main
+   * resize pipeline so sideOf() can avoid reading canvas.clientWidth on every
+   * pointer event (which forces layout on iPad Safari).
+   */
+  notifyResize(width: number): void {
+    if (width > 0) {
+      this.canvasWidth = width;
+    }
+  }
+
   dispose(): void {
     if (this.canvas) {
       this.canvas.removeEventListener('pointerdown', this.onPointerDown);
-      this.canvas.removeEventListener('pointermove', this.onPointerMove);
+      this.canvas.removeEventListener('pointermove', this.onPointerMove, InputSystem.POINTERMOVE_OPTIONS);
       this.canvas.removeEventListener('pointerup', this.onPointerUp);
       this.canvas.removeEventListener('pointercancel', this.onPointerCancel);
       this.canvas.removeEventListener('pointerleave', this.onPointerUp);
       this.canvas = null;
+      this.canvasWidth = 0;
     }
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
