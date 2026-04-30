@@ -67,6 +67,11 @@ export class GameLoop {
     return this.running;
   }
 
+  /** True after `pause()` was called and before `resume()` / `stop()`. */
+  isPaused(): boolean {
+    return this.paused;
+  }
+
   getFps(): number {
     return this.monitor.getFps();
   }

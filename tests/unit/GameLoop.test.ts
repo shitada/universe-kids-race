@@ -236,4 +236,28 @@ describe('GameLoop', () => {
     expect(loop.isRunning()).toBe(false);
     expect(rafCallback).toBeNull();
   });
+
+  it('isPaused() reflects pause/resume/stop transitions', () => {
+    const loop = new GameLoop();
+    expect(loop.isPaused()).toBe(false);
+
+    loop.start(() => {}, () => {});
+    expect(loop.isPaused()).toBe(false);
+    expect(loop.isRunning()).toBe(true);
+
+    loop.pause();
+    expect(loop.isPaused()).toBe(true);
+    expect(loop.isRunning()).toBe(false);
+
+    loop.resume();
+    expect(loop.isPaused()).toBe(false);
+    expect(loop.isRunning()).toBe(true);
+
+    loop.pause();
+    expect(loop.isPaused()).toBe(true);
+
+    loop.stop();
+    expect(loop.isPaused()).toBe(false);
+    expect(loop.isRunning()).toBe(false);
+  });
 });

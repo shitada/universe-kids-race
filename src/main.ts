@@ -12,8 +12,10 @@ import { TOTAL_STAGES } from './game/config/StageConfig';
 import { createResizeCoalescer } from './game/utils/ResizeCoalescer';
 import { createSceneTransitionHandler } from './game/utils/createSceneTransitionHandler';
 import { createWebGLContextLossHandler } from './game/utils/createWebGLContextLossHandler';
+import { createVisibilityPauseHandler } from './game/utils/createVisibilityPauseHandler';
 import { getViewportSize, subscribeViewportResize } from './game/utils/getViewportSize';
 import { ContextLossOverlay } from './ui/ContextLossOverlay';
+import { ResumeOverlay } from './ui/ResumeOverlay';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 
@@ -135,43 +137,47 @@ function scheduleResize(): void {
 }
 subscribeViewportResize(window, scheduleResize);
 
-// Resume from any background state (visibilitychange, bfcache pageshow,
-// window.focus). All operations are idempotent so duplicate dispatches are
-// safe. iPad Safari does not always fire `visibilitychange` on bfcache
-// restore or URL bar / share sheet exits, so we listen on multiple events.
-function resumeFromBackground(): void {
+// Resume the game loop / audio. Idempotent: safe to call from multiple
+// visibility-restore signals (visibilitychange, bfcache pageshow, focus).
+function resumeGame(): void {
   gameLoop.resume();
   audioManager.ensureResumed();
+}
+
+// Re-sync viewport / pixel ratio after returning from background. Cosmetic
+// only; runs immediately on every restore signal regardless of scene because
+// it does not affect gameplay state.
+function refreshViewportAfterRestore(): void {
   pixelRatioController.notifyResume(performance.now());
-  // Re-sync size in case viewport changed while in background.
   const { width, height } = getViewportSize();
   resizeCoalescer.schedule(width, height);
   resizeCoalescer.flush();
 }
 
-// Auto-pause on background (T053 early integration)
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
+// Tap-to-resume overlay (Constitution I: 子供が戻ってきたとき隕石にぶつかる
+// 前にタップで再開できる)。Stage シーン以外では即時自動再開する。
+const resumeOverlay = new ResumeOverlay();
+
+function handleVisibilityRestore(): void {
+  refreshViewportAfterRestore();
+  if (sceneManager.getCurrentType() === 'stage' && gameLoop.isPaused()) {
+    resumeOverlay.show(() => {
+      resumeGame();
+    });
+  } else {
+    resumeOverlay.hide();
+    resumeGame();
+  }
+}
+
+// Auto-pause on visibilitychange / pagehide / blur, auto-resume (or show
+// overlay) on visibilitychange / bfcache pageshow / focus.
+createVisibilityPauseHandler({
+  onHide: () => {
     gameLoop.pause();
     audioManager.suspend();
-  } else {
-    resumeFromBackground();
-  }
-});
-
-// bfcache restore on iPad Safari (Back/Forward cache, tab restore). In this
-// path `visibilitychange` is not fired but `pageshow` arrives with
-// event.persisted === true.
-window.addEventListener('pageshow', (event: PageTransitionEvent) => {
-  if (event.persisted) {
-    resumeFromBackground();
-  }
-});
-
-// URL bar editing / share sheet on iPad Safari can stop rAF without firing
-// `visibilitychange`; only `focus` fires when the user returns.
-window.addEventListener('focus', () => {
-  resumeFromBackground();
+  },
+  onShow: handleVisibilityRestore,
 });
 
 // WebGL context loss recovery (iPad Safari background/memory pressure).
@@ -190,11 +196,6 @@ createWebGLContextLossHandler(canvas, {
   onRestored: () => {
     contextLossOverlay.hide();
     applyPixelRatioTier(MAX_TIER);
-    const { width, height } = getViewportSize();
-    resizeCoalescer.schedule(width, height);
-    resizeCoalescer.flush();
-    gameLoop.resume();
-    audioManager.ensureResumed();
-    pixelRatioController.notifyResume(performance.now());
+    handleVisibilityRestore();
   },
 });
