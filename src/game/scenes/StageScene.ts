@@ -922,10 +922,13 @@ export class StageScene implements Scene {
     // Cleanup Three.js objects (dispose geometry/material before clearing the scene)
     this.particleBurstManager.clear(this.threeScene);
 
-    // Dispose entities. All star types and meteorites (both still-active and
-    // previously released) are pooled and freed via spawnSystem.dispose().
+    // Recycle entities. All star types and meteorites (both still-active and
+    // previously released) return to the pool so the next stage can reuse
+    // their Mesh / Material instances without reallocation. The pool itself
+    // is kept alive for the lifetime of this StageScene; permanent GPU
+    // resource release happens via spawnSystem.dispose() in shutdown paths.
     this.spaceship?.dispose();
-    this.spawnSystem.dispose();
+    this.spawnSystem.recycleAll();
 
     // Dispose retained scene resources
     this.boostLinesEffect.dispose();
