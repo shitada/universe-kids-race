@@ -720,7 +720,18 @@ export class StageScene implements Scene {
       this.spaceship.position.y,
       this.spaceship.position.z,
     );
-    this.airShield.setBoostMode(this.boostSystem.isActive());
+    // Air shield mode: BOOST (blue) > INVINCIBLE (pink, post-hit) > OFF.
+    // During SLOWDOWN the shield stays at full strength so kids see they're
+    // safe; during RECOVERING it fades out 1→0 over the recovery window.
+    if (this.boostSystem.isActive()) {
+      this.airShield.setShieldMode('BOOST');
+    } else if (this.spaceship.speedState === 'SLOWDOWN') {
+      this.airShield.setShieldMode('INVINCIBLE', 1);
+    } else if (this.spaceship.speedState === 'RECOVERING') {
+      this.airShield.setShieldMode('INVINCIBLE', this.spaceship.getSpeedStateRemainingRatio());
+    } else {
+      this.airShield.setShieldMode('OFF');
+    }
     this.airShield.update(deltaTime);
 
     // Particle effects
