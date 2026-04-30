@@ -250,6 +250,14 @@ export class AudioManager {
   private noiseBuffer: AudioBuffer | null = null;
   private bgmPlaying = false;
   private bgmGeneration = 0;
+  // Per-SFX-type timestamp (ctx.currentTime, seconds) of the last successful playback.
+  // Used to coalesce duplicate SFX triggers within the same frame to prevent
+  // pop noise on iPad Safari WebAudio (Constitution I) and reduce node churn (Constitution IV).
+  private readonly lastSfxTime = new Map<SFXType, number>();
+  // Coalescing window for playSFX: same SFX type fired within this window is
+  // dropped. ~30ms ≈ 2 frames at 60fps — short enough to keep the response
+  // snappy for kids while suppressing in-frame stacking pops.
+  private static readonly SFX_COALESCE_WINDOW_SEC = 0.03;
 
   async init(): Promise<void> {
     try {
@@ -629,6 +637,11 @@ export class AudioManager {
   playSFX(type: SFXType): void {
     this.ensureResumed();
     if (!this.initialized || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    const last = this.lastSfxTime.get(type);
+    if (last !== undefined && now - last < AudioManager.SFX_COALESCE_WINDOW_SEC) {
+      return;
+    }
     try {
       switch (type) {
         case 'starCollect':
@@ -661,6 +674,7 @@ export class AudioManager {
           this.playArpeggio([523, 659, 784], 'sine', 0.07, 0.22);
           break;
       }
+      this.lastSfxTime.set(type, now);
     } catch {
       // Ignore SFX errors
     }
@@ -678,6 +692,7 @@ export class AudioManager {
       this.ctx = null;
     }
     this.noiseBuffer = null;
+    this.lastSfxTime.clear();
     this.initialized = false;
   }
 
