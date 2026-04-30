@@ -71,7 +71,7 @@ const audioManager = new AudioManager();
 
 // Session management: detect Safari swipe termination
 if (saveManager.isFreshSession()) {
-  saveManager.clear();
+  saveManager.resetSessionDataPreservingMuted();
 }
 
 // Restore persisted mute state before any audio is initialised so the very
