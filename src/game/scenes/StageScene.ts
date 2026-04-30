@@ -833,7 +833,7 @@ export class StageScene implements Scene {
         // Animate retained meteorites (X/Z rotation) here so this.meteorites
         // is walked only once per frame, mirroring the star retain branch.
         if (met.isActive) {
-          met.update(deltaTime);
+          met.update(deltaTime, shipZ);
         }
         if (metWrite !== read) meteorites[metWrite] = met;
         metWrite++;
