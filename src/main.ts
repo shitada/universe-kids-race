@@ -35,12 +35,20 @@ let lastAppliedHeight = 0;
 // initialization" runtime error when sceneManager was declared after this
 // point (caught by Playwright smoke test on iPad emulation).
 const sceneManager = new SceneManager();
+// Construct InputSystem early as well: applyRendererSize() references it via
+// notifyResize() during the initial applyPixelRatioTier() call below. Same
+// TDZ avoidance pattern as sceneManager above. setup() is deferred until the
+// rest of the systems are wired.
+const inputSystem = new InputSystem();
 
 function applyRendererSize(width: number, height: number): void {
   if (width !== lastAppliedWidth || height !== lastAppliedHeight) {
     renderer.setSize(width, height);
     lastAppliedWidth = width;
     lastAppliedHeight = height;
+    // Keep InputSystem's cached canvas width in sync to avoid forced reflow
+    // on every pointermove (Constitution III/IV: iPad Safari touch latency).
+    inputSystem.notifyResize(canvas.clientWidth);
   }
   const camera = sceneManager.getCurrentCamera();
   if (camera instanceof THREE.PerspectiveCamera) {
@@ -70,7 +78,6 @@ lastAppliedWidth = initialViewport.width;
 lastAppliedHeight = initialViewport.height;
 renderer.setClearColor(0x000020);
 
-const inputSystem = new InputSystem();
 inputSystem.setup(canvas);
 
 const gameLoop = new GameLoop();
