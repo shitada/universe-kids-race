@@ -22,12 +22,13 @@ export class ParticleBurst {
   private readonly points: THREE.Points;
   private readonly positions: Float32Array;
   private readonly colors: Float32Array;
-  private readonly sizes: Float32Array;
   private readonly velocities: Float32Array;
-  private readonly initialSizes: Float32Array;
   private readonly positionAttr: THREE.BufferAttribute;
   private readonly colorAttr: THREE.BufferAttribute;
-  private readonly sizeAttr: THREE.BufferAttribute;
+  private initialSize = 0.3;
+  // Per-burst velocity decay scalar. Replaces per-particle multiplication
+  // because every particle is damped by the same 0.95 factor each frame.
+  private velocityScale = 1;
   // Reused per-instance color scratch buffers. Safe because each pool slot
   // owns its own ParticleBurst, so concurrent emits never share these.
   private readonly baseColor = new THREE.Color();
@@ -42,18 +43,17 @@ export class ParticleBurst {
   constructor() {
     this.positions = new Float32Array(MAX_PARTICLES_PER_BURST * 3);
     this.colors = new Float32Array(MAX_PARTICLES_PER_BURST * 3);
-    this.sizes = new Float32Array(MAX_PARTICLES_PER_BURST);
     this.velocities = new Float32Array(MAX_PARTICLES_PER_BURST * 3);
-    this.initialSizes = new Float32Array(MAX_PARTICLES_PER_BURST);
 
     this.positionAttr = new THREE.BufferAttribute(this.positions, 3);
     this.colorAttr = new THREE.BufferAttribute(this.colors, 3);
-    this.sizeAttr = new THREE.BufferAttribute(this.sizes, 1);
 
     this.geometry = new THREE.BufferGeometry();
     this.geometry.setAttribute('position', this.positionAttr);
     this.geometry.setAttribute('color', this.colorAttr);
-    this.geometry.setAttribute('size', this.sizeAttr);
+    // No `size` attribute: PointsMaterial's built-in shader does not consume
+    // a per-vertex size, so uploading one every frame would be pure waste.
+    // The whole burst shrinks via the scalar `material.size` instead.
     this.geometry.setDrawRange(0, 0);
 
     this.material = new THREE.PointsMaterial({
@@ -120,11 +120,10 @@ export class ParticleBurst {
         this.colors[i3 + 1] = baseColor.g;
         this.colors[i3 + 2] = baseColor.b;
       }
-
-      this.sizes[i] = initialSize;
-      this.initialSizes[i] = initialSize;
     }
 
+    this.initialSize = initialSize;
+    this.velocityScale = 1;
     this.material.size = initialSize;
     this.material.opacity = 1.0;
 
@@ -179,19 +178,18 @@ export class ParticleBurst {
     }
 
     const remaining = 1 - this.elapsed / this.maxLifetime;
+    const vScale = this.velocityScale;
+    const stepScale = vScale * deltaTime;
 
     for (let i = 0; i < this.count; i++) {
       const i3 = i * 3;
-      this.positions[i3] += this.velocities[i3] * deltaTime;
-      this.positions[i3 + 1] += this.velocities[i3 + 1] * deltaTime;
-      this.positions[i3 + 2] += this.velocities[i3 + 2] * deltaTime;
-
-      this.velocities[i3] *= 0.95;
-      this.velocities[i3 + 1] *= 0.95;
-      this.velocities[i3 + 2] *= 0.95;
-
-      this.sizes[i] = this.initialSizes[i] * remaining;
+      this.positions[i3] += this.velocities[i3] * stepScale;
+      this.positions[i3 + 1] += this.velocities[i3 + 1] * stepScale;
+      this.positions[i3 + 2] += this.velocities[i3 + 2] * stepScale;
     }
+    // Per-burst scalar damping: equivalent to multiplying every velocity
+    // component by 0.95 each frame, but writes 1 scalar instead of 3*count.
+    this.velocityScale = vScale * 0.95;
 
     // Limit the GPU upload window to the live particle slice. The backing
     // Float32Arrays are sized for MAX_PARTICLES_PER_BURST (50), but bursts
@@ -200,9 +198,9 @@ export class ParticleBurst {
     this.positionAttr.clearUpdateRanges();
     this.positionAttr.addUpdateRange(0, this.count * 3);
     this.positionAttr.needsUpdate = true;
-    this.sizeAttr.clearUpdateRanges();
-    this.sizeAttr.addUpdateRange(0, this.count);
-    this.sizeAttr.needsUpdate = true;
+    // Whole-burst shrink via scalar PointsMaterial.size — no per-vertex
+    // size attribute upload needed.
+    this.material.size = this.initialSize * remaining;
     this.material.opacity = remaining;
     return false;
   }
@@ -257,9 +255,6 @@ export class ParticleBurst {
     this.colorAttr.clearUpdateRanges();
     this.colorAttr.addUpdateRange(0, count * 3);
     this.colorAttr.needsUpdate = true;
-    this.sizeAttr.clearUpdateRanges();
-    this.sizeAttr.addUpdateRange(0, count);
-    this.sizeAttr.needsUpdate = true;
   }
 }
 
