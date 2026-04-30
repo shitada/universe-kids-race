@@ -271,6 +271,7 @@ export class StageScene implements Scene {
   private lastBoostFlameSize = -1;
   private flameIndex = 0;
   private flameEmitting = false;
+  private flameMaxAliveIndex = -1;
   private static readonly MAX_FLAME_PARTICLES = 150;
 
   constructor(sceneManager: SceneManager, inputSystem: InputSystem, audioManager: AudioManager, saveManager: SaveManager) {
@@ -883,6 +884,9 @@ export class StageScene implements Scene {
       depthWrite: false,
     });
 
+    geometry.setDrawRange(0, 0);
+    this.flameMaxAliveIndex = -1;
+
     this.boostFlame = new THREE.Points(geometry, material);
     this.boostFlame.frustumCulled = false;
     this.boostFlame.visible = false;
@@ -913,9 +917,17 @@ export class StageScene implements Scene {
     this.lastBoostFlameSize = 0.5;
     this.flameIndex = 0;
     this.flameEmitting = true;
+    this.flameMaxAliveIndex = -1;
+    this.boostFlame.geometry.setDrawRange(0, 0);
     this.boostFlame.visible = true;
-    if (this.boostFlamePositionAttr) this.boostFlamePositionAttr.needsUpdate = true;
-    if (this.boostFlameColorAttr) this.boostFlameColorAttr.needsUpdate = true;
+    if (this.boostFlamePositionAttr) {
+      this.boostFlamePositionAttr.clearUpdateRanges();
+      this.boostFlamePositionAttr.needsUpdate = false;
+    }
+    if (this.boostFlameColorAttr) {
+      this.boostFlameColorAttr.clearUpdateRanges();
+      this.boostFlameColorAttr.needsUpdate = false;
+    }
   }
 
   private emitFlameParticles(): void {
@@ -933,6 +945,7 @@ export class StageScene implements Scene {
       ? 1.0
       : (1.0 - progress) / (1.0 - fadeStart);
 
+    let maxEmittedIdx = -1;
     for (let p = 0; p < emitCount; p++) {
       const idx = this.flameIndex % MAX;
       const i3 = idx * 3;
@@ -951,12 +964,27 @@ export class StageScene implements Scene {
       this.flameVelocities[i2] = 3 + Math.random() * 2;
       this.flameVelocities[i2 + 1] = (Math.random() - 0.5);
 
+      if (idx > maxEmittedIdx) maxEmittedIdx = idx;
       this.flameIndex++;
     }
 
     if (emitCount > 0) {
-      if (this.boostFlamePositionAttr) this.boostFlamePositionAttr.needsUpdate = true;
-      if (this.boostFlameColorAttr) this.boostFlameColorAttr.needsUpdate = true;
+      const newMax = Math.max(this.flameMaxAliveIndex, maxEmittedIdx);
+      this.flameMaxAliveIndex = newMax;
+      const uploadCount = (newMax + 1) * 3;
+      if (this.boostFlamePositionAttr) {
+        this.boostFlamePositionAttr.clearUpdateRanges();
+        this.boostFlamePositionAttr.addUpdateRange(0, uploadCount);
+        this.boostFlamePositionAttr.needsUpdate = true;
+      }
+      if (this.boostFlameColorAttr) {
+        this.boostFlameColorAttr.clearUpdateRanges();
+        this.boostFlameColorAttr.addUpdateRange(0, uploadCount);
+        this.boostFlameColorAttr.needsUpdate = true;
+      }
+      if (this.boostFlame) {
+        this.boostFlame.geometry.setDrawRange(0, newMax + 1);
+      }
     }
 
     // Scale particle size during fade phase
@@ -976,8 +1004,10 @@ export class StageScene implements Scene {
     let hasLive = false;
     let positionsChanged = false;
     let colorsChanged = false;
+    let newMaxAlive = -1;
 
-    for (let i = 0; i < MAX; i++) {
+    const scanLimit = Math.min(MAX, this.flameMaxAliveIndex + 1);
+    for (let i = 0; i < scanLimit; i++) {
       if (this.flameLifetimes[i] <= 0) continue;
       this.flameLifetimes[i] -= deltaTime;
       const i3 = i * 3;
@@ -997,10 +1027,22 @@ export class StageScene implements Scene {
       this.flamePositions[i3 + 2] += this.flameVelocities[i2] * deltaTime;
       this.flamePositions[i3 + 1] += this.flameVelocities[i2 + 1] * deltaTime;
       positionsChanged = true;
+      if (i > newMaxAlive) newMaxAlive = i;
     }
 
-    if (positionsChanged) this.boostFlamePositionAttr!.needsUpdate = true;
-    if (colorsChanged) this.boostFlameColorAttr!.needsUpdate = true;
+    this.flameMaxAliveIndex = newMaxAlive;
+    const uploadCount = (newMaxAlive + 1) * 3;
+    if (positionsChanged && this.boostFlamePositionAttr) {
+      this.boostFlamePositionAttr.clearUpdateRanges();
+      if (uploadCount > 0) this.boostFlamePositionAttr.addUpdateRange(0, uploadCount);
+      this.boostFlamePositionAttr.needsUpdate = true;
+    }
+    if (colorsChanged && this.boostFlameColorAttr) {
+      this.boostFlameColorAttr.clearUpdateRanges();
+      if (uploadCount > 0) this.boostFlameColorAttr.addUpdateRange(0, uploadCount);
+      this.boostFlameColorAttr.needsUpdate = true;
+    }
+    this.boostFlame.geometry.setDrawRange(0, newMaxAlive + 1);
 
     if (!this.flameEmitting && !hasLive) {
       this.removeBoostFlame();
@@ -1021,10 +1063,18 @@ export class StageScene implements Scene {
         this.flamePositions[i3 + 2] = 99999;
       }
     }
-    if (this.boostFlamePositionAttr) this.boostFlamePositionAttr.needsUpdate = true;
-    if (this.boostFlameColorAttr) this.boostFlameColorAttr.needsUpdate = true;
+    if (this.boostFlamePositionAttr) {
+      this.boostFlamePositionAttr.clearUpdateRanges();
+      this.boostFlamePositionAttr.needsUpdate = true;
+    }
+    if (this.boostFlameColorAttr) {
+      this.boostFlameColorAttr.clearUpdateRanges();
+      this.boostFlameColorAttr.needsUpdate = true;
+    }
     this.flameIndex = 0;
     this.flameEmitting = false;
+    this.flameMaxAliveIndex = -1;
+    this.boostFlame.geometry.setDrawRange(0, 0);
     this.boostFlame.visible = false;
     this.lastBoostFlameSize = -1;
   }
@@ -1032,6 +1082,7 @@ export class StageScene implements Scene {
   private disposeBoostFlame(): void {
     if (this.boostFlame) {
       this.threeScene.remove(this.boostFlame);
+      this.boostFlame.geometry.setDrawRange(0, 0);
       this.boostFlame.geometry.dispose();
       (this.boostFlame.material as THREE.PointsMaterial).dispose();
       this.boostFlame = null;
@@ -1044,6 +1095,7 @@ export class StageScene implements Scene {
     this.boostFlameColorAttr = null;
     this.flameIndex = 0;
     this.flameEmitting = false;
+    this.flameMaxAliveIndex = -1;
     this.lastBoostFlameSize = -1;
   }
 
