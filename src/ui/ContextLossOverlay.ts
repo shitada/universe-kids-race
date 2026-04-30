@@ -81,14 +81,30 @@ export class ContextLossOverlay {
       touch-action: manipulation;
       pointer-events: auto;
       box-shadow: 0 4px 18px rgba(255, 107, 107, 0.45);
+      transform: scale(1);
+      transition: transform 0.08s ease-out;
     `;
     reloadBtn.style.fontFamily = "'Zen Maru Gothic', sans-serif";
     reloadBtn.style.minWidth = '88px';
     reloadBtn.style.minHeight = '88px';
-    reloadBtn.addEventListener('click', (e) => {
+    reloadBtn.style.touchAction = 'manipulation';
+    reloadBtn.style.transform = 'scale(1)';
+    reloadBtn.style.transition = 'transform 0.08s ease-out';
+
+    let triggered = false;
+    const releasePress = (): void => {
+      reloadBtn.style.transform = 'scale(1)';
+    };
+    reloadBtn.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
+      reloadBtn.style.transform = 'scale(0.9)';
+      if (triggered) return;
+      triggered = true;
       onReload();
     });
+    reloadBtn.addEventListener('pointerup', releasePress);
+    reloadBtn.addEventListener('pointercancel', releasePress);
+    reloadBtn.addEventListener('pointerleave', releasePress);
     this.overlayEl.appendChild(reloadBtn);
 
     uiOverlay.appendChild(this.overlayEl);
