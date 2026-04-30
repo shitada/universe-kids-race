@@ -11,7 +11,9 @@ import { AdaptivePixelRatioController } from './game/utils/AdaptivePixelRatioCon
 import { TOTAL_STAGES } from './game/config/StageConfig';
 import { createResizeCoalescer } from './game/utils/ResizeCoalescer';
 import { createSceneTransitionHandler } from './game/utils/createSceneTransitionHandler';
+import { createWebGLContextLossHandler } from './game/utils/createWebGLContextLossHandler';
 import { getViewportSize, subscribeViewportResize } from './game/utils/getViewportSize';
+import { ContextLossOverlay } from './ui/ContextLossOverlay';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 
@@ -147,4 +149,29 @@ document.addEventListener('visibilitychange', () => {
     resizeCoalescer.schedule(width, height);
     resizeCoalescer.flush();
   }
+});
+
+// WebGL context loss recovery (iPad Safari background/memory pressure).
+// Without this, the canvas freezes black with no path back. We pause the
+// loop, show a kid-friendly reload overlay, and if the browser does fire
+// `webglcontextrestored` we re-apply pixel ratio and resume cleanly.
+const contextLossOverlay = new ContextLossOverlay();
+createWebGLContextLossHandler(canvas, {
+  onLost: () => {
+    gameLoop.pause();
+    audioManager.suspend();
+    contextLossOverlay.show(() => {
+      window.location.reload();
+    });
+  },
+  onRestored: () => {
+    contextLossOverlay.hide();
+    applyPixelRatioTier(MAX_TIER);
+    const { width, height } = getViewportSize();
+    resizeCoalescer.schedule(width, height);
+    resizeCoalescer.flush();
+    gameLoop.resume();
+    audioManager.ensureResumed();
+    pixelRatioController.notifyResume(performance.now());
+  },
 });
