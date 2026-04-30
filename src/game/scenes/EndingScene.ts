@@ -83,6 +83,9 @@ export class EndingScene implements Scene {
   // (CompanionManager の cosTilt/sinTilt キャッシュと同じ最適化方針)
   private circleX: number[] = [];
   private circleZ: number[] = [];
+  // popin が完了して scale=1 へ最終書き込み済みなら true。完了済みフレーム以降は
+  // mesh.scale.set(1,1,1) を毎フレーム呼ばない (Star/Meteorite/AirShield と同じ rest skip 方針)。
+  private popinSettled: boolean[] = [];
   private celebrationElapsed = 0;
   private thankYouShown = false;
 
@@ -231,9 +234,10 @@ export class EndingScene implements Scene {
   private setupCelebration(): void {
     this.companionGroup = new THREE.Group();
     this.companionMeshes = [];
-    // 再入時の整合性のため、既存の円周キャッシュをリセットしてから push する。
+    // 再入時の整合性のため、既存の円周キャッシュ・settled フラグをリセットしてから push する。
     this.circleX.length = 0;
     this.circleZ.length = 0;
+    this.popinSettled.length = 0;
     this.celebrationElapsed = 0;
     this.thankYouShown = false;
 
@@ -252,6 +256,7 @@ export class EndingScene implements Scene {
       mesh.scale.set(0, 0, 0);
 
       this.companionMeshes.push(mesh);
+      this.popinSettled.push(false);
       this.companionGroup.add(mesh);
     }
 
@@ -276,16 +281,32 @@ export class EndingScene implements Scene {
 
     for (let i = 0; i < this.companionMeshes.length; i++) {
       const mesh = this.companionMeshes[i];
+
+      if (this.popinSettled[i]) {
+        // popin 完了済み: scale 書き込み・開始時刻判定をスキップし、bounce y + rotation のみの hot path。
+        if (bounceActive) {
+          mesh.position.y = bounceY;
+        }
+        mesh.rotation.y += deltaTime * 2;
+        continue;
+      }
+
       const startTime = i * EndingScene.POPIN_DELAY;
 
       if (this.celebrationElapsed < startTime) {
-        mesh.scale.set(0, 0, 0);
-      } else if (this.celebrationElapsed < startTime + EndingScene.POPIN_DURATION) {
+        // popin 開始前: setupCelebration() で scale=0 にしてあり以後変えていないので毎フレーム書き込まない。
+        // 表示されないメッシュなので rotation も加算しない (視覚出力に影響なし)。
+        continue;
+      }
+
+      if (this.celebrationElapsed < startTime + EndingScene.POPIN_DURATION) {
         const localT = (this.celebrationElapsed - startTime) / EndingScene.POPIN_DURATION;
         const s = this.bounceEase(localT);
         mesh.scale.set(s, s, s);
       } else {
+        // popin が今フレームで完了。最終 scale=1 を 1 度だけ書き込み、以降はスキップする。
         mesh.scale.set(1, 1, 1);
+        this.popinSettled[i] = true;
       }
 
       if (bounceActive) {

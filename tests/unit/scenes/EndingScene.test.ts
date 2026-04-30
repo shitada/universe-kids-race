@@ -264,4 +264,98 @@ describe('EndingScene', () => {
       expect(companionGroupAfter).toBeNull();
     });
   });
+
+  describe('updateCelebration() rest-skip optimization', () => {
+    function getCompanionGroup(scene: EndingScene): THREE.Group {
+      const threeScene = scene.getThreeScene();
+      let companionGroup: THREE.Group | null = null;
+      threeScene.traverse((child) => {
+        if (
+          child instanceof THREE.Group &&
+          child !== threeScene &&
+          child.children.length === PLANET_ENCYCLOPEDIA.length
+        ) {
+          companionGroup = child as THREE.Group;
+        }
+      });
+      if (!companionGroup) throw new Error('companion group not found');
+      return companionGroup;
+    }
+
+    function makeScene(): EndingScene {
+      const sceneManager = createMockSceneManager();
+      const { mock: saveManager } = createMockSaveManager({
+        clearedStage: 11,
+        unlockedPlanets: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      });
+      const audioManager = createMockAudioManager();
+      const scene = new EndingScene(sceneManager, saveManager, audioManager);
+      scene.enter({ totalScore: 0, totalStarCount: 0 });
+      return scene;
+    }
+
+    it('does not rotate companions whose popin has not started yet', () => {
+      const scene = makeScene();
+      const group = getCompanionGroup(scene);
+      // Companion index 10 starts at t = 10 * 0.2 = 2.0s.
+      const lastIdx = PLANET_ENCYCLOPEDIA.length - 1;
+      const initialRotation = group.children[lastIdx].rotation.y;
+
+      // Advance only 0.5s (last companion is still scale=0, hidden, popin not started).
+      for (let i = 0; i < 50; i++) scene.update(0.01);
+
+      expect(group.children[lastIdx].scale.x).toBe(0);
+      expect(group.children[lastIdx].rotation.y).toBe(initialRotation);
+    });
+
+    it('writes scale=1 once when popin completes, then stops touching scale on subsequent updates', () => {
+      const scene = makeScene();
+      const group = getCompanionGroup(scene);
+
+      // Drive past the full popin window so every companion has settled (POPIN_TOTAL = 10*0.2 + 0.3 = 2.3s).
+      for (let i = 0; i < 250; i++) scene.update(0.01);
+
+      for (const mesh of group.children) {
+        expect(mesh.scale.x).toBe(1);
+        expect(mesh.scale.y).toBe(1);
+        expect(mesh.scale.z).toBe(1);
+      }
+
+      // After settle, manually corrupt scale; if updateCelebration still re-writes scale every frame,
+      // it would clobber back to 1. The optimization guarantees the value is preserved.
+      const sentinel = group.children[0];
+      sentinel.scale.set(7, 7, 7);
+      const rotationBefore = sentinel.rotation.y;
+
+      scene.update(0.016);
+
+      expect(sentinel.scale.x).toBe(7);
+      expect(sentinel.scale.y).toBe(7);
+      expect(sentinel.scale.z).toBe(7);
+      // Rotation must still advance on settled meshes.
+      expect(sentinel.rotation.y).toBeGreaterThan(rotationBefore);
+    });
+
+    it('resets settled state on re-enter so popin replays cleanly', () => {
+      const scene = makeScene();
+      // Settle everything.
+      for (let i = 0; i < 300; i++) scene.update(0.01);
+      scene.exit();
+
+      // Re-enter should reset internal flags so a brand-new popin sequence starts at scale=0.
+      scene.enter({ totalScore: 0, totalStarCount: 0 });
+      const group = getCompanionGroup(scene);
+      for (const mesh of group.children) {
+        expect(mesh.scale.x).toBe(0);
+      }
+
+      // Single small step: only companion 0 (startTime=0) progresses; index 5+ stays at 0
+      // (and crucially, the previously-settled flag from the prior run must NOT short-circuit them to scale=1).
+      scene.update(0.05);
+      expect(group.children[0].scale.x).toBeGreaterThan(0);
+      expect(group.children[0].scale.x).toBeLessThan(1);
+      const lastIdx = PLANET_ENCYCLOPEDIA.length - 1;
+      expect(group.children[lastIdx].scale.x).toBe(0);
+    });
+  });
 });
