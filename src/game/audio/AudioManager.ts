@@ -266,8 +266,18 @@ export class AudioManager {
   }
 
   ensureResumed(): void {
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
+    // iOS Safari uses 'interrupted' state (WebKit-specific) when audio is
+    // disrupted by phone calls, other apps, etc. Treat any non-'running'
+    // state (except terminal 'closed') as needing resume.
+    if (this.ctx && this.ctx.state !== 'running' && this.ctx.state !== 'closed') {
+      try {
+        const result = this.ctx.resume();
+        if (result && typeof (result as Promise<void>).catch === 'function') {
+          (result as Promise<void>).catch(() => { /* ignore */ });
+        }
+      } catch {
+        /* ignore */
+      }
     }
   }
 

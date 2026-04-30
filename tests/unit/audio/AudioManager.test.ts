@@ -926,6 +926,48 @@ describe('AudioManager', () => {
       expect(ctx.resume).not.toHaveBeenCalled();
       am.dispose();
     });
+
+    it('calls ctx.resume() when ctx.state is interrupted (iOS Safari)', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      const ctx = (am as any).ctx as MockAudioContext;
+      ctx.state = 'interrupted' as AudioContextState;
+      ctx.resume.mockClear();
+
+      am.ensureResumed();
+
+      expect(ctx.resume).toHaveBeenCalled();
+      am.dispose();
+    });
+
+    it('does not call resume() when ctx.state is closed', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      const ctx = (am as any).ctx as MockAudioContext;
+      ctx.state = 'closed';
+      ctx.resume.mockClear();
+
+      am.ensureResumed();
+
+      expect(ctx.resume).not.toHaveBeenCalled();
+      am.dispose();
+    });
+
+    it('swallows rejected resume() promise (fire-and-forget)', async () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      const ctx = (am as any).ctx as MockAudioContext;
+      ctx.state = 'suspended';
+      ctx.resume.mockImplementationOnce(() => Promise.reject(new Error('user gesture required')));
+
+      expect(() => am.ensureResumed()).not.toThrow();
+      // Wait a microtask so the unhandled rejection (if any) would surface.
+      await Promise.resolve();
+      am.dispose();
+    });
   });
 
   describe('suspend()', () => {
