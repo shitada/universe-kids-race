@@ -25,6 +25,7 @@ function createMockAudioManager(): AudioManager {
   return {
     init: vi.fn(),
     initSync: vi.fn(),
+    isInitialized: vi.fn(() => false),
     playBGM: vi.fn(),
     stopBGM: vi.fn(),
     isMuted: vi.fn(() => false),

@@ -18,10 +18,12 @@ function createMockSceneManager(): SceneManager {
   } as unknown as SceneManager;
 }
 
-function createMockAudioManager(): AudioManager {
+function createMockAudioManager(initialized = false): AudioManager {
+  let initState = initialized;
   return {
     init: vi.fn(),
-    initSync: vi.fn(),
+    initSync: vi.fn(() => { initState = true; }),
+    isInitialized: vi.fn(() => initState),
     playBGM: vi.fn(),
     stopBGM: vi.fn(),
     isMuted: vi.fn(() => false),
@@ -53,39 +55,71 @@ beforeEach(() => {
 });
 
 describe('TitleScene (T009)', () => {
-  it('overlay pointerdown calls initSync() but NOT playBGM()', () => {
+  it('overlay pointerdown calls initSync() and starts BGM_0 when not initialized', () => {
     const sceneManager = createMockSceneManager();
     const saveManager = createMockSaveManager();
-    const audioManager = createMockAudioManager();
+    const audioManager = createMockAudioManager(false);
 
     const scene = new TitleScene(sceneManager, saveManager, audioManager);
     scene.enter({});
 
+    // enter() 直後は AudioContext 未初期化なので playBGM はまだ呼ばれない
+    expect(audioManager.playBGM).not.toHaveBeenCalled();
+
     const uiOverlay = document.getElementById('ui-overlay')!;
-    // The overlay div created by TitleScene is the first child of ui-overlay
     const titleOverlay = uiOverlay.firstElementChild as HTMLDivElement;
     expect(titleOverlay).toBeTruthy();
 
-    // Simulate pointerdown on the overlay (not on the button)
     const event = new Event('pointerdown', { bubbles: true });
     titleOverlay.dispatchEvent(event);
 
     expect(audioManager.initSync).toHaveBeenCalled();
-    expect(audioManager.playBGM).not.toHaveBeenCalled();
+    // 初回 pointerdown 後に BGM_0 が 1 回再生される
+    expect(audioManager.playBGM).toHaveBeenCalledTimes(1);
+    expect(audioManager.playBGM).toHaveBeenCalledWith(0);
 
     scene.exit();
   });
 
-  it('"あそぶ" button calls initSync() and playBGM()', () => {
+  it('enter() immediately starts BGM_0 when AudioManager already initialized', () => {
     const sceneManager = createMockSceneManager();
     const saveManager = createMockSaveManager();
-    const audioManager = createMockAudioManager();
+    const audioManager = createMockAudioManager(true);
 
     const scene = new TitleScene(sceneManager, saveManager, audioManager);
     scene.enter({});
 
+    expect(audioManager.playBGM).toHaveBeenCalledTimes(1);
+    expect(audioManager.playBGM).toHaveBeenCalledWith(0);
+
+    scene.exit();
+  });
+
+  it('exit() calls stopBGM() exactly once', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager(true);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager);
+    scene.enter({});
+    expect(audioManager.stopBGM).not.toHaveBeenCalled();
+
+    scene.exit();
+    expect(audioManager.stopBGM).toHaveBeenCalledTimes(1);
+  });
+
+  it('"あそぶ" button calls initSync() but does NOT call playBGM (avoids double-trigger)', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager();
+    // 初期化済み状態にして enter() 直後の playBGM(0) を 1 回として記録
+    const audioManager = createMockAudioManager(true);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager);
+    scene.enter({});
+
+    expect(audioManager.playBGM).toHaveBeenCalledTimes(1);
+
     const uiOverlay = document.getElementById('ui-overlay')!;
-    // Find the "あそぶ" button
     const buttons = uiOverlay.querySelectorAll('button');
     const playButton = Array.from(buttons).find(b => b.textContent === 'あそぶ');
     expect(playButton).toBeTruthy();
@@ -94,7 +128,12 @@ describe('TitleScene (T009)', () => {
     playButton!.dispatchEvent(event);
 
     expect(audioManager.initSync).toHaveBeenCalled();
-    expect(audioManager.playBGM).toHaveBeenCalledWith(0);
+    // ボタン押下では追加 playBGM は呼ばれない（StageScene 側が呼ぶため）
+    expect(audioManager.playBGM).toHaveBeenCalledTimes(1);
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith(
+      'stage',
+      expect.objectContaining({ stageNumber: expect.any(Number) }),
+    );
 
     scene.exit();
   });
