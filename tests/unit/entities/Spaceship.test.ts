@@ -321,4 +321,54 @@ describe('Spaceship', () => {
       expect(ship.mesh.parent).toBeNull();
     });
   });
+
+  describe('bank rotation write skipping (perf)', () => {
+    it('skips mesh.rotation writes once bankAngle has settled to rest', () => {
+      const ship = new Spaceship();
+      // Drive a few level frames to ensure normalized + at-rest state.
+      for (let i = 0; i < 10; i++) ship.update(1 / 60);
+      expect(ship.mesh.rotation.z).toBe(0);
+      expect(ship.mesh.rotation.y).toBe(0);
+
+      // Spy on the Euler change callback. three.js Euler invokes
+      // _onChangeCallback whenever any of its setters fire; the optimization
+      // we are validating is that idle straight-flight frames do NOT trigger it.
+      const rotChange = vi.fn();
+      ship.mesh.rotation['_onChange'](rotChange);
+
+      for (let i = 0; i < 30; i++) ship.update(1 / 60);
+
+      expect(rotChange).not.toHaveBeenCalled();
+      expect(ship.mesh.rotation.z).toBe(0);
+      expect(ship.mesh.rotation.y).toBe(0);
+    });
+
+    it('still applies bank rotation while lateral input is active', () => {
+      const ship = new Spaceship();
+      // Settle first.
+      for (let i = 0; i < 10; i++) ship.update(1 / 60);
+
+      ship.moveRight(1 / 60);
+      ship.update(1 / 60);
+      expect(ship.mesh.rotation.z).toBeGreaterThan(0);
+      expect(ship.mesh.rotation.y).toBeGreaterThan(0);
+
+      ship.moveLeft(1 / 60);
+      ship.update(1 / 60);
+      // Bank target flipped negative; rotation should follow toward negative.
+      ship.moveLeft(1 / 60);
+      ship.update(1 / 60);
+      expect(ship.mesh.rotation.z).toBeLessThan(0);
+    });
+
+    it('reset re-enables rotation writes for subsequent input', () => {
+      const ship = new Spaceship();
+      for (let i = 0; i < 20; i++) ship.update(1 / 60);
+      ship.reset();
+
+      ship.moveRight(1 / 60);
+      ship.update(1 / 60);
+      expect(ship.mesh.rotation.z).toBeGreaterThan(0);
+    });
+  });
 });
