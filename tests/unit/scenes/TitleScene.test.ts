@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import * as THREE from 'three';
 import { TitleScene } from '../../../src/game/scenes/TitleScene';
 import type { SceneManager } from '../../../src/game/SceneManager';
 import type { SaveManager } from '../../../src/game/storage/SaveManager';
@@ -94,6 +95,73 @@ describe('TitleScene (T009)', () => {
 
     expect(audioManager.initSync).toHaveBeenCalled();
     expect(audioManager.playBGM).toHaveBeenCalledWith(0);
+
+    scene.exit();
+  });
+
+  it('reuses the same THREE.Scene instance across enter/exit cycles', () => {
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager(),
+      createMockAudioManager(),
+    );
+
+    scene.enter({});
+    const firstScene = scene.getThreeScene();
+    scene.exit();
+
+    scene.enter({});
+    const secondScene = scene.getThreeScene();
+
+    expect(secondScene).toBe(firstScene);
+
+    scene.exit();
+  });
+
+  it('does not duplicate AmbientLight on re-entry', () => {
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager(),
+      createMockAudioManager(),
+    );
+
+    scene.enter({});
+    scene.exit();
+    scene.enter({});
+
+    const threeScene = scene.getThreeScene();
+    const ambientLights = threeScene.children.filter(
+      (c) => c instanceof THREE.AmbientLight,
+    ) as THREE.AmbientLight[];
+
+    expect(ambientLights.length).toBe(1);
+
+    scene.exit();
+    scene.enter({});
+
+    const ambientLights2 = scene
+      .getThreeScene()
+      .children.filter((c) => c instanceof THREE.AmbientLight) as THREE.AmbientLight[];
+    expect(ambientLights2.length).toBe(1);
+    expect(ambientLights2[0]).toBe(ambientLights[0]);
+
+    scene.exit();
+  });
+
+  it('still contains the background star Points after re-entry', () => {
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager(),
+      createMockAudioManager(),
+    );
+
+    scene.enter({});
+    scene.exit();
+    scene.enter({});
+
+    const threeScene = scene.getThreeScene();
+    const points = threeScene.children.filter((c) => c instanceof THREE.Points);
+    expect(points.length).toBeGreaterThanOrEqual(1);
 
     scene.exit();
   });
