@@ -310,4 +310,69 @@ describe('AirShield', () => {
       shield.dispose();
     });
   });
+
+  describe('visibility skip when fully faded (fillrate optimization)', () => {
+    it('INVINCIBLE with opacityScale=0 hides mesh after update to skip additive draw', () => {
+      const shield = new AirShield();
+      shield.setShieldMode('INVINCIBLE', 0);
+      shield.update(0.016);
+      expect(shield.getMesh().visible).toBe(false);
+      shield.dispose();
+    });
+
+    it('INVINCIBLE with opacityScale=1 keeps mesh visible after update', () => {
+      const shield = new AirShield();
+      shield.setShieldMode('INVINCIBLE', 1);
+      shield.update(0.016);
+      expect(shield.getMesh().visible).toBe(true);
+      shield.dispose();
+    });
+
+    it("setShieldMode('OFF') leaves mesh hidden immediately (no update needed)", () => {
+      const shield = new AirShield();
+      shield.setShieldMode('INVINCIBLE', 1);
+      shield.setShieldMode('OFF');
+      expect(shield.getMesh().visible).toBe(false);
+      shield.dispose();
+    });
+
+    it('BOOST mode keeps mesh visible across update (opacity well above threshold)', () => {
+      const shield = new AirShield();
+      shield.setShieldMode('BOOST');
+      for (let i = 0; i < 30; i++) {
+        shield.update(1 / 60);
+        expect(shield.getMesh().visible).toBe(true);
+      }
+      shield.dispose();
+    });
+
+    it('INVINCIBLE re-shows mesh when opacityScale ramps back above threshold', () => {
+      const shield = new AirShield();
+      shield.setShieldMode('INVINCIBLE', 0);
+      shield.update(0.016);
+      expect(shield.getMesh().visible).toBe(false);
+      // Caller updates opacityScale back above threshold; same mode so only
+      // the scale is updated. update() should re-enable visibility.
+      shield.setShieldMode('INVINCIBLE', 1);
+      shield.update(0.016);
+      expect(shield.getMesh().visible).toBe(true);
+      shield.dispose();
+    });
+
+    it('setShieldMode(BOOST) sets a non-zero initial opacity so first frame is visible', () => {
+      const shield = new AirShield();
+      shield.setShieldMode('BOOST');
+      const mat = shield.getMesh().material as THREE.MeshBasicMaterial;
+      expect(mat.opacity).toBeGreaterThan(0.001);
+      expect(shield.getMesh().visible).toBe(true);
+    });
+
+    it('setShieldMode(INVINCIBLE, 1) sets a non-zero initial opacity so first frame is visible', () => {
+      const shield = new AirShield();
+      shield.setShieldMode('INVINCIBLE', 1);
+      const mat = shield.getMesh().material as THREE.MeshBasicMaterial;
+      expect(mat.opacity).toBeGreaterThan(0.001);
+      expect(shield.getMesh().visible).toBe(true);
+    });
+  });
 });
