@@ -330,7 +330,7 @@ export class StageScene implements Scene {
 
     // HUD
     const stageName = `ステージ${this.stageConfig.stageNumber}: ${this.stageConfig.emoji} ${this.stageConfig.displayName}`;
-    this.hud.show(stageName);
+    this.hud.show(stageName, this.stageConfig.planetColor);
     this.hud.setBoostCallback(() => {
       this.inputSystem.setBoostPressed(true);
     });
@@ -744,6 +744,7 @@ export class StageScene implements Scene {
 
     // Check stage clear
     const progress = this.spaceship.getProgress(this.stageConfig.stageLength);
+    this.hud.updateStageProgress(progress);
     if (progress >= 1) {
       this.onStageClear();
     }
