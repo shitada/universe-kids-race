@@ -11,6 +11,9 @@ export class HUD {
   private muteHandle: MuteButtonHandle | null = null;
   private cooldownContainer: HTMLDivElement | null = null;
   private cooldownBar: HTMLDivElement | null = null;
+  private stageProgressContainer: HTMLDivElement | null = null;
+  private stageProgressFill: HTMLDivElement | null = null;
+  private stageProgressGoalEl: HTMLDivElement | null = null;
   private onBoostCallback: (() => void) | null = null;
   private onBoostDeniedCallback: (() => void) | null = null;
   private onHomeCallback: (() => void) | null = null;
@@ -23,12 +26,16 @@ export class HUD {
   // be invalidated explicitly.
   private lastCooldownPct = -1;
   private lastReadyState: boolean | null = null;
+  // Differential write cache for updateStageProgress (same pattern as
+  // updateCooldown). -1 sentinel guarantees the first valid call writes.
+  private lastStageProgressPct = -1;
+  private lastStageProgressComplete: boolean | null = null;
   // Differential write caches for update(score, starCount) to avoid
   // redundant textContent writes (which can trigger layout/paint on iPad Safari).
   private lastScore = -1;
   private lastStarCount = -1;
 
-  show(stageName?: string): void {
+  show(stageName?: string, planetColor?: number): void {
     const hudRoot = document.getElementById('hud');
     if (!hudRoot) return;
 
@@ -90,6 +97,9 @@ export class HUD {
       hudRoot.appendChild(this.stageNameEl);
     }
 
+    // Stage progress bar (🚀 ─── 🪐) under the stage name.
+    this.createStageProgress(hudRoot, planetColor);
+
     this.container = document.createElement('div');
     this.container.style.cssText = `
       display: flex;
@@ -125,6 +135,75 @@ export class HUD {
     // Mute toggle button on HUD root (top-right) — created after stage name
     // and other elements so existing children indices remain stable.
     this.createMuteButton();
+  }
+
+  private createStageProgress(hudRoot: HTMLElement, planetColor?: number): void {
+    const colorHex = this.toCssColor(planetColor ?? 0xffd700);
+
+    const wrapper = document.createElement('div');
+    wrapper.setAttribute('data-stage-progress-container', '');
+    wrapper.setAttribute('role', 'progressbar');
+    wrapper.setAttribute('aria-label', 'ゴールまでの すすみ');
+    wrapper.setAttribute('aria-valuemin', '0');
+    wrapper.setAttribute('aria-valuemax', '100');
+    wrapper.setAttribute('aria-valuenow', '0');
+    wrapper.style.position = 'relative';
+    wrapper.style.display = 'flex';
+    wrapper.style.alignItems = 'center';
+    wrapper.style.justifyContent = 'center';
+    wrapper.style.gap = '0.4rem';
+    wrapper.style.margin = '0 auto 0.4rem';
+    wrapper.style.width = 'clamp(160px, 32vmin, 280px)';
+    wrapper.style.pointerEvents = 'none';
+    wrapper.style.fontFamily = "'Zen Maru Gothic', sans-serif";
+
+    const shipIcon = document.createElement('div');
+    shipIcon.setAttribute('data-stage-progress-ship', '');
+    shipIcon.textContent = '🚀';
+    shipIcon.style.fontSize = 'clamp(0.9rem, 2.4vmin, 1.1rem)';
+    shipIcon.style.lineHeight = '1';
+    shipIcon.style.pointerEvents = 'none';
+
+    const track = document.createElement('div');
+    track.setAttribute('data-stage-progress-track', '');
+    track.style.flex = '1';
+    track.style.height = '14px';
+    track.style.background = 'rgba(255, 255, 255, 0.18)';
+    track.style.borderRadius = '7px';
+    track.style.overflow = 'hidden';
+    track.style.boxShadow = 'inset 0 2px 6px rgba(0, 0, 0, 0.35)';
+
+    const fill = document.createElement('div');
+    fill.setAttribute('data-stage-progress-fill', '');
+    fill.style.height = '100%';
+    fill.style.width = '0%';
+    fill.style.borderRadius = '7px';
+    fill.style.background = `linear-gradient(90deg, #00ddff, ${colorHex})`;
+    fill.style.transition = 'width 0.15s linear';
+    fill.setAttribute('data-stage-progress-color', colorHex);
+    track.appendChild(fill);
+
+    const goalIcon = document.createElement('div');
+    goalIcon.setAttribute('data-stage-progress-goal', '');
+    goalIcon.textContent = '🪐';
+    goalIcon.style.fontSize = 'clamp(0.9rem, 2.4vmin, 1.1rem)';
+    goalIcon.style.lineHeight = '1';
+    goalIcon.style.pointerEvents = 'none';
+    goalIcon.style.textShadow = `0 0 8px ${colorHex}`;
+
+    wrapper.appendChild(shipIcon);
+    wrapper.appendChild(track);
+    wrapper.appendChild(goalIcon);
+    hudRoot.appendChild(wrapper);
+
+    this.stageProgressContainer = wrapper;
+    this.stageProgressFill = fill;
+    this.stageProgressGoalEl = goalIcon;
+  }
+
+  private toCssColor(hex: number): string {
+    const clamped = Math.max(0, Math.min(0xffffff, Math.floor(hex)));
+    return `#${clamped.toString(16).padStart(6, '0')}`;
   }
 
   private createMuteButton(): void {
@@ -251,6 +330,15 @@ export class HUD {
       button[data-boost-ready-flash] {
         animation: boostBtnReadyFlash 0.45s ease-out 1 !important;
       }
+      @keyframes stageGoalFlash {
+        0%   { transform: scale(1.0); }
+        40%  { transform: scale(1.35); }
+        100% { transform: scale(1.0); }
+      }
+      span[data-stage-goal-flash], div[data-stage-goal-flash] {
+        animation: stageGoalFlash 0.45s ease-out 1;
+        display: inline-block;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -331,6 +419,55 @@ export class HUD {
   }
 
   /**
+   * Update the stage progress bar (🚀 ─── 🪐). Uses the same differential
+   * write pattern as updateCooldown so per-frame DOM writes are skipped
+   * when the integer percentage hasn't changed.
+   */
+  updateStageProgress(progress: number): void {
+    if (!this.stageProgressContainer || !this.stageProgressFill) return;
+
+    const clamped = Math.max(0, Math.min(1, progress));
+    const pct = Math.round(clamped * 100);
+
+    if (pct !== this.lastStageProgressPct) {
+      this.stageProgressFill.style.width = `${pct}%`;
+      this.stageProgressContainer.setAttribute('aria-valuenow', String(pct));
+      this.lastStageProgressPct = pct;
+    }
+
+    const complete = clamped >= 1.0;
+    if (complete !== this.lastStageProgressComplete) {
+      if (complete) {
+        this.stageProgressContainer.setAttribute('data-stage-progress-complete', '');
+        this.flashStageGoal();
+      } else {
+        this.stageProgressContainer.removeAttribute('data-stage-progress-complete');
+      }
+      this.lastStageProgressComplete = complete;
+    }
+  }
+
+  private flashStageGoal(): void {
+    const goal = this.stageProgressGoalEl;
+    if (!goal) return;
+    if (goal.hasAttribute('data-stage-goal-flash')) return;
+    goal.setAttribute('data-stage-goal-flash', '');
+    let cleared = false;
+    const cleanup = (): void => {
+      if (cleared) return;
+      cleared = true;
+      goal.removeAttribute('data-stage-goal-flash');
+      goal.removeEventListener('animationend', onEnd);
+    };
+    const onEnd = (ev: AnimationEvent): void => {
+      if (ev.animationName !== 'stageGoalFlash') return;
+      cleanup();
+    };
+    goal.addEventListener('animationend', onEnd);
+    setTimeout(cleanup, 500);
+  }
+
+  /**
    * Trigger a one-shot scale pulse on the boost button to visually signal
    * "boost is ready again". Safe to call multiple times: re-entrant calls
    * while the flash is in progress are ignored (no re-trigger).
@@ -387,6 +524,12 @@ export class HUD {
       this.stageNameEl.remove();
       this.stageNameEl = null;
     }
+    if (this.stageProgressContainer) {
+      this.stageProgressContainer.remove();
+      this.stageProgressContainer = null;
+    }
+    this.stageProgressFill = null;
+    this.stageProgressGoalEl = null;
     if (this.container) {
       this.container.remove();
       this.container = null;
@@ -403,6 +546,8 @@ export class HUD {
     this.lastCooldownProgress = 1.0;
     this.lastCooldownPct = -1;
     this.lastReadyState = null;
+    this.lastStageProgressPct = -1;
+    this.lastStageProgressComplete = null;
     this.lastScore = -1;
     this.lastStarCount = -1;
     this.scoreEl = null;
