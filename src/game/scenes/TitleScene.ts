@@ -7,6 +7,7 @@ import { TutorialOverlay } from '../../ui/TutorialOverlay';
 import { EncyclopediaOverlay } from '../../ui/EncyclopediaOverlay';
 import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButton';
 import { TOTAL_STAGES } from '../config/StageConfig';
+import { getViewportSize } from '../utils/getViewportSize';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // SHARED background-star resources for TitleScene
@@ -95,9 +96,10 @@ export class TitleScene implements Scene {
     this.audioManager = audioManager;
     this.threeScene = new THREE.Scene();
     this.threeScene.background = new THREE.Color(0x000020);
+    const { width: vw, height: vh } = getViewportSize();
     this.camera = new THREE.PerspectiveCamera(
       60,
-      window.innerWidth / window.innerHeight,
+      vw / vh,
       0.1,
       1000,
     );
@@ -320,7 +322,8 @@ export class TitleScene implements Scene {
   }
 
   getCamera(): THREE.Camera {
-    const aspect = window.innerWidth / window.innerHeight;
+    const { width, height } = getViewportSize();
+    const aspect = width / height;
     if (aspect !== this.lastAspect && Number.isFinite(aspect) && aspect > 0) {
       this.camera.aspect = aspect;
       this.camera.updateProjectionMatrix();

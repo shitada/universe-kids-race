@@ -22,6 +22,7 @@ import { CompanionManager } from '../entities/CompanionManager';
 import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
 import { disposeObject3D } from '../utils/disposeObject3D';
 import { followCameraZ } from '../utils/followCameraZ';
+import { getViewportSize } from '../utils/getViewportSize';
 
 const BG_STAR_PARALLAX = 1.0;
 
@@ -280,9 +281,10 @@ export class StageScene implements Scene {
     this.audioManager = audioManager;
     this.saveManager = saveManager;
     this.threeScene = new THREE.Scene();
+    const { width: vw, height: vh } = getViewportSize();
     this.camera = new THREE.PerspectiveCamera(
       60,
-      window.innerWidth / window.innerHeight,
+      vw / vh,
       0.1,
       2000,
     );
@@ -1064,7 +1066,8 @@ export class StageScene implements Scene {
   }
 
   getCamera(): THREE.Camera {
-    const aspect = window.innerWidth / window.innerHeight;
+    const { width, height } = getViewportSize();
+    const aspect = width / height;
     if (aspect !== this.lastAspect && Number.isFinite(aspect) && aspect > 0) {
       this.camera.aspect = aspect;
       this.camera.updateProjectionMatrix();
