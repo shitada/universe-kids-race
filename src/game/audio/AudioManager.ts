@@ -445,6 +445,16 @@ export class AudioManager {
         return;
       }
 
+      // While muted, skip creating short-lived voices (arpeggio/melody).
+      // Persistent layers (bass/pad) are already silenced via masterGain=0,
+      // and we keep the tick cadence so unmute resumes within one beat.
+      // Same approach as playSFX muted skip optimization.
+      if (this.muted) {
+        beat = (beat + 1) % totalBeats;
+        this.bgmTimer = setTimeout(tick, beatInterval * 1000);
+        return;
+      }
+
       const chordIndex = Math.floor(beat / config.beatsPerChord) % config.chords.length;
       const beatInChord = beat % config.beatsPerChord;
 
