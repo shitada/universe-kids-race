@@ -1,6 +1,22 @@
 import * as THREE from 'three';
 import type { SpeedState } from '../../types';
-import { disposeObject3D } from '../utils/disposeObject3D';
+
+// Shared resources for Spaceship instances. StageScene re-creates a Spaceship
+// on every stage transition / retry; without sharing, each lifecycle would
+// allocate three GPU buffers and three materials and free them again, which
+// adds up over a Solar Stages session (10 stages + clear sequence) on iPad
+// Safari. Mirrors the established pattern in Star.ts / Meteorite.ts /
+// CompanionManager.ts.
+//
+// Do NOT mutate these; do NOT dispose them from Spaceship.dispose() (the
+// generic disposeObject3D path is intentionally bypassed). They live for the
+// process lifetime.
+const SHARED_BODY_GEOM = new THREE.CylinderGeometry(0.4, 0.6, 2, 8);
+const SHARED_NOSE_GEOM = new THREE.ConeGeometry(0.4, 0.8, 8);
+const SHARED_WING_GEOM = new THREE.BoxGeometry(2.4, 0.1, 0.8);
+const SHARED_BODY_MATERIAL = new THREE.MeshToonMaterial({ color: 0x4488ff });
+const SHARED_NOSE_MATERIAL = new THREE.MeshToonMaterial({ color: 0xff6644 });
+const SHARED_WING_MATERIAL = new THREE.MeshToonMaterial({ color: 0x44aaff });
 
 const BASE_SPEED = 50;
 const LATERAL_SPEED = 15;
@@ -37,24 +53,18 @@ export class Spaceship {
     const group = new THREE.Group();
 
     // Body: cylinder
-    const bodyGeo = new THREE.CylinderGeometry(0.4, 0.6, 2, 8);
-    const bodyMat = new THREE.MeshToonMaterial({ color: 0x4488ff });
-    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    const body = new THREE.Mesh(SHARED_BODY_GEOM, SHARED_BODY_MATERIAL);
     body.rotation.x = Math.PI / 2;
     group.add(body);
 
     // Nose: cone
-    const noseGeo = new THREE.ConeGeometry(0.4, 0.8, 8);
-    const noseMat = new THREE.MeshToonMaterial({ color: 0xff6644 });
-    const nose = new THREE.Mesh(noseGeo, noseMat);
+    const nose = new THREE.Mesh(SHARED_NOSE_GEOM, SHARED_NOSE_MATERIAL);
     nose.rotation.x = Math.PI / 2;
     nose.position.z = -1.4;
     group.add(nose);
 
     // Wings
-    const wingGeo = new THREE.BoxGeometry(2.4, 0.1, 0.8);
-    const wingMat = new THREE.MeshToonMaterial({ color: 0x44aaff });
-    const wings = new THREE.Mesh(wingGeo, wingMat);
+    const wings = new THREE.Mesh(SHARED_WING_GEOM, SHARED_WING_MATERIAL);
     wings.position.z = 0.2;
     group.add(wings);
 
@@ -190,6 +200,7 @@ export class Spaceship {
   }
 
   dispose(): void {
-    disposeObject3D(this.mesh);
+    // Shared geometry/material are NOT disposed here; only detach from parent.
+    this.mesh.parent?.remove(this.mesh);
   }
 }

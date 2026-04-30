@@ -297,7 +297,7 @@ describe('Spaceship', () => {
   });
 
   describe('dispose', () => {
-    it('disposes all child mesh geometry and materials recursively', () => {
+    it('detaches the mesh from its parent without disposing shared geometry/material', () => {
       const ship = new Spaceship();
       const geoSpies: ReturnType<typeof vi.spyOn>[] = [];
       const matSpies: ReturnType<typeof vi.spyOn>[] = [];
@@ -309,10 +309,16 @@ describe('Spaceship', () => {
       });
       expect(geoSpies.length).toBeGreaterThan(0);
 
+      const parent = new THREE.Group();
+      parent.add(ship.mesh);
+
       ship.dispose();
 
-      for (const s of geoSpies) expect(s).toHaveBeenCalledTimes(1);
-      for (const s of matSpies) expect(s).toHaveBeenCalledTimes(1);
+      // Shared geometry/material are owned at module scope and must outlive
+      // any single Spaceship instance (see Spaceship.ts SHARED_* declarations).
+      for (const s of geoSpies) expect(s).not.toHaveBeenCalled();
+      for (const s of matSpies) expect(s).not.toHaveBeenCalled();
+      expect(ship.mesh.parent).toBeNull();
     });
   });
 });
