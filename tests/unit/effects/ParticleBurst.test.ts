@@ -150,11 +150,9 @@ describe('ParticleBurstManager', () => {
     burst.reset(scene, 0, 0, 0, 0xffdd00, 20, false);
     const points = scene.children[0] as THREE.Points;
     const positionAttr = points.geometry.getAttribute('position') as THREE.BufferAttribute;
-    const sizeAttr = points.geometry.getAttribute('size') as THREE.BufferAttribute;
 
     // Snapshot the upload version after the initial reset (which marks dirty).
     const positionVersionBefore = positionAttr.version;
-    const sizeVersionBefore = sizeAttr.version;
 
     // Step past the lifetime in a single frame; expired path must not bump
     // the version (otherwise WebGL would re-upload a buffer that is about
@@ -162,10 +160,12 @@ describe('ParticleBurstManager', () => {
     const expired = burst.update(1.0);
     expect(expired).toBe(true);
     expect(positionAttr.version).toBe(positionVersionBefore);
-    expect(sizeAttr.version).toBe(sizeVersionBefore);
     expect(burst.isActive()).toBe(false);
     expect(points.visible).toBe(false);
     expect(points.geometry.drawRange.count).toBe(0);
+    // The unused per-vertex `size` attribute must not exist on the geometry:
+    // PointsMaterial's built-in shader does not consume it.
+    expect(points.geometry.getAttribute('size')).toBeUndefined();
   });
 
   it('manager.update detaches expired bursts immediately so cleanup becomes redundant', () => {
@@ -265,11 +265,11 @@ describe('ParticleBurst rendering invariants', () => {
     const points = scene.children[0] as THREE.Points;
     const positionAttr = points.geometry.getAttribute('position') as THREE.BufferAttribute;
     const colorAttr = points.geometry.getAttribute('color') as THREE.BufferAttribute;
-    const sizeAttr = points.geometry.getAttribute('size') as THREE.BufferAttribute;
 
     expect(positionAttr.updateRanges).toEqual([{ start: 0, count: 20 * 3 }]);
     expect(colorAttr.updateRanges).toEqual([{ start: 0, count: 20 * 3 }]);
-    expect(sizeAttr.updateRanges).toEqual([{ start: 0, count: 20 }]);
+    // No per-vertex size attribute is registered on the geometry.
+    expect(points.geometry.getAttribute('size')).toBeUndefined();
   });
 
   it('reset narrows attribute update ranges to the live particle slice (RAINBOW=50)', () => {
@@ -278,28 +278,78 @@ describe('ParticleBurst rendering invariants', () => {
     const points = scene.children[0] as THREE.Points;
     const positionAttr = points.geometry.getAttribute('position') as THREE.BufferAttribute;
     const colorAttr = points.geometry.getAttribute('color') as THREE.BufferAttribute;
-    const sizeAttr = points.geometry.getAttribute('size') as THREE.BufferAttribute;
 
     expect(positionAttr.updateRanges).toEqual([{ start: 0, count: 50 * 3 }]);
     expect(colorAttr.updateRanges).toEqual([{ start: 0, count: 50 * 3 }]);
-    expect(sizeAttr.updateRanges).toEqual([{ start: 0, count: 50 }]);
+    expect(points.geometry.getAttribute('size')).toBeUndefined();
   });
 
-  it('update narrows per-frame GPU upload to position*3 / size of count', () => {
+  it('update narrows per-frame GPU upload to position*3 of count and shrinks material.size linearly', () => {
     const burst = new ParticleBurst();
     burst.reset(scene, 0, 0, 0, 0xffdd00, 20, false);
     const points = scene.children[0] as THREE.Points;
     const positionAttr = points.geometry.getAttribute('position') as THREE.BufferAttribute;
-    const sizeAttr = points.geometry.getAttribute('size') as THREE.BufferAttribute;
+    const material = points.material as THREE.PointsMaterial;
+    const initialSize = material.size;
 
     // Step several non-expire frames; updateRanges must remain a single
-    // [0, count*stride] entry — never grow unbounded.
+    // [0, count*stride] entry — never grow unbounded — and material.size
+    // must track `initialSize * remaining` (no per-vertex size attribute).
+    let elapsed = 0;
+    const maxLifetime = 0.5;
     for (let i = 0; i < 5; i++) {
-      const expired = burst.update(0.05);
+      const dt = 0.05;
+      elapsed += dt;
+      const expired = burst.update(dt);
       expect(expired).toBe(false);
       expect(positionAttr.updateRanges).toEqual([{ start: 0, count: 20 * 3 }]);
-      expect(sizeAttr.updateRanges).toEqual([{ start: 0, count: 20 }]);
+      const expectedRemaining = 1 - elapsed / maxLifetime;
+      expect(material.size).toBeCloseTo(initialSize * expectedRemaining, 6);
     }
+    expect(points.geometry.getAttribute('size')).toBeUndefined();
+  });
+
+  it('velocityScale damps positions by ~0.95^N each frame (dt-independent factor)', () => {
+    const burst = new ParticleBurst();
+    burst.reset(scene, 0, 0, 0, 0xffdd00, 20, false);
+    const points = scene.children[0] as THREE.Points;
+    const positionAttr = points.geometry.getAttribute('position') as THREE.BufferAttribute;
+
+    // Take a velocity sample from the buffer (non-zero by construction:
+    // each particle gets a random direction with speed >= speedMin > 0).
+    const velocityAttr = (points.geometry.getAttribute('position') as THREE.BufferAttribute);
+    void velocityAttr;
+
+    // Snapshot starting positions, run N identical frames, and verify the
+    // accumulated displacement matches sum_{k=0..N-1} 0.95^k * v0 * dt.
+    const startX = positionAttr.getX(0);
+    const startY = positionAttr.getY(0);
+    const startZ = positionAttr.getZ(0);
+    const dt = 0.01;
+    const frames = 4;
+    burst.update(dt);
+    burst.update(dt);
+    burst.update(dt);
+    burst.update(dt);
+    const dx = positionAttr.getX(0) - startX;
+    const dy = positionAttr.getY(0) - startY;
+    const dz = positionAttr.getZ(0) - startZ;
+
+    // Geometric series factor = 1 + 0.95 + 0.95^2 + 0.95^3 (since velocityScale
+    // starts at 1 and is multiplied by 0.95 *after* each frame's position step).
+    let factor = 0;
+    let scale = 1;
+    for (let i = 0; i < frames; i++) {
+      factor += scale;
+      scale *= 0.95;
+    }
+    // The displacement magnitude must equal |v0| * factor * dt within FP tolerance.
+    const dispMag = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    // Recover |v0| from displacement / (factor*dt) and verify in [speedMin, speedMax]
+    // for the NORMAL (non-rainbow) preset (speedMin=5, speedMax=10).
+    const recoveredSpeed = dispMag / (factor * dt);
+    expect(recoveredSpeed).toBeGreaterThanOrEqual(5 - 1e-6);
+    expect(recoveredSpeed).toBeLessThanOrEqual(10 + 1e-6);
   });
 
   it('update on the expire frame leaves updateRanges untouched (no extra push)', () => {
@@ -307,15 +357,12 @@ describe('ParticleBurst rendering invariants', () => {
     burst.reset(scene, 0, 0, 0, 0xffdd00, 20, false);
     const points = scene.children[0] as THREE.Points;
     const positionAttr = points.geometry.getAttribute('position') as THREE.BufferAttribute;
-    const sizeAttr = points.geometry.getAttribute('size') as THREE.BufferAttribute;
 
     const positionRangesBefore = positionAttr.updateRanges.slice();
-    const sizeRangesBefore = sizeAttr.updateRanges.slice();
 
     const expired = burst.update(1.0);
     expect(expired).toBe(true);
     expect(positionAttr.updateRanges).toEqual(positionRangesBefore);
-    expect(sizeAttr.updateRanges).toEqual(sizeRangesBefore);
   });
 });
 
