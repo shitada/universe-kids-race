@@ -13,14 +13,13 @@ import { createResizeCoalescer } from './game/utils/ResizeCoalescer';
 import { createSceneTransitionHandler } from './game/utils/createSceneTransitionHandler';
 import { createWebGLContextLossHandler } from './game/utils/createWebGLContextLossHandler';
 import { createWebGLContextRestoredHandler } from './game/utils/createWebGLContextRestoredHandler';
+import { createRenderer } from './game/utils/createRenderer';
 import { getViewportSize, subscribeViewportResize } from './game/utils/getViewportSize';
 import { ContextLossOverlay } from './ui/ContextLossOverlay';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 
-// iPad Safari 高 DPR 端末では MSAA を切る（Constitution IV: 60fps 維持）
-const useMSAA = (window.devicePixelRatio ?? 1) < 2;
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: useMSAA });
+const renderer = createRenderer(canvas);
 const maxPixelRatio = Math.min(window.devicePixelRatio, 2);
 const PIXEL_RATIO_TIERS = [1.0, 1.5, maxPixelRatio];
 const MAX_TIER = PIXEL_RATIO_TIERS.length - 1;
