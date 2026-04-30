@@ -96,6 +96,59 @@ describe('HUD', () => {
       const homeBtn = hudRoot.querySelector('button');
       expect(homeBtn).toBeNull();
     });
+
+    describe('press visual feedback', () => {
+      const getHomeBtn = (): HTMLButtonElement =>
+        document.getElementById('hud')!.querySelector('button') as HTMLButtonElement;
+
+      it('initialises home button transform to scale(1) with transform transition', () => {
+        hud.show('🌙 つきを めざせ！');
+        const btn = getHomeBtn();
+        expect(btn.style.transform).toBe('scale(1)');
+        expect(btn.style.transition).toContain('transform');
+      });
+
+      it('shrinks home button to scale(0.9) on pointerdown', () => {
+        hud.show('🌙 つきを めざせ！');
+        const btn = getHomeBtn();
+        btn.dispatchEvent(new Event('pointerdown'));
+        expect(btn.style.transform).toBe('scale(0.9)');
+      });
+
+      it('restores home button to scale(1) on pointerup', () => {
+        hud.show('🌙 つきを めざせ！');
+        const btn = getHomeBtn();
+        btn.dispatchEvent(new Event('pointerdown'));
+        btn.dispatchEvent(new Event('pointerup'));
+        expect(btn.style.transform).toBe('scale(1)');
+      });
+
+      it('restores home button to scale(1) on pointercancel', () => {
+        hud.show('🌙 つきを めざせ！');
+        const btn = getHomeBtn();
+        btn.dispatchEvent(new Event('pointerdown'));
+        btn.dispatchEvent(new Event('pointercancel'));
+        expect(btn.style.transform).toBe('scale(1)');
+      });
+
+      it('restores home button to scale(1) on pointerleave', () => {
+        hud.show('🌙 つきを めざせ！');
+        const btn = getHomeBtn();
+        btn.dispatchEvent(new Event('pointerdown'));
+        btn.dispatchEvent(new Event('pointerleave'));
+        expect(btn.style.transform).toBe('scale(1)');
+      });
+
+      it('still fires home callback on pointerdown when applying press feedback', () => {
+        hud.show('🌙 つきを めざせ！');
+        let called = 0;
+        hud.setHomeCallback(() => { called++; });
+        const btn = getHomeBtn();
+        btn.dispatchEvent(new Event('pointerdown'));
+        expect(called).toBe(1);
+        expect(btn.style.transform).toBe('scale(0.9)');
+      });
+    });
   });
 
   describe('Cooldown Indicator (US5)', () => {

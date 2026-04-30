@@ -44,12 +44,22 @@ export function createMuteButton(opts: MuteButtonOptions): MuteButtonHandle {
   button.style.cursor = 'pointer';
   button.style.pointerEvents = 'auto';
   button.style.touchAction = 'manipulation';
+  button.style.transform = 'scale(1)';
+  button.style.transition = 'transform 0.08s ease-out';
   applyState();
+
+  const releasePress = (): void => {
+    button.style.transform = 'scale(1)';
+  };
 
   button.addEventListener('pointerdown', (e) => {
     e.stopPropagation();
+    button.style.transform = 'scale(0.9)';
     opts.onToggle();
   });
+  button.addEventListener('pointerup', releasePress);
+  button.addEventListener('pointercancel', releasePress);
+  button.addEventListener('pointerleave', releasePress);
 
   opts.container.appendChild(button);
 
