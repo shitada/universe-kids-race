@@ -264,6 +264,25 @@ export class SpawnSystem {
     this.meteoriteTimer = 0;
   }
 
+  /**
+   * Return all currently active (acquired) entities to their pools without
+   * disposing GPU resources. Unlike {@link dispose}, the underlying Mesh /
+   * Material instances are retained for reuse on the next stage. Each
+   * entity's `recycle()` runs via the pool's releaseFn, which detaches the
+   * mesh from its parent so a subsequent `threeScene.clear()` is a no-op for
+   * pooled entities.
+   *
+   * Constitution IV (60fps): used by StageScene.exit() so the next stage's
+   * enter() reuses pooled Star / Meteorite Mesh + Material instances. This
+   * eliminates per-stage Mesh / Material reallocation and lets the per-frame
+   * MAX_STAR_SPAWNS_PER_FRAME throttle warm-start from the available pool.
+   */
+  recycleAll(): void {
+    this.normalStarPool.releaseAll();
+    this.rainbowStarPool.releaseAll();
+    this.meteoritePool.releaseAll();
+  }
+
   /** Permanently free all pooled GPU resources. Call from scene teardown. */
   dispose(): void {
     this.normalStarPool.dispose();
