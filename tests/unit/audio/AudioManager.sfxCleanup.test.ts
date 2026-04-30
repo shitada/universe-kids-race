@@ -170,4 +170,18 @@ describe('AudioManager SFX one-shot cleanup', () => {
     expect(() => oscs[0].onended!()).not.toThrow();
     expect(oscs[0].disconnect).toHaveBeenCalledTimes(1);
   });
+
+  it('boostDenied uses playSweep and registers cleanup', () => {
+    const prevO = ctx.createdOscillators.length;
+    const prevG = ctx.createdGains.length;
+    am.playSFX('boostDenied');
+    const { oscs, gains } = snapshotNewNodes(ctx, prevO, prevG);
+    expect(oscs).toHaveLength(1);
+    expect(gains).toHaveLength(1);
+    expect(oscs[0].type).toBe('triangle');
+    expect(typeof oscs[0].onended).toBe('function');
+    oscs[0].onended!();
+    expect(oscs[0].disconnect).toHaveBeenCalledTimes(1);
+    expect(gains[0].disconnect).toHaveBeenCalledTimes(1);
+  });
 });

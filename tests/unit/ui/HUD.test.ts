@@ -265,6 +265,62 @@ describe('HUD', () => {
     });
   });
 
+  describe('Boost Button Denied SFX Callback', () => {
+    it('invokes boost denied callback when tapped during cooldown', () => {
+      hud.show('Test');
+      let deniedCount = 0;
+      let boostCount = 0;
+      hud.setBoostCallback(() => { boostCount++; });
+      hud.setBoostDeniedCallback(() => { deniedCount++; });
+      hud.updateCooldown(0.5);
+      const uiOverlay = document.getElementById('ui-overlay')!;
+      const boostBtn = uiOverlay.querySelector('button') as HTMLButtonElement;
+      boostBtn.dispatchEvent(new Event('pointerdown'));
+      expect(deniedCount).toBe(1);
+      expect(boostCount).toBe(0);
+    });
+
+    it('does NOT invoke boost denied callback when boost is available', () => {
+      hud.show('Test');
+      let deniedCount = 0;
+      let boostCount = 0;
+      hud.setBoostCallback(() => { boostCount++; });
+      hud.setBoostDeniedCallback(() => { deniedCount++; });
+      hud.updateCooldown(1.0);
+      const uiOverlay = document.getElementById('ui-overlay')!;
+      const boostBtn = uiOverlay.querySelector('button') as HTMLButtonElement;
+      boostBtn.dispatchEvent(new Event('pointerdown'));
+      expect(deniedCount).toBe(0);
+      expect(boostCount).toBe(1);
+    });
+
+    it('debounces boost denied callback within shake window (250ms)', () => {
+      hud.show('Test');
+      let deniedCount = 0;
+      hud.setBoostDeniedCallback(() => { deniedCount++; });
+      hud.updateCooldown(0.5);
+      const uiOverlay = document.getElementById('ui-overlay')!;
+      const boostBtn = uiOverlay.querySelector('button') as HTMLButtonElement;
+      boostBtn.dispatchEvent(new Event('pointerdown'));
+      boostBtn.dispatchEvent(new Event('pointerdown'));
+      boostBtn.dispatchEvent(new Event('pointerdown'));
+      expect(deniedCount).toBe(1);
+    });
+
+    it('allows boost denied callback again after shake window elapses', async () => {
+      hud.show('Test');
+      let deniedCount = 0;
+      hud.setBoostDeniedCallback(() => { deniedCount++; });
+      hud.updateCooldown(0.5);
+      const uiOverlay = document.getElementById('ui-overlay')!;
+      const boostBtn = uiOverlay.querySelector('button') as HTMLButtonElement;
+      boostBtn.dispatchEvent(new Event('pointerdown'));
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      boostBtn.dispatchEvent(new Event('pointerdown'));
+      expect(deniedCount).toBe(2);
+    });
+  });
+
   describe('updateCooldown differential writes (perf)', () => {
     function spyStyleSetter(el: HTMLElement, prop: string): { count: number; values: string[] } {
       const tracker = { count: 0, values: [] as string[] };
