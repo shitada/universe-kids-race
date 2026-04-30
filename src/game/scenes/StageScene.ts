@@ -661,18 +661,7 @@ export class StageScene implements Scene {
     }
 
     // Damage animation (overrides bank rotation while active)
-    if (this.damageTimer > 0) {
-      this.damageTimer -= deltaTime;
-      const wobble = Math.sin(this.damageTimer * 30) * 0.3;
-      this.spaceship.mesh.rotation.z = wobble;
-      this.spaceship.mesh.rotation.y = 0;
-      // Flash effect
-      const flash = Math.sin(this.damageTimer * 20) > 0;
-      this.spaceship.mesh.visible = flash || this.damageTimer <= 0;
-    } else {
-      // Bank rotations are managed by Spaceship.update(); only ensure visibility.
-      this.spaceship.mesh.visible = true;
-    }
+    this.updateDamageEffect(deltaTime);
 
     // Deactivate passed objects
     this.cleanupPassedObjects(deltaTime);
@@ -747,6 +736,31 @@ export class StageScene implements Scene {
     this.hud.updateStageProgress(progress);
     if (progress >= 1) {
       this.onStageClear();
+    }
+  }
+
+  private updateDamageEffect(deltaTime: number): void {
+    if (this.damageTimer > 0) {
+      this.damageTimer -= deltaTime;
+      if (this.damageTimer <= 0) {
+        // Damage flash just ended this frame: reset wobble residue so that
+        // Spaceship.update()'s "rest skip" optimization doesn't leave the
+        // ship visibly tilted. Subsequent frames take the no-write else-branch.
+        this.damageTimer = 0;
+        this.spaceship.mesh.rotation.z = 0;
+        this.spaceship.mesh.rotation.y = 0;
+        this.spaceship.mesh.visible = true;
+        return;
+      }
+      const wobble = Math.sin(this.damageTimer * 30) * 0.3;
+      this.spaceship.mesh.rotation.z = wobble;
+      this.spaceship.mesh.rotation.y = 0;
+      // Flash effect
+      const flash = Math.sin(this.damageTimer * 20) > 0;
+      this.spaceship.mesh.visible = flash;
+    } else {
+      // Bank rotations are managed by Spaceship.update(); only ensure visibility.
+      this.spaceship.mesh.visible = true;
     }
   }
 
