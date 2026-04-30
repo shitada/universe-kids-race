@@ -135,20 +135,43 @@ function scheduleResize(): void {
 }
 subscribeViewportResize(window, scheduleResize);
 
+// Resume from any background state (visibilitychange, bfcache pageshow,
+// window.focus). All operations are idempotent so duplicate dispatches are
+// safe. iPad Safari does not always fire `visibilitychange` on bfcache
+// restore or URL bar / share sheet exits, so we listen on multiple events.
+function resumeFromBackground(): void {
+  gameLoop.resume();
+  audioManager.ensureResumed();
+  pixelRatioController.notifyResume(performance.now());
+  // Re-sync size in case viewport changed while in background.
+  const { width, height } = getViewportSize();
+  resizeCoalescer.schedule(width, height);
+  resizeCoalescer.flush();
+}
+
 // Auto-pause on background (T053 early integration)
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     gameLoop.pause();
     audioManager.suspend();
   } else {
-    gameLoop.resume();
-    audioManager.ensureResumed();
-    pixelRatioController.notifyResume(performance.now());
-    // Re-sync size in case viewport changed while in background.
-    const { width, height } = getViewportSize();
-    resizeCoalescer.schedule(width, height);
-    resizeCoalescer.flush();
+    resumeFromBackground();
   }
+});
+
+// bfcache restore on iPad Safari (Back/Forward cache, tab restore). In this
+// path `visibilitychange` is not fired but `pageshow` arrives with
+// event.persisted === true.
+window.addEventListener('pageshow', (event: PageTransitionEvent) => {
+  if (event.persisted) {
+    resumeFromBackground();
+  }
+});
+
+// URL bar editing / share sheet on iPad Safari can stop rAF without firing
+// `visibilitychange`; only `focus` fires when the user returns.
+window.addEventListener('focus', () => {
+  resumeFromBackground();
 });
 
 // WebGL context loss recovery (iPad Safari background/memory pressure).

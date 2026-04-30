@@ -181,4 +181,134 @@ describe('AudioResume integration (T003)', () => {
 
     expect(ctx.suspend).not.toHaveBeenCalled();
   });
+
+  describe('bfcache / focus resume paths (iPad Safari)', () => {
+    let windowListeners: Record<string, EventListener[]>;
+
+    beforeEach(() => {
+      windowListeners = {};
+      vi.spyOn(window, 'addEventListener').mockImplementation(
+        (event: string, handler: EventListenerOrEventListenerObject) => {
+          if (!windowListeners[event]) windowListeners[event] = [];
+          windowListeners[event].push(handler as EventListener);
+        },
+      );
+    });
+
+    function wireResumeHandlers(resume: () => void): void {
+      window.addEventListener('pageshow', (event: Event) => {
+        if ((event as PageTransitionEvent).persisted) resume();
+      });
+      window.addEventListener('focus', () => resume());
+    }
+
+    it('pageshow with persisted=true triggers ensureResumed() and gameLoop.resume()', () => {
+      audioManager.initSync();
+      const ctx = (audioManager as unknown as { ctx: MockAudioContext }).ctx;
+      ctx.state = 'suspended';
+      ctx.resume.mockClear();
+
+      const gameLoop = { resume: vi.fn(), pause: vi.fn() };
+      const resume = () => {
+        gameLoop.resume();
+        audioManager.ensureResumed();
+      };
+      wireResumeHandlers(resume);
+
+      const evt = new Event('pageshow') as PageTransitionEvent;
+      Object.defineProperty(evt, 'persisted', { value: true, configurable: true });
+      for (const h of windowListeners['pageshow'] ?? []) h(evt);
+
+      expect(gameLoop.resume).toHaveBeenCalledTimes(1);
+      expect(ctx.resume).toHaveBeenCalledTimes(1);
+    });
+
+    it('pageshow with persisted=false does NOT trigger resume', () => {
+      audioManager.initSync();
+      const ctx = (audioManager as unknown as { ctx: MockAudioContext }).ctx;
+      ctx.state = 'suspended';
+      ctx.resume.mockClear();
+
+      const gameLoop = { resume: vi.fn(), pause: vi.fn() };
+      wireResumeHandlers(() => {
+        gameLoop.resume();
+        audioManager.ensureResumed();
+      });
+
+      const evt = new Event('pageshow') as PageTransitionEvent;
+      Object.defineProperty(evt, 'persisted', { value: false, configurable: true });
+      for (const h of windowListeners['pageshow'] ?? []) h(evt);
+
+      expect(gameLoop.resume).not.toHaveBeenCalled();
+      expect(ctx.resume).not.toHaveBeenCalled();
+    });
+
+    it('window focus triggers ensureResumed() and gameLoop.resume()', () => {
+      audioManager.initSync();
+      const ctx = (audioManager as unknown as { ctx: MockAudioContext }).ctx;
+      ctx.state = 'suspended';
+      ctx.resume.mockClear();
+
+      const gameLoop = { resume: vi.fn(), pause: vi.fn() };
+      wireResumeHandlers(() => {
+        gameLoop.resume();
+        audioManager.ensureResumed();
+      });
+
+      for (const h of windowListeners['focus'] ?? []) h(new Event('focus'));
+
+      expect(gameLoop.resume).toHaveBeenCalledTimes(1);
+      expect(ctx.resume).toHaveBeenCalledTimes(1);
+    });
+
+    it('focus from interrupted state (iOS) calls ctx.resume()', () => {
+      audioManager.initSync();
+      const ctx = (audioManager as unknown as { ctx: MockAudioContext }).ctx;
+      ctx.state = 'interrupted' as AudioContextState;
+      ctx.resume.mockClear();
+
+      wireResumeHandlers(() => audioManager.ensureResumed());
+      for (const h of windowListeners['focus'] ?? []) h(new Event('focus'));
+
+      expect(ctx.resume).toHaveBeenCalledTimes(1);
+    });
+
+    it('repeated resume events are idempotent (no double-loop / double-play)', () => {
+      audioManager.initSync();
+      const ctx = (audioManager as unknown as { ctx: MockAudioContext }).ctx;
+      ctx.state = 'running';
+      ctx.resume.mockClear();
+
+      let runCount = 0;
+      const gameLoop = {
+        resume: vi.fn(() => { runCount++; }),
+        pause: vi.fn(),
+      };
+      // Mimic GameLoop.resume() idempotency: only acts when paused.
+      let paused = false;
+      gameLoop.resume.mockImplementation(() => {
+        if (!paused) return;
+        paused = false;
+        runCount++;
+      });
+
+      wireResumeHandlers(() => {
+        gameLoop.resume();
+        audioManager.ensureResumed();
+      });
+
+      // Fire focus 3 times and a persisted pageshow — all should be safe.
+      for (let i = 0; i < 3; i++) {
+        for (const h of windowListeners['focus'] ?? []) h(new Event('focus'));
+      }
+      const evt = new Event('pageshow') as PageTransitionEvent;
+      Object.defineProperty(evt, 'persisted', { value: true, configurable: true });
+      for (const h of windowListeners['pageshow'] ?? []) h(evt);
+
+      // ctx.state is 'running' so resume must NOT be called.
+      expect(ctx.resume).not.toHaveBeenCalled();
+      // gameLoop was never paused, so no extra runs.
+      expect(runCount).toBe(0);
+    });
+  });
 });
