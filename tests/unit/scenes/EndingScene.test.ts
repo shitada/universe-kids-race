@@ -212,6 +212,34 @@ describe('EndingScene', () => {
       expect(allText).toContain('みんな ありがとう！');
     });
 
+    it('keeps companion x/z constant during bounce phase (only y oscillates)', () => {
+      const threeScene = scene.getThreeScene();
+      let companionGroup: THREE.Group | null = null;
+      threeScene.traverse((child) => {
+        if (child instanceof THREE.Group && child !== threeScene && child.children.length === PLANET_ENCYCLOPEDIA.length) {
+          companionGroup = child as THREE.Group;
+        }
+      });
+      expect(companionGroup).not.toBeNull();
+
+      // Capture x/z immediately after setup (before any update)
+      const initialPositions = companionGroup!.children.map((m) => ({
+        x: m.position.x,
+        z: m.position.z,
+      }));
+
+      // Advance well past POPIN_TOTAL into the bounce phase.
+      for (let i = 0; i < 400; i++) {
+        scene.update(0.01);
+      }
+
+      for (let i = 0; i < companionGroup!.children.length; i++) {
+        const mesh = companionGroup!.children[i];
+        expect(mesh.position.x).toBeCloseTo(initialPositions[i].x, 6);
+        expect(mesh.position.z).toBeCloseTo(initialPositions[i].z, 6);
+      }
+    });
+
     it('cleans up companion group and disposes meshes on exit()', () => {
       const threeScene = scene.getThreeScene();
 
