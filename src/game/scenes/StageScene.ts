@@ -816,7 +816,7 @@ export class StageScene implements Scene {
       } else {
         // Animate retained stars (rainbow hue cycling / Y rotation) here so
         // this.stars is walked only once per frame.
-        star.update(deltaTime);
+        star.update(deltaTime, shipZ);
         if (starWrite !== read) stars[starWrite] = star;
         starWrite++;
       }
