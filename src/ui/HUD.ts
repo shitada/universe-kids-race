@@ -339,6 +339,16 @@ export class HUD {
         animation: stageGoalFlash 0.45s ease-out 1;
         display: inline-block;
       }
+      @keyframes hudCountPop {
+        0%   { transform: scale(1.0); }
+        40%  { transform: scale(1.25); }
+        100% { transform: scale(1.0); }
+      }
+      span[data-hud-count-pop] {
+        animation: hudCountPop 0.35s ease-out 1;
+        display: inline-block;
+        transform-origin: center;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -375,13 +385,39 @@ export class HUD {
 
   update(score: number, starCount: number): void {
     if (this.scoreEl && score !== this.lastScore) {
+      const prev = this.lastScore;
       this.scoreEl.textContent = String(score);
       this.lastScore = score;
+      if (prev !== -1 && score > prev) {
+        this.flashCount(this.scoreEl);
+      }
     }
     if (this.starCountEl && starCount !== this.lastStarCount) {
+      const prev = this.lastStarCount;
       this.starCountEl.textContent = String(starCount);
       this.lastStarCount = starCount;
+      if (prev !== -1 && starCount > prev) {
+        this.flashCount(this.starCountEl);
+      }
     }
+  }
+
+  private flashCount(el: HTMLElement): void {
+    if (el.hasAttribute('data-hud-count-pop')) return;
+    el.setAttribute('data-hud-count-pop', '');
+    let cleared = false;
+    const cleanup = (): void => {
+      if (cleared) return;
+      cleared = true;
+      el.removeAttribute('data-hud-count-pop');
+      el.removeEventListener('animationend', onEnd);
+    };
+    const onEnd = (ev: AnimationEvent): void => {
+      if (ev.animationName !== 'hudCountPop') return;
+      cleanup();
+    };
+    el.addEventListener('animationend', onEnd);
+    setTimeout(cleanup, 500);
   }
 
   updateCooldown(progress: number): void {
