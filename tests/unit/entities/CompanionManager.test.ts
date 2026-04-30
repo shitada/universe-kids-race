@@ -257,6 +257,38 @@ describe('CompanionManager', () => {
       expect(mesh.rotation.y - initialRotY).toBeCloseTo(4.0, 1);
     });
 
+    it('snaps mesh scale to exactly 1.0 once entrance completes, even when last step lands mid-progress', () => {
+      const manager = new CompanionManager([]);
+      manager.addCompanion(1);
+      // 0.4 + 0.4 + 0.4 = 1.2 > 1.0, last step lands while progress < 1.0 then crosses 0.
+      manager.update(0.4, 0, 0, 0);
+      manager.update(0.4, 0, 0, 0);
+      manager.update(0.4, 0, 0, 0);
+      const mesh = manager.getGroup().children[0];
+      expect(mesh.scale.x).toBe(1);
+      expect(mesh.scale.y).toBe(1);
+      expect(mesh.scale.z).toBe(1);
+    });
+
+    it('clamps entranceTimer to 0 once entrance completes (no further scale updates)', () => {
+      const manager = new CompanionManager([]);
+      manager.addCompanion(1);
+      manager.update(1.5, 0, 0, 0);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cs = (manager as any).companions;
+      expect(cs[0].entranceTimer).toBe(0);
+
+      // After completion, manually mutate scale to detect whether update() rewrites it.
+      const mesh = manager.getGroup().children[0];
+      mesh.scale.setScalar(0.42);
+      manager.update(0.016, 0, 0, 0);
+      // Scale must remain at the externally-set value because the entrance branch
+      // is no longer entered and the normal-orbit branch does NOT touch scale.
+      expect(mesh.scale.x).toBe(0.42);
+      expect(mesh.scale.y).toBe(0.42);
+      expect(mesh.scale.z).toBe(0.42);
+    });
+
     it('uses normal rotation speed (deltaTime * 2) after entrance completes', () => {
       const manager = new CompanionManager([]);
       manager.addCompanion(1);

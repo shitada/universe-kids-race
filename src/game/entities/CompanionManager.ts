@@ -152,8 +152,13 @@ export class CompanionManager {
 
       if (c.entranceTimer > 0) {
         c.entranceTimer -= deltaTime;
-        const progress = Math.max(0, Math.min(1, 1 - c.entranceTimer));
-        c.mesh.scale.setScalar(progress);
+        if (c.entranceTimer <= 0) {
+          c.entranceTimer = 0;
+          c.mesh.scale.setScalar(1);
+        } else {
+          const progress = Math.max(0, Math.min(1, 1 - c.entranceTimer));
+          c.mesh.scale.setScalar(progress);
+        }
         c.mesh.rotation.y += deltaTime * 8;
       } else {
         c.mesh.rotation.y += deltaTime * 2;
