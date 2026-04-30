@@ -68,7 +68,10 @@ export const __titleSceneSharedAssetsForTest = {
 };
 
 export class TitleScene implements Scene {
-  private threeScene: THREE.Scene;
+  // Scene / AmbientLight はインスタンスで再利用し、🏠 ボタンによる再入場ごとの
+  // per-entry GPU/JS アロケーションを抑える。
+  private readonly threeScene: THREE.Scene;
+  private readonly ambientLight: THREE.AmbientLight = new THREE.AmbientLight(0xffffff, 1);
   private camera: THREE.PerspectiveCamera;
   private lastAspect = 0;
   private sceneManager: SceneManager;
@@ -85,6 +88,7 @@ export class TitleScene implements Scene {
     this.saveManager = saveManager;
     this.audioManager = audioManager;
     this.threeScene = new THREE.Scene();
+    this.threeScene.background = new THREE.Color(0x000020);
     this.camera = new THREE.PerspectiveCamera(
       60,
       window.innerWidth / window.innerHeight,
@@ -96,8 +100,6 @@ export class TitleScene implements Scene {
 
   enter(_context: SceneContext): void {
     this.lastAspect = 0;
-    this.threeScene = new THREE.Scene();
-    this.threeScene.background = new THREE.Color(0x000020);
 
     // Starfield background (SHARED: 共有 geometry / material は dispose しない)
     this.stars = new THREE.Points(getTitleBgStarsGeometry(), getTitleBgStarsMaterial());
@@ -105,8 +107,10 @@ export class TitleScene implements Scene {
     this.stars.rotation.set(0, 0, 0);
     this.threeScene.add(this.stars);
 
-    // Ambient light
-    this.threeScene.add(new THREE.AmbientLight(0xffffff, 1));
+    // Ambient light: 再入場時の重複 add を防ぐため parent チェック
+    if (!this.ambientLight.parent) {
+      this.threeScene.add(this.ambientLight);
+    }
 
     this.createOverlay();
     this.createMuteButton();

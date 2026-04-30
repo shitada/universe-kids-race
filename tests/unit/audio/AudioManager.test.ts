@@ -322,6 +322,7 @@ describe('AudioManager', () => {
 
   describe('stopBGM() clears all layers (T009)', () => {
     it('stops and disconnects all persistent oscillators', () => {
+      vi.useFakeTimers();
       vi.stubGlobal('AudioContext', MockAudioContext);
       const am = new AudioManager();
       am.initSync();
@@ -331,6 +332,7 @@ describe('AudioManager', () => {
       const gainCopies = [...(am as any).bgmGains];
 
       am.stopBGM();
+      vi.advanceTimersByTime(60);
 
       for (const osc of oscCopies) {
         expect(osc.stop).toHaveBeenCalled();
@@ -340,6 +342,7 @@ describe('AudioManager', () => {
         expect(gain.disconnect).toHaveBeenCalled();
       }
       am.dispose();
+      vi.useRealTimers();
     });
 
     it('clears bgmOscillators, bgmGains, and bgmTimer', () => {
@@ -376,6 +379,7 @@ describe('AudioManager', () => {
     });
 
     it('stops, disconnects, and cancels schedules of short-lived voices on stopBGM()', () => {
+      vi.useFakeTimers();
       vi.stubGlobal('AudioContext', MockAudioContext);
       const am = new AudioManager();
       am.initSync();
@@ -385,6 +389,7 @@ describe('AudioManager', () => {
       expect(shortVoiceCopies.length).toBeGreaterThan(0);
 
       am.stopBGM();
+      vi.advanceTimersByTime(50);
 
       for (const { osc, gain } of shortVoiceCopies) {
         expect(osc.stop).toHaveBeenCalled();
@@ -394,6 +399,7 @@ describe('AudioManager', () => {
       }
       expect((am as any).bgmShortVoices).toHaveLength(0);
       am.dispose();
+      vi.useRealTimers();
     });
 
     it('removes a short-lived voice from bgmShortVoices when its onended fires', () => {
@@ -416,6 +422,7 @@ describe('AudioManager', () => {
     });
 
     it('after switching playBGM(1) -> playBGM(2), no old-generation short voices remain', () => {
+      vi.useFakeTimers();
       vi.stubGlobal('AudioContext', MockAudioContext);
       const am = new AudioManager();
       am.initSync();
@@ -425,6 +432,7 @@ describe('AudioManager', () => {
       expect(oldShortVoices.length).toBeGreaterThan(0);
 
       am.playBGM(2);
+      vi.advanceTimersByTime(60);
 
       // Old voices must be stopped/disconnected (cleaned by inner stopBGM())
       for (const { osc, gain } of oldShortVoices) {
@@ -439,6 +447,177 @@ describe('AudioManager', () => {
         expect(currentShortVoices.includes(oldEntry)).toBe(false);
       }
       am.dispose();
+      vi.useRealTimers();
+    });
+  });
+
+  describe('playBGM() fades in persistent layers to avoid pop noise (bugfix)', () => {
+    it('schedules setValueAtTime(0) and linearRampToValueAtTime(volume) for bass and pad layers', () => {
+      vi.useFakeTimers();
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      am.playBGM(1);
+
+      const gainCopies = [...(am as any).bgmGains] as Array<any>;
+      expect(gainCopies.length).toBeGreaterThan(0);
+
+      // Every persistent gain should have been ramped up from 0.
+      for (const gain of gainCopies) {
+        expect(gain.gain.setValueAtTime).toHaveBeenCalledWith(0, expect.any(Number));
+        expect(gain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(
+          expect.any(Number),
+          expect.any(Number),
+        );
+        // The first ramp call ramps to a positive volume (the layer's target volume).
+        const firstRampCall = (gain.gain.linearRampToValueAtTime as any).mock.calls[0];
+        expect(firstRampCall[0]).toBeGreaterThan(0);
+      }
+
+      am.dispose();
+      vi.useRealTimers();
+    });
+
+    it('does not throw when muted', () => {
+      vi.useFakeTimers();
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      am.setMuted(true);
+      expect(() => am.playBGM(1)).not.toThrow();
+      am.dispose();
+      vi.useRealTimers();
+    });
+  });
+
+  describe('stopBGM() defers disconnect to allow fade-out (bugfix)', () => {
+    it('schedules linearRampToValueAtTime(0) for short-lived voices and defers disconnect', () => {
+      vi.useFakeTimers();
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      am.playBGM(1);
+
+      const shortVoiceCopies = [...((am as any).bgmShortVoices as Array<{ osc: any; gain: any }>)];
+      expect(shortVoiceCopies.length).toBeGreaterThan(0);
+
+      am.stopBGM();
+
+      // Synchronously: stop is scheduled and ramp registered, but disconnect deferred.
+      for (const { osc, gain } of shortVoiceCopies) {
+        expect(osc.stop).toHaveBeenCalled();
+        expect(gain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(0, expect.any(Number));
+        expect(osc.disconnect).not.toHaveBeenCalled();
+        expect(gain.disconnect).not.toHaveBeenCalled();
+      }
+
+      vi.advanceTimersByTime(50);
+
+      for (const { osc, gain } of shortVoiceCopies) {
+        expect(osc.disconnect).toHaveBeenCalled();
+        expect(gain.disconnect).toHaveBeenCalled();
+      }
+      am.dispose();
+      vi.useRealTimers();
+    });
+
+    it('schedules linearRampToValueAtTime(0) for persistent layers and defers disconnect', () => {
+      vi.useFakeTimers();
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      am.playBGM(1);
+
+      const oscCopies = [...(am as any).bgmOscillators] as Array<any>;
+      const gainCopies = [...(am as any).bgmGains] as Array<any>;
+      expect(oscCopies.length).toBeGreaterThan(0);
+
+      am.stopBGM();
+
+      for (const gain of gainCopies) {
+        expect(gain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(0, expect.any(Number));
+      }
+      for (const osc of oscCopies) {
+        expect(osc.stop).toHaveBeenCalled();
+        expect(osc.disconnect).not.toHaveBeenCalled();
+      }
+      for (const gain of gainCopies) {
+        expect(gain.disconnect).not.toHaveBeenCalled();
+      }
+
+      vi.advanceTimersByTime(60);
+
+      for (const osc of oscCopies) {
+        expect(osc.disconnect).toHaveBeenCalled();
+      }
+      for (const gain of gainCopies) {
+        expect(gain.disconnect).toHaveBeenCalled();
+      }
+      am.dispose();
+      vi.useRealTimers();
+    });
+
+    it('clears internal voice arrays synchronously on stopBGM()', () => {
+      vi.useFakeTimers();
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      am.playBGM(1);
+
+      expect((am as any).bgmShortVoices.length).toBeGreaterThan(0);
+      expect((am as any).bgmOscillators.length).toBeGreaterThan(0);
+      expect((am as any).bgmGains.length).toBeGreaterThan(0);
+
+      am.stopBGM();
+
+      expect((am as any).bgmShortVoices).toHaveLength(0);
+      expect((am as any).bgmOscillators).toHaveLength(0);
+      expect((am as any).bgmGains).toHaveLength(0);
+
+      am.dispose();
+      vi.useRealTimers();
+    });
+
+    it('increments bgmGeneration so an in-flight tick early-returns', () => {
+      vi.useFakeTimers();
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      am.playBGM(1);
+
+      const genBefore = (am as any).bgmGeneration as number;
+      am.stopBGM();
+      const genAfter = (am as any).bgmGeneration as number;
+      expect(genAfter).toBe(genBefore + 1);
+
+      // After stopBGM the timer is null, so even if the previously scheduled
+      // tick had not yet been cleared it would early-return on the gen check.
+      expect((am as any).bgmTimer).toBeNull();
+
+      am.dispose();
+      vi.useRealTimers();
+    });
+
+    it('replays a new generation cleanly after stopBGM()', () => {
+      vi.useFakeTimers();
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+
+      am.playBGM(1);
+      am.stopBGM();
+      am.playBGM(2);
+
+      // Fresh generation should have re-populated arrays.
+      expect((am as any).bgmShortVoices.length).toBeGreaterThan(0);
+      expect((am as any).bgmOscillators.length).toBeGreaterThan(0);
+      expect((am as any).bgmPlaying).toBe(true);
+
+      // Deferred disconnects from the previous stopBGM still flush safely.
+      vi.advanceTimersByTime(60);
+
+      am.dispose();
+      vi.useRealTimers();
     });
   });
 

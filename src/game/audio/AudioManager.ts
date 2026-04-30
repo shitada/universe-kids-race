@@ -359,6 +359,8 @@ export class AudioManager {
 
     const config = BGM_CONFIGS[stageNumber] ?? BGM_CONFIGS[0];
     const beatInterval = 60 / config.tempo;
+    const startTime = this.ctx.currentTime;
+    const fadeInDuration = 0.03;
 
     // Bass layer - persistent oscillator
     try {
@@ -366,10 +368,11 @@ export class AudioManager {
       const bassGain = this.ctx.createGain();
       bassOsc.type = config.waveforms.bass;
       bassOsc.frequency.value = config.bassNotes[0];
-      bassGain.gain.value = config.volumes.bass;
+      bassGain.gain.setValueAtTime(0, startTime);
+      bassGain.gain.linearRampToValueAtTime(config.volumes.bass, startTime + fadeInDuration);
       bassOsc.connect(bassGain);
       bassGain.connect(this.sink()!);
-      bassOsc.start();
+      bassOsc.start(startTime);
       this.bgmOscillators.push(bassOsc);
       this.bgmGains.push(bassGain);
     } catch {
@@ -385,10 +388,11 @@ export class AudioManager {
         const padGain = this.ctx.createGain();
         padOsc.type = config.waveforms.pad;
         padOsc.frequency.value = firstChord[i];
-        padGain.gain.value = config.volumes.pad;
+        padGain.gain.setValueAtTime(0, startTime);
+        padGain.gain.linearRampToValueAtTime(config.volumes.pad, startTime + fadeInDuration);
         padOsc.connect(padGain);
         padGain.connect(this.sink()!);
-        padOsc.start();
+        padOsc.start(startTime);
         padOscs.push(padOsc);
         this.bgmOscillators.push(padOsc);
         this.bgmGains.push(padGain);
@@ -490,24 +494,51 @@ export class AudioManager {
       this.bgmTimer = null;
     }
     const now = this.ctx ? this.ctx.currentTime : 0;
-    for (const { osc, gain } of this.bgmShortVoices) {
+    // Snapshot then synchronously clear arrays to prevent re-entrancy with
+    // any subsequent playBGM() call while disconnects are deferred.
+    const shortVoiceSnapshot = this.bgmShortVoices;
+    const persistentOscSnapshot = this.bgmOscillators;
+    const persistentGainSnapshot = this.bgmGains;
+    this.bgmShortVoices = [];
+    this.bgmOscillators = [];
+    this.bgmGains = [];
+
+    // Short-lived voices: schedule a 20ms fade-out, then stop, then defer
+    // disconnect so the fade is actually audible (do not break the audio
+    // graph synchronously).
+    for (const { osc, gain } of shortVoiceSnapshot) {
       try { gain.gain.cancelScheduledValues(now); } catch { /* ignore */ }
       try { gain.gain.setValueAtTime(gain.gain.value, now); } catch { /* ignore */ }
       try { gain.gain.linearRampToValueAtTime(0, now + 0.02); } catch { /* ignore */ }
       try { osc.stop(now + 0.03); } catch { /* already stopped */ }
-      try { osc.disconnect(); } catch { /* ignore */ }
-      try { gain.disconnect(); } catch { /* ignore */ }
     }
-    this.bgmShortVoices = [];
-    for (const osc of this.bgmOscillators) {
-      try { osc.stop(); } catch { /* already stopped */ }
-      try { osc.disconnect(); } catch { /* ignore */ }
+    setTimeout(() => {
+      for (const { osc, gain } of shortVoiceSnapshot) {
+        try { osc.disconnect(); } catch { /* ignore */ }
+        try { gain.disconnect(); } catch { /* ignore */ }
+      }
+    }, 40);
+
+    // Persistent layers (bass/pad): apply a short ~30ms fade so iPad Safari
+    // does not emit a click when the graph is torn down.
+    for (let i = 0; i < persistentOscSnapshot.length; i++) {
+      const osc = persistentOscSnapshot[i];
+      const gain = persistentGainSnapshot[i];
+      if (gain) {
+        try { gain.gain.cancelScheduledValues(now); } catch { /* ignore */ }
+        try { gain.gain.setValueAtTime(gain.gain.value, now); } catch { /* ignore */ }
+        try { gain.gain.linearRampToValueAtTime(0, now + 0.03); } catch { /* ignore */ }
+      }
+      try { osc.stop(now + 0.04); } catch { /* already stopped */ }
     }
-    for (const gain of this.bgmGains) {
-      try { gain.disconnect(); } catch { /* ignore */ }
-    }
-    this.bgmOscillators = [];
-    this.bgmGains = [];
+    setTimeout(() => {
+      for (const osc of persistentOscSnapshot) {
+        try { osc.disconnect(); } catch { /* ignore */ }
+      }
+      for (const gain of persistentGainSnapshot) {
+        try { gain.disconnect(); } catch { /* ignore */ }
+      }
+    }, 50);
   }
 
   startBoostSFX(): void {

@@ -8,6 +8,14 @@ import * as THREE from 'three';
 const SHARED_GEOMETRY = new THREE.DodecahedronGeometry(1.0);
 const SHARED_MATERIAL = new THREE.MeshToonMaterial({ color: 0x887766 });
 
+// View-bracket thresholds used by Meteorite.update() to skip per-frame X/Z
+// rotation for meteorites that are far ahead of (or already behind) the
+// spaceship. SpawnSystem pre-spawns meteorites well outside the camera
+// frustum; animating those wastes per-frame cost on iPad Safari. Forward
+// axis is -Z, so "ahead" = z < cameraZ. Mirrors Star.update() pattern.
+const METEORITE_ANIMATION_AHEAD = 60;
+const METEORITE_ANIMATION_BEHIND = 5;
+
 export class Meteorite {
   position: { x: number; y: number; z: number };
   // Constant for every Meteorite instance. CollisionSystem.check() relies on
@@ -27,7 +35,17 @@ export class Meteorite {
     return new THREE.Mesh(SHARED_GEOMETRY, SHARED_MATERIAL);
   }
 
-  update(deltaTime: number): void {
+  update(deltaTime: number, cameraZ?: number): void {
+    // Skip rotation for meteorites outside the visible Z bracket. cameraZ is
+    // optional for backward-compat with existing tests and any callers that
+    // haven't been migrated; when omitted, animate as before.
+    if (
+      cameraZ !== undefined &&
+      (this.position.z < cameraZ - METEORITE_ANIMATION_AHEAD ||
+        this.position.z > cameraZ + METEORITE_ANIMATION_BEHIND)
+    ) {
+      return;
+    }
     this.mesh.rotation.x += deltaTime * 0.5;
     this.mesh.rotation.z += deltaTime * 0.3;
   }

@@ -26,6 +26,7 @@ export class BoostFlameEffect {
   private lastSize = -1;
   private index = 0;
   private emitting = false;
+  private maxAliveIndex = -1;
 
   init(scene: THREE.Scene): void {
     if (this.points) return;
@@ -66,6 +67,8 @@ export class BoostFlameEffect {
     this.points = new THREE.Points(geometry, material);
     this.points.frustumCulled = false;
     this.points.visible = false;
+    this.points.geometry.setDrawRange(0, 0);
+    this.maxAliveIndex = -1;
     scene.add(this.points);
   }
 
@@ -97,9 +100,17 @@ export class BoostFlameEffect {
     this.lastSize = BoostFlameEffect.BASE_SIZE;
     this.index = 0;
     this.emitting = true;
+    this.maxAliveIndex = -1;
+    this.points.geometry.setDrawRange(0, 0);
     this.points.visible = true;
-    if (this.positionAttr) this.positionAttr.needsUpdate = true;
-    if (this.colorAttr) this.colorAttr.needsUpdate = true;
+    if (this.positionAttr) {
+      this.positionAttr.clearUpdateRanges();
+      this.positionAttr.needsUpdate = false;
+    }
+    if (this.colorAttr) {
+      this.colorAttr.clearUpdateRanges();
+      this.colorAttr.needsUpdate = false;
+    }
   }
 
   /**
@@ -132,6 +143,7 @@ export class BoostFlameEffect {
       ? 1.0
       : (1.0 - progress) / (1.0 - FADE_START);
 
+    let maxEmittedIdx = -1;
     for (let p = 0; p < emitCount; p++) {
       const idx = this.index % MAX;
       const i3 = idx * 3;
@@ -150,12 +162,27 @@ export class BoostFlameEffect {
       this.velocities[i2] = 3 + Math.random() * 2;
       this.velocities[i2 + 1] = (Math.random() - 0.5);
 
+      if (idx > maxEmittedIdx) maxEmittedIdx = idx;
       this.index++;
     }
 
     if (emitCount > 0) {
-      if (this.positionAttr) this.positionAttr.needsUpdate = true;
-      if (this.colorAttr) this.colorAttr.needsUpdate = true;
+      const newMax = Math.max(this.maxAliveIndex, maxEmittedIdx);
+      this.maxAliveIndex = newMax;
+      const uploadCount = (newMax + 1) * 3;
+      if (this.positionAttr) {
+        this.positionAttr.clearUpdateRanges();
+        this.positionAttr.addUpdateRange(0, uploadCount);
+        this.positionAttr.needsUpdate = true;
+      }
+      if (this.colorAttr) {
+        this.colorAttr.clearUpdateRanges();
+        this.colorAttr.addUpdateRange(0, uploadCount);
+        this.colorAttr.needsUpdate = true;
+      }
+      if (this.points) {
+        this.points.geometry.setDrawRange(0, newMax + 1);
+      }
     }
 
     // Scale particle size during fade phase
@@ -171,12 +198,13 @@ export class BoostFlameEffect {
   update(deltaTime: number): void {
     if (!this.positions || !this.colors || !this.lifetimes || !this.velocities || !this.points) return;
     if (!this.points.visible) return;
-    const MAX = BoostFlameEffect.MAX_PARTICLES;
     let hasLive = false;
     let positionsChanged = false;
     let colorsChanged = false;
+    let newMaxAlive = -1;
 
-    for (let i = 0; i < MAX; i++) {
+    const scanLimit = Math.min(BoostFlameEffect.MAX_PARTICLES, this.maxAliveIndex + 1);
+    for (let i = 0; i < scanLimit; i++) {
       if (this.lifetimes[i] <= 0) continue;
       this.lifetimes[i] -= deltaTime;
       const i3 = i * 3;
@@ -196,10 +224,22 @@ export class BoostFlameEffect {
       this.positions[i3 + 2] += this.velocities[i2] * deltaTime;
       this.positions[i3 + 1] += this.velocities[i2 + 1] * deltaTime;
       positionsChanged = true;
+      if (i > newMaxAlive) newMaxAlive = i;
     }
 
-    if (positionsChanged) this.positionAttr!.needsUpdate = true;
-    if (colorsChanged) this.colorAttr!.needsUpdate = true;
+    this.maxAliveIndex = newMaxAlive;
+    const uploadCount = (newMaxAlive + 1) * 3;
+    if (positionsChanged && this.positionAttr) {
+      this.positionAttr.clearUpdateRanges();
+      if (uploadCount > 0) this.positionAttr.addUpdateRange(0, uploadCount);
+      this.positionAttr.needsUpdate = true;
+    }
+    if (colorsChanged && this.colorAttr) {
+      this.colorAttr.clearUpdateRanges();
+      if (uploadCount > 0) this.colorAttr.addUpdateRange(0, uploadCount);
+      this.colorAttr.needsUpdate = true;
+    }
+    this.points.geometry.setDrawRange(0, newMaxAlive + 1);
 
     if (!this.emitting && !hasLive) {
       this.remove();
@@ -224,12 +264,24 @@ export class BoostFlameEffect {
         this.positions[i3 + 2] = BoostFlameEffect.OFFSCREEN_Z;
       }
     }
-    if (this.positionAttr) this.positionAttr.needsUpdate = true;
-    if (this.colorAttr) this.colorAttr.needsUpdate = true;
+    if (this.positionAttr) {
+      this.positionAttr.clearUpdateRanges();
+      this.positionAttr.needsUpdate = true;
+    }
+    if (this.colorAttr) {
+      this.colorAttr.clearUpdateRanges();
+      this.colorAttr.needsUpdate = true;
+    }
     this.index = 0;
     this.emitting = false;
+    this.maxAliveIndex = -1;
+    this.points.geometry.setDrawRange(0, 0);
     this.points.visible = false;
     this.lastSize = -1;
+  }
+
+  getMaxAliveIndex(): number {
+    return this.maxAliveIndex;
   }
 
   getObject(): THREE.Points | null {
@@ -251,6 +303,7 @@ export class BoostFlameEffect {
     this.colorAttr = null;
     this.index = 0;
     this.emitting = false;
+    this.maxAliveIndex = -1;
     this.lastSize = -1;
     this.scene = null;
   }

@@ -19,6 +19,15 @@ const SHARED_NORMAL_MATERIAL = new THREE.MeshToonMaterial({
 // so a pooled instance does not leak the previous lifetime's hue.
 const RAINBOW_INITIAL_COLOR = 0xff0000;
 
+// View-bracket thresholds used by Star.update() to skip per-frame Y-rotation
+// and rainbow hue updates for stars that are far ahead of (or already behind)
+// the spaceship. SpawnSystem pre-spawns stars at shipZ - 80 (well outside the
+// camera frustum); animating those wastes per-frame cost on iPad Safari.
+// Forward axis is -Z, so "ahead" = z < cameraZ. behind matches the very small
+// window before cleanupPassedObjects() releases the star at shipZ + 30.
+const STAR_ANIMATION_AHEAD = 60;
+const STAR_ANIMATION_BEHIND = 5;
+
 export class Star {
   position: { x: number; y: number; z: number };
   // Constant for every Star instance. CollisionSystem.check() relies on this
@@ -50,7 +59,18 @@ export class Star {
     return new THREE.Mesh(SHARED_GEOMETRY, SHARED_NORMAL_MATERIAL);
   }
 
-  update(deltaTime: number): void {
+  update(deltaTime: number, cameraZ?: number): void {
+    // Skip rotation / hue animation for stars outside the visible Z bracket.
+    // cameraZ is optional for backward-compat with existing tests and any
+    // callers that haven't been migrated; when omitted, animate as before.
+    if (
+      cameraZ !== undefined &&
+      (this.position.z < cameraZ - STAR_ANIMATION_AHEAD ||
+        this.position.z > cameraZ + STAR_ANIMATION_BEHIND)
+    ) {
+      return;
+    }
+
     // Rotate
     this.mesh.rotation.y += deltaTime * 2;
 

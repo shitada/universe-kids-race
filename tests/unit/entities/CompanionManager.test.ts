@@ -271,6 +271,118 @@ describe('CompanionManager', () => {
     });
   });
 
+  describe('addCompanion orbit redistribution', () => {
+    // Helper to peek into private companions for orbit-param assertions.
+    function getCompanions(manager: CompanionManager): Array<{
+      angleOffset: number;
+      orbitRadius: number;
+      orbitTilt: number;
+      cosTilt: number;
+      sinTilt: number;
+      entranceTimer: number;
+    }> {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (manager as any).companions;
+    }
+
+    it('keeps angleOffset evenly distributed (i * 2π/count) as companions are added 1..10', () => {
+      const manager = new CompanionManager([]);
+      const stageNumbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+      for (let n = 0; n < stageNumbers.length; n++) {
+        manager.addCompanion(stageNumbers[n]);
+        const cs = getCompanions(manager);
+        const count = cs.length;
+        for (let i = 0; i < count; i++) {
+          expect(cs[i].angleOffset).toBeCloseTo(i * ((2 * Math.PI) / count), 10);
+        }
+      }
+    });
+
+    it('recomputes orbitRadius for ALL companions when crossing baseRadius boundary at count=4', () => {
+      const manager = new CompanionManager([]);
+      manager.addCompanion(1);
+      manager.addCompanion(2);
+      manager.addCompanion(3);
+      // Add 4th — baseRadius switches from 2.0 to 2.5
+      manager.addCompanion(4);
+      const cs = getCompanions(manager);
+      expect(cs.length).toBe(4);
+      for (let i = 0; i < 4; i++) {
+        expect(cs[i].orbitRadius).toBeCloseTo(2.5 + (i % 3) * 0.15, 10);
+      }
+    });
+
+    it('recomputes orbitRadius for ALL companions when crossing baseRadius boundary at count=8', () => {
+      const manager = new CompanionManager([]);
+      for (const s of [1, 2, 3, 4, 5, 6, 7, 8]) {
+        manager.addCompanion(s);
+      }
+      const cs = getCompanions(manager);
+      expect(cs.length).toBe(8);
+      for (let i = 0; i < 8; i++) {
+        expect(cs[i].orbitRadius).toBeCloseTo(3.0 + (i % 3) * 0.15, 10);
+      }
+    });
+
+    it('recomputes orbitTilt and cached cos/sin for all companions on add', () => {
+      const manager = new CompanionManager([]);
+      for (const s of [1, 2, 3]) {
+        manager.addCompanion(s);
+      }
+      const cs = getCompanions(manager);
+      const count = cs.length;
+      for (let i = 0; i < count; i++) {
+        const expectedTilt = (i - count / 2) * 0.15;
+        expect(cs[i].orbitTilt).toBeCloseTo(expectedTilt, 10);
+        expect(cs[i].cosTilt).toBeCloseTo(Math.cos(expectedTilt), 10);
+        expect(cs[i].sinTilt).toBeCloseTo(Math.sin(expectedTilt), 10);
+      }
+    });
+
+    it('preserves entranceTimer of the newly added companion (not reset by redistribution)', () => {
+      const manager = new CompanionManager([]);
+      manager.addCompanion(1);
+      manager.addCompanion(2);
+      manager.addCompanion(3);
+      const cs = getCompanions(manager);
+      // The most recently added companion must still have its entrance timer near 1.0
+      expect(cs[cs.length - 1].entranceTimer).toBeCloseTo(1.0, 5);
+    });
+
+    it('does not reset entranceTimer of an in-progress entrance when another companion is added', () => {
+      const manager = new CompanionManager([]);
+      manager.addCompanion(1);
+      // Partially advance the first companion's entrance animation
+      manager.update(0.4, 0, 0, 0);
+      const cs1 = getCompanions(manager);
+      const partialTimer = cs1[0].entranceTimer;
+      expect(partialTimer).toBeGreaterThan(0);
+      expect(partialTimer).toBeLessThan(1.0);
+
+      // Add another companion — must not reset existing entranceTimer
+      manager.addCompanion(2);
+      const cs2 = getCompanions(manager);
+      expect(cs2[0].entranceTimer).toBeCloseTo(partialTimer, 10);
+      expect(cs2[1].entranceTimer).toBeCloseTo(1.0, 5);
+    });
+
+    it('matches the constructor-produced layout when adding companions one-by-one', () => {
+      const stages = [1, 2, 3, 4, 5];
+      const incremental = new CompanionManager([]);
+      for (const s of stages) incremental.addCompanion(s);
+      const bulk = new CompanionManager(stages);
+
+      const incCs = getCompanions(incremental);
+      const bulkCs = getCompanions(bulk);
+      expect(incCs.length).toBe(bulkCs.length);
+      for (let i = 0; i < incCs.length; i++) {
+        expect(incCs[i].angleOffset).toBeCloseTo(bulkCs[i].angleOffset, 10);
+        expect(incCs[i].orbitRadius).toBeCloseTo(bulkCs[i].orbitRadius, 10);
+        expect(incCs[i].orbitTilt).toBeCloseTo(bulkCs[i].orbitTilt, 10);
+      }
+    });
+  });
+
   describe('shared geometry / material caching', () => {
     it('reuses the same body geometry across multiple companions of the same shape', () => {
       const all = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];

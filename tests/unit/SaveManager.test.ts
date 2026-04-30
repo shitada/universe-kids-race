@@ -361,4 +361,45 @@ describe('SaveManager', () => {
       expect(manager.isFreshSession()).toBe(false);
     });
   });
+
+  describe('resetSessionDataPreservingMuted', () => {
+    it('preserves muted=true while resetting clearedStage and unlockedPlanets', () => {
+      const manager = new SaveManager();
+      manager.save({ clearedStage: 5, unlockedPlanets: [1, 2, 3], muted: true });
+      manager.resetSessionDataPreservingMuted();
+      const data = manager.load();
+      expect(data.clearedStage).toBe(0);
+      expect(data.unlockedPlanets).toEqual([]);
+      expect(data.muted).toBe(true);
+    });
+
+    it('preserves muted=false while resetting other fields', () => {
+      const manager = new SaveManager();
+      manager.save({ clearedStage: 7, unlockedPlanets: [4, 5], muted: false });
+      manager.resetSessionDataPreservingMuted();
+      const data = manager.load();
+      expect(data.clearedStage).toBe(0);
+      expect(data.unlockedPlanets).toEqual([]);
+      expect(data.muted).toBe(false);
+    });
+
+    it('does not throw and stores muted=false when no save exists', () => {
+      const manager = new SaveManager();
+      expect(() => manager.resetSessionDataPreservingMuted()).not.toThrow();
+      const data = manager.load();
+      expect(data.clearedStage).toBe(0);
+      expect(data.unlockedPlanets).toEqual([]);
+      expect(data.muted).toBe(false);
+    });
+
+    it('does not throw when localStorage.setItem throws', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const manager = new SaveManager();
+      vi.spyOn(localStorage, 'setItem').mockImplementationOnce(() => {
+        throw new Error('QuotaExceededError');
+      });
+      expect(() => manager.resetSessionDataPreservingMuted()).not.toThrow();
+      warnSpy.mockRestore();
+    });
+  });
 });

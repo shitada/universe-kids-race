@@ -546,6 +546,8 @@ export class StageScene implements Scene {
         this.audioManager.playSFX('boost');
         this.audioManager.startBoostSFX();
         this.boostFlameEffect.start();
+      } else {
+        this.audioManager.playSFX('boostDenied');
       }
       this.inputSystem.setBoostPressed(false);
     }
@@ -578,7 +580,13 @@ export class StageScene implements Scene {
     this.spaceship.update(deltaTime);
 
     // Spawn
-    const spawnResult = this.spawnSystem.update(deltaTime, this.spaceship.position.z, this.stageConfig);
+    const spawnResult = this.spawnSystem.update(
+      deltaTime,
+      this.spaceship.position.z,
+      this.stageConfig,
+      this.stars,
+      this.meteorites,
+    );
     for (const star of spawnResult.newStars) {
       this.stars.push(star);
       this.threeScene.add(star.mesh);
@@ -754,7 +762,7 @@ export class StageScene implements Scene {
       } else {
         // Animate retained stars (rainbow hue cycling / Y rotation) here so
         // this.stars is walked only once per frame.
-        star.update(deltaTime);
+        star.update(deltaTime, shipZ);
         if (starWrite !== read) stars[starWrite] = star;
         starWrite++;
       }
@@ -771,7 +779,7 @@ export class StageScene implements Scene {
         // Animate retained meteorites (X/Z rotation) here so this.meteorites
         // is walked only once per frame, mirroring the star retain branch.
         if (met.isActive) {
-          met.update(deltaTime);
+          met.update(deltaTime, shipZ);
         }
         if (metWrite !== read) meteorites[metWrite] = met;
         metWrite++;
