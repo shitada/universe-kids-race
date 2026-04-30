@@ -194,6 +194,71 @@ describe('SpawnSystem safe margin (Constitution I)', () => {
     system.dispose();
   });
 
+  it('ignores existing entities outside SAFE_Z_BAND even when xy collides (tail-walk early break)', () => {
+    // Regression for the tail-walk early-break optimization. Existing arrays are
+    // maintained in z-descending order (spawn order). Place a colliding entity
+    // far away in z (dz > band) at the head of the array and a non-colliding
+    // entity inside the band at the tail. The tail-walk must early-break before
+    // ever reaching the head, and the spawn must succeed at the deterministic
+    // colliding xy without rerolling.
+    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    try {
+      const system = new SpawnSystem();
+      // Star spawn slot: z = -starSpacing = -20. SAFE_Z_BAND = 3.0.
+      // Far entity at z = +50 collides on xy (would force reroll if scanned),
+      // but |dz| = 70 ≫ band so it must be ignored. With tail-walk it is not
+      // even visited because the in-band tail entity (z = -22) breaks earlier.
+      const farColliding = new Meteorite(0, 0, 50);
+      const nearSafe = new Meteorite(8, 0, -22); // |dz|=2 in band, |dx|=8 safe
+      const existingMeteorites = [farColliding, nearSafe]; // z-descending
+      const result = system.update(0.016, 0, denseStars, [], existingMeteorites);
+      expect(result.newStars.length).toBeGreaterThan(0);
+      // First star must spawn at the deterministic (0,0,-20) — no reroll fired.
+      const first = result.newStars[0];
+      expect(first.position.x).toBe(0);
+      expect(first.position.y).toBe(0);
+      expect(first.position.z).toBe(-20);
+      farColliding.dispose();
+      nearSafe.dispose();
+      system.dispose();
+    } finally {
+      randSpy.mockRestore();
+    }
+  });
+
+  it('detects collision with the band-tail entity even when head entries are far out of band', () => {
+    // Mirror of the above: the in-band tail entity actually collides on xy and
+    // must trigger a reroll. The head entry is far out of band and irrelevant.
+    // Sequence: per star → rainbowCheck, x, y [, x', y' on reroll].
+    const seq = [0.5, 0.5, 0.5, 0.95, 0.5];
+    let i = 0;
+    const randSpy = vi.spyOn(Math, 'random').mockImplementation(() => {
+      const v = seq[i] ?? 0.95;
+      i++;
+      return v;
+    });
+    try {
+      const system = new SpawnSystem();
+      // Far entity (out of band): irrelevant to safety.
+      const farSafe = new Meteorite(8, 0, 50);
+      // Tail entity (in band, colliding): must force a reroll.
+      const nearColliding = new Meteorite(0, 0, -20);
+      const existingMeteorites = [farSafe, nearColliding]; // z-descending
+      const result = system.update(0.016, 0, denseStars, [], existingMeteorites);
+      expect(result.newStars.length).toBeGreaterThan(0);
+      const first = result.newStars[0];
+      expect(first.position.z).toBe(-20);
+      expect(xyDistance(first.position, nearColliding.position)).toBeGreaterThanOrEqual(
+        SAFE_XY_DISTANCE,
+      );
+      farSafe.dispose();
+      nearColliding.dispose();
+      system.dispose();
+    } finally {
+      randSpy.mockRestore();
+    }
+  });
+
   it('matches legacy behavior when no nearby existing entities are passed (backward-compatible default)', () => {
     // With no existing stars / meteorites, no rerolls should ever fire and the
     // emitted positions must be deterministic given a fixed Math.random sequence.
