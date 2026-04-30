@@ -253,6 +253,116 @@ describe('AudioManager', () => {
     });
   });
 
+  describe('playBGM() tick spin-reschedules while AudioContext is suspended', () => {
+    it('does not create new oscillators while ctx.state !== "running"', () => {
+      vi.useFakeTimers();
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      const ctx = (am as any).ctx;
+
+      am.playBGM(1);
+      // Initial synchronous tick already scheduled bass/pad/arp/melody.
+      const oscCallsAfterInitialTick = ctx.createOscillator.mock.calls.length;
+
+      // Simulate the AudioContext being suspended (e.g. iOS Safari background).
+      ctx.state = 'suspended';
+
+      // Advance well past several beat intervals; tick should spin-reschedule
+      // at ~200ms without creating any new oscillators or gains.
+      const gainCallsBefore = ctx.createGain.mock.calls.length;
+      vi.advanceTimersByTime(2000);
+
+      expect(ctx.createOscillator.mock.calls.length).toBe(oscCallsAfterInitialTick);
+      expect(ctx.createGain.mock.calls.length).toBe(gainCallsBefore);
+
+      // bgmTimer should still be armed (spin re-schedule), and bgmPlaying true.
+      expect((am as any).bgmTimer).not.toBeNull();
+      expect((am as any).bgmPlaying).toBe(true);
+
+      am.stopBGM();
+      am.dispose();
+      vi.useRealTimers();
+    });
+
+    it('resumes scheduling new oscillators once ctx.state returns to "running"', () => {
+      vi.useFakeTimers();
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      const ctx = (am as any).ctx;
+
+      am.playBGM(1);
+      const oscCallsAfterInitialTick = ctx.createOscillator.mock.calls.length;
+
+      // Suspend, spin a while.
+      ctx.state = 'suspended';
+      vi.advanceTimersByTime(1000);
+      expect(ctx.createOscillator.mock.calls.length).toBe(oscCallsAfterInitialTick);
+
+      // Resume: next spin tick (within 200ms) should fire a normal beat that
+      // schedules arpeggio + melody (2 new oscillators).
+      ctx.state = 'running';
+      vi.advanceTimersByTime(250);
+
+      expect(ctx.createOscillator.mock.calls.length).toBeGreaterThanOrEqual(
+        oscCallsAfterInitialTick + 2,
+      );
+
+      am.stopBGM();
+      am.dispose();
+      vi.useRealTimers();
+    });
+
+    it('stops the spin-rescheduled tick after stopBGM() via generation guard', () => {
+      vi.useFakeTimers();
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      const ctx = (am as any).ctx;
+
+      am.playBGM(1);
+      ctx.state = 'suspended';
+      vi.advanceTimersByTime(400); // a couple of spin ticks
+
+      const oscCallsBeforeStop = ctx.createOscillator.mock.calls.length;
+      am.stopBGM();
+      // bgmTimer is cleared synchronously in stopBGM().
+      expect((am as any).bgmTimer).toBeNull();
+
+      // Even if the ctx becomes running again later, no further oscillators
+      // should be created from the old tick (generation guard).
+      ctx.state = 'running';
+      vi.advanceTimersByTime(2000);
+      expect(ctx.createOscillator.mock.calls.length).toBe(oscCallsBeforeStop);
+
+      am.dispose();
+      vi.useRealTimers();
+    });
+
+    it('schedules arpeggio + melody every beat while ctx.state === "running"', () => {
+      vi.useFakeTimers();
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      const ctx = (am as any).ctx;
+
+      am.playBGM(1);
+      const baseline = ctx.createOscillator.mock.calls.length;
+
+      // Make sure ctx is running and advance one beat (Stage 1: 120 BPM => 0.5s).
+      ctx.state = 'running';
+      vi.advanceTimersByTime(550);
+
+      // After one full beat we expect at least one additional arpeggio + melody pair.
+      expect(ctx.createOscillator.mock.calls.length).toBeGreaterThanOrEqual(baseline + 2);
+
+      am.stopBGM();
+      am.dispose();
+      vi.useRealTimers();
+    });
+  });
+
   describe('playBGM() 4-layer BGM system (T008)', () => {
     it('creates bass, pad, arpeggio, and melody oscillators', () => {
       vi.stubGlobal('AudioContext', MockAudioContext);

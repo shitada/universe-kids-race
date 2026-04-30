@@ -419,6 +419,15 @@ export class AudioManager {
       if (!this.initialized || !this.ctx) return;
       if (currentGen !== this.bgmGeneration) return;
 
+      // While the AudioContext is not running (e.g. iOS Safari backgrounded
+      // and suspend() was invoked), skip scheduling new oscillators to avoid
+      // accumulating short voices whose start times are pinned to the
+      // suspended currentTime. Spin-reschedule cheaply until we resume.
+      if (this.ctx.state !== 'running') {
+        this.bgmTimer = setTimeout(tick, 200);
+        return;
+      }
+
       const chordIndex = Math.floor(beat / config.beatsPerChord) % config.chords.length;
       const beatInChord = beat % config.beatsPerChord;
 
