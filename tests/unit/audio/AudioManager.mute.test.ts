@@ -257,4 +257,70 @@ describe('AudioManager mute control', () => {
       expect((am as any).masterGain).toBeNull();
     });
   });
+
+  describe('playSFX() while muted', () => {
+    it('does not create oscillator/gain nodes when muted', () => {
+      am.initSync();
+      const ctx = (am as any).ctx;
+      am.setMuted(true);
+      ctx.createOscillator.mockClear();
+      ctx.createGain.mockClear();
+
+      am.playSFX('starCollect');
+
+      expect(ctx.createOscillator).not.toHaveBeenCalled();
+      expect(ctx.createGain).not.toHaveBeenCalled();
+      am.dispose();
+    });
+
+    it('does not call ctx.resume() when muted (no ensureResumed)', () => {
+      am.initSync();
+      const ctx = (am as any).ctx;
+      am.setMuted(true);
+      ctx.resume.mockClear();
+      // Force suspended state so a stray ensureResumed() would call resume().
+      ctx.state = 'suspended';
+
+      am.playSFX('starCollect');
+
+      expect(ctx.resume).not.toHaveBeenCalled();
+      am.dispose();
+    });
+
+    it('100 muted playSFX calls produce zero AudioNodes', () => {
+      am.initSync();
+      const ctx = (am as any).ctx;
+      am.setMuted(true);
+      ctx.createOscillator.mockClear();
+      ctx.createGain.mockClear();
+
+      for (let i = 0; i < 100; i++) {
+        am.playSFX('starCollect');
+      }
+
+      expect(ctx.createOscillator).not.toHaveBeenCalled();
+      expect(ctx.createGain).not.toHaveBeenCalled();
+      am.dispose();
+    });
+
+    it('first playSFX after unmute generates nodes normally (not coalesce-suppressed)', () => {
+      am.initSync();
+      const ctx = (am as any).ctx;
+
+      am.setMuted(true);
+      am.playSFX('starCollect');
+
+      ctx.createOscillator.mockClear();
+      ctx.createGain.mockClear();
+      am.setMuted(false);
+      // Advance currentTime to be safe (though coalesce should not have been armed while muted).
+      ctx.currentTime += 1.0;
+
+      am.playSFX('starCollect');
+
+      expect(ctx.createOscillator).toHaveBeenCalled();
+      expect(ctx.createGain).toHaveBeenCalled();
+      am.dispose();
+    });
+  });
 });
