@@ -55,6 +55,15 @@ function getPlanetTexture(key: string, factory: () => THREE.CanvasTexture): THRE
   let tex = planetTextureCache.get(key);
   if (!tex) {
     tex = factory();
+    // Constitution IV（iPad Safari で 60fps 維持）対応:
+    // 手続き的に生成する惑星 CanvasTexture はミップマップ生成と
+    // LinearMipmapLinearFilter を無効化し、GPU 常駐サイズと
+    // ステージ初回入場時のテクスチャアップロード負荷を削減する。
+    // 目的地惑星はカメラから手前〜中距離で表示されるため、
+    // LinearFilter でも視覚的劣化はほぼ知覚されない。
+    tex.generateMipmaps = false;
+    tex.minFilter = THREE.LinearFilter;
+    tex.needsUpdate = true;
     planetTextureCache.set(key, tex);
   }
   return tex;
