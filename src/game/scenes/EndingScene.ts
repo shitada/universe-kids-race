@@ -77,6 +77,11 @@ export class EndingScene implements Scene {
   private bgStars: THREE.Points | null = null;
   private companionMeshes: THREE.Group[] = [];
   private companionGroup: THREE.Group | null = null;
+  // 円周上の X/Z 座標は static なので setupCelebration() で 1 回だけ事前計算してキャッシュする。
+  // 毎フレーム Math.cos/Math.sin を N 回呼ばないことで iPad Safari 60fps を守る。
+  // (CompanionManager の cosTilt/sinTilt キャッシュと同じ最適化方針)
+  private circleX: number[] = [];
+  private circleZ: number[] = [];
   private celebrationElapsed = 0;
   private thankYouShown = false;
 
@@ -224,6 +229,9 @@ export class EndingScene implements Scene {
   private setupCelebration(): void {
     this.companionGroup = new THREE.Group();
     this.companionMeshes = [];
+    // 再入時の整合性のため、既存の円周キャッシュをリセットしてから push する。
+    this.circleX.length = 0;
+    this.circleZ.length = 0;
     this.celebrationElapsed = 0;
     this.thankYouShown = false;
 
@@ -232,11 +240,12 @@ export class EndingScene implements Scene {
       const mesh = CompanionManager.createCompanionMesh(entry);
 
       const angle = i * ((2 * Math.PI) / PLANET_ENCYCLOPEDIA.length);
-      mesh.position.set(
-        Math.cos(angle) * EndingScene.CIRCLE_RADIUS,
-        0,
-        Math.sin(angle) * EndingScene.CIRCLE_RADIUS,
-      );
+      const x = Math.cos(angle) * EndingScene.CIRCLE_RADIUS;
+      const z = Math.sin(angle) * EndingScene.CIRCLE_RADIUS;
+      // 円周上 X/Z は static なのでここで 1 回だけ計算し、updateCelebration() ではキャッシュを使う。
+      this.circleX.push(x);
+      this.circleZ.push(z);
+      mesh.position.set(x, 0, z);
 
       mesh.scale.set(0, 0, 0);
 
@@ -255,6 +264,14 @@ export class EndingScene implements Scene {
       EndingScene.POPIN_DELAY * (this.companionMeshes.length - 1) +
       EndingScene.POPIN_DURATION;
 
+    // bounceY はフレーム共通なのでループ外で 1 回だけ算出する。
+    // (毎フレーム N 回 Math.abs(Math.sin(...)) を呼ばない)
+    const bounceActive = this.celebrationElapsed > POPIN_TOTAL;
+    const bounceY = bounceActive
+      ? Math.abs(Math.sin(this.celebrationElapsed * EndingScene.BOUNCE_SPEED)) *
+        EndingScene.BOUNCE_HEIGHT
+      : 0;
+
     for (let i = 0; i < this.companionMeshes.length; i++) {
       const mesh = this.companionMeshes[i];
       const startTime = i * EndingScene.POPIN_DELAY;
@@ -269,16 +286,10 @@ export class EndingScene implements Scene {
         mesh.scale.set(1, 1, 1);
       }
 
-      if (this.celebrationElapsed > POPIN_TOTAL) {
-        const angle = i * ((2 * Math.PI) / this.companionMeshes.length);
-        const bounceY =
-          Math.abs(Math.sin(this.celebrationElapsed * EndingScene.BOUNCE_SPEED)) *
-          EndingScene.BOUNCE_HEIGHT;
-        mesh.position.set(
-          Math.cos(angle) * EndingScene.CIRCLE_RADIUS,
-          bounceY,
-          Math.sin(angle) * EndingScene.CIRCLE_RADIUS,
-        );
+      if (bounceActive) {
+        // x/z は setupCelebration() で 1 回設定したまま触らない。
+        // y のみ更新することで Object3D の matrixWorld 連鎖無効化発火を最小化する。
+        mesh.position.y = bounceY;
       }
 
       mesh.rotation.y += deltaTime * 2;
