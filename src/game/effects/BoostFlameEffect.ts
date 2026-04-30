@@ -73,28 +73,20 @@ export class BoostFlameEffect {
   }
 
   /**
-   * Begin a new boost: reset all particle state and enable emission.
-   * Equivalent to the former `resetBoostFlame` in StageScene.
+   * Begin a new boost: reset state values only and enable emission.
+   *
+   * 観測されない CPU 書き込みを削るため、TypedArray (positions / colors /
+   * lifetimes / velocities) の全スロットクリアは行わない。
+   * - update() のスキャン上限は maxAliveIndex+1 までで、それより上のスロットは参照されない。
+   * - emit() は this.index をリングで進めながら使うスロットの lifetime / color /
+   *   position / velocity を必ず上書きするため、過去ブーストのデータが残っていても
+   *   live particle として誤検出されたり描画に寄与したりすることはない。
+   * - 描画レンジも setDrawRange(0,0) からスタートし、emit() で必要分だけ広がる。
+   * 結果として TypedArray は emit()/update() で必要分だけ上書きすれば足りる。
    */
   start(): void {
-    if (
-      !this.points
-      || !this.positions
-      || !this.colors
-      || !this.lifetimes
-      || !this.velocities
-    ) {
+    if (!this.points) {
       return;
-    }
-    const MAX = BoostFlameEffect.MAX_PARTICLES;
-    this.lifetimes.fill(0);
-    this.colors.fill(0);
-    this.velocities.fill(0);
-    for (let i = 0; i < MAX; i++) {
-      const i3 = i * 3;
-      this.positions[i3] = 0;
-      this.positions[i3 + 1] = 0;
-      this.positions[i3 + 2] = BoostFlameEffect.OFFSCREEN_Z;
     }
     (this.points.material as THREE.PointsMaterial).size = BoostFlameEffect.BASE_SIZE;
     this.lastSize = BoostFlameEffect.BASE_SIZE;
