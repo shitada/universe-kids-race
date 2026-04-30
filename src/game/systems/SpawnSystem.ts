@@ -42,6 +42,17 @@ export class SpawnSystem {
   private static readonly SAFE_Z_BAND = 3.0;
   private static readonly MAX_REROLL = 4;
 
+  // Constitution I (子供ファースト) / III (左右移動のみ): 宇宙船は Y=0 固定で
+  // X しか動かせない (Spaceship.update は y を変更しない)。CollisionSystem の
+  // 当たり判定半径は star: ship(1.0)+star(0.6)=1.6 / meteorite: ship(1.0)+
+  // meteorite(1.0)=2.0 のため、|y| がこの値を超えると X 操作だけでは収集/回避
+  // できない「見えるのに取れない／避けられない」配置になり得る。
+  // 衝突半径から安全マージン (約 0.6 / 1.2) を引いた範囲に Y を制限することで、
+  // X 操作のみで全ての星が到達可能になる（隕石は逆に余裕を残して見た目の Y
+  // ばらつきを保ちつつフェアな回避経路を確保）。
+  private static readonly STAR_SPAWN_Y_HALF_RANGE = 1.0;
+  private static readonly METEORITE_SPAWN_Y_HALF_RANGE = 0.8;
+
   private lastStarSpawnZ = 0;
   private meteoriteTimer = 0;
   private spawnAheadDistance = 80;
@@ -117,11 +128,11 @@ export class SpawnSystem {
       const z = this.lastStarSpawnZ;
       const isRainbow = Math.random() < 0.1;
       let x = (Math.random() - 0.5) * 14;
-      let y = (Math.random() - 0.5) * 4;
+      let y = (Math.random() - 0.5) * 2 * SpawnSystem.STAR_SPAWN_Y_HALF_RANGE;
       let safe = this.isXySafeAgainstMeteorites(x, y, z, existingMeteorites, result.newMeteorites);
       for (let attempt = 0; !safe && attempt < SpawnSystem.MAX_REROLL; attempt++) {
         x = (Math.random() - 0.5) * 14;
-        y = (Math.random() - 0.5) * 4;
+        y = (Math.random() - 0.5) * 2 * SpawnSystem.STAR_SPAWN_Y_HALF_RANGE;
         safe = this.isXySafeAgainstMeteorites(x, y, z, existingMeteorites, result.newMeteorites);
       }
       // Count this slot regardless to advance lastStarSpawnZ (already decremented)
@@ -141,11 +152,11 @@ export class SpawnSystem {
       this.meteoriteTimer -= config.meteoriteInterval;
       const z = spaceshipZ - this.spawnAheadDistance - Math.random() * 20;
       let x = (Math.random() - 0.5) * 14;
-      let y = (Math.random() - 0.5) * 3;
+      let y = (Math.random() - 0.5) * 2 * SpawnSystem.METEORITE_SPAWN_Y_HALF_RANGE;
       let safe = this.isXySafeAgainstStars(x, y, z, existingStars, result.newStars);
       for (let attempt = 0; !safe && attempt < SpawnSystem.MAX_REROLL; attempt++) {
         x = (Math.random() - 0.5) * 14;
-        y = (Math.random() - 0.5) * 3;
+        y = (Math.random() - 0.5) * 2 * SpawnSystem.METEORITE_SPAWN_Y_HALF_RANGE;
         safe = this.isXySafeAgainstStars(x, y, z, existingStars, result.newStars);
       }
       // If no safe xy was found, skip this meteorite. meteoriteTimer was already
