@@ -59,12 +59,51 @@ describe('ContextLossOverlay', () => {
     expect(heading.style.color).toMatch(/#FFD700|rgb\(255,\s*215,\s*0\)/i);
   });
 
-  it('button click invokes onReload exactly once', () => {
+  it('button pointerdown invokes onReload exactly once', () => {
     const onReload = vi.fn();
     overlay.show(onReload);
     const btn = document.querySelector<HTMLButtonElement>('[data-context-loss-reload]')!;
-    btn.click();
+    btn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     expect(onReload).toHaveBeenCalledTimes(1);
+  });
+
+  it('pointerdown stops propagation to parent listeners', () => {
+    const onReload = vi.fn();
+    const parentHandler = vi.fn();
+    document.body.addEventListener('pointerdown', parentHandler);
+    try {
+      overlay.show(onReload);
+      const btn = document.querySelector<HTMLButtonElement>('[data-context-loss-reload]')!;
+      btn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      expect(onReload).toHaveBeenCalledTimes(1);
+      expect(parentHandler).not.toHaveBeenCalled();
+    } finally {
+      document.body.removeEventListener('pointerdown', parentHandler);
+    }
+  });
+
+  it('repeated pointerdown does not invoke onReload more than once', () => {
+    const onReload = vi.fn();
+    overlay.show(onReload);
+    const btn = document.querySelector<HTMLButtonElement>('[data-context-loss-reload]')!;
+    btn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    btn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(onReload).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies pressed scale on pointerdown and restores on pointerup', () => {
+    overlay.show(() => {});
+    const btn = document.querySelector<HTMLButtonElement>('[data-context-loss-reload]')!;
+    btn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(btn.style.transform).toBe('scale(0.9)');
+    btn.dispatchEvent(new Event('pointerup', { bubbles: true }));
+    expect(btn.style.transform).toBe('scale(1)');
+  });
+
+  it('reload button uses touch-action: manipulation', () => {
+    overlay.show(() => {});
+    const btn = document.querySelector<HTMLButtonElement>('[data-context-loss-reload]')!;
+    expect(btn.style.touchAction).toBe('manipulation');
   });
 
   it('hide() removes overlay from DOM', () => {
