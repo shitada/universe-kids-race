@@ -12,6 +12,7 @@ import { ScoreSystem } from '../systems/ScoreSystem';
 import { SpawnSystem } from '../systems/SpawnSystem';
 import { BoostSystem } from '../systems/BoostSystem';
 import { HUD } from '../../ui/HUD';
+import { CountdownOverlay } from '../../ui/CountdownOverlay';
 import { getStageConfig, TOTAL_STAGES } from '../config/StageConfig';
 import { ParticleBurstManager } from '../effects/ParticleBurst';
 import { AirShield } from '../effects/AirShield';
@@ -266,6 +267,13 @@ export class StageScene implements Scene {
   // Boost flame particles
   private boostFlameEffect = new BoostFlameEffect();
 
+  // Stage start countdown ("3 → 2 → 1 → スタート！")
+  // While `isStarting` is true, input/spawn/ship-forward are skipped so the
+  // child can mentally prepare. Background stars and the destination planet
+  // continue to rotate gently for a calm waiting state.
+  private isStarting = false;
+  private countdownOverlay: CountdownOverlay | null = null;
+
   constructor(sceneManager: SceneManager, inputSystem: InputSystem, audioManager: AudioManager, saveManager: SaveManager) {
     this.sceneManager = sceneManager;
     this.inputSystem = inputSystem;
@@ -370,6 +378,42 @@ export class StageScene implements Scene {
 
     // BGM
     this.audioManager.playBGM(this.stageNumber);
+
+    // Stage start countdown. Locks input/spawn/forward motion until the
+    // child sees "3 → 2 → 1 → スタート！". Honors `?nocount=1` query string
+    // for E2E / smoke tests so existing assertions about immediate forward
+    // motion are not broken.
+    this.startCountdown();
+  }
+
+  private startCountdown(): void {
+    this.isStarting = true;
+    if (this.shouldSkipCountdown()) {
+      this.isStarting = false;
+      this.countdownOverlay = null;
+      return;
+    }
+    this.countdownOverlay = new CountdownOverlay({
+      onTick: () => {
+        this.audioManager.playSFX('countdownTick');
+      },
+      onGo: () => {
+        this.audioManager.playSFX('countdownGo');
+      },
+    });
+    this.countdownOverlay.show(() => {
+      this.isStarting = false;
+      this.countdownOverlay = null;
+    });
+  }
+
+  private shouldSkipCountdown(): boolean {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('nocount') === '1';
+    } catch {
+      return false;
+    }
   }
 
   private createBackground(): void {
@@ -562,6 +606,29 @@ export class StageScene implements Scene {
       if (this.clearTimer >= this.clearDelay) {
         this.handleStageComplete();
       }
+      return;
+    }
+
+    // Countdown gate: while the start countdown is showing, freeze input,
+    // spawning, and ship forward motion. Only the destination planet's
+    // gentle spin and background-star centering keep moving so the scene
+    // feels alive (Constitution I/IV).
+    if (this.isStarting) {
+      this.countdownOverlay?.tick(deltaTime);
+      if (this.destinationPlanetSpinTarget) {
+        this.destinationPlanetSpinTarget.rotation.y +=
+          deltaTime * StageScene.DESTINATION_PLANET_SPIN_SPEED;
+      }
+      if (this.bgStars) {
+        followCameraZ(this.bgStars, this.spaceship.position.z, BG_STAR_PARALLAX);
+      }
+      this.airShield.setPosition(
+        this.spaceship.position.x,
+        this.spaceship.position.y,
+        this.spaceship.position.z,
+      );
+      this.airShield.update(deltaTime);
+      this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
       return;
     }
 
@@ -950,6 +1017,11 @@ export class StageScene implements Scene {
     this.hud.hide();
     this.audioManager.stopBGM();
     this.audioManager.stopBoostSFX();
+    if (this.countdownOverlay) {
+      this.countdownOverlay.dispose();
+      this.countdownOverlay = null;
+    }
+    this.isStarting = false;
     this.boostFlameEffect.dispose();
     this.companionManager?.dispose();
     this.companionManager = null;
