@@ -24,7 +24,7 @@ export class BoostLinesEffect {
     this.scene = scene;
     this.positions = new Float32Array(BoostLinesEffect.POSITION_FLOATS);
     const geo = new THREE.BufferGeometry();
-    const positionAttr = new THREE.BufferAttribute(this.positions, 3);
+    const positionAttr = new THREE.BufferAttribute(this.positions, 3).setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('position', positionAttr);
     this.positionAttr = positionAttr;
     const mat = new THREE.LineBasicMaterial({ color: 0x00ddff, transparent: true, opacity: 0.6 });

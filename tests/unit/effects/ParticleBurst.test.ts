@@ -514,4 +514,16 @@ describe('ParticleBurstManager activeCount cache', () => {
     manager.cleanup(scene);
     expect(manager.getActiveCount()).toBe(0);
   });
+
+  it('position and color attributes are marked as DynamicDrawUsage for GPU streaming hint', () => {
+    const burst = new ParticleBurst();
+    burst.reset(scene, 0, 0, 0, 0xffdd00, 20, false);
+    const points = scene.children.find((c) => c instanceof THREE.Points) as THREE.Points;
+    expect(points).toBeDefined();
+    const geometry = points.geometry as THREE.BufferGeometry;
+    const positionAttr = geometry.getAttribute('position') as THREE.BufferAttribute;
+    const colorAttr = geometry.getAttribute('color') as THREE.BufferAttribute;
+    expect(positionAttr.usage).toBe(THREE.DynamicDrawUsage);
+    expect(colorAttr.usage).toBe(THREE.DynamicDrawUsage);
+  });
 });
