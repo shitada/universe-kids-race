@@ -451,6 +451,45 @@ describe('AudioManager', () => {
     });
   });
 
+  describe('playBGM() fades in persistent layers to avoid pop noise (bugfix)', () => {
+    it('schedules setValueAtTime(0) and linearRampToValueAtTime(volume) for bass and pad layers', () => {
+      vi.useFakeTimers();
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      am.playBGM(1);
+
+      const gainCopies = [...(am as any).bgmGains] as Array<any>;
+      expect(gainCopies.length).toBeGreaterThan(0);
+
+      // Every persistent gain should have been ramped up from 0.
+      for (const gain of gainCopies) {
+        expect(gain.gain.setValueAtTime).toHaveBeenCalledWith(0, expect.any(Number));
+        expect(gain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(
+          expect.any(Number),
+          expect.any(Number),
+        );
+        // The first ramp call ramps to a positive volume (the layer's target volume).
+        const firstRampCall = (gain.gain.linearRampToValueAtTime as any).mock.calls[0];
+        expect(firstRampCall[0]).toBeGreaterThan(0);
+      }
+
+      am.dispose();
+      vi.useRealTimers();
+    });
+
+    it('does not throw when muted', () => {
+      vi.useFakeTimers();
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      am.setMuted(true);
+      expect(() => am.playBGM(1)).not.toThrow();
+      am.dispose();
+      vi.useRealTimers();
+    });
+  });
+
   describe('stopBGM() defers disconnect to allow fade-out (bugfix)', () => {
     it('schedules linearRampToValueAtTime(0) for short-lived voices and defers disconnect', () => {
       vi.useFakeTimers();

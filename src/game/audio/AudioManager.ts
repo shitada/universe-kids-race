@@ -359,6 +359,8 @@ export class AudioManager {
 
     const config = BGM_CONFIGS[stageNumber] ?? BGM_CONFIGS[0];
     const beatInterval = 60 / config.tempo;
+    const startTime = this.ctx.currentTime;
+    const fadeInDuration = 0.03;
 
     // Bass layer - persistent oscillator
     try {
@@ -366,10 +368,11 @@ export class AudioManager {
       const bassGain = this.ctx.createGain();
       bassOsc.type = config.waveforms.bass;
       bassOsc.frequency.value = config.bassNotes[0];
-      bassGain.gain.value = config.volumes.bass;
+      bassGain.gain.setValueAtTime(0, startTime);
+      bassGain.gain.linearRampToValueAtTime(config.volumes.bass, startTime + fadeInDuration);
       bassOsc.connect(bassGain);
       bassGain.connect(this.sink()!);
-      bassOsc.start();
+      bassOsc.start(startTime);
       this.bgmOscillators.push(bassOsc);
       this.bgmGains.push(bassGain);
     } catch {
@@ -385,10 +388,11 @@ export class AudioManager {
         const padGain = this.ctx.createGain();
         padOsc.type = config.waveforms.pad;
         padOsc.frequency.value = firstChord[i];
-        padGain.gain.value = config.volumes.pad;
+        padGain.gain.setValueAtTime(0, startTime);
+        padGain.gain.linearRampToValueAtTime(config.volumes.pad, startTime + fadeInDuration);
         padOsc.connect(padGain);
         padGain.connect(this.sink()!);
-        padOsc.start();
+        padOsc.start(startTime);
         padOscs.push(padOsc);
         this.bgmOscillators.push(padOsc);
         this.bgmGains.push(padGain);
