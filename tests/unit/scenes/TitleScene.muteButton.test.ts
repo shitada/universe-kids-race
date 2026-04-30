@@ -26,6 +26,7 @@ function createMockAudioManager(initialMuted = false): {
   const mock = {
     init: vi.fn(),
     initSync: vi.fn(),
+    isInitialized: vi.fn(() => false),
     playBGM: vi.fn(),
     stopBGM: vi.fn(),
     isMuted: vi.fn(() => state.muted),

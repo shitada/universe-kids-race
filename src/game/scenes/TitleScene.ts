@@ -82,6 +82,12 @@ export class TitleScene implements Scene {
   private muteHandle: MuteButtonHandle | null = null;
   private tutorialOverlay = new TutorialOverlay();
   private encyclopediaOverlay = new EncyclopediaOverlay();
+  // タイトル滞在中、初回 user gesture（AudioContext 初期化）を待つフラグ。
+  // iPad Safari の AudioContext は user gesture 必須のため、enter() 直後の
+  // 即時 playBGM(0) は AudioManager が既に初期化済みのとき（再訪問時）のみ
+  // 機能する。初回起動時は overlay の pointerdown ハンドラ内で initSync()
+  // 直後に再生開始するため、その判定にこのフラグを利用する。
+  private bgmPending = false;
 
   constructor(sceneManager: SceneManager, saveManager: SaveManager, audioManager: AudioManager) {
     this.sceneManager = sceneManager;
@@ -114,6 +120,19 @@ export class TitleScene implements Scene {
 
     this.createOverlay();
     this.createMuteButton();
+
+    // タイトル BGM (BGM_0) を再生する。
+    // - AudioContext が既に初期化済み（エンディング後・🏠 ボタン経由でタイトル
+    //   へ戻った再訪問ケース）であれば即時再生を開始する。
+    // - 未初期化（初回起動）であれば bgmPending フラグだけ立て、overlay の
+    //   pointerdown {once:true} ハンドラ側で initSync() 直後に再生する。
+    //   iPad Safari は user gesture 内でしか AudioContext を起動できないため。
+    if (this.audioManager.isInitialized()) {
+      this.audioManager.playBGM(0);
+      this.bgmPending = false;
+    } else {
+      this.bgmPending = true;
+    }
   }
 
   private createMuteButton(): void {
@@ -176,9 +195,11 @@ export class TitleScene implements Scene {
 
     button.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
-      // Initialize AudioContext synchronously on user gesture (iPad Safari requirement)
+      // Initialize AudioContext synchronously on user gesture (iPad Safari requirement).
+      // ここで playBGM(0) は呼ばない。直後の StageScene.enter() が
+      // playBGM(stageNumber) を呼び、内部の stopBGM() でタイトル BGM を即停止
+      // するため、タイトル BGM は実質的に再生されない無駄な処理になっていた。
       this.audioManager.initSync();
-      this.audioManager.playBGM(0);
       const saveData = this.saveManager.load();
       const startStage = Math.min(saveData.clearedStage + 1, TOTAL_STAGES);
       this.sceneManager.requestTransition('stage', { stageNumber: startStage });
@@ -250,9 +271,16 @@ export class TitleScene implements Scene {
     this.overlay.appendChild(encyclopediaBtn);
     uiOverlay.appendChild(this.overlay);
 
-    // First touch anywhere on overlay initializes audio (iPad Safari requirement)
+    // First touch anywhere on overlay initializes audio (iPad Safari requirement).
+    // 初回起動時は AudioContext 未初期化のため enter() 内では BGM_0 を開始
+    // できない（user gesture 必須）。ここで initSync() 直後に bgmPending を
+    // 確認し、まだ再生されていなければ BGM_0 を開始する。
     this.overlay.addEventListener('pointerdown', () => {
       this.audioManager.initSync();
+      if (this.bgmPending) {
+        this.audioManager.playBGM(0);
+        this.bgmPending = false;
+      }
     }, { once: true });
   }
 
@@ -266,6 +294,12 @@ export class TitleScene implements Scene {
   exit(): void {
     this.tutorialOverlay.hide();
     this.encyclopediaOverlay.hide();
+    // タイトル BGM を明示的に停止する。StageScene.enter() 内の playBGM() が
+    // stopBGM() を呼ぶため二重実行になるが、stopBGM() は冪等であり
+    // bgmGeneration インクリメント・配列クリアともに副作用はない。
+    // 「タイトル BGM がステージ突入後にうっすら残る」可能性を断つ。
+    this.audioManager.stopBGM();
+    this.bgmPending = false;
     if (this.stars) {
       // SHARED: geometry / material はモジュールキャッシュで使い回すため dispose しない。
       this.stars.parent?.remove(this.stars);

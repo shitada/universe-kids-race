@@ -302,6 +302,15 @@ export class AudioManager {
     }
   }
 
+  /**
+   * AudioContext が初期化済みかを返す純粋な getter（副作用なし）。
+   * TitleScene が「再訪問時は enter() で即時 playBGM(0)、初回起動時は
+   * pointerdown を待つ」を判定するために使用する。
+   */
+  isInitialized(): boolean {
+    return this.initialized;
+  }
+
   initSync(): void {
     if (this.initialized) {
       this.ensureResumed();
