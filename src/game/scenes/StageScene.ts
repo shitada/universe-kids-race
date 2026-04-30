@@ -254,6 +254,29 @@ export class StageScene implements Scene {
   // null means "unknown / needs to be re-asserted on the next write".
   private lastBoostLinesVisible: boolean | null = null;
 
+  // Pre-computed pseudo-random jitter table for boost line endpoint generation.
+  // updateBoostEffects() previously called Math.random() 100 times per frame
+  // during boost (5 per line × 20 lines), which on iPad Safari accumulates
+  // ~18,000 PRNG state advances per 3-second boost. We instead sample from a
+  // small table seeded once with Math.random() at module load and advance a
+  // cursor each frame so the visible "scattered" distribution is preserved
+  // while the per-frame Math.random() count drops to 0 (only the table init
+  // itself runs once). TABLE_SIZE is a power of two so wrap-around uses a bit
+  // mask. STRIDE is co-prime with TABLE_SIZE so consecutive frames pull
+  // non-aligned offsets, avoiding obvious repetition over the boost window.
+  private static readonly BOOST_JITTER_TABLE_SIZE = 256;
+  private static readonly BOOST_JITTER_TABLE_MASK =
+    StageScene.BOOST_JITTER_TABLE_SIZE - 1;
+  private static readonly BOOST_JITTER_STRIDE = 7;
+  private static readonly BOOST_JITTER_TABLE: Float32Array = (() => {
+    const table = new Float32Array(StageScene.BOOST_JITTER_TABLE_SIZE);
+    for (let i = 0; i < table.length; i++) {
+      table[i] = Math.random();
+    }
+    return table;
+  })();
+  private boostJitterCursor = 0;
+
   // Companion manager
   private companionManager: CompanionManager | null = null;
 
@@ -790,18 +813,23 @@ export class StageScene implements Scene {
     const pos = this.boostLinePositions;
     const shipX = this.spaceship.position.x;
     const shipZ = this.spaceship.position.z;
+    const table = StageScene.BOOST_JITTER_TABLE;
+    const mask = StageScene.BOOST_JITTER_TABLE_MASK;
+    const cursor = this.boostJitterCursor;
     for (let i = 0; i < 20; i++) {
-      const x = shipX + (Math.random() - 0.5) * 4;
-      const y = (Math.random() - 0.5) * 3;
-      const z = shipZ + 2 + Math.random() * 8;
+      const idx = i * 5;
+      const x = shipX + (table[(cursor + idx) & mask] - 0.5) * 4;
+      const y = (table[(cursor + idx + 1) & mask] - 0.5) * 3;
+      const z = shipZ + 2 + table[(cursor + idx + 2) & mask] * 8;
       const base = i * 6;
       pos[base] = x;
       pos[base + 1] = y;
       pos[base + 2] = z;
       pos[base + 3] = x;
       pos[base + 4] = y;
-      pos[base + 5] = z + 2 + Math.random() * 3;
+      pos[base + 5] = z + 2 + table[(cursor + idx + 3) & mask] * 3;
     }
+    this.boostJitterCursor = (cursor + StageScene.BOOST_JITTER_STRIDE) & mask;
     this.boostLinePositionAttr!.needsUpdate = true;
     if (this.lastBoostLinesVisible !== true) {
       this.boostLines.visible = true;
