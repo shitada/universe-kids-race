@@ -402,4 +402,156 @@ describe('SaveManager', () => {
       warnSpy.mockRestore();
     });
   });
+
+  describe('bestStageStars', () => {
+    it('defaults to empty object when no save exists', () => {
+      const manager = new SaveManager();
+      expect(manager.load().bestStageStars).toEqual({});
+    });
+
+    it('defaults to empty object for legacy saves missing the field', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({ clearedStage: 3, unlockedPlanets: [1, 2] }));
+      const manager = new SaveManager();
+      expect(manager.load().bestStageStars).toEqual({});
+    });
+
+    it('does not throw on legacy save without bestStageStars', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({ clearedStage: 3, unlockedPlanets: [1, 2] }));
+      const manager = new SaveManager();
+      expect(() => manager.load()).not.toThrow();
+    });
+
+    it('persists bestStageStars through save/load roundtrip', () => {
+      const manager = new SaveManager();
+      manager.save({ clearedStage: 2, unlockedPlanets: [1, 2], bestStageStars: { 1: 5, 2: 3 } });
+      const data = manager.load();
+      expect(data.bestStageStars).toEqual({ 1: 5, 2: 3 });
+    });
+
+    it('drops stage keys outside 1..TOTAL_STAGES', () => {
+      storage.set(
+        'universe-kids-race-save',
+        JSON.stringify({
+          clearedStage: 1,
+          unlockedPlanets: [1],
+          bestStageStars: { 0: 1, 1: 4, [String(TOTAL_STAGES)]: 9, [String(TOTAL_STAGES + 1)]: 99 },
+        }),
+      );
+      const manager = new SaveManager();
+      const data = manager.load();
+      expect(data.bestStageStars).toEqual({ 1: 4, [TOTAL_STAGES]: 9 });
+    });
+
+    it('drops non-integer or non-canonical stage keys', () => {
+      storage.set(
+        'universe-kids-race-save',
+        JSON.stringify({ clearedStage: 1, unlockedPlanets: [1], bestStageStars: { 'a': 1, '1.5': 2, '1': 3 } }),
+      );
+      const manager = new SaveManager();
+      expect(manager.load().bestStageStars).toEqual({ 1: 3 });
+    });
+
+    it('drops negative or non-integer star counts', () => {
+      storage.set(
+        'universe-kids-race-save',
+        JSON.stringify({ clearedStage: 1, unlockedPlanets: [1], bestStageStars: { 1: -1, 2: 2.5, 3: 'x', 4: 7 } }),
+      );
+      const manager = new SaveManager();
+      expect(manager.load().bestStageStars).toEqual({ 4: 7 });
+    });
+
+    it('falls back to empty object when bestStageStars is not an object', () => {
+      storage.set(
+        'universe-kids-race-save',
+        JSON.stringify({ clearedStage: 1, unlockedPlanets: [1], bestStageStars: 'oops' }),
+      );
+      const manager = new SaveManager();
+      expect(manager.load().bestStageStars).toEqual({});
+    });
+
+    it('falls back to empty object when bestStageStars is an array', () => {
+      storage.set(
+        'universe-kids-race-save',
+        JSON.stringify({ clearedStage: 1, unlockedPlanets: [1], bestStageStars: [1, 2, 3] }),
+      );
+      const manager = new SaveManager();
+      expect(manager.load().bestStageStars).toEqual({});
+    });
+  });
+
+  describe('updateBestStageStars', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('records a new best when no previous record exists', () => {
+      const manager = new SaveManager();
+      manager.updateBestStageStars(1, 4);
+      expect(manager.load().bestStageStars).toEqual({ 1: 4 });
+    });
+
+    it('updates the record only when the new count is higher', () => {
+      const manager = new SaveManager();
+      manager.updateBestStageStars(1, 3);
+      manager.updateBestStageStars(1, 5);
+      expect(manager.load().bestStageStars?.[1]).toBe(5);
+    });
+
+    it('does not overwrite a higher previous record with a lower count', () => {
+      const manager = new SaveManager();
+      manager.updateBestStageStars(1, 7);
+      manager.updateBestStageStars(1, 2);
+      expect(manager.load().bestStageStars?.[1]).toBe(7);
+    });
+
+    it('does not overwrite when counts are equal', () => {
+      const manager = new SaveManager();
+      manager.updateBestStageStars(1, 4);
+      manager.updateBestStageStars(1, 4);
+      expect(manager.load().bestStageStars?.[1]).toBe(4);
+    });
+
+    it('tracks multiple stages independently', () => {
+      const manager = new SaveManager();
+      manager.updateBestStageStars(1, 3);
+      manager.updateBestStageStars(2, 8);
+      manager.updateBestStageStars(3, 0);
+      expect(manager.load().bestStageStars).toEqual({ 1: 3, 2: 8 });
+    });
+
+    it('ignores invalid stageNumber', () => {
+      const manager = new SaveManager();
+      manager.updateBestStageStars(0, 5);
+      manager.updateBestStageStars(TOTAL_STAGES + 1, 5);
+      manager.updateBestStageStars(1.5, 5);
+      expect(manager.load().bestStageStars).toEqual({});
+    });
+
+    it('ignores negative or non-integer star counts', () => {
+      const manager = new SaveManager();
+      manager.updateBestStageStars(1, -1);
+      manager.updateBestStageStars(1, 2.5);
+      expect(manager.load().bestStageStars).toEqual({});
+    });
+
+    it('does not throw when localStorage.setItem throws', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const manager = new SaveManager();
+      vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+        throw new Error('QuotaExceededError');
+      });
+      expect(() => manager.updateBestStageStars(1, 5)).not.toThrow();
+      warnSpy.mockRestore();
+    });
+
+    it('preserves clearedStage and unlockedPlanets when updating', () => {
+      const manager = new SaveManager();
+      manager.save({ clearedStage: 4, unlockedPlanets: [1, 2, 3] });
+      manager.updateBestStageStars(2, 6);
+      const data = manager.load();
+      expect(data.clearedStage).toBe(4);
+      expect(data.unlockedPlanets).toEqual([1, 2, 3]);
+      expect(data.bestStageStars).toEqual({ 2: 6 });
+    });
+  });
 });

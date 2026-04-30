@@ -6,14 +6,17 @@ export class EncyclopediaOverlay {
   private detailEl: HTMLDivElement | null = null;
   private isShowingDetail = false;
   private onSelectStage: ((stageNumber: number) => void) | null = null;
+  private bestStageStars: Record<number, number> = {};
 
   show(
     unlockedPlanets: number[],
     onClose: () => void,
     onSelectStage?: (stageNumber: number) => void,
+    bestStageStars?: Record<number, number>,
   ): void {
     if (this.overlayEl) return;
     this.onSelectStage = onSelectStage ?? null;
+    this.bestStageStars = bestStageStars ?? {};
 
     const uiOverlay = document.getElementById('ui-overlay');
     if (!uiOverlay) return;
@@ -100,6 +103,7 @@ export class EncyclopediaOverlay {
     }
     this.isShowingDetail = false;
     this.onSelectStage = null;
+    this.bestStageStars = {};
   }
 
   private createCard(entry: PlanetEncyclopediaEntry, isUnlocked: boolean): HTMLDivElement {
@@ -139,6 +143,21 @@ export class EncyclopediaOverlay {
         margin-top: 0.3rem;
       `;
       card.appendChild(name);
+
+      const bestCount = this.bestStageStars[entry.stageNumber];
+      if (typeof bestCount === 'number' && bestCount > 0) {
+        const best = document.createElement('div');
+        best.setAttribute('data-card-best', '');
+        best.textContent = `⭐ ベスト ${bestCount}`;
+        best.style.cssText = `
+          font-family: 'Zen Maru Gothic', sans-serif;
+          font-size: 0.85rem;
+          font-weight: 700;
+          color: #FFD700;
+          margin-top: 0.2rem;
+        `;
+        card.appendChild(best);
+      }
 
       card.addEventListener('pointerdown', (e) => {
         e.stopPropagation();
@@ -236,6 +255,21 @@ export class EncyclopediaOverlay {
       text-align: center;
     `;
     detailCard.appendChild(trivia);
+
+    const bestCount = this.bestStageStars[entry.stageNumber];
+    if (typeof bestCount === 'number' && bestCount > 0) {
+      const best = document.createElement('div');
+      best.setAttribute('data-detail-best', '');
+      best.textContent = `⭐ ベスト ${bestCount}`;
+      best.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: #FFD700;
+        margin-top: 0.5rem;
+      `;
+      detailCard.appendChild(best);
+    }
 
     this.detailEl.appendChild(detailCard);
 

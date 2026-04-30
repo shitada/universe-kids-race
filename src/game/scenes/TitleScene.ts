@@ -264,6 +264,7 @@ export class TitleScene implements Scene {
             totalStarCount: 0,
           });
         },
+        saveData.bestStageStars ?? {},
       );
     });
 

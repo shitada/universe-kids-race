@@ -139,4 +139,62 @@ describe('EncyclopediaOverlay', () => {
     const detail = uiOverlay.querySelector('[data-detail]');
     expect(detail).not.toBeNull();
   });
+
+  describe('bestStageStars display', () => {
+    it('does not show best label on unlocked card when no record exists', () => {
+      overlay.show([1], () => {}, undefined, {});
+      const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
+      expect(card.querySelector('[data-card-best]')).toBeNull();
+    });
+
+    it('does not show best label when bestStageStars omitted (backward compat)', () => {
+      overlay.show([1], () => {});
+      const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
+      expect(card.querySelector('[data-card-best]')).toBeNull();
+    });
+
+    it('does not show best label when count is 0', () => {
+      overlay.show([1], () => {}, undefined, { 1: 0 });
+      const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
+      expect(card.querySelector('[data-card-best]')).toBeNull();
+    });
+
+    it('shows "⭐ ベスト N" on unlocked card when a record exists', () => {
+      overlay.show([1], () => {}, undefined, { 1: 7 });
+      const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
+      const best = card.querySelector('[data-card-best]') as HTMLElement | null;
+      expect(best).not.toBeNull();
+      expect(best!.textContent).toBe('⭐ ベスト 7');
+    });
+
+    it('does not show best label on locked card', () => {
+      overlay.show([], () => {}, undefined, { 1: 9 });
+      const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
+      expect(card.querySelector('[data-card-best]')).toBeNull();
+    });
+
+    it('shows "⭐ ベスト N" inside detail view when a record exists', () => {
+      overlay.show([1], () => {}, undefined, { 1: 4 });
+      const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
+      card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      const detailBest = uiOverlay.querySelector('[data-detail-best]') as HTMLElement | null;
+      expect(detailBest).not.toBeNull();
+      expect(detailBest!.textContent).toBe('⭐ ベスト 4');
+    });
+
+    it('does not show best label inside detail when no record exists', () => {
+      overlay.show([1], () => {}, undefined, {});
+      const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
+      card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      expect(uiOverlay.querySelector('[data-detail-best]')).toBeNull();
+    });
+
+    it('per-stage best counts render independently', () => {
+      overlay.show([1, 2], () => {}, undefined, { 1: 3, 2: 8 });
+      const c1 = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
+      const c2 = uiOverlay.querySelector('[data-card][data-stage="2"]') as HTMLElement;
+      expect(c1.querySelector('[data-card-best]')!.textContent).toBe('⭐ ベスト 3');
+      expect(c2.querySelector('[data-card-best]')!.textContent).toBe('⭐ ベスト 8');
+    });
+  });
 });
