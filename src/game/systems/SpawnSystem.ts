@@ -159,6 +159,17 @@ export class SpawnSystem {
     return result;
   }
 
+  // NOTE on traversal order: `existing` (caller's live entity arrays) and
+  // `sameFrame` (this frame's freshly spawned entities) are both maintained in
+  // spawn order, which equals z-descending order — spawn z monotonically
+  // decreases (lastStarSpawnZ -= starSpacing; meteorites spawn at shipZ-80-jitter
+  // as the ship moves forward) and EntityScene's cleanupPassedObjects performs
+  // in-place compaction that preserves order. The candidate `z` is always at
+  // (or beyond) the head of the spawn frontier, so existing entries have z ≥ z.
+  // Traversing from the tail visits the smallest z (closest dz) first; once
+  // (p.z - z) > band, all earlier entries have even larger dz and can be
+  // skipped. The `dz < -band` branch is retained as a safety net in case the
+  // ordering invariant is ever violated by future changes.
   private isXySafeAgainstMeteorites(
     x: number,
     y: number,
@@ -168,16 +179,20 @@ export class SpawnSystem {
   ): boolean {
     const minSq = SpawnSystem.SAFE_XY_DISTANCE * SpawnSystem.SAFE_XY_DISTANCE;
     const band = SpawnSystem.SAFE_Z_BAND;
-    for (let i = 0; i < existing.length; i++) {
+    for (let i = existing.length - 1; i >= 0; i--) {
       const p = existing[i].position;
-      if (Math.abs(p.z - z) > band) continue;
+      const dz = p.z - z;
+      if (dz > band) break;
+      if (dz < -band) continue;
       const dx = p.x - x;
       const dy = p.y - y;
       if (dx * dx + dy * dy < minSq) return false;
     }
-    for (let i = 0; i < sameFrame.length; i++) {
+    for (let i = sameFrame.length - 1; i >= 0; i--) {
       const p = sameFrame[i].position;
-      if (Math.abs(p.z - z) > band) continue;
+      const dz = p.z - z;
+      if (dz > band) break;
+      if (dz < -band) continue;
       const dx = p.x - x;
       const dy = p.y - y;
       if (dx * dx + dy * dy < minSq) return false;
@@ -194,16 +209,20 @@ export class SpawnSystem {
   ): boolean {
     const minSq = SpawnSystem.SAFE_XY_DISTANCE * SpawnSystem.SAFE_XY_DISTANCE;
     const band = SpawnSystem.SAFE_Z_BAND;
-    for (let i = 0; i < existing.length; i++) {
+    for (let i = existing.length - 1; i >= 0; i--) {
       const p = existing[i].position;
-      if (Math.abs(p.z - z) > band) continue;
+      const dz = p.z - z;
+      if (dz > band) break;
+      if (dz < -band) continue;
       const dx = p.x - x;
       const dy = p.y - y;
       if (dx * dx + dy * dy < minSq) return false;
     }
-    for (let i = 0; i < sameFrame.length; i++) {
+    for (let i = sameFrame.length - 1; i >= 0; i--) {
       const p = sameFrame[i].position;
-      if (Math.abs(p.z - z) > band) continue;
+      const dz = p.z - z;
+      if (dz > band) break;
+      if (dz < -band) continue;
       const dx = p.x - x;
       const dy = p.y - y;
       if (dx * dx + dy * dy < minSq) return false;
