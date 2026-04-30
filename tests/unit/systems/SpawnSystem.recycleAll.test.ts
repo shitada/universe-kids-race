@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as THREE from 'three';
 import { SpawnSystem } from '../../../src/game/systems/SpawnSystem';
 import type { StageConfig } from '../../../src/types';
@@ -24,6 +24,10 @@ function spawnAcrossFrames(system: SpawnSystem, frames: number): void {
 }
 
 describe('SpawnSystem.recycleAll', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('returns all active pooled entities to the available pool without disposing them', () => {
     const system = new SpawnSystem();
     spawnAcrossFrames(system, 20);
@@ -112,6 +116,13 @@ describe('SpawnSystem.recycleAll', () => {
   });
 
   it('recycleAll on an active stage caps next-stage pool growth far below dispose+realloc baseline', () => {
+    // Pin Math.random so the NORMAL/RAINBOW split and xy positions are
+    // identical in both stage runs. Without this, the 10% RAINBOW probability
+    // can shift per-pool peaks between stages and cause a spurious assertion
+    // failure (the +5 tolerance is intentionally tight to catch real regressions).
+    // 0.5 > 0.1 → always NORMAL; x = (0.5-0.5)*14 = 0; y = 0.
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
     // End-to-end check: drive a "stage" with active (un-released) entities,
     // then start a second stage. With recycleAll() the second stage reuses
     // the still-allocated Mesh / Material instances; with dispose() it would
