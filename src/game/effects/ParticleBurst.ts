@@ -193,7 +193,15 @@ export class ParticleBurst {
       this.sizes[i] = this.initialSizes[i] * remaining;
     }
 
+    // Limit the GPU upload window to the live particle slice. The backing
+    // Float32Arrays are sized for MAX_PARTICLES_PER_BURST (50), but bursts
+    // such as the NORMAL star pickup only use 20 particles, so without a
+    // range hint Three.js would re-upload the unused tail every frame.
+    this.positionAttr.clearUpdateRanges();
+    this.positionAttr.addUpdateRange(0, this.count * 3);
     this.positionAttr.needsUpdate = true;
+    this.sizeAttr.clearUpdateRanges();
+    this.sizeAttr.addUpdateRange(0, this.count);
     this.sizeAttr.needsUpdate = true;
     this.material.opacity = remaining;
     return false;
@@ -239,8 +247,18 @@ export class ParticleBurst {
   }
 
   private markAttributesDirty(): void {
+    // Mirror the per-frame upload-range narrowing in update(): only the
+    // active [0, count) slice was written by reset(), so flagging the
+    // remaining MAX_PARTICLES_PER_BURST tail dirty would waste bandwidth.
+    const count = this.count;
+    this.positionAttr.clearUpdateRanges();
+    this.positionAttr.addUpdateRange(0, count * 3);
     this.positionAttr.needsUpdate = true;
+    this.colorAttr.clearUpdateRanges();
+    this.colorAttr.addUpdateRange(0, count * 3);
     this.colorAttr.needsUpdate = true;
+    this.sizeAttr.clearUpdateRanges();
+    this.sizeAttr.addUpdateRange(0, count);
     this.sizeAttr.needsUpdate = true;
   }
 }
