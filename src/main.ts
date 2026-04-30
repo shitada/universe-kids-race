@@ -11,6 +11,7 @@ import { AdaptivePixelRatioController } from './game/utils/AdaptivePixelRatioCon
 import { TOTAL_STAGES } from './game/config/StageConfig';
 import { createResizeCoalescer } from './game/utils/ResizeCoalescer';
 import { createSceneTransitionHandler } from './game/utils/createSceneTransitionHandler';
+import { getViewportSize, subscribeViewportResize } from './game/utils/getViewportSize';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 
@@ -52,14 +53,16 @@ function applyPixelRatioTier(tier: number): void {
   // Force re-apply: pixel ratio change requires setSize even if dimensions match.
   lastAppliedWidth = 0;
   lastAppliedHeight = 0;
-  applyRendererSize(window.innerWidth, window.innerHeight);
+  const { width: w0, height: h0 } = getViewportSize();
+  applyRendererSize(w0, h0);
 }
 
 applyPixelRatioTier(MAX_TIER);
 const pixelRatioController = new AdaptivePixelRatioController(MAX_TIER, applyPixelRatioTier);
-renderer.setSize(window.innerWidth, window.innerHeight);
-lastAppliedWidth = window.innerWidth;
-lastAppliedHeight = window.innerHeight;
+const initialViewport = getViewportSize();
+renderer.setSize(initialViewport.width, initialViewport.height);
+lastAppliedWidth = initialViewport.width;
+lastAppliedHeight = initialViewport.height;
 renderer.setClearColor(0x000020);
 
 const inputSystem = new InputSystem();
@@ -119,12 +122,16 @@ gameLoop.start(
 
 // Handle resize - coalesce via rAF to avoid WebGL framebuffer reallocation
 // thrash on iPad Safari URL bar show/hide (Constitution IV: 60fps).
+// Subscribes to both window and visualViewport events; the latter is needed
+// for iPad Safari to react promptly to URL bar show/hide (window.resize is
+// delayed/suppressed in that case). Duplicate dispatches are absorbed by the
+// coalescer's rAF batching and "same size" guard.
 const resizeCoalescer = createResizeCoalescer((w, h) => applyRendererSize(w, h));
 function scheduleResize(): void {
-  resizeCoalescer.schedule(window.innerWidth, window.innerHeight);
+  const { width, height } = getViewportSize();
+  resizeCoalescer.schedule(width, height);
 }
-window.addEventListener('resize', scheduleResize);
-window.addEventListener('orientationchange', scheduleResize);
+subscribeViewportResize(window, scheduleResize);
 
 // Auto-pause on background (T053 early integration)
 document.addEventListener('visibilitychange', () => {
@@ -136,7 +143,8 @@ document.addEventListener('visibilitychange', () => {
     audioManager.ensureResumed();
     pixelRatioController.notifyResume(performance.now());
     // Re-sync size in case viewport changed while in background.
-    resizeCoalescer.schedule(window.innerWidth, window.innerHeight);
+    const { width, height } = getViewportSize();
+    resizeCoalescer.schedule(width, height);
     resizeCoalescer.flush();
   }
 });
