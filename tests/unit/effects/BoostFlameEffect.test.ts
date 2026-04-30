@@ -405,4 +405,16 @@ describe('BoostFlameEffect', () => {
 
     fx.dispose();
   });
+
+  it('position and color attributes are marked as DynamicDrawUsage for GPU streaming hint', () => {
+    const scene = new THREE.Scene();
+    const fx = new BoostFlameEffect();
+    fx.init(scene);
+    const geometry = fx.getObject()!.geometry as THREE.BufferGeometry;
+    const positionAttr = geometry.getAttribute('position') as THREE.BufferAttribute;
+    const colorAttr = geometry.getAttribute('color') as THREE.BufferAttribute;
+    expect(positionAttr.usage).toBe(THREE.DynamicDrawUsage);
+    expect(colorAttr.usage).toBe(THREE.DynamicDrawUsage);
+    fx.dispose();
+  });
 });

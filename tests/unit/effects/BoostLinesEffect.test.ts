@@ -123,4 +123,14 @@ describe('BoostLinesEffect', () => {
     expect(() => effect.update(true, 0, 0)).not.toThrow();
     expect(() => effect.update(false, 0, 0)).not.toThrow();
   });
+
+  it('position attribute is marked as DynamicDrawUsage for GPU streaming hint', () => {
+    const scene = new THREE.Scene();
+    const effect = new BoostLinesEffect();
+    effect.init(scene);
+    const geometry = effect.getObject()!.geometry as THREE.BufferGeometry;
+    const positionAttr = geometry.getAttribute('position') as THREE.BufferAttribute;
+    expect(positionAttr.usage).toBe(THREE.DynamicDrawUsage);
+    effect.dispose();
+  });
 });

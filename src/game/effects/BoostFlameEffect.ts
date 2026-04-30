@@ -48,8 +48,8 @@ export class BoostFlameEffect {
     this.emitting = false;
 
     const geometry = new THREE.BufferGeometry();
-    const positionAttr = new THREE.BufferAttribute(this.positions, 3);
-    const colorAttr = new THREE.BufferAttribute(this.colors, 3);
+    const positionAttr = new THREE.BufferAttribute(this.positions, 3).setUsage(THREE.DynamicDrawUsage);
+    const colorAttr = new THREE.BufferAttribute(this.colors, 3).setUsage(THREE.DynamicDrawUsage);
     geometry.setAttribute('position', positionAttr);
     geometry.setAttribute('color', colorAttr);
     this.positionAttr = positionAttr;

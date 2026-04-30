@@ -45,8 +45,8 @@ export class ParticleBurst {
     this.colors = new Float32Array(MAX_PARTICLES_PER_BURST * 3);
     this.velocities = new Float32Array(MAX_PARTICLES_PER_BURST * 3);
 
-    this.positionAttr = new THREE.BufferAttribute(this.positions, 3);
-    this.colorAttr = new THREE.BufferAttribute(this.colors, 3);
+    this.positionAttr = new THREE.BufferAttribute(this.positions, 3).setUsage(THREE.DynamicDrawUsage);
+    this.colorAttr = new THREE.BufferAttribute(this.colors, 3).setUsage(THREE.DynamicDrawUsage);
 
     this.geometry = new THREE.BufferGeometry();
     this.geometry.setAttribute('position', this.positionAttr);
