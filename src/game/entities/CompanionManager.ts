@@ -54,6 +54,20 @@ function getRingBodyMaterial(color: number): THREE.MeshToonMaterial {
   return mat;
 }
 
+// All companion child Meshes use SHARED_* geometries and cached MeshToonMaterial
+// instances above. We tag every Mesh with userData.sharedAssets = true so that
+// disposeObject3D() (see src/game/utils/disposeObject3D.ts) skips dispose() of
+// the shared GPU resources. When adding a new companion shape or extra child
+// Mesh, ALWAYS create it via makeSharedMesh() to preserve this invariant.
+function makeSharedMesh(
+  geometry: THREE.BufferGeometry,
+  material: THREE.Material,
+): THREE.Mesh {
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.userData.sharedAssets = true;
+  return mesh;
+}
+
 interface CompanionData {
   mesh: THREE.Group;
   angleOffset: number;
@@ -208,24 +222,24 @@ export class CompanionManager {
     const group = new THREE.Group();
     const mat = getOpaqueBodyMaterial(color);
 
-    const body = new THREE.Mesh(SHARED_BODY_SPHERE_GEOM, mat);
+    const body = makeSharedMesh(SHARED_BODY_SPHERE_GEOM, mat);
     group.add(body);
 
-    const ear1 = new THREE.Mesh(SHARED_EAR_CONE_GEOM, mat);
+    const ear1 = makeSharedMesh(SHARED_EAR_CONE_GEOM, mat);
     ear1.position.set(0.2, 0.35, 0);
     ear1.rotation.z = -0.3;
     group.add(ear1);
 
-    const ear2 = new THREE.Mesh(SHARED_EAR_CONE_GEOM, mat);
+    const ear2 = makeSharedMesh(SHARED_EAR_CONE_GEOM, mat);
     ear2.position.set(-0.2, 0.35, 0);
     ear2.rotation.z = 0.3;
     group.add(ear2);
 
-    const eye1 = new THREE.Mesh(SHARED_EYE_GEOM, SHARED_EYE_MATERIAL);
+    const eye1 = makeSharedMesh(SHARED_EYE_GEOM, SHARED_EYE_MATERIAL);
     eye1.position.set(0.1, 0.1, 0.25);
     group.add(eye1);
 
-    const eye2 = new THREE.Mesh(SHARED_EYE_GEOM, SHARED_EYE_MATERIAL);
+    const eye2 = makeSharedMesh(SHARED_EYE_GEOM, SHARED_EYE_MATERIAL);
     eye2.position.set(-0.1, 0.1, 0.25);
     group.add(eye2);
 
@@ -235,7 +249,7 @@ export class CompanionManager {
   private static createRinged(color: number): THREE.Group {
     const group = CompanionManager.createBasic(color);
     const ringMat = getRingBodyMaterial(color);
-    const ring = new THREE.Mesh(SHARED_RING_GEOM, ringMat);
+    const ring = makeSharedMesh(SHARED_RING_GEOM, ringMat);
     ring.rotation.x = (Math.PI / 2) * 0.8;
     group.add(ring);
     return group;
@@ -245,28 +259,28 @@ export class CompanionManager {
     const group = new THREE.Group();
     const mat = getOpaqueBodyMaterial(color);
 
-    const body = new THREE.Mesh(SHARED_BODY_SPHERE_GEOM, mat);
+    const body = makeSharedMesh(SHARED_BODY_SPHERE_GEOM, mat);
     group.add(body);
 
-    const ray1 = new THREE.Mesh(SHARED_RAY_CONE_GEOM, mat);
+    const ray1 = makeSharedMesh(SHARED_RAY_CONE_GEOM, mat);
     ray1.position.set(0, 0.5, 0);
     group.add(ray1);
 
-    const ray2 = new THREE.Mesh(SHARED_RAY_CONE_GEOM, mat);
+    const ray2 = makeSharedMesh(SHARED_RAY_CONE_GEOM, mat);
     ray2.position.set(0.4, 0.15, 0);
     ray2.rotation.z = -Math.PI / 3;
     group.add(ray2);
 
-    const ray3 = new THREE.Mesh(SHARED_RAY_CONE_GEOM, mat);
+    const ray3 = makeSharedMesh(SHARED_RAY_CONE_GEOM, mat);
     ray3.position.set(-0.4, 0.15, 0);
     ray3.rotation.z = Math.PI / 3;
     group.add(ray3);
 
-    const eye1 = new THREE.Mesh(SHARED_EYE_GEOM, SHARED_EYE_MATERIAL);
+    const eye1 = makeSharedMesh(SHARED_EYE_GEOM, SHARED_EYE_MATERIAL);
     eye1.position.set(0.1, 0.1, 0.25);
     group.add(eye1);
 
-    const eye2 = new THREE.Mesh(SHARED_EYE_GEOM, SHARED_EYE_MATERIAL);
+    const eye2 = makeSharedMesh(SHARED_EYE_GEOM, SHARED_EYE_MATERIAL);
     eye2.position.set(-0.1, 0.1, 0.25);
     group.add(eye2);
 
@@ -277,24 +291,24 @@ export class CompanionManager {
     const group = new THREE.Group();
     const mat = getOpaqueBodyMaterial(color);
 
-    const body = new THREE.Mesh(SHARED_BODY_SPHERE_GEOM, mat);
+    const body = makeSharedMesh(SHARED_BODY_SPHERE_GEOM, mat);
     group.add(body);
 
-    const horn1 = new THREE.Mesh(SHARED_HORN_CONE_GEOM, mat);
+    const horn1 = makeSharedMesh(SHARED_HORN_CONE_GEOM, mat);
     horn1.position.set(0.15, 0.45, 0);
     horn1.rotation.z = -0.2;
     group.add(horn1);
 
-    const horn2 = new THREE.Mesh(SHARED_HORN_CONE_GEOM, mat);
+    const horn2 = makeSharedMesh(SHARED_HORN_CONE_GEOM, mat);
     horn2.position.set(-0.15, 0.45, 0);
     horn2.rotation.z = 0.2;
     group.add(horn2);
 
-    const eye1 = new THREE.Mesh(SHARED_EYE_GEOM, SHARED_EYE_MATERIAL);
+    const eye1 = makeSharedMesh(SHARED_EYE_GEOM, SHARED_EYE_MATERIAL);
     eye1.position.set(0.1, 0.1, 0.25);
     group.add(eye1);
 
-    const eye2 = new THREE.Mesh(SHARED_EYE_GEOM, SHARED_EYE_MATERIAL);
+    const eye2 = makeSharedMesh(SHARED_EYE_GEOM, SHARED_EYE_MATERIAL);
     eye2.position.set(-0.1, 0.1, 0.25);
     group.add(eye2);
 
@@ -305,24 +319,24 @@ export class CompanionManager {
     const group = new THREE.Group();
     const mat = getOpaqueBodyMaterial(color);
 
-    const body = new THREE.Mesh(SHARED_BODY_ICOSAHEDRON_GEOM, mat);
+    const body = makeSharedMesh(SHARED_BODY_ICOSAHEDRON_GEOM, mat);
     group.add(body);
 
-    const ear1 = new THREE.Mesh(SHARED_EAR_CONE_GEOM, mat);
+    const ear1 = makeSharedMesh(SHARED_EAR_CONE_GEOM, mat);
     ear1.position.set(0.2, 0.35, 0);
     ear1.rotation.z = -0.3;
     group.add(ear1);
 
-    const ear2 = new THREE.Mesh(SHARED_EAR_CONE_GEOM, mat);
+    const ear2 = makeSharedMesh(SHARED_EAR_CONE_GEOM, mat);
     ear2.position.set(-0.2, 0.35, 0);
     ear2.rotation.z = 0.3;
     group.add(ear2);
 
-    const eye1 = new THREE.Mesh(SHARED_EYE_GEOM, SHARED_EYE_MATERIAL);
+    const eye1 = makeSharedMesh(SHARED_EYE_GEOM, SHARED_EYE_MATERIAL);
     eye1.position.set(0.1, 0.1, 0.25);
     group.add(eye1);
 
-    const eye2 = new THREE.Mesh(SHARED_EYE_GEOM, SHARED_EYE_MATERIAL);
+    const eye2 = makeSharedMesh(SHARED_EYE_GEOM, SHARED_EYE_MATERIAL);
     eye2.position.set(-0.1, 0.1, 0.25);
     group.add(eye2);
 
@@ -333,22 +347,22 @@ export class CompanionManager {
     const group = new THREE.Group();
     const mat = getTransparentBodyMaterial(color);
 
-    const body = new THREE.Mesh(SHARED_BODY_BUBBLE_SPHERE_GEOM, mat);
+    const body = makeSharedMesh(SHARED_BODY_BUBBLE_SPHERE_GEOM, mat);
     group.add(body);
 
-    const bubble1 = new THREE.Mesh(SHARED_BUBBLE_LARGE_GEOM, mat);
+    const bubble1 = makeSharedMesh(SHARED_BUBBLE_LARGE_GEOM, mat);
     bubble1.position.set(0.3, 0.2, 0);
     group.add(bubble1);
 
-    const bubble2 = new THREE.Mesh(SHARED_BUBBLE_SMALL_GEOM, mat);
+    const bubble2 = makeSharedMesh(SHARED_BUBBLE_SMALL_GEOM, mat);
     bubble2.position.set(-0.25, 0.3, 0);
     group.add(bubble2);
 
-    const eye1 = new THREE.Mesh(SHARED_EYE_GEOM, SHARED_EYE_MATERIAL);
+    const eye1 = makeSharedMesh(SHARED_EYE_GEOM, SHARED_EYE_MATERIAL);
     eye1.position.set(0.1, 0.1, 0.25);
     group.add(eye1);
 
-    const eye2 = new THREE.Mesh(SHARED_EYE_GEOM, SHARED_EYE_MATERIAL);
+    const eye2 = makeSharedMesh(SHARED_EYE_GEOM, SHARED_EYE_MATERIAL);
     eye2.position.set(-0.1, 0.1, 0.25);
     group.add(eye2);
 
