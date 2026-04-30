@@ -225,6 +225,11 @@ describe('StageScene boost activation SFX feedback (PC keyboard parity with HUD)
     } as unknown as SaveManager;
     const scene = new StageScene(sceneManager, inputSystem, audioManager, saveManager);
     scene.enter({ stageNumber: 1 });
+    // Bypass the start countdown so existing boost-input assertions can run
+    // immediately after enter(). Countdown is covered by StageScene.countdown.test.ts.
+    (scene as unknown as { countdownOverlay: { dispose(): void } | null }).countdownOverlay?.dispose();
+    (scene as unknown as { isStarting: boolean }).isStarting = false;
+    (scene as unknown as { countdownOverlay: unknown | null }).countdownOverlay = null;
     return {
       scene,
       inputState,

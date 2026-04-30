@@ -652,6 +652,14 @@ export class AudioManager {
         case 'boostDenied':
           this.playSweep('triangle', 320, 260, 0.08, 0.12);
           break;
+        case 'countdownTick':
+          // 短い 800Hz サイン波ビープ。子どもが気持ちよく数えられる軽快な音。
+          this.playSweep('sine', 800, 800, 0.08, 0.18);
+          break;
+        case 'countdownGo':
+          // 明るい長三和音 (C/E/G) ジングル。「スタート！」の高揚感を与える。
+          this.playArpeggio([523, 659, 784], 'sine', 0.07, 0.22);
+          break;
       }
     } catch {
       // Ignore SFX errors

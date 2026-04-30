@@ -65,6 +65,12 @@ function setupForStage(stageNumber: number): {
 } {
   const scene = createScene();
   scene.enter({ stageNumber });
+  // Bypass start countdown so update() exercises the full per-frame branch
+  // (planet spin / Sun pulse / elapsedTime). Countdown behavior is tested
+  // separately in StageScene.countdown.test.ts.
+  (scene as unknown as { countdownOverlay: { dispose(): void } | null }).countdownOverlay?.dispose();
+  (scene as unknown as { isStarting: boolean }).isStarting = false;
+  (scene as unknown as { countdownOverlay: unknown | null }).countdownOverlay = null;
   const internal = scene as unknown as StageSceneInternals;
   return { scene, internal };
 }
