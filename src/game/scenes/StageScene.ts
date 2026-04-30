@@ -244,6 +244,12 @@ export class StageScene implements Scene {
 
   // Destination planet
   private destinationPlanet: THREE.Group | null = null;
+  // Sub-object to spin (sphere body for ringed planets, sub-group for Earth+cloud,
+  // sphere mesh for plain planets / sun). Kept separate from `destinationPlanet`
+  // so that ring meshes stay tilted and the sun's pulse-scale on the parent group
+  // composes cleanly with this rotation.
+  private destinationPlanetSpinTarget: THREE.Object3D | null = null;
+  private static readonly DESTINATION_PLANET_SPIN_SPEED = 0.2;
 
   // Background stars
   private bgStars: THREE.Points | null = null;
@@ -283,6 +289,7 @@ export class StageScene implements Scene {
     this.clearTimer = 0;
     this.damageTimer = 0;
     this.elapsedTime = 0;
+    this.destinationPlanetSpinTarget = null;
 
     // Restore total scores if passed
     if (context.totalScore !== undefined) {
@@ -403,7 +410,9 @@ export class StageScene implements Scene {
         const tex = getPlanetTexture('mercury', buildMercuryTexture);
         const geo = getPlanetGeometry('mercury:sphere', () => new THREE.SphereGeometry(10, 24, 24));
         const mat = getPlanetMaterial('mercury:mat', () => new THREE.MeshToonMaterial({ map: tex }));
-        this.destinationPlanet.add(makeSharedMesh(geo, mat));
+        const mesh = makeSharedMesh(geo, mat);
+        this.destinationPlanet.add(mesh);
+        this.destinationPlanetSpinTarget = mesh;
         break;
       }
       case 3: {
@@ -411,7 +420,9 @@ export class StageScene implements Scene {
         const tex = getPlanetTexture('venus', buildVenusTexture);
         const geo = getPlanetGeometry('venus:sphere', () => new THREE.SphereGeometry(14, 24, 24));
         const mat = getPlanetMaterial('venus:mat', () => new THREE.MeshToonMaterial({ map: tex }));
-        this.destinationPlanet.add(makeSharedMesh(geo, mat));
+        const mesh = makeSharedMesh(geo, mat);
+        this.destinationPlanet.add(mesh);
+        this.destinationPlanetSpinTarget = mesh;
         break;
       }
       case 5: {
@@ -419,7 +430,9 @@ export class StageScene implements Scene {
         const tex = getPlanetTexture('jupiter', buildJupiterTexture);
         const geo = getPlanetGeometry('jupiter:sphere', () => new THREE.SphereGeometry(20, 24, 24));
         const mat = getPlanetMaterial('jupiter:mat', () => new THREE.MeshToonMaterial({ map: tex }));
-        this.destinationPlanet.add(makeSharedMesh(geo, mat));
+        const mesh = makeSharedMesh(geo, mat);
+        this.destinationPlanet.add(mesh);
+        this.destinationPlanetSpinTarget = mesh;
         break;
       }
       case 6: {
@@ -430,7 +443,8 @@ export class StageScene implements Scene {
           `saturn:mat:${sphereColor}`,
           () => new THREE.MeshToonMaterial({ color: sphereColor }),
         );
-        this.destinationPlanet.add(makeSharedMesh(sphereGeo, sphereMat));
+        const sphere = makeSharedMesh(sphereGeo, sphereMat);
+        this.destinationPlanet.add(sphere);
         const ringGeo = getPlanetGeometry('saturn:ring', () => new THREE.RingGeometry(20, 30, 48));
         const ringMat = getPlanetMaterial(
           'saturn:ringMat',
@@ -439,6 +453,8 @@ export class StageScene implements Scene {
         const ring = makeSharedMesh(ringGeo, ringMat);
         ring.rotation.x = Math.PI / 3;
         this.destinationPlanet.add(ring);
+        // Spin only the sphere body so the ring keeps its tilt.
+        this.destinationPlanetSpinTarget = sphere;
         break;
       }
       case 7: {
@@ -448,7 +464,8 @@ export class StageScene implements Scene {
           'uranus:mat',
           () => new THREE.MeshToonMaterial({ color: 0x66ccdd }),
         );
-        this.destinationPlanet.add(makeSharedMesh(sphereGeo, sphereMat));
+        const sphere = makeSharedMesh(sphereGeo, sphereMat);
+        this.destinationPlanet.add(sphere);
         const ringGeo = getPlanetGeometry('uranus:ring', () => new THREE.RingGeometry(21, 28, 48));
         const ringMat = getPlanetMaterial(
           'uranus:ringMat',
@@ -457,13 +474,17 @@ export class StageScene implements Scene {
         const ring = makeSharedMesh(ringGeo, ringMat);
         ring.rotation.z = Math.PI / 2;
         this.destinationPlanet.add(ring);
+        // Spin only the sphere body so the sideways ring stays sideways.
+        this.destinationPlanetSpinTarget = sphere;
         break;
       }
       case 9: {
         // Pluto — small sphere
         const geo = getPlanetGeometry('pluto:sphere', () => new THREE.SphereGeometry(8, 24, 24));
         const mat = getPlanetMaterial('pluto:mat', () => new THREE.MeshToonMaterial({ color: 0xbbaaaa }));
-        this.destinationPlanet.add(makeSharedMesh(geo, mat));
+        const mesh = makeSharedMesh(geo, mat);
+        this.destinationPlanet.add(mesh);
+        this.destinationPlanetSpinTarget = mesh;
         break;
       }
       case 10: {
@@ -473,10 +494,13 @@ export class StageScene implements Scene {
           'sun:mat',
           () => new THREE.MeshToonMaterial({ color: 0xffcc00, emissive: 0xffaa00, emissiveIntensity: 0.5 }),
         );
-        this.destinationPlanet.add(makeSharedMesh(geo, mat));
+        const mesh = makeSharedMesh(geo, mat);
+        this.destinationPlanet.add(mesh);
         // PointLight は per-instance (light は dispose 不要、GC で解放)
         const sunLight = new THREE.PointLight(0xffcc00, 2, 200);
         this.destinationPlanet.add(sunLight);
+        // Spin the sphere; pulse continues to scale the parent group.
+        this.destinationPlanetSpinTarget = mesh;
         break;
       }
       case 11: {
@@ -486,7 +510,6 @@ export class StageScene implements Scene {
         const tex = getPlanetTexture('earth', buildEarthTexture);
         const geo = getPlanetGeometry('earth:sphere', () => new THREE.SphereGeometry(15, 32, 32));
         const mat = getPlanetMaterial('earth:mat', () => new THREE.MeshToonMaterial({ map: tex }));
-        this.destinationPlanet.add(makeSharedMesh(geo, mat));
 
         // Cloud layer
         const cloudTex = getPlanetTexture('earth:cloud', buildEarthCloudTexture);
@@ -495,7 +518,13 @@ export class StageScene implements Scene {
           'earth:cloudMat',
           () => new THREE.MeshToonMaterial({ map: cloudTex, transparent: true, opacity: 0.3 }),
         );
-        this.destinationPlanet.add(makeSharedMesh(cloudGeo, cloudMat));
+
+        // Wrap sphere + clouds in a sub-group so they spin together.
+        const earthSpin = new THREE.Group();
+        earthSpin.add(makeSharedMesh(geo, mat));
+        earthSpin.add(makeSharedMesh(cloudGeo, cloudMat));
+        this.destinationPlanet.add(earthSpin);
+        this.destinationPlanetSpinTarget = earthSpin;
         break;
       }
       default: {
@@ -508,7 +537,9 @@ export class StageScene implements Scene {
           `default:mat:${color}`,
           () => new THREE.MeshToonMaterial({ color }),
         );
-        this.destinationPlanet.add(makeSharedMesh(sphereGeo, sphereMat));
+        const mesh = makeSharedMesh(sphereGeo, sphereMat);
+        this.destinationPlanet.add(mesh);
+        this.destinationPlanetSpinTarget = mesh;
         break;
       }
     }
@@ -682,6 +713,14 @@ export class StageScene implements Scene {
     if (this.stageNumber === 10 && this.destinationPlanet) {
       const s = 1.0 + Math.sin(this.elapsedTime * 2) * 0.05;
       this.destinationPlanet.scale.set(s, s, s);
+    }
+    // Gentle Y-axis self-rotation for the goal planet (Constitution I/II:
+    // a "living universe" feel). For ringed planets the spin target is the
+    // sphere body only so the ring keeps its tilt; for the sun this composes
+    // with the parent group's pulse-scale.
+    if (this.destinationPlanetSpinTarget) {
+      this.destinationPlanetSpinTarget.rotation.y +=
+        deltaTime * StageScene.DESTINATION_PLANET_SPIN_SPEED;
     }
     this.elapsedTime += deltaTime;
 
@@ -941,6 +980,7 @@ export class StageScene implements Scene {
       disposeObject3D(this.destinationPlanet);
       this.destinationPlanet = null;
     }
+    this.destinationPlanetSpinTarget = null;
 
     this.threeScene.clear();
     this.stars.length = 0;
