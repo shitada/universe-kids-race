@@ -6,6 +6,13 @@ const INVINCIBLE_OPACITY_BASE = 0.30;
 const INVINCIBLE_OPACITY_PULSE = 0.20;
 const INVINCIBLE_PULSE_HZ = 3;
 
+const BOOST_PULSE_OMEGA = 5 * Math.PI * 2;
+const INVINCIBLE_PULSE_OMEGA = INVINCIBLE_PULSE_HZ * Math.PI * 2;
+const MIN_VISIBLE_OPACITY = 0.001;
+
+const BOOST_INITIAL_OPACITY = 0.25;
+const INVINCIBLE_INITIAL_OPACITY = INVINCIBLE_OPACITY_BASE;
+
 export class AirShield {
   private mesh: THREE.Mesh;
   private material: THREE.MeshBasicMaterial;
@@ -34,17 +41,21 @@ export class AirShield {
     this.elapsedTime += deltaTime;
 
     if (this.mode === 'BOOST') {
-      const pulse = Math.sin(this.elapsedTime * 5 * Math.PI * 2) * 0.5 + 0.5;
+      const pulse = Math.sin(this.elapsedTime * BOOST_PULSE_OMEGA) * 0.5 + 0.5;
       this.material.opacity = 0.25 + pulse * 0.10;
+      this.mesh.visible = this.material.opacity >= MIN_VISIBLE_OPACITY;
       return;
     }
 
     // INVINCIBLE: ~3Hz pulse, multiplied by opacityScale (1 during SLOWDOWN,
     // fading 1→0 during RECOVERING) so that returning to NORMAL hides it.
-    const pulse = Math.sin(this.elapsedTime * INVINCIBLE_PULSE_HZ * Math.PI * 2) * 0.5 + 0.5;
+    const pulse = Math.sin(this.elapsedTime * INVINCIBLE_PULSE_OMEGA) * 0.5 + 0.5;
     const base = INVINCIBLE_OPACITY_BASE + pulse * INVINCIBLE_OPACITY_PULSE;
     const scale = Math.max(0, Math.min(1, this.opacityScale));
     this.material.opacity = base * scale;
+    // Skip drawing when fully faded — additive sphere covers a large area in
+    // front of the camera, so this saves significant fillrate on iPad Safari.
+    this.mesh.visible = this.material.opacity >= MIN_VISIBLE_OPACITY;
   }
 
   /**
@@ -69,10 +80,12 @@ export class AirShield {
       this.mesh.visible = true;
       this.mesh.scale.set(1.0, 0.8, 2.0);
       this.material.color.setHex(0x88ddff);
+      this.material.opacity = BOOST_INITIAL_OPACITY;
     } else if (mode === 'INVINCIBLE') {
       this.mesh.visible = true;
       this.mesh.scale.set(1.2, 1.0, 1.6);
       this.material.color.setHex(0xff88aa);
+      this.material.opacity = INVINCIBLE_INITIAL_OPACITY * Math.max(0, Math.min(1, opacityScale));
     } else {
       this.mesh.visible = false;
       this.material.color.setHex(0x44aaff);
