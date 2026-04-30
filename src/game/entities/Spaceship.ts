@@ -30,6 +30,11 @@ const BANK_SMOOTHING = 8;
 const BANK_YAW_RATIO = 0.3;
 const BANK_BOOST_SCALE = 1.2;
 const BANK_SLOWDOWN_SCALE = 0.5;
+// Below this absolute bank angle (radians) and with no lateral input, the
+// ship is considered visually level. We normalize rotation to zero once and
+// then skip subsequent rotation writes to avoid triggering three.js's Euler
+// _onChangeCallback every frame on the hot path. See Spaceship.update().
+const BANK_REST_EPSILON = 1e-4;
 
 export class Spaceship {
   position = { x: 0, y: 0, z: 0 };
@@ -43,6 +48,10 @@ export class Spaceship {
   bankAngle = 0;
   bankTarget = 0;
   private startZ = 0;
+  // True once bankAngle has settled within BANK_REST_EPSILON and the mesh
+  // rotation has been normalized to zero. While this is true and no lateral
+  // input is active, update() skips mesh.rotation writes.
+  private bankAtRest = true;
 
   constructor() {
     this.mesh = this.createMesh();
@@ -133,12 +142,26 @@ export class Spaceship {
     // a frame without left/right input naturally decays back to level.
     const t = 1 - Math.exp(-deltaTime * BANK_SMOOTHING);
     this.bankAngle += (this.bankTarget - this.bankAngle) * t;
+    const hadLateralInput = this.bankTarget !== 0;
     this.bankTarget = 0;
 
     // Sync mesh
     this.mesh.position.set(this.position.x, this.position.y, this.position.z);
-    this.mesh.rotation.z = this.bankAngle;
-    this.mesh.rotation.y = this.bankAngle * BANK_YAW_RATIO;
+
+    // Skip rotation writes once the ship has settled level. three.js's Euler
+    // setters fire _onChangeCallback on every assignment; the straight-flight
+    // case (no lateral input, bankAngle ~ 0) dominates playtime, so avoiding
+    // those writes keeps the iPad Safari 60fps budget healthier.
+    if (hadLateralInput || Math.abs(this.bankAngle) >= BANK_REST_EPSILON) {
+      this.mesh.rotation.z = this.bankAngle;
+      this.mesh.rotation.y = this.bankAngle * BANK_YAW_RATIO;
+      this.bankAtRest = false;
+    } else if (!this.bankAtRest) {
+      this.bankAngle = 0;
+      this.mesh.rotation.z = 0;
+      this.mesh.rotation.y = 0;
+      this.bankAtRest = true;
+    }
   }
 
   onMeteoriteHit(): void {
@@ -195,6 +218,7 @@ export class Spaceship {
     this.speedStateTimer = 0;
     this.bankAngle = 0;
     this.bankTarget = 0;
+    this.bankAtRest = true;
     this.mesh.position.set(0, 0, 0);
     this.mesh.rotation.set(0, 0, 0);
   }
