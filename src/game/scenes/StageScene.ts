@@ -15,6 +15,8 @@ import { HUD } from '../../ui/HUD';
 import { getStageConfig, TOTAL_STAGES } from '../config/StageConfig';
 import { ParticleBurstManager } from '../effects/ParticleBurst';
 import { AirShield } from '../effects/AirShield';
+import { BoostLinesEffect } from '../effects/BoostLinesEffect';
+import { BoostFlameEffect } from '../effects/BoostFlameEffect';
 import { CompanionManager } from '../entities/CompanionManager';
 import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
 import { disposeObject3D } from '../utils/disposeObject3D';
@@ -247,12 +249,7 @@ export class StageScene implements Scene {
   private bgStars: THREE.Points | null = null;
 
   // Boost effects (retained: single instance reused per frame; do not dispose per instance)
-  private boostLines: THREE.LineSegments | null = null;
-  private boostLinePositions: Float32Array | null = null;
-  private boostLinePositionAttr: THREE.BufferAttribute | null = null;
-  // Cache last value written to boostLines.visible to skip redundant per-frame writes.
-  // null means "unknown / needs to be re-asserted on the next write".
-  private lastBoostLinesVisible: boolean | null = null;
+  private boostLinesEffect = new BoostLinesEffect();
 
   // Companion manager
   private companionManager: CompanionManager | null = null;
@@ -261,17 +258,7 @@ export class StageScene implements Scene {
   private elapsedTime = 0;
 
   // Boost flame particles
-  private boostFlame: THREE.Points | null = null;
-  private flamePositions: Float32Array | null = null;
-  private flameColors: Float32Array | null = null;
-  private flameLifetimes: Float32Array | null = null;
-  private flameVelocities: Float32Array | null = null;
-  private boostFlamePositionAttr: THREE.BufferAttribute | null = null;
-  private boostFlameColorAttr: THREE.BufferAttribute | null = null;
-  private lastBoostFlameSize = -1;
-  private flameIndex = 0;
-  private flameEmitting = false;
-  private static readonly MAX_FLAME_PARTICLES = 150;
+  private boostFlameEffect = new BoostFlameEffect();
 
   constructor(sceneManager: SceneManager, inputSystem: InputSystem, audioManager: AudioManager, saveManager: SaveManager) {
     this.sceneManager = sceneManager;
@@ -369,10 +356,10 @@ export class StageScene implements Scene {
     this.threeScene.add(this.companionManager.getGroup());
 
     // Boost line effect (created once, reused per frame)
-    this.initBoostLines();
+    this.boostLinesEffect.init(this.threeScene);
 
     // Boost flame particles (allocated once per stage, reused per boost)
-    this.initBoostFlame();
+    this.boostFlameEffect.init(this.threeScene);
 
     // BGM
     this.audioManager.playBGM(this.stageNumber);
@@ -558,7 +545,7 @@ export class StageScene implements Scene {
       if (this.boostSystem.activate()) {
         this.audioManager.playSFX('boost');
         this.audioManager.startBoostSFX();
-        this.resetBoostFlame();
+        this.boostFlameEffect.start();
       }
       this.inputSystem.setBoostPressed(false);
     }
@@ -567,7 +554,7 @@ export class StageScene implements Scene {
     // Boost end detection (wasActive → !isActive)
     if (wasActive && !this.boostSystem.isActive()) {
       this.audioManager.stopBoostSFX();
-      this.flameEmitting = false;
+      this.boostFlameEffect.stopEmitting();
     }
 
     // Cooldown completion detection
@@ -661,7 +648,7 @@ export class StageScene implements Scene {
       this.damageTimer = StageScene.DAMAGE_FLASH_DURATION;
       this.audioManager.playSFX('meteoriteHit');
       this.audioManager.stopBoostSFX();
-      this.removeBoostFlame();
+      this.boostFlameEffect.remove();
     }
 
     // Damage animation (overrides bank rotation while active)
@@ -707,15 +694,17 @@ export class StageScene implements Scene {
     }
 
     // Boost visual effects
-    this.updateBoostEffects();
+    this.boostLinesEffect.update(
+      this.boostSystem.isActive(),
+      this.spaceship.position.x,
+      this.spaceship.position.z,
+    );
 
     // Boost flame particles
     if (this.boostSystem.isActive()) {
-      this.emitFlameParticles();
+      this.boostFlameEffect.emit(this.spaceship.position, this.boostSystem.getDurationProgress());
     }
-    if (this.boostFlame) {
-      this.updateFlameParticles(deltaTime);
-    }
+    this.boostFlameEffect.update(deltaTime);
 
     // Air shield sync
     this.airShield.setPosition(
@@ -748,55 +737,6 @@ export class StageScene implements Scene {
     const progress = this.spaceship.getProgress(this.stageConfig.stageLength);
     if (progress >= 1) {
       this.onStageClear();
-    }
-  }
-
-  private initBoostLines(): void {
-    if (this.boostLines) return;
-    // 20 line segments × 2 endpoints × 3 floats = 120
-    this.boostLinePositions = new Float32Array(120);
-    const geo = new THREE.BufferGeometry();
-    const positionAttr = new THREE.BufferAttribute(this.boostLinePositions, 3);
-    geo.setAttribute('position', positionAttr);
-    this.boostLinePositionAttr = positionAttr;
-    const mat = new THREE.LineBasicMaterial({ color: 0x00ddff, transparent: true, opacity: 0.6 });
-    this.boostLines = new THREE.LineSegments(geo, mat);
-    this.boostLines.frustumCulled = false;
-    this.boostLines.visible = false;
-    this.lastBoostLinesVisible = false;
-    this.threeScene.add(this.boostLines);
-  }
-
-  private updateBoostEffects(): void {
-    if (!this.boostLines || !this.boostLinePositions) return;
-
-    if (!this.boostSystem.isActive()) {
-      if (this.lastBoostLinesVisible !== false) {
-        this.boostLines.visible = false;
-        this.lastBoostLinesVisible = false;
-      }
-      return;
-    }
-
-    const pos = this.boostLinePositions;
-    const shipX = this.spaceship.position.x;
-    const shipZ = this.spaceship.position.z;
-    for (let i = 0; i < 20; i++) {
-      const x = shipX + (Math.random() - 0.5) * 4;
-      const y = (Math.random() - 0.5) * 3;
-      const z = shipZ + 2 + Math.random() * 8;
-      const base = i * 6;
-      pos[base] = x;
-      pos[base + 1] = y;
-      pos[base + 2] = z;
-      pos[base + 3] = x;
-      pos[base + 4] = y;
-      pos[base + 5] = z + 2 + Math.random() * 3;
-    }
-    this.boostLinePositionAttr!.needsUpdate = true;
-    if (this.lastBoostLinesVisible !== true) {
-      this.boostLines.visible = true;
-      this.lastBoostLinesVisible = true;
     }
   }
 
@@ -840,211 +780,13 @@ export class StageScene implements Scene {
     meteorites.length = metWrite;
   }
 
-  private initBoostFlame(): void {
-    if (this.boostFlame) return;
-    const MAX = StageScene.MAX_FLAME_PARTICLES;
-    this.flamePositions = new Float32Array(MAX * 3);
-    this.flameColors = new Float32Array(MAX * 3);
-    this.flameLifetimes = new Float32Array(MAX);
-    this.flameVelocities = new Float32Array(MAX * 2);
-
-    // Park all particles offscreen on z=99999 until first emission.
-    for (let i = 0; i < MAX; i++) {
-      this.flamePositions[i * 3 + 2] = 99999;
-    }
-    this.flameLifetimes.fill(0);
-    this.flameColors.fill(0);
-    this.flameVelocities.fill(0);
-    this.flameIndex = 0;
-    this.flameEmitting = false;
-
-    const geometry = new THREE.BufferGeometry();
-    const positionAttr = new THREE.BufferAttribute(this.flamePositions, 3);
-    const colorAttr = new THREE.BufferAttribute(this.flameColors, 3);
-    geometry.setAttribute('position', positionAttr);
-    geometry.setAttribute('color', colorAttr);
-    this.boostFlamePositionAttr = positionAttr;
-    this.boostFlameColorAttr = colorAttr;
-
-    const material = new THREE.PointsMaterial({
-      vertexColors: true,
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      sizeAttenuation: true,
-      size: 0.5,
-      depthWrite: false,
-    });
-
-    this.boostFlame = new THREE.Points(geometry, material);
-    this.boostFlame.frustumCulled = false;
-    this.boostFlame.visible = false;
-    this.threeScene.add(this.boostFlame);
-  }
-
-  private resetBoostFlame(): void {
-    if (
-      !this.boostFlame
-      || !this.flamePositions
-      || !this.flameColors
-      || !this.flameLifetimes
-      || !this.flameVelocities
-    ) {
-      return;
-    }
-    const MAX = StageScene.MAX_FLAME_PARTICLES;
-    this.flameLifetimes.fill(0);
-    this.flameColors.fill(0);
-    this.flameVelocities.fill(0);
-    for (let i = 0; i < MAX; i++) {
-      const i3 = i * 3;
-      this.flamePositions[i3] = 0;
-      this.flamePositions[i3 + 1] = 0;
-      this.flamePositions[i3 + 2] = 99999;
-    }
-    (this.boostFlame.material as THREE.PointsMaterial).size = 0.5;
-    this.lastBoostFlameSize = 0.5;
-    this.flameIndex = 0;
-    this.flameEmitting = true;
-    this.boostFlame.visible = true;
-    if (this.boostFlamePositionAttr) this.boostFlamePositionAttr.needsUpdate = true;
-    if (this.boostFlameColorAttr) this.boostFlameColorAttr.needsUpdate = true;
-  }
-
-  private emitFlameParticles(): void {
-    if (!this.flamePositions || !this.flameColors || !this.flameLifetimes || !this.flameVelocities) return;
-    const MAX = StageScene.MAX_FLAME_PARTICLES;
-    const shipPos = this.spaceship.position;
-
-    // Fadeout calculation
-    const progress = this.boostSystem.getDurationProgress();
-    const fadeStart = 0.83;
-    const emitCount = progress < fadeStart
-      ? 8
-      : Math.max(0, Math.round(8 * (1.0 - progress) / (1.0 - fadeStart)));
-    const sizeFraction = progress < fadeStart
-      ? 1.0
-      : (1.0 - progress) / (1.0 - fadeStart);
-
-    for (let p = 0; p < emitCount; p++) {
-      const idx = this.flameIndex % MAX;
-      const i3 = idx * 3;
-      const i2 = idx * 2;
-
-      this.flamePositions[i3] = shipPos.x + (Math.random() - 0.5) * sizeFraction;
-      this.flamePositions[i3 + 1] = shipPos.y + (Math.random() - 0.5) * sizeFraction;
-      this.flamePositions[i3 + 2] = shipPos.z + 2;
-
-      const t = Math.random();
-      this.flameColors[i3] = 1.0;
-      this.flameColors[i3 + 1] = 0.4 * (1 - t) + 0.133 * t;
-      this.flameColors[i3 + 2] = 0;
-
-      this.flameLifetimes[idx] = 0.7;
-      this.flameVelocities[i2] = 3 + Math.random() * 2;
-      this.flameVelocities[i2 + 1] = (Math.random() - 0.5);
-
-      this.flameIndex++;
-    }
-
-    if (emitCount > 0) {
-      if (this.boostFlamePositionAttr) this.boostFlamePositionAttr.needsUpdate = true;
-      if (this.boostFlameColorAttr) this.boostFlameColorAttr.needsUpdate = true;
-    }
-
-    // Scale particle size during fade phase
-    if (this.boostFlame) {
-      const desiredSize = 0.5 * sizeFraction;
-      if (desiredSize !== this.lastBoostFlameSize) {
-        (this.boostFlame.material as THREE.PointsMaterial).size = desiredSize;
-        this.lastBoostFlameSize = desiredSize;
-      }
-    }
-  }
-
-  private updateFlameParticles(deltaTime: number): void {
-    if (!this.flamePositions || !this.flameColors || !this.flameLifetimes || !this.flameVelocities || !this.boostFlame) return;
-    if (!this.boostFlame.visible) return;
-    const MAX = StageScene.MAX_FLAME_PARTICLES;
-    let hasLive = false;
-    let positionsChanged = false;
-    let colorsChanged = false;
-
-    for (let i = 0; i < MAX; i++) {
-      if (this.flameLifetimes[i] <= 0) continue;
-      this.flameLifetimes[i] -= deltaTime;
-      const i3 = i * 3;
-      const i2 = i * 2;
-
-      if (this.flameLifetimes[i] <= 0) {
-        this.flamePositions[i3 + 2] = 99999;
-        this.flameColors[i3] = 0;
-        this.flameColors[i3 + 1] = 0;
-        this.flameColors[i3 + 2] = 0;
-        positionsChanged = true;
-        colorsChanged = true;
-        continue;
-      }
-
-      hasLive = true;
-      this.flamePositions[i3 + 2] += this.flameVelocities[i2] * deltaTime;
-      this.flamePositions[i3 + 1] += this.flameVelocities[i2 + 1] * deltaTime;
-      positionsChanged = true;
-    }
-
-    if (positionsChanged) this.boostFlamePositionAttr!.needsUpdate = true;
-    if (colorsChanged) this.boostFlameColorAttr!.needsUpdate = true;
-
-    if (!this.flameEmitting && !hasLive) {
-      this.removeBoostFlame();
-    }
-  }
-
-  private removeBoostFlame(): void {
-    if (!this.boostFlame) return;
-    const MAX = StageScene.MAX_FLAME_PARTICLES;
-    if (this.flameLifetimes) this.flameLifetimes.fill(0);
-    if (this.flameColors) this.flameColors.fill(0);
-    if (this.flameVelocities) this.flameVelocities.fill(0);
-    if (this.flamePositions) {
-      for (let i = 0; i < MAX; i++) {
-        const i3 = i * 3;
-        this.flamePositions[i3] = 0;
-        this.flamePositions[i3 + 1] = 0;
-        this.flamePositions[i3 + 2] = 99999;
-      }
-    }
-    if (this.boostFlamePositionAttr) this.boostFlamePositionAttr.needsUpdate = true;
-    if (this.boostFlameColorAttr) this.boostFlameColorAttr.needsUpdate = true;
-    this.flameIndex = 0;
-    this.flameEmitting = false;
-    this.boostFlame.visible = false;
-    this.lastBoostFlameSize = -1;
-  }
-
-  private disposeBoostFlame(): void {
-    if (this.boostFlame) {
-      this.threeScene.remove(this.boostFlame);
-      this.boostFlame.geometry.dispose();
-      (this.boostFlame.material as THREE.PointsMaterial).dispose();
-      this.boostFlame = null;
-    }
-    this.flamePositions = null;
-    this.flameColors = null;
-    this.flameLifetimes = null;
-    this.flameVelocities = null;
-    this.boostFlamePositionAttr = null;
-    this.boostFlameColorAttr = null;
-    this.flameIndex = 0;
-    this.flameEmitting = false;
-    this.lastBoostFlameSize = -1;
-  }
 
   private onStageClear(): void {
     this.isCleared = true;
     this.clearTimer = 0;
     this.audioManager.playSFX('stageClear');
     this.audioManager.stopBoostSFX();
-    this.removeBoostFlame();
+    this.boostFlameEffect.remove();
 
     // Add companion if this is a new planet unlock
     const saveData = this.saveManager.load();
@@ -1145,7 +887,7 @@ export class StageScene implements Scene {
     this.hud.hide();
     this.audioManager.stopBGM();
     this.audioManager.stopBoostSFX();
-    this.disposeBoostFlame();
+    this.boostFlameEffect.dispose();
     this.companionManager?.dispose();
     this.companionManager = null;
     this.airShield.dispose();
@@ -1162,15 +904,7 @@ export class StageScene implements Scene {
     this.spawnSystem.dispose();
 
     // Dispose retained scene resources
-    if (this.boostLines) {
-      this.threeScene.remove(this.boostLines);
-      this.boostLines.geometry.dispose();
-      (this.boostLines.material as THREE.Material).dispose();
-      this.boostLines = null;
-    }
-    this.boostLinePositions = null;
-    this.boostLinePositionAttr = null;
-    this.lastBoostLinesVisible = null;
+    this.boostLinesEffect.dispose();
     if (this.bgStars) {
       // SHARED: geometry / material はモジュールキャッシュ済み。dispose しない。
       this.bgStars.parent?.remove(this.bgStars);
