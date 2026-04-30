@@ -230,6 +230,14 @@ export class HUD {
       button[data-boost-shake] {
         animation: boostShake 0.25s ease-in-out 1 !important;
       }
+      @keyframes boostBtnReadyFlash {
+        0%   { transform: scale(1.0); }
+        40%  { transform: scale(1.18); }
+        100% { transform: scale(1.0); }
+      }
+      button[data-boost-ready-flash] {
+        animation: boostBtnReadyFlash 0.45s ease-out 1 !important;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -299,11 +307,57 @@ export class HUD {
         this.boostButton.style.filter = 'grayscale(0.8)';
         this.boostButton.style.animation = 'none';
         this.boostButton.setAttribute('aria-disabled', 'true');
+        // Clear ready-flash attribute if cooldown restarts mid-flash so the
+        // pulse doesn't linger on a disabled button.
+        this.clearBoostReadyFlash();
       }
       this.lastReadyState = ready;
     }
 
     this.lastCooldownProgress = progress;
+  }
+
+  /**
+   * Trigger a one-shot scale pulse on the boost button to visually signal
+   * "boost is ready again". Safe to call multiple times: re-entrant calls
+   * while the flash is in progress are ignored (no re-trigger).
+   * After the flash completes, the button returns to its standard
+   * `boostBtnPulse` loop animation.
+   */
+  flashBoostReady(): void {
+    const btn = this.boostButton;
+    if (!btn) return;
+    if (btn.hasAttribute('data-boost-ready-flash')) return;
+
+    btn.setAttribute('data-boost-ready-flash', '');
+
+    let cleared = false;
+    const cleanup = () => {
+      if (cleared) return;
+      cleared = true;
+      btn.removeAttribute('data-boost-ready-flash');
+      btn.removeEventListener('animationend', onEnd);
+      // Restore the standard ready-state pulse loop in case the !important
+      // flash animation overrode the inline style cascade.
+      if (this.lastReadyState === true) {
+        btn.style.animation = 'boostBtnPulse 2s ease-in-out infinite';
+      }
+    };
+    const onEnd = (ev: AnimationEvent) => {
+      if (ev.animationName !== 'boostBtnReadyFlash') return;
+      cleanup();
+    };
+    btn.addEventListener('animationend', onEnd);
+    // Fallback for iPad Safari where animationend may not fire (e.g., tab
+    // switch interrupts the CSS animation). Slightly longer than the
+    // 0.45s keyframe to allow the natural event to win when present.
+    setTimeout(cleanup, 500);
+  }
+
+  private clearBoostReadyFlash(): void {
+    if (this.boostButton?.hasAttribute('data-boost-ready-flash')) {
+      this.boostButton.removeAttribute('data-boost-ready-flash');
+    }
   }
 
   hide(): void {

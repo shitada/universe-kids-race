@@ -575,6 +575,7 @@ export class StageScene implements Scene {
     // Cooldown completion detection
     if (!wasAvailable && this.boostSystem.isAvailable()) {
       this.audioManager.playSFX('boostReady');
+      this.hud.flashBoostReady();
     }
 
     // Apply boost state to spaceship
