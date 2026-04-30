@@ -225,6 +225,118 @@ describe('BoostFlameEffect', () => {
     expect(fx.getObject()).toBeNull();
   });
 
+  it('start() called twice in a row resets state values (maxAliveIndex=-1, emitting=true, drawRange=0, index=0)', () => {
+    const scene = new THREE.Scene();
+    const fx = new BoostFlameEffect();
+    fx.init(scene);
+    fx.start();
+    fx.emit(SHIP, 0);
+    fx.update(0.05);
+    expect(fx.getMaxAliveIndex()).toBeGreaterThanOrEqual(0);
+
+    fx.start();
+    expect(fx.getMaxAliveIndex()).toBe(-1);
+    expect(fx.isEmitting()).toBe(true);
+    const geom = fx.getObject()!.geometry as THREE.BufferGeometry;
+    expect(geom.drawRange.start).toBe(0);
+    expect(geom.drawRange.count).toBe(0);
+
+    // index=0 を間接検証: 直後の emit() でスロット 0 から書き始める
+    fx.emit({ x: 7, y: 7, z: 7 }, 0);
+    const positions = geom.getAttribute('position').array as Float32Array;
+    // スロット 0 の z は shipPos.z + 2 = 9 になっているはず
+    expect(positions[2]).toBeCloseTo(9);
+
+    fx.start();
+    expect(fx.getMaxAliveIndex()).toBe(-1);
+    expect(fx.isEmitting()).toBe(true);
+    expect(geom.drawRange.count).toBe(0);
+
+    fx.dispose();
+  });
+
+  it('start() does not zero TypedArrays; stale slot data does not become live in update()', () => {
+    const scene = new THREE.Scene();
+    const fx = new BoostFlameEffect();
+    fx.init(scene);
+    fx.start();
+    fx.emit({ x: 1, y: 2, z: 3 }, 0);
+    const obj = fx.getObject()!;
+    const positions = (obj.geometry as THREE.BufferGeometry).getAttribute('position').array as Float32Array;
+    const colors = (obj.geometry as THREE.BufferGeometry).getAttribute('color').array as Float32Array;
+
+    // Snapshot stale data left from previous boost (slots 0..7 written).
+    const stalePositions = new Float32Array(positions);
+    const staleColors = new Float32Array(colors);
+
+    fx.start();
+
+    // start() must not have zeroed/cleared any of the buffers.
+    for (let i = 0; i < positions.length; i++) {
+      expect(positions[i]).toBe(stalePositions[i]);
+    }
+    for (let i = 0; i < colors.length; i++) {
+      expect(colors[i]).toBe(staleColors[i]);
+    }
+
+    // Even though slots 0..7 have non-OFFSCREEN_Z positions left over,
+    // update() must not detect them as live (lifetime stays 0 for unrelated
+    // slots, and maxAliveIndex was reset to -1 so scanLimit=0).
+    fx.update(0.1);
+    expect(fx.getMaxAliveIndex()).toBe(-1);
+    // Stale positions for slots 0..7 are still untouched by update().
+    for (let i = 0; i < 8; i++) {
+      expect(positions[i * 3 + 2]).toBe(stalePositions[i * 3 + 2]);
+    }
+
+    fx.dispose();
+  });
+
+  it('start() then emit(): drawRange.count matches emitCount and stale slots are out of draw range', () => {
+    const scene = new THREE.Scene();
+    const fx = new BoostFlameEffect();
+    fx.init(scene);
+    fx.start();
+    // Write to many slots across two boosts to leave stale data above index 8.
+    fx.emit(SHIP, 0);
+    fx.emit(SHIP, 0);
+    fx.emit(SHIP, 0); // 24 particles spanning slots 0..23
+
+    fx.start();
+    const geom = fx.getObject()!.geometry as THREE.BufferGeometry;
+    expect(geom.drawRange.count).toBe(0);
+
+    fx.emit({ x: 0, y: 0, z: 0 }, 0); // 8 particles at slots 0..7
+    expect(geom.drawRange.start).toBe(0);
+    expect(geom.drawRange.count).toBe(8);
+    // stale slots (8..23) remain outside the draw range.
+    fx.dispose();
+  });
+
+  it('start() performs no Float32Array fill / no MAX_PARTICLES-wide clear loop', () => {
+    const scene = new THREE.Scene();
+    const fx = new BoostFlameEffect();
+    fx.init(scene);
+    fx.start();
+    fx.emit({ x: 9, y: 9, z: 9 }, 0); // dirty slots 0..7
+
+    const obj = fx.getObject()!;
+    const positions = (obj.geometry as THREE.BufferGeometry).getAttribute('position').array as Float32Array;
+    const colors = (obj.geometry as THREE.BufferGeometry).getAttribute('color').array as Float32Array;
+    const before = {
+      positions: new Float32Array(positions),
+      colors: new Float32Array(colors),
+    };
+
+    fx.start();
+
+    // No buffer entry was modified by start() — content is byte-identical.
+    expect(positions).toEqual(before.positions);
+    expect(colors).toEqual(before.colors);
+
+    fx.dispose();
+  });
+
   it('emit/update/remove before init are safe no-ops', () => {
     const fx = new BoostFlameEffect();
     expect(() => fx.start()).not.toThrow();
