@@ -77,4 +77,47 @@ describe('createMuteButton', () => {
     handle.remove();
     expect(container.querySelector('button[data-mute-button]')).toBeNull();
   });
+
+  describe('press visual feedback', () => {
+    it('initialises transform to scale(1) and applies a transform transition', () => {
+      const handle = createMuteButton({ initialMuted: false, container, onToggle: () => {} });
+      expect(handle.element.style.transform).toBe('scale(1)');
+      expect(handle.element.style.transition).toContain('transform');
+    });
+
+    it('shrinks to scale(0.9) on pointerdown', () => {
+      const handle = createMuteButton({ initialMuted: false, container, onToggle: () => {} });
+      handle.element.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      expect(handle.element.style.transform).toBe('scale(0.9)');
+    });
+
+    it('restores to scale(1) on pointerup', () => {
+      const handle = createMuteButton({ initialMuted: false, container, onToggle: () => {} });
+      handle.element.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      handle.element.dispatchEvent(new Event('pointerup', { bubbles: true }));
+      expect(handle.element.style.transform).toBe('scale(1)');
+    });
+
+    it('restores to scale(1) on pointercancel', () => {
+      const handle = createMuteButton({ initialMuted: false, container, onToggle: () => {} });
+      handle.element.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      handle.element.dispatchEvent(new Event('pointercancel', { bubbles: true }));
+      expect(handle.element.style.transform).toBe('scale(1)');
+    });
+
+    it('restores to scale(1) on pointerleave', () => {
+      const handle = createMuteButton({ initialMuted: false, container, onToggle: () => {} });
+      handle.element.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      handle.element.dispatchEvent(new Event('pointerleave', { bubbles: true }));
+      expect(handle.element.style.transform).toBe('scale(1)');
+    });
+
+    it('still fires onToggle on pointerdown when applying press feedback', () => {
+      const onToggle = vi.fn();
+      const handle = createMuteButton({ initialMuted: false, container, onToggle });
+      handle.element.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      expect(onToggle).toHaveBeenCalledTimes(1);
+      expect(handle.element.style.transform).toBe('scale(0.9)');
+    });
+  });
 });

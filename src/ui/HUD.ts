@@ -54,10 +54,23 @@ export class HUD {
     this.homeButton.style.cursor = 'pointer';
     this.homeButton.style.pointerEvents = 'auto';
     this.homeButton.style.touchAction = 'manipulation';
+    this.homeButton.style.transform = 'scale(1)';
+    this.homeButton.style.transition = 'transform 0.08s ease-out';
+    const releaseHomePress = (): void => {
+      if (this.homeButton) {
+        this.homeButton.style.transform = 'scale(1)';
+      }
+    };
     this.homeButton.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
+      if (this.homeButton) {
+        this.homeButton.style.transform = 'scale(0.9)';
+      }
       this.onHomeCallback?.();
     });
+    this.homeButton.addEventListener('pointerup', releaseHomePress);
+    this.homeButton.addEventListener('pointercancel', releaseHomePress);
+    this.homeButton.addEventListener('pointerleave', releaseHomePress);
     hudRoot.appendChild(this.homeButton);
 
     // Stage name display
