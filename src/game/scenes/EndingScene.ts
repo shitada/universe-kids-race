@@ -6,6 +6,7 @@ import type { AudioManager } from '../audio/AudioManager';
 import { CompanionManager } from '../entities/CompanionManager';
 import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
 import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButton';
+import { getViewportSize } from '../utils/getViewportSize';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // SHARED background-star resources for EndingScene
@@ -90,9 +91,10 @@ export class EndingScene implements Scene {
     this.saveManager = saveManager;
     this.audioManager = audioManager;
     this.threeScene = new THREE.Scene();
+    const { width: vw, height: vh } = getViewportSize();
     this.camera = new THREE.PerspectiveCamera(
       60,
-      window.innerWidth / window.innerHeight,
+      vw / vh,
       0.1,
       1000,
     );
@@ -376,7 +378,8 @@ export class EndingScene implements Scene {
   }
 
   getCamera(): THREE.Camera {
-    const aspect = window.innerWidth / window.innerHeight;
+    const { width, height } = getViewportSize();
+    const aspect = width / height;
     if (aspect !== this.lastAspect && Number.isFinite(aspect) && aspect > 0) {
       this.camera.aspect = aspect;
       this.camera.updateProjectionMatrix();
