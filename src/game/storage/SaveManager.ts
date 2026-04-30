@@ -55,6 +55,19 @@ export class SaveManager {
     }
   }
 
+  // Resets progress data (clearedStage, unlockedPlanets) but preserves the
+  // user's mute preference. Used on Safari new-session detection so that
+  // parents' silent-environment setting survives swipe-to-close.
+  resetSessionDataPreservingMuted(): void {
+    try {
+      const muted = this.load().muted === true;
+      this.clear();
+      this.save({ clearedStage: 0, unlockedPlanets: [], muted });
+    } catch (e) {
+      console.warn('SaveManager.resetSessionDataPreservingMuted failed:', e);
+    }
+  }
+
   // Returns true if this is a fresh session (no session flag yet).
   // Safe against sessionStorage exceptions (iPad Safari private mode etc.).
   // Also marks the session as active as a side-effect.
