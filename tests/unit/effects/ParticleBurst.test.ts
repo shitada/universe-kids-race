@@ -258,6 +258,65 @@ describe('ParticleBurst rendering invariants', () => {
     expect(burst.isActive()).toBe(true);
     expect(scene.children.length).toBe(1);
   });
+
+  it('reset narrows attribute update ranges to the live particle slice (NORMAL=20)', () => {
+    const burst = new ParticleBurst();
+    burst.reset(scene, 0, 0, 0, 0xffdd00, 20, false);
+    const points = scene.children[0] as THREE.Points;
+    const positionAttr = points.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const colorAttr = points.geometry.getAttribute('color') as THREE.BufferAttribute;
+    const sizeAttr = points.geometry.getAttribute('size') as THREE.BufferAttribute;
+
+    expect(positionAttr.updateRanges).toEqual([{ start: 0, count: 20 * 3 }]);
+    expect(colorAttr.updateRanges).toEqual([{ start: 0, count: 20 * 3 }]);
+    expect(sizeAttr.updateRanges).toEqual([{ start: 0, count: 20 }]);
+  });
+
+  it('reset narrows attribute update ranges to the live particle slice (RAINBOW=50)', () => {
+    const burst = new ParticleBurst();
+    burst.reset(scene, 0, 0, 0, 0xffdd00, 50, true);
+    const points = scene.children[0] as THREE.Points;
+    const positionAttr = points.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const colorAttr = points.geometry.getAttribute('color') as THREE.BufferAttribute;
+    const sizeAttr = points.geometry.getAttribute('size') as THREE.BufferAttribute;
+
+    expect(positionAttr.updateRanges).toEqual([{ start: 0, count: 50 * 3 }]);
+    expect(colorAttr.updateRanges).toEqual([{ start: 0, count: 50 * 3 }]);
+    expect(sizeAttr.updateRanges).toEqual([{ start: 0, count: 50 }]);
+  });
+
+  it('update narrows per-frame GPU upload to position*3 / size of count', () => {
+    const burst = new ParticleBurst();
+    burst.reset(scene, 0, 0, 0, 0xffdd00, 20, false);
+    const points = scene.children[0] as THREE.Points;
+    const positionAttr = points.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const sizeAttr = points.geometry.getAttribute('size') as THREE.BufferAttribute;
+
+    // Step several non-expire frames; updateRanges must remain a single
+    // [0, count*stride] entry — never grow unbounded.
+    for (let i = 0; i < 5; i++) {
+      const expired = burst.update(0.05);
+      expect(expired).toBe(false);
+      expect(positionAttr.updateRanges).toEqual([{ start: 0, count: 20 * 3 }]);
+      expect(sizeAttr.updateRanges).toEqual([{ start: 0, count: 20 }]);
+    }
+  });
+
+  it('update on the expire frame leaves updateRanges untouched (no extra push)', () => {
+    const burst = new ParticleBurst();
+    burst.reset(scene, 0, 0, 0, 0xffdd00, 20, false);
+    const points = scene.children[0] as THREE.Points;
+    const positionAttr = points.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const sizeAttr = points.geometry.getAttribute('size') as THREE.BufferAttribute;
+
+    const positionRangesBefore = positionAttr.updateRanges.slice();
+    const sizeRangesBefore = sizeAttr.updateRanges.slice();
+
+    const expired = burst.update(1.0);
+    expect(expired).toBe(true);
+    expect(positionAttr.updateRanges).toEqual(positionRangesBefore);
+    expect(sizeAttr.updateRanges).toEqual(sizeRangesBefore);
+  });
 });
 
 describe('ParticleBurstManager allocation invariants', () => {
