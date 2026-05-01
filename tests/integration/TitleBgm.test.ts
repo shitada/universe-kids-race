@@ -227,7 +227,7 @@ describe('Title → Stage BGM transition (bugfix: BGM_0 plays during title)', ()
     ]);
   });
 
-  it('stage selection from encyclopedia does not add a duplicate title BGM start', async () => {
+  it('stage selection from encyclopedia detail play does not add a duplicate title BGM start', async () => {
     const sceneManager = createMockSceneManager();
     const saveManager = createUnlockedSaveManager();
     const { audioManager, calls } = createTrackingAudioManager(false);
@@ -247,6 +247,10 @@ describe('Title → Stage BGM transition (bugfix: BGM_0 plays during title)', ()
 
     const card = document.querySelector('[data-card][data-stage="2"]') as HTMLDivElement;
     card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(sceneManager.requestTransition).not.toHaveBeenCalled();
+    const playButton = document.querySelector('[data-detail-play]') as HTMLButtonElement | null;
+    expect(playButton).not.toBeNull();
+    playButton?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
 
     expect(sceneManager.requestTransition).toHaveBeenCalledWith(
       'stage',

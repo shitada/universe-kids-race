@@ -162,14 +162,7 @@ export class EncyclopediaOverlay {
       card.addEventListener('pointerdown', (e) => {
         e.stopPropagation();
         card.style.transform = 'scale(0.95)';
-        if (this.onSelectStage) {
-          const cb = this.onSelectStage;
-          const stageNumber = entry.stageNumber;
-          this.hide();
-          cb(stageNumber);
-        } else {
-          this.showDetail(entry);
-        }
+        this.showDetail(entry);
       });
       const resetScale = () => {
         card.style.transform = '';
@@ -269,6 +262,34 @@ export class EncyclopediaOverlay {
         margin-top: 0.5rem;
       `;
       detailCard.appendChild(best);
+    }
+
+    if (this.onSelectStage) {
+      const playBtn = document.createElement('button');
+      playBtn.setAttribute('data-detail-play', '');
+      playBtn.textContent = 'このステージで あそぶ';
+      playBtn.style.cssText = `
+        margin-top: 1rem;
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: 1.2rem;
+        font-weight: 700;
+        padding: 0.8rem 1.6rem;
+        border: none;
+        border-radius: 1.5rem;
+        background: linear-gradient(135deg, #FF6B6B, #FFE66D);
+        color: #333;
+        cursor: pointer;
+        touch-action: manipulation;
+      `;
+      playBtn.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        const cb = this.onSelectStage;
+        if (!cb) return;
+        const stageNumber = entry.stageNumber;
+        this.hide();
+        cb(stageNumber);
+      });
+      detailCard.appendChild(playBtn);
     }
 
     this.detailEl.appendChild(detailCard);

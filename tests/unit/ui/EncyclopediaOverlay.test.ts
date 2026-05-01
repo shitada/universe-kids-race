@@ -103,22 +103,34 @@ describe('EncyclopediaOverlay', () => {
     expect(cards[1].getAttribute('data-stage')).toBe('2');
   });
 
-  it('onSelectStage callback is called when unlocked card is tapped', () => {
+  it('with onSelectStage, unlocked card tap opens detail without calling callback', () => {
     const selected: number[] = [];
     overlay.show([2], () => {}, (stageNumber) => {
       selected.push(stageNumber);
-    });
+    }, { 2: 4 });
     const card = uiOverlay.querySelector('[data-card][data-stage="2"]') as HTMLElement;
     expect(card).not.toBeNull();
     card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-    expect(selected).toEqual([2]);
+    expect(selected).toEqual([]);
+    const detail = uiOverlay.querySelector('[data-detail]') as HTMLElement | null;
+    expect(detail).not.toBeNull();
+    expect(detail?.textContent).toContain('水星');
+    expect(detail?.textContent).toContain('すいせいは たいように いちばん ちかい わくせいだよ');
+    expect(detail?.textContent).toContain('⭐ ベスト 4');
   });
 
-  it('overlay is hidden after stage select callback fires', () => {
-    overlay.show([1], () => {}, () => {});
+  it('detail play button calls onSelectStage exactly once and hides overlay', () => {
+    const selected: number[] = [];
+    overlay.show([1], () => {}, (stageNumber) => {
+      selected.push(stageNumber);
+    });
     expect(uiOverlay.children.length).toBe(1);
     const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
     card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    const playButton = uiOverlay.querySelector('[data-detail-play]') as HTMLElement | null;
+    expect(playButton).not.toBeNull();
+    playButton?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(selected).toEqual([1]);
     expect(uiOverlay.children.length).toBe(0);
   });
 
