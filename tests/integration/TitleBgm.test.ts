@@ -4,6 +4,7 @@ import { TitleScene } from '../../src/game/scenes/TitleScene';
 import type { SceneManager } from '../../src/game/SceneManager';
 import type { SaveManager } from '../../src/game/storage/SaveManager';
 import type { AudioManager } from '../../src/game/audio/AudioManager';
+import { EncyclopediaOverlay } from '../../src/ui/EncyclopediaOverlay';
 
 /**
  * Integration test: タイトル→ステージ遷移時の BGM 切替順序検証 (bugfix: BGM_0 not playing).
@@ -33,10 +34,38 @@ function createMockSceneManager(): SceneManager {
 
 function createMockSaveManager(): SaveManager {
   return {
-    load: vi.fn(() => ({ clearedStage: 0, unlockedPlanets: [] })),
+    load: vi.fn(() => ({ clearedStage: 0, unlockedPlanets: [], tutorialShown: true })),
     save: vi.fn(),
     clear: vi.fn(),
+    markTutorialShown: vi.fn(),
   } as unknown as SaveManager;
+}
+
+function createOnboardingSaveManager(): SaveManager {
+  let tutorialShown = false;
+  return {
+    load: vi.fn(() => ({ clearedStage: 0, unlockedPlanets: [2], tutorialShown })),
+    save: vi.fn(),
+    clear: vi.fn(),
+    markTutorialShown: vi.fn(() => {
+      tutorialShown = true;
+    }),
+  } as unknown as SaveManager;
+}
+
+function createUnlockedSaveManager(): SaveManager {
+  return {
+    load: vi.fn(() => ({ clearedStage: 0, unlockedPlanets: [2], tutorialShown: true })),
+    save: vi.fn(),
+    clear: vi.fn(),
+    markTutorialShown: vi.fn(),
+  } as unknown as SaveManager;
+}
+
+function flushPromises(): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, 0);
+  });
 }
 
 function createTrackingAudioManager(initialized: boolean): {
@@ -144,5 +173,85 @@ describe('Title → Stage BGM transition (bugfix: BGM_0 plays during title)', ()
       { kind: 'play', arg: 0 },
       { kind: 'stop' },
     ]);
+  });
+
+  it('first launch: closing the tutorial starts BGM_0 exactly once', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createOnboardingSaveManager();
+    const { audioManager, calls } = createTrackingAudioManager(false);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager);
+    scene.enter({});
+
+    const closeButton = Array.from(document.querySelectorAll('button'))
+      .find((button) => button.textContent === 'とじる') as HTMLButtonElement;
+    closeButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(calls).toEqual([{ kind: 'play', arg: 0 }]);
+
+    const titleOverlay = document.getElementById('ui-overlay')!.firstElementChild as HTMLDivElement;
+    titleOverlay.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(calls).toEqual([{ kind: 'play', arg: 0 }]);
+
+    scene.exit();
+    expect(calls).toEqual([
+      { kind: 'play', arg: 0 },
+      { kind: 'stop' },
+    ]);
+  });
+
+  it('first launch: "あそぶ" initializes audio without starting title BGM before stage BGM', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager();
+    const { audioManager, calls } = createTrackingAudioManager(false);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager);
+    scene.enter({});
+
+    const playButton = Array.from(document.querySelectorAll('button'))
+      .find((button) => button.textContent === 'あそぶ') as HTMLButtonElement;
+    playButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith(
+      'stage',
+      expect.objectContaining({ stageNumber: 1 }),
+    );
+    expect(calls).toEqual([]);
+
+    scene.exit();
+    audioManager.playBGM(1);
+
+    expect(calls).toEqual([
+      { kind: 'stop' },
+      { kind: 'play', arg: 1 },
+    ]);
+  });
+
+  it('stage selection from encyclopedia does not add a duplicate title BGM start', async () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createUnlockedSaveManager();
+    const { audioManager, calls } = createTrackingAudioManager(false);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager, {
+      loadEncyclopediaOverlay: vi.fn(async () => ({ EncyclopediaOverlay })),
+    });
+    scene.enter({});
+
+    const encyclopediaButton = Array.from(document.querySelectorAll('button'))
+      .find((button) => button.textContent?.startsWith('ずかん')) as HTMLButtonElement;
+    encyclopediaButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+    await flushPromises();
+
+    expect(calls).toEqual([{ kind: 'play', arg: 0 }]);
+
+    const card = document.querySelector('[data-card][data-stage="2"]') as HTMLDivElement;
+    card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith(
+      'stage',
+      expect.objectContaining({ stageNumber: 2 }),
+    );
+    expect(calls).toEqual([{ kind: 'play', arg: 0 }]);
   });
 });

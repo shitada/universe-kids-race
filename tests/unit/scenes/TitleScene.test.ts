@@ -5,6 +5,7 @@ import { TitleScene } from '../../../src/game/scenes/TitleScene';
 import type { SceneManager } from '../../../src/game/SceneManager';
 import type { SaveManager } from '../../../src/game/storage/SaveManager';
 import type { AudioManager } from '../../../src/game/audio/AudioManager';
+import { EncyclopediaOverlay } from '../../../src/ui/EncyclopediaOverlay';
 
 function createMockSceneManager(): SceneManager {
   return {
@@ -54,6 +55,18 @@ beforeEach(() => {
     overlay.remove();
   };
 });
+
+function flushPromises(): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, 0);
+  });
+}
+
+function findButtonByText(text: string): HTMLButtonElement | undefined {
+  return Array.from(document.querySelectorAll('button')).find(
+    (button) => button.textContent === text,
+  ) as HTMLButtonElement | undefined;
+}
 
 describe('TitleScene (T009)', () => {
   it('overlay pointerdown calls initSync() and starts BGM_0 when not initialized', () => {
@@ -128,13 +141,110 @@ describe('TitleScene (T009)', () => {
     const event = new Event('pointerdown', { bubbles: true });
     playButton!.dispatchEvent(event);
 
-    expect(audioManager.initSync).toHaveBeenCalled();
+    expect(audioManager.initSync).not.toHaveBeenCalled();
     // ボタン押下では追加 playBGM は呼ばれない（StageScene 側が呼ぶため）
     expect(audioManager.playBGM).toHaveBeenCalledTimes(1);
     expect(sceneManager.requestTransition).toHaveBeenCalledWith(
       'stage',
       expect.objectContaining({ stageNumber: expect.any(Number) }),
     );
+
+    scene.exit();
+  });
+
+  it('first "あそぶ" interaction initializes audio without starting title BGM', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager(false);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager);
+    scene.enter({});
+
+    const playButton = findButtonByText('あそぶ');
+    expect(playButton).toBeTruthy();
+
+    playButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(audioManager.initSync).toHaveBeenCalledTimes(1);
+    expect(audioManager.playBGM).not.toHaveBeenCalled();
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith(
+      'stage',
+      expect.objectContaining({ stageNumber: expect.any(Number) }),
+    );
+
+    scene.exit();
+  });
+
+  it('first "あそびかた" interaction initializes audio and starts BGM_0 once', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager(false);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager);
+    scene.enter({});
+
+    const tutorialButton = findButtonByText('あそびかた');
+    expect(tutorialButton).toBeTruthy();
+
+    tutorialButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(audioManager.initSync).toHaveBeenCalledTimes(1);
+    expect(audioManager.playBGM).toHaveBeenCalledTimes(1);
+    expect(audioManager.playBGM).toHaveBeenCalledWith(0);
+    expect(document.querySelector('[data-tutorial-overlay]')).toBeTruthy();
+
+    findButtonByText('とじる')?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    const titleOverlay = document.getElementById('ui-overlay')!.firstElementChild as HTMLDivElement;
+    titleOverlay.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(audioManager.playBGM).toHaveBeenCalledTimes(1);
+
+    scene.exit();
+  });
+
+  it('first encyclopedia interaction initializes audio and starts BGM_0 once', async () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager(false);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager, {
+      loadEncyclopediaOverlay: vi.fn(async () => ({ EncyclopediaOverlay })),
+    });
+    scene.enter({});
+
+    const encyclopediaButton = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent?.startsWith('ずかん'),
+    ) as HTMLButtonElement | undefined;
+    expect(encyclopediaButton).toBeTruthy();
+
+    encyclopediaButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+    await flushPromises();
+
+    expect(audioManager.initSync).toHaveBeenCalledTimes(1);
+    expect(audioManager.playBGM).toHaveBeenCalledTimes(1);
+    expect(audioManager.playBGM).toHaveBeenCalledWith(0);
+    expect(document.querySelector('[data-card]')).toBeTruthy();
+
+    scene.exit();
+  });
+
+  it('first mute interaction initializes audio and starts BGM_0 once', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager(false);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager);
+    scene.enter({});
+
+    const muteButton = document.querySelector('button[data-mute-button]') as HTMLButtonElement | null;
+    expect(muteButton).toBeTruthy();
+
+    muteButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(audioManager.initSync).toHaveBeenCalledTimes(1);
+    expect(audioManager.playBGM).toHaveBeenCalledTimes(1);
+    expect(audioManager.playBGM).toHaveBeenCalledWith(0);
+    expect(audioManager.toggleMute).toHaveBeenCalledTimes(1);
 
     scene.exit();
   });
@@ -277,6 +387,33 @@ describe('TitleScene first-run onboarding (auto tutorial)', () => {
 
     expect(saveManager.markTutorialShown).toHaveBeenCalledTimes(1);
     expect(document.querySelector('[data-tutorial-overlay]')).toBeNull();
+
+    scene.exit();
+  });
+
+  it('first tutorial close initializes audio and starts BGM_0 once', () => {
+    const saveManager = createOnboardingMockSaveManager(false);
+    const audioManager = createMockAudioManager(false);
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      saveManager,
+      audioManager,
+    );
+
+    scene.enter({});
+
+    const closeBtn = findButtonByText('とじる');
+    expect(closeBtn).toBeTruthy();
+
+    closeBtn!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(audioManager.initSync).toHaveBeenCalledTimes(1);
+    expect(audioManager.playBGM).toHaveBeenCalledTimes(1);
+    expect(audioManager.playBGM).toHaveBeenCalledWith(0);
+
+    const titleOverlay = document.getElementById('ui-overlay')!.firstElementChild as HTMLDivElement;
+    titleOverlay.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(audioManager.playBGM).toHaveBeenCalledTimes(1);
 
     scene.exit();
   });
