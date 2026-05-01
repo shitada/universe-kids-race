@@ -383,7 +383,7 @@ describe('SaveManager', () => {
       expect(data.muted).toBe(false);
     });
 
-    it('preserves tutorialShown=true while resetting only session progress data', () => {
+    it('resets tutorialShown to false while resetting session progress data', () => {
       const manager = new SaveManager();
       manager.save({
         clearedStage: 7,
@@ -399,7 +399,7 @@ describe('SaveManager', () => {
         clearedStage: 0,
         unlockedPlanets: [],
         muted: true,
-        tutorialShown: true,
+        tutorialShown: false,
         bestStageStars: {},
       });
     });
@@ -822,6 +822,7 @@ describe('SaveManager', () => {
         unlockedPlanets: [1, 2, 3, 4, 5],
         muted: true,
         bestStageStars: { 1: 3, 2: 2 },
+        tutorialShown: true,
         lastStablePixelTier: 3,
       });
       manager.resetSessionDataPreservingMuted();
@@ -831,6 +832,7 @@ describe('SaveManager', () => {
       expect(loaded.clearedStage).toBe(0);
       expect(loaded.unlockedPlanets).toEqual([]);
       expect(loaded.bestStageStars).toEqual({});
+      expect(loaded.tutorialShown).toBe(false);
     });
 
     it('invalidates the cache when save() throws so the next load() re-reads storage', () => {
