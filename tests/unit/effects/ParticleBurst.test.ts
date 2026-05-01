@@ -36,6 +36,14 @@ describe('ParticleBurst', () => {
     expect(burst.isExpired()).toBe(true);
   });
 
+  it('disables frustum culling on the underlying Points so off-axis particles do not vanish', () => {
+    const burst = new ParticleBurst();
+    burst.reset(scene, 0, 0, 0, 0xffdd00, 20, false);
+    const points = scene.children.find((c) => (c as THREE.Points).isPoints) as THREE.Points | undefined;
+    expect(points).toBeDefined();
+    expect(points!.frustumCulled).toBe(false);
+  });
+
   it('dispose removes from scene', () => {
     const burst = new ParticleBurst();
     burst.reset(scene, 0, 0, 0, 0xffdd00, 20, false);

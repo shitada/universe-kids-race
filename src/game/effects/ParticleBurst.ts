@@ -67,6 +67,12 @@ export class ParticleBurst {
     });
 
     this.points = new THREE.Points(this.geometry, this.material);
+    // reset() で全パーティクルを burst 原点に集約するため geometry の bounding sphere は
+    // 半径ほぼ 0 になるが、update() で最大 12 単位ほど外側に飛散する。bounding sphere は
+    // 自動再計算されないため、画面端での爆発時にフラスタムカリングで瞬間的に消える可能性がある。
+    // BoostLinesEffect / BoostFlameEffect と同様にカリングを無効化して回避する。
+    // Pool 上限は ParticleBurstManager.MAX_BURSTS=10 のため描画コスト増は無視できる。
+    this.points.frustumCulled = false;
     this.points.visible = false;
   }
 
