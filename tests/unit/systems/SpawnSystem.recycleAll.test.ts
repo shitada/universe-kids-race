@@ -76,6 +76,14 @@ describe('SpawnSystem.recycleAll', () => {
   });
 
   it('reuses pooled entities on the next spawn cycle (no Mesh reallocation)', () => {
+    // Pin Math.random so the NORMAL/RAINBOW split is identical across both
+    // stage runs. Without this, the 10% RAINBOW probability can cause stage 2
+    // to allocate one additional rainbow entity vs stage 1 (or vice versa)
+    // depending on the global Math.random state at test start, producing a
+    // spurious mismatch between rainbowSizeBefore and the post-stage-2 size.
+    // 0.5 > 0.1 → always NORMAL; x = (0.5-0.5)*14 = 0; y = 0.
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
     // Simulate the StageScene lifecycle where spawned entities are eventually
     // released back to the pool (cleanupPassedObjects). Without simulating
     // release, the test would conflate "pool size grows because nothing is
