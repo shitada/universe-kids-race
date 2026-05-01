@@ -39,9 +39,10 @@ function createMockAudioManager(initialized = false): AudioManager {
 
 function createMockSaveManager(): SaveManager {
   return {
-    load: vi.fn(() => ({ clearedStage: 0, unlockedPlanets: [] })),
+    load: vi.fn(() => ({ clearedStage: 0, unlockedPlanets: [], tutorialShown: true })),
     save: vi.fn(),
     clear: vi.fn(),
+    markTutorialShown: vi.fn(),
   } as unknown as SaveManager;
 }
 
@@ -201,6 +202,123 @@ describe('TitleScene (T009)', () => {
     const threeScene = scene.getThreeScene();
     const points = threeScene.children.filter((c) => c instanceof THREE.Points);
     expect(points.length).toBeGreaterThanOrEqual(1);
+
+    scene.exit();
+  });
+});
+
+describe('TitleScene first-run onboarding (auto tutorial)', () => {
+  function createOnboardingMockSaveManager(initialTutorialShown = false): SaveManager {
+    let tutorialShown = initialTutorialShown;
+    return {
+      load: vi.fn(() => ({
+        clearedStage: 0,
+        unlockedPlanets: [],
+        bestStageStars: {},
+        tutorialShown,
+      })),
+      save: vi.fn(),
+      clear: vi.fn(),
+      markTutorialShown: vi.fn(() => {
+        tutorialShown = true;
+      }),
+    } as unknown as SaveManager;
+  }
+
+  it('auto-shows TutorialOverlay on enter() when tutorialShown is false', () => {
+    const saveManager = createOnboardingMockSaveManager(false);
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      saveManager,
+      createMockAudioManager(true),
+    );
+
+    scene.enter({});
+
+    const overlay = document.querySelector('[data-tutorial-overlay]');
+    expect(overlay).toBeTruthy();
+
+    scene.exit();
+  });
+
+  it('does NOT auto-show TutorialOverlay when tutorialShown is true', () => {
+    const saveManager = createOnboardingMockSaveManager(true);
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      saveManager,
+      createMockAudioManager(true),
+    );
+
+    scene.enter({});
+
+    expect(document.querySelector('[data-tutorial-overlay]')).toBeNull();
+    expect(saveManager.markTutorialShown).not.toHaveBeenCalled();
+
+    scene.exit();
+  });
+
+  it('persists tutorialShown=true and removes overlay when child taps "とじる"', () => {
+    const saveManager = createOnboardingMockSaveManager(false);
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      saveManager,
+      createMockAudioManager(true),
+    );
+
+    scene.enter({});
+
+    const overlay = document.querySelector('[data-tutorial-overlay]') as HTMLElement;
+    expect(overlay).toBeTruthy();
+    const closeBtn = Array.from(overlay.querySelectorAll('button'))
+      .find((b) => b.textContent === 'とじる');
+    expect(closeBtn).toBeTruthy();
+
+    closeBtn!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(saveManager.markTutorialShown).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[data-tutorial-overlay]')).toBeNull();
+
+    scene.exit();
+  });
+
+  it('does not auto-show on the second enter() after the flag was set', () => {
+    const saveManager = createOnboardingMockSaveManager(false);
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      saveManager,
+      createMockAudioManager(true),
+    );
+
+    scene.enter({});
+    const overlay = document.querySelector('[data-tutorial-overlay]') as HTMLElement;
+    const closeBtn = Array.from(overlay.querySelectorAll('button'))
+      .find((b) => b.textContent === 'とじる')!;
+    closeBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    scene.exit();
+
+    scene.enter({});
+    expect(document.querySelector('[data-tutorial-overlay]')).toBeNull();
+    scene.exit();
+  });
+
+  it('manual "あそびかた" button still opens the overlay even after tutorialShown is true', () => {
+    const saveManager = createOnboardingMockSaveManager(true);
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      saveManager,
+      createMockAudioManager(true),
+    );
+
+    scene.enter({});
+    expect(document.querySelector('[data-tutorial-overlay]')).toBeNull();
+
+    const uiOverlay = document.getElementById('ui-overlay')!;
+    const tutorialBtn = Array.from(uiOverlay.querySelectorAll('button'))
+      .find((b) => b.textContent === 'あそびかた');
+    expect(tutorialBtn).toBeTruthy();
+    tutorialBtn!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(document.querySelector('[data-tutorial-overlay]')).toBeTruthy();
 
     scene.exit();
   });

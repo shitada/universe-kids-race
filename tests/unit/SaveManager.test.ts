@@ -766,4 +766,76 @@ describe('SaveManager', () => {
       expect(loaded.clearedStage).toBe(1);
     });
   });
+
+  describe('tutorialShown (first-run onboarding flag)', () => {
+    it('defaults to false when no save exists', () => {
+      const manager = new SaveManager();
+      expect(manager.load().tutorialShown).toBe(false);
+    });
+
+    it('defaults to false for legacy saves missing the field (backward compatible)', () => {
+      // Legacy v1 save with no tutorialShown key.
+      storage.set(
+        'universe-kids-race-save',
+        JSON.stringify({ clearedStage: 1, unlockedPlanets: [1] }),
+      );
+      const manager = new SaveManager();
+      expect(manager.load().tutorialShown).toBe(false);
+    });
+
+    it('normalizes non-boolean tutorialShown values to false', () => {
+      storage.set(
+        'universe-kids-race-save',
+        JSON.stringify({ clearedStage: 0, unlockedPlanets: [], tutorialShown: 'yes' }),
+      );
+      const manager = new SaveManager();
+      expect(manager.load().tutorialShown).toBe(false);
+    });
+
+    it('markTutorialShown() persists tutorialShown=true', () => {
+      const manager = new SaveManager();
+      expect(manager.load().tutorialShown).toBe(false);
+      manager.markTutorialShown();
+      expect(manager.load().tutorialShown).toBe(true);
+      // And survives a fresh manager instance reading from storage.
+      const manager2 = new SaveManager();
+      expect(manager2.load().tutorialShown).toBe(true);
+    });
+
+    it('markTutorialShown() preserves other fields (clearedStage / unlockedPlanets / muted)', () => {
+      const manager = new SaveManager();
+      manager.save({
+        clearedStage: 3,
+        unlockedPlanets: [1, 2, 3],
+        muted: true,
+        bestStageStars: { 1: 3, 2: 2 },
+      });
+      manager.markTutorialShown();
+      const data = manager.load();
+      expect(data.tutorialShown).toBe(true);
+      expect(data.clearedStage).toBe(3);
+      expect(data.unlockedPlanets).toEqual([1, 2, 3]);
+      expect(data.muted).toBe(true);
+      expect(data.bestStageStars).toEqual({ 1: 3, 2: 2 });
+    });
+
+    it('markTutorialShown() is idempotent (no extra write when already true)', () => {
+      const manager = new SaveManager();
+      manager.markTutorialShown();
+      const snapshot = storage.get('universe-kids-race-save');
+      // Mutate stored value to detect any unwanted re-write.
+      storage.set('universe-kids-race-save', snapshot + ' /* sentinel */');
+      manager.markTutorialShown();
+      // No new write happened, so the sentinel must remain intact.
+      expect(storage.get('universe-kids-race-save')).toBe(snapshot + ' /* sentinel */');
+    });
+
+    it('clear() resets tutorialShown back to false on next load', () => {
+      const manager = new SaveManager();
+      manager.markTutorialShown();
+      expect(manager.load().tutorialShown).toBe(true);
+      manager.clear();
+      expect(manager.load().tutorialShown).toBe(false);
+    });
+  });
 });
