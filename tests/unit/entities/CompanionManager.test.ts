@@ -94,6 +94,37 @@ describe('CompanionManager', () => {
       manager.update(1.0, 0, 0, 0);
       expect(companion.rotation.y).toBeGreaterThan(initialRotY);
     });
+
+    it('rest-skips when no companions are present (does not advance elapsedTime)', () => {
+      // Empty manager: no unlocked planets means no companions exist yet.
+      const manager = new CompanionManager([]);
+      expect(manager.getCount()).toBe(0);
+
+      // Multiple update() calls with no companions must be a complete no-op.
+      manager.update(1.0, 0, 0, 0);
+      manager.update(2.5, 10, 5, -3);
+      manager.update(0.016, 0, 0, 0);
+
+      // Add the first companion AFTER the empty updates. If elapsedTime had
+      // advanced during the no-companion frames, the orbit angle on the next
+      // update would be non-zero. With rest-skip, elapsedTime stays 0, so a
+      // tiny first deltaTime must yield an angle ≈ 0 → cos≈1, sin≈0 →
+      // companion lands at (shipX + orbitRadius, shipY, shipZ).
+      manager.addCompanion(1);
+      expect(manager.getCount()).toBe(1);
+
+      const tinyDt = 0.0001;
+      manager.update(tinyDt, 5, 0, -10);
+
+      const companion = manager.getGroup().children[0];
+      // baseRadius for 1 companion = 2.0, orbitRadius = 2.0, orbitTilt for
+      // i=0,count=1 = (0 - 0.5)*0.15 = -0.075. cos(-0.075)≈0.997, sin(-0.075)≈-0.075.
+      // angle = 0 + tinyDt * orbitSpeed ≈ ~1e-4 → cos≈1, sin≈~1e-4.
+      // Expected: x ≈ 5 + 2.0 = 7, y ≈ 0, z ≈ -10.
+      expect(companion.position.x).toBeCloseTo(7, 3);
+      expect(companion.position.y).toBeCloseTo(0, 3);
+      expect(companion.position.z).toBeCloseTo(-10, 3);
+    });
   });
 
   describe('orbit parameter auto-adjustment', () => {
