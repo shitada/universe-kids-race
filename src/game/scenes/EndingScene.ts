@@ -367,19 +367,9 @@ export class EndingScene implements Scene {
     }
 
     if (this.companionGroup) {
+      // SHARED: CompanionManager の geometry / material はモジュール共有資産。
+      // ここではシーングラフから外して参照だけ切り、dispose はしない。
       this.threeScene.remove(this.companionGroup);
-      for (const mesh of this.companionMeshes) {
-        mesh.traverse((child) => {
-          if (child instanceof THREE.Mesh) {
-            child.geometry.dispose();
-            if (Array.isArray(child.material)) {
-              child.material.forEach((m) => m.dispose());
-            } else {
-              child.material.dispose();
-            }
-          }
-        });
-      }
       this.companionMeshes = [];
       this.companionGroup = null;
     }
