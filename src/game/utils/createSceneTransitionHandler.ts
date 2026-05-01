@@ -17,7 +17,7 @@ export interface SceneTransitionHandlerDeps {
   now: () => number;
 }
 
-export type SceneTransitionHandler = (sceneType: SceneType, context?: SceneContext) => void;
+export type SceneTransitionHandler = (sceneType: SceneType, context?: SceneContext) => void | Promise<void>;
 
 /**
  * Build the transition handler used by SceneManager.setTransitionHandler.

@@ -4,7 +4,7 @@ import type { SceneManager } from '../SceneManager';
 import type { SaveManager } from '../storage/SaveManager';
 import type { AudioManager } from '../audio/AudioManager';
 import { TutorialOverlay } from '../../ui/TutorialOverlay';
-import { EncyclopediaOverlay } from '../../ui/EncyclopediaOverlay';
+import { LoadingOverlay } from '../../ui/LoadingOverlay';
 import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButton';
 import { TOTAL_STAGES } from '../config/StageConfig';
 import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
@@ -70,6 +70,15 @@ export const __titleSceneSharedAssetsForTest = {
   getBgStarsMaterial: (): THREE.PointsMaterial | null => SHARED_TITLE_BG_STARS_MATERIAL,
 };
 
+type EncyclopediaOverlayModule = typeof import('../../ui/EncyclopediaOverlay');
+type EncyclopediaOverlayCtor = EncyclopediaOverlayModule['EncyclopediaOverlay'];
+type EncyclopediaOverlayInstance = InstanceType<EncyclopediaOverlayCtor>;
+
+interface TitleSceneOptions {
+  loadingOverlay?: Pick<LoadingOverlay, 'show' | 'hide'>;
+  loadEncyclopediaOverlay?: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
+}
+
 export class TitleScene implements Scene {
   // Scene / AmbientLight はインスタンスで再利用し、🏠 ボタンによる再入場ごとの
   // per-entry GPU/JS アロケーションを抑える。
@@ -84,8 +93,12 @@ export class TitleScene implements Scene {
   private overlay: HTMLDivElement | null = null;
   private muteHandle: MuteButtonHandle | null = null;
   private tutorialOverlay = new TutorialOverlay();
-  private encyclopediaOverlay = new EncyclopediaOverlay();
+  private encyclopediaOverlay: EncyclopediaOverlayInstance | null = null;
+  private encyclopediaOverlayPromise: Promise<EncyclopediaOverlayInstance> | null = null;
+  private readonly loadEncyclopediaOverlay: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
+  private readonly loadingOverlay: Pick<LoadingOverlay, 'show' | 'hide'>;
   private encyclopediaBtn: HTMLButtonElement | null = null;
+  private isOpeningEncyclopedia = false;
   // タイトル滞在中、初回 user gesture（AudioContext 初期化）を待つフラグ。
   // iPad Safari の AudioContext は user gesture 必須のため、enter() 直後の
   // 即時 playBGM(0) は AudioManager が既に初期化済みのとき（再訪問時）のみ
@@ -93,10 +106,19 @@ export class TitleScene implements Scene {
   // 直後に再生開始するため、その判定にこのフラグを利用する。
   private bgmPending = false;
 
-  constructor(sceneManager: SceneManager, saveManager: SaveManager, audioManager: AudioManager) {
+  constructor(
+    sceneManager: SceneManager,
+    saveManager: SaveManager,
+    audioManager: AudioManager,
+    options: TitleSceneOptions = {},
+  ) {
     this.sceneManager = sceneManager;
     this.saveManager = saveManager;
     this.audioManager = audioManager;
+    this.loadingOverlay = options.loadingOverlay ?? new LoadingOverlay();
+    this.loadEncyclopediaOverlay =
+      options.loadEncyclopediaOverlay ??
+      (() => import('../../ui/EncyclopediaOverlay'));
     this.threeScene = new THREE.Scene();
     this.threeScene.background = new THREE.Color(0x000020);
     const { width: vw, height: vh } = getViewportSize();
@@ -171,6 +193,67 @@ export class TitleScene implements Scene {
         this.saveManager.save(data);
       },
     });
+  }
+
+  private getEncyclopediaOverlay(): Promise<EncyclopediaOverlayInstance> {
+    if (this.encyclopediaOverlay) {
+      return Promise.resolve(this.encyclopediaOverlay);
+    }
+    if (this.encyclopediaOverlayPromise) {
+      return this.encyclopediaOverlayPromise;
+    }
+
+    this.encyclopediaOverlayPromise = this.loadEncyclopediaOverlay()
+      .then(({ EncyclopediaOverlay: EncyclopediaOverlayClass }) => {
+        const overlay = new EncyclopediaOverlayClass();
+        this.encyclopediaOverlay = overlay;
+        return overlay;
+      })
+      .finally(() => {
+        this.encyclopediaOverlayPromise = null;
+      });
+
+    return this.encyclopediaOverlayPromise;
+  }
+
+  private showEncyclopedia(): void {
+    if (!this.encyclopediaOverlay) return;
+    const saveData = this.saveManager.load();
+    this.encyclopediaOverlay.show(
+      saveData.unlockedPlanets,
+      () => this.refreshEncyclopediaButtonLabel(),
+      (stageNumber) => {
+        this.audioManager.initSync();
+        this.sceneManager.requestTransition('stage', {
+          stageNumber,
+          totalScore: 0,
+          totalStarCount: 0,
+        });
+      },
+      saveData.bestStageStars ?? {},
+    );
+  }
+
+  private async openEncyclopedia(): Promise<void> {
+    if (this.encyclopediaOverlay) {
+      this.showEncyclopedia();
+      return;
+    }
+    if (this.isOpeningEncyclopedia) {
+      return;
+    }
+
+    this.isOpeningEncyclopedia = true;
+    this.loadingOverlay.show('ずかんを よんでるよ...');
+    try {
+      await this.getEncyclopediaOverlay();
+      this.loadingOverlay.hide();
+      this.showEncyclopedia();
+    } catch {
+      this.loadingOverlay.hide();
+    } finally {
+      this.isOpeningEncyclopedia = false;
+    }
   }
 
   private createOverlay(): void {
@@ -278,20 +361,7 @@ export class TitleScene implements Scene {
     this.encyclopediaBtn = encyclopediaBtn;
     encyclopediaBtn.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
-      const saveData = this.saveManager.load();
-      this.encyclopediaOverlay.show(
-        saveData.unlockedPlanets,
-        () => this.refreshEncyclopediaButtonLabel(),
-        (stageNumber) => {
-          this.audioManager.initSync();
-          this.sceneManager.requestTransition('stage', {
-            stageNumber,
-            totalScore: 0,
-            totalStarCount: 0,
-          });
-        },
-        saveData.bestStageStars ?? {},
-      );
+      void this.openEncyclopedia();
     });
 
     this.overlay.appendChild(title);
@@ -331,7 +401,8 @@ export class TitleScene implements Scene {
 
   exit(): void {
     this.tutorialOverlay.hide();
-    this.encyclopediaOverlay.hide();
+    this.encyclopediaOverlay?.hide();
+    this.loadingOverlay.hide();
     // タイトル BGM を明示的に停止する。StageScene.enter() 内の playBGM() が
     // stopBGM() を呼ぶため二重実行になるが、stopBGM() は冪等であり
     // bgmGeneration インクリメント・配列クリアともに副作用はない。

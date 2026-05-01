@@ -3,8 +3,7 @@ import { GameLoop } from './game/GameLoop';
 import { SceneManager } from './game/SceneManager';
 import { InputSystem } from './game/systems/InputSystem';
 import { TitleScene } from './game/scenes/TitleScene';
-import { StageScene } from './game/scenes/StageScene';
-import { EndingScene } from './game/scenes/EndingScene';
+import type { StageScene } from './game/scenes/StageScene';
 import { SaveManager } from './game/storage/SaveManager';
 import { AudioManager } from './game/audio/AudioManager';
 import { AdaptivePixelRatioController } from './game/utils/AdaptivePixelRatioController';
@@ -19,6 +18,7 @@ import { resolveInitialPixelTier } from './game/utils/resolveInitialPixelTier';
 import { ContextLossOverlay } from './ui/ContextLossOverlay';
 import { ResumeOverlay } from './ui/ResumeOverlay';
 import { OrientationHintOverlay } from './ui/OrientationHintOverlay';
+import { LoadingOverlay } from './ui/LoadingOverlay';
 import { createOrientationHintHandler } from './game/utils/createOrientationHintHandler';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
@@ -122,18 +122,36 @@ inputSystem.setup(canvas);
 
 const gameLoop = new GameLoop();
 const audioManager = new AudioManager();
+const loadingOverlay = new LoadingOverlay();
+let stageScene: StageScene | null = null;
 
 // Restore persisted mute state before any audio is initialised so the very
 // first BGM/SFX honours it without an audible blip.
 audioManager.setMuted(saveManager.load().muted === true);
 
 const titleScene = new TitleScene(sceneManager, saveManager, audioManager);
-const stageScene = new StageScene(sceneManager, inputSystem, audioManager, saveManager);
-const endingScene = new EndingScene(sceneManager, saveManager, audioManager);
 
 sceneManager.registerScene('title', titleScene);
-sceneManager.registerScene('stage', stageScene);
-sceneManager.registerScene('ending', endingScene);
+sceneManager.registerSceneFactory('stage', async () => {
+  const { StageScene } = await import('./game/scenes/StageScene');
+  stageScene = new StageScene(sceneManager, inputSystem, audioManager, saveManager);
+  return stageScene;
+});
+sceneManager.registerSceneFactory('ending', async () => {
+  const { EndingScene } = await import('./game/scenes/EndingScene');
+  return new EndingScene(sceneManager, saveManager, audioManager);
+});
+sceneManager.setLoadStateHandler((isLoading, sceneType) => {
+  if (isLoading) {
+    loadingOverlay.show(
+      sceneType === 'ending'
+        ? 'さいごの じゅんび ちゅう...'
+        : 'たびの じゅんび ちゅう...',
+    );
+    return;
+  }
+  loadingOverlay.hide();
+});
 
 sceneManager.setTransitionHandler(
   createSceneTransitionHandler({
@@ -148,7 +166,21 @@ sceneManager.setTransitionHandler(
 );
 
 // Start from title
-sceneManager.transitionTo('title');
+void sceneManager.transitionTo('title');
+
+const schedulePrefetch = (cb: () => void): void => {
+  const requestIdle = (window as Window & {
+    requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+  }).requestIdleCallback;
+  if (typeof requestIdle === 'function') {
+    requestIdle(cb, { timeout: 1500 });
+    return;
+  }
+  window.setTimeout(cb, 800);
+};
+schedulePrefetch(() => {
+  void sceneManager.prefetchScene('stage').catch(() => {});
+});
 
 gameLoop.start(
   (deltaTime: number) => {
@@ -218,7 +250,7 @@ function showStageResumeOverlay(): void {
   resumeOverlay.show(() => {
     pendingBackgroundResume = false;
     resumeGame();
-    stageScene.requestResumeCountdown();
+    stageScene?.requestResumeCountdown();
   });
 }
 

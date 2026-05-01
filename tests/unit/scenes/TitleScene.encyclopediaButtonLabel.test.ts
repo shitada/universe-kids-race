@@ -5,6 +5,7 @@ import type { SceneManager } from '../../../src/game/SceneManager';
 import type { SaveManager } from '../../../src/game/storage/SaveManager';
 import type { AudioManager } from '../../../src/game/audio/AudioManager';
 import { PLANET_ENCYCLOPEDIA } from '../../../src/game/config/PlanetEncyclopedia';
+import { EncyclopediaOverlay } from '../../../src/ui/EncyclopediaOverlay';
 
 function createMockSceneManager(): SceneManager {
   return {
@@ -62,6 +63,12 @@ function findEncyclopediaButton(): HTMLButtonElement | undefined {
   return Array.from(buttons).find((b) => (b.textContent ?? '').startsWith('ずかん'));
 }
 
+function flushPromises(): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, 0);
+  });
+}
+
 describe('TitleScene encyclopedia button label', () => {
   it('shows plain "ずかん" when no planets are unlocked', () => {
     const scene = new TitleScene(
@@ -101,12 +108,15 @@ describe('TitleScene encyclopedia button label', () => {
     scene.exit();
   });
 
-  it('refreshes label after closing the encyclopedia overlay', () => {
+  it('refreshes label after closing the encyclopedia overlay', async () => {
     const saveManager = createMockSaveManager([]) as SaveManager & { setUnlocked: (u: number[]) => void };
     const scene = new TitleScene(
       createMockSceneManager(),
       saveManager,
       createMockAudioManager(),
+      {
+        loadEncyclopediaOverlay: async () => ({ EncyclopediaOverlay }),
+      },
     );
     scene.enter({});
     const btn = findEncyclopediaButton();
@@ -114,6 +124,8 @@ describe('TitleScene encyclopedia button label', () => {
 
     // ずかんを開く
     btn!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+    await flushPromises();
 
     // プレイヤーがプレイ中に新しい惑星を解放したと仮定し保存データ更新
     saveManager.setUnlocked([1, 2]);
