@@ -54,6 +54,20 @@ export class SaveManager {
       }
       data.bestStageStars = validatedBest;
 
+      // Validate lastStablePixelTier (backward compatible; missing/invalid → undefined).
+      // No upper bound check here because MAX_TIER is a runtime concept derived
+      // from devicePixelRatio in main.ts; callers clamp on read.
+      const rawTier = (data as { lastStablePixelTier?: unknown }).lastStablePixelTier;
+      if (
+        typeof rawTier === 'number' &&
+        Number.isInteger(rawTier) &&
+        rawTier >= 0
+      ) {
+        data.lastStablePixelTier = rawTier;
+      } else {
+        delete (data as { lastStablePixelTier?: unknown }).lastStablePixelTier;
+      }
+
       return data;
     } catch {
       return defaults();
@@ -81,9 +95,15 @@ export class SaveManager {
   // parents' silent-environment setting survives swipe-to-close.
   resetSessionDataPreservingMuted(): void {
     try {
-      const muted = this.load().muted === true;
+      const prev = this.load();
+      const muted = prev.muted === true;
+      const lastStablePixelTier = prev.lastStablePixelTier;
       this.clear();
-      this.save({ clearedStage: 0, unlockedPlanets: [], muted, bestStageStars: {} });
+      const next: SaveData = { clearedStage: 0, unlockedPlanets: [], muted, bestStageStars: {} };
+      if (typeof lastStablePixelTier === 'number') {
+        next.lastStablePixelTier = lastStablePixelTier;
+      }
+      this.save(next);
     } catch (e) {
       console.warn('SaveManager.resetSessionDataPreservingMuted failed:', e);
     }
@@ -113,6 +133,28 @@ export class SaveManager {
       }
     } catch (e) {
       console.warn('SaveManager.updateBestStageStars failed:', e);
+    }
+  }
+
+  // Persists the last observed stable adaptive pixel-ratio tier so the next
+  // launch can start at this level instead of MAX_TIER, avoiding the initial
+  // downscale hitch on slower iPads (Constitution IV: 60fps on iPad Safari).
+  // Validates the value (non-negative integer); negative / non-integer inputs
+  // are ignored. The controller (caller) is responsible for upper-bound
+  // clamping via its own maxTier knowledge.
+  saveLastStablePixelTier(tier: number): void {
+    if (!Number.isInteger(tier) || tier < 0) {
+      return;
+    }
+    try {
+      const data = this.load();
+      if (data.lastStablePixelTier === tier) {
+        return;
+      }
+      data.lastStablePixelTier = tier;
+      this.save(data);
+    } catch (e) {
+      console.warn('SaveManager.saveLastStablePixelTier failed:', e);
     }
   }
 

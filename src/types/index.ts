@@ -59,6 +59,10 @@ export interface SaveData {
   unlockedPlanets: number[];
   muted?: boolean;
   bestStageStars?: Record<number, number>;
+  // Last stable adaptive pixel-ratio tier observed in the previous session.
+  // Persisted so the next launch can start at the same tier and avoid the
+  // initial-frame downscale hitch on slower iPads (Constitution IV).
+  lastStablePixelTier?: number;
 }
 
 // Planet encyclopedia
