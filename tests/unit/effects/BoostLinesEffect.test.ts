@@ -203,4 +203,64 @@ describe('BoostLinesEffect', () => {
 
     effect.dispose();
   });
+
+  it('registers a full-range updateRange on the first boost frame (start:0, count:120)', () => {
+    const scene = new THREE.Scene();
+    const effect = new BoostLinesEffect();
+    effect.init(scene);
+    const obj = effect.getObject()!;
+    const positionAttr = (obj.geometry as THREE.BufferGeometry).getAttribute('position') as THREE.BufferAttribute;
+
+    const versionBefore = positionAttr.version;
+    effect.update(true, 0, 0);
+
+    expect(positionAttr.version).toBe(versionBefore + 1);
+    expect(positionAttr.updateRanges).toEqual([{ start: 0, count: 120 }]);
+
+    effect.dispose();
+  });
+
+  it('limits per-frame updateRange to the round-robin slice (24 floats) after the initial burst', () => {
+    const scene = new THREE.Scene();
+    const effect = new BoostLinesEffect();
+    effect.init(scene);
+    const obj = effect.getObject()!;
+    const positionAttr = (obj.geometry as THREE.BufferGeometry).getAttribute('position') as THREE.BufferAttribute;
+
+    // Initial burst frame.
+    effect.update(true, 0, 0);
+
+    // Subsequent round-robin frames write LINES_PER_FRAME (=4) lines = 24 floats
+    // at startIndex * 6, advancing by 24 each frame and wrapping back to 0 every 5 frames.
+    const expectedStarts = [0, 24, 48, 72, 96, 0, 24];
+    for (const expectedStart of expectedStarts) {
+      const versionBefore = positionAttr.version;
+      effect.update(true, 0, 0);
+      expect(positionAttr.version).toBe(versionBefore + 1);
+      expect(positionAttr.updateRanges).toEqual([{ start: expectedStart, count: 24 }]);
+    }
+
+    effect.dispose();
+  });
+
+  it('does not touch version or updateRanges while boost is inactive', () => {
+    const scene = new THREE.Scene();
+    const effect = new BoostLinesEffect();
+    effect.init(scene);
+    const obj = effect.getObject()!;
+    const positionAttr = (obj.geometry as THREE.BufferGeometry).getAttribute('position') as THREE.BufferAttribute;
+
+    // Drive a boost frame so updateRanges is populated, then deactivate.
+    effect.update(true, 0, 0);
+    const snapshotRanges = positionAttr.updateRanges.map((r) => ({ ...r }));
+    const snapshotVersion = positionAttr.version;
+
+    for (let i = 0; i < 3; i++) {
+      effect.update(false, 0, 0);
+      expect(positionAttr.version).toBe(snapshotVersion);
+      expect(positionAttr.updateRanges).toEqual(snapshotRanges);
+    }
+
+    effect.dispose();
+  });
 });
