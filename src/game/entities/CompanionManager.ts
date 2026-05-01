@@ -152,7 +152,14 @@ export class CompanionManager {
     }
   }
 
+  // Rest-skip: when no companions are present, completely no-op (no elapsedTime
+  // advance, no iteration). Same pattern as ParticleBurstManager.update and
+  // AirShield.update — keeps the StageScene update hot-path free of empty
+  // iteration on iPad Safari (Constitution IV: 60fps). Also keeps the orbit
+  // phase deterministic: the first acquired companion always starts at angle=0
+  // because elapsedTime stays 0 until at least one companion exists.
   update(deltaTime: number, shipX: number, shipY: number, shipZ: number): void {
+    if (this.companions.length === 0) return;
     this.elapsedTime += deltaTime;
 
     for (const c of this.companions) {
