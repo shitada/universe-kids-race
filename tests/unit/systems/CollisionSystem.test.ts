@@ -57,6 +57,42 @@ describe('CollisionSystem', () => {
     met.isActive = false;
     const result = system.check(ship, [], [met]);
     expect(result.meteoriteCollision).toBe(false);
+    expect(result.meteoriteHit).toBeNull();
+  });
+
+  it('returns reference to the hit meteorite via meteoriteHit', () => {
+    const ship = new Spaceship();
+    ship.position = { x: 0, y: 0, z: 0 };
+    const met = new Meteorite(0.5, 0, 0);
+    const result = system.check(ship, [], [met]);
+    expect(result.meteoriteCollision).toBe(true);
+    expect(result.meteoriteHit).toBe(met);
+  });
+
+  it('clears meteoriteHit when no meteorite is hit', () => {
+    const ship = new Spaceship();
+    ship.position = { x: 0, y: 0, z: 0 };
+    const met = new Meteorite(20, 0, 0);
+    const result = system.check(ship, [], [met]);
+    expect(result.meteoriteCollision).toBe(false);
+    expect(result.meteoriteHit).toBeNull();
+  });
+
+  it('does not double-hit the same meteorite once isActive is set false', () => {
+    // Simulates the StageScene behavior of marking a meteorite consumed
+    // after the first hit. A second check() at the same position must not
+    // register a duplicate collision.
+    const ship = new Spaceship();
+    ship.position = { x: 0, y: 0, z: 0 };
+    const met = new Meteorite(0.5, 0, 0);
+    const first = system.check(ship, [], [met]);
+    expect(first.meteoriteCollision).toBe(true);
+    expect(first.meteoriteHit).toBe(met);
+    // Caller (StageScene) marks it consumed.
+    if (first.meteoriteHit) first.meteoriteHit.isActive = false;
+    const second = system.check(ship, [], [met]);
+    expect(second.meteoriteCollision).toBe(false);
+    expect(second.meteoriteHit).toBeNull();
   });
 
   it('detects meteorite collision during RECOVERING state (not invincible)', () => {
