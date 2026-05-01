@@ -11,6 +11,8 @@ export class BoostLinesEffect {
   // 20 line segments × 2 endpoints × 3 floats = 120
   private static readonly LINE_COUNT = 20;
   private static readonly POSITION_FLOATS = BoostLinesEffect.LINE_COUNT * 6;
+  // ブースト中の per-frame コスト削減のため、1 フレームあたり更新する本数を制限する。
+  private static readonly LINES_PER_FRAME = 4;
 
   private scene: THREE.Scene | null = null;
   private lines: THREE.LineSegments | null = null;
@@ -18,6 +20,7 @@ export class BoostLinesEffect {
   private positionAttr: THREE.BufferAttribute | null = null;
   // null means "unknown / needs to be re-asserted on the next write".
   private lastVisible: boolean | null = null;
+  private writeCursor = 0;
 
   init(scene: THREE.Scene): void {
     if (this.lines) return;
@@ -47,7 +50,15 @@ export class BoostLinesEffect {
     }
 
     const pos = this.positions;
-    for (let i = 0; i < BoostLinesEffect.LINE_COUNT; i++) {
+    const isFirstBoostFrame = this.lastVisible !== true;
+    // boost 開始フレームは初期見栄え担保のため全 20 本を一度に書き込み、
+    // 以降は LINES_PER_FRAME 本ずつ round-robin で更新する。
+    const updateCount = isFirstBoostFrame
+      ? BoostLinesEffect.LINE_COUNT
+      : BoostLinesEffect.LINES_PER_FRAME;
+    const startIndex = isFirstBoostFrame ? 0 : this.writeCursor;
+    for (let n = 0; n < updateCount; n++) {
+      const i = (startIndex + n) % BoostLinesEffect.LINE_COUNT;
       const x = shipX + (Math.random() - 0.5) * 4;
       const y = (Math.random() - 0.5) * 3;
       const z = shipZ + 2 + Math.random() * 8;
@@ -58,6 +69,11 @@ export class BoostLinesEffect {
       pos[base + 3] = x;
       pos[base + 4] = y;
       pos[base + 5] = z + 2 + Math.random() * 3;
+    }
+    if (isFirstBoostFrame) {
+      this.writeCursor = 0;
+    } else {
+      this.writeCursor = (this.writeCursor + BoostLinesEffect.LINES_PER_FRAME) % BoostLinesEffect.LINE_COUNT;
     }
     this.positionAttr!.needsUpdate = true;
     if (this.lastVisible !== true) {
@@ -80,6 +96,7 @@ export class BoostLinesEffect {
     this.positions = null;
     this.positionAttr = null;
     this.lastVisible = null;
+    this.writeCursor = 0;
     this.scene = null;
   }
 }
