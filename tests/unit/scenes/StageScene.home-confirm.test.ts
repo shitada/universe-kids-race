@@ -70,6 +70,7 @@ describe('StageScene home confirm pause', () => {
     const { scene } = createScene();
     scene.enter({ stageNumber: 1 });
     finishStartCountdown(scene);
+    expect(scene.isPlaying()).toBe(true);
 
     const internal = scene as unknown as {
       spaceship: { position: { z: number } };
@@ -85,6 +86,7 @@ describe('StageScene home confirm pause', () => {
     internal.update(0.5);
 
     expect(document.querySelector('[data-home-confirm-overlay]')).not.toBeNull();
+    expect(scene.isPlaying()).toBe(false);
     expect(internal.spaceship.position.z).toBe(z0);
     expect(spawnSpy).not.toHaveBeenCalled();
     expect(collisionSpy).not.toHaveBeenCalled();
