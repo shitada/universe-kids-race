@@ -9,7 +9,7 @@ function createCanvas(): HTMLCanvasElement {
   return canvas;
 }
 
-function keyDown(key: string, opts?: Partial<KeyboardEvent>): void {
+function keyDown(key: string, opts?: KeyboardEventInit): void {
   window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...opts }));
 }
 
@@ -66,8 +66,12 @@ describe('InputSystem — keyboard', () => {
     expect(input.getState().moveDirection).toBe(0);
   });
 
-  it('Space keydown sets boostPressed to true', () => {
-    keyDown(' ');
+  it.each([
+    { key: ' ', label: 'space character' },
+    { key: 'Spacebar', label: 'legacy Spacebar key' },
+    { key: 'Unidentified', code: 'Space', label: 'Space code fallback' },
+  ])('Space-compatible keydown (%s) sets boostPressed to true', ({ key, code }) => {
+    keyDown(key, code ? { code } : undefined);
     expect(input.getState().boostPressed).toBe(true);
   });
 
