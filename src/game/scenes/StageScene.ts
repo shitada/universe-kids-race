@@ -20,7 +20,6 @@ import { BoostLinesEffect } from '../effects/BoostLinesEffect';
 import { BoostFlameEffect } from '../effects/BoostFlameEffect';
 import { CompanionManager } from '../entities/CompanionManager';
 import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
-import { disposeObject3D } from '../utils/disposeObject3D';
 import { followCameraZ } from '../utils/followCameraZ';
 import { getViewportSize } from '../utils/getViewportSize';
 
@@ -230,7 +229,9 @@ export class StageScene implements Scene {
   private audioManager: AudioManager;
   private saveManager: SaveManager;
 
-  private spaceship!: Spaceship;
+  private ambientLight: THREE.AmbientLight;
+  private directionalLight: THREE.DirectionalLight;
+  private spaceship: Spaceship;
   private stars: Star[] = [];
   private meteorites: Meteorite[] = [];
 
@@ -300,6 +301,7 @@ export class StageScene implements Scene {
     this.audioManager = audioManager;
     this.saveManager = saveManager;
     this.threeScene = new THREE.Scene();
+    this.threeScene.background = new THREE.Color(0x000020);
     const { width: vw, height: vh } = getViewportSize();
     this.camera = new THREE.PerspectiveCamera(
       60,
@@ -307,6 +309,20 @@ export class StageScene implements Scene {
       0.1,
       2000,
     );
+    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    this.directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    this.directionalLight.position.set(5, 10, 5);
+    this.threeScene.add(this.ambientLight);
+    this.threeScene.add(this.directionalLight);
+    this.createBackground();
+    this.spaceship = new Spaceship();
+    this.threeScene.add(this.spaceship.mesh);
+    this.airShield = new AirShield();
+    this.threeScene.add(this.airShield.getMesh());
+    this.companionManager = new CompanionManager([]);
+    this.threeScene.add(this.companionManager.getGroup());
+    this.boostLinesEffect.init(this.threeScene);
+    this.boostFlameEffect.init(this.threeScene);
     this.hud = new HUD();
   }
 
@@ -327,27 +343,13 @@ export class StageScene implements Scene {
     this.scoreSystem.setTotalScore(totalScore);
     this.scoreSystem.setTotalStarCount(totalStarCount);
 
-    // Reset scene
-    this.threeScene = new THREE.Scene();
-    this.threeScene.background = new THREE.Color(0x000020);
-
-    // Lighting
-    const ambient = new THREE.AmbientLight(0xffffff, 0.6);
-    this.threeScene.add(ambient);
-    const directional = new THREE.DirectionalLight(0xffffff, 0.8);
-    directional.position.set(5, 10, 5);
-    this.threeScene.add(directional);
-
-    // Background starfield
+    this.resetStageObjects();
+    this.spaceship.reset();
+    this.airShield.reset(0, 0, 0);
+    this.boostLinesEffect.update(false, 0, 0);
+    this.boostFlameEffect.remove();
+    this.companionManager?.resetUnlockedPlanets([]);
     this.createBackground();
-
-    // Spaceship
-    this.spaceship = new Spaceship();
-    this.threeScene.add(this.spaceship.mesh);
-
-    // Air shield
-    this.airShield = new AirShield();
-    this.threeScene.add(this.airShield.getMesh());
 
     // Camera behind spaceship
     this.camera.position.set(0, 5, 10);
@@ -405,14 +407,10 @@ export class StageScene implements Scene {
     // their target score during play. enter() runs on every (re)entry so a
     // freshly-updated best (from a prior clear) is reflected immediately.
     this.hud.setBestStarCount(saveData.bestStageStars?.[this.stageNumber] ?? 0);
-    this.companionManager = new CompanionManager(saveData.unlockedPlanets);
-    this.threeScene.add(this.companionManager.getGroup());
-
-    // Boost line effect (created once, reused per frame)
-    this.boostLinesEffect.init(this.threeScene);
-
-    // Boost flame particles (allocated once per stage, reused per boost)
-    this.boostFlameEffect.init(this.threeScene);
+    this.companionManager?.resetUnlockedPlanets(saveData.unlockedPlanets);
+    if (this.bgStars) {
+      followCameraZ(this.bgStars, this.spaceship.position.z, BG_STAR_PARALLAX);
+    }
 
     // BGM
     this.audioManager.playBGM(this.stageNumber);
@@ -503,6 +501,7 @@ export class StageScene implements Scene {
   }
 
   private createBackground(): void {
+    if (this.bgStars) return;
     // SHARED: BufferGeometry / PointsMaterial / position attribute はモジュール
     // レベルで 1 度だけ生成し、再入場時は同じ参照を使い回す。Points (mesh) のみ
     // per-instance だが、`userData.sharedAssets = true` を付与して dispose 経路で
@@ -531,6 +530,7 @@ export class StageScene implements Scene {
   }
 
   private createDestinationPlanet(): void {
+    this.removeDestinationPlanet();
     this.destinationPlanet = new THREE.Group();
     const goalZ = -(this.stageConfig.stageLength + 50);
 
@@ -676,6 +676,25 @@ export class StageScene implements Scene {
 
     this.destinationPlanet.position.set(0, 0, goalZ);
     this.threeScene.add(this.destinationPlanet);
+  }
+
+  private removeDestinationPlanet(): void {
+    if (!this.destinationPlanet) return;
+    this.destinationPlanet.parent?.remove(this.destinationPlanet);
+    this.destinationPlanet = null;
+    this.destinationPlanetSpinTarget = null;
+  }
+
+  private resetStageObjects(): void {
+    if (this.clearOverlay) {
+      this.clearOverlay.remove();
+      this.clearOverlay = null;
+    }
+    this.removeDestinationPlanet();
+    this.particleBurstManager.clear(this.threeScene);
+    this.spawnSystem.recycleAll();
+    this.stars.length = 0;
+    this.meteorites.length = 0;
   }
 
 
@@ -1202,41 +1221,14 @@ export class StageScene implements Scene {
     this.awaitingResume = false;
     this.isHomeConfirmOpen = false;
     this.shouldResumeAfterHomeConfirm = false;
-    this.boostFlameEffect.dispose();
-    this.companionManager?.dispose();
-    this.companionManager = null;
-    this.airShield.dispose();
-    if (this.clearOverlay) {
-      this.clearOverlay.remove();
-      this.clearOverlay = null;
-    }
-    // Cleanup Three.js objects (dispose geometry/material before clearing the scene)
-    this.particleBurstManager.clear(this.threeScene);
-
-    // Recycle entities. All star types and meteorites (both still-active and
-    // previously released) return to the pool so the next stage can reuse
-    // their Mesh / Material instances without reallocation. The pool itself
-    // is kept alive for the lifetime of this StageScene; permanent GPU
-    // resource release happens via spawnSystem.dispose() in shutdown paths.
-    this.spaceship?.dispose();
-    this.spawnSystem.recycleAll();
-
-    // Dispose retained scene resources
-    this.boostLinesEffect.dispose();
+    this.boostFlameEffect.remove();
+    this.boostLinesEffect.update(false, this.spaceship.position.x, this.spaceship.position.z);
+    this.airShield.reset(this.spaceship.position.x, this.spaceship.position.y, this.spaceship.position.z);
+    this.resetStageObjects();
     if (this.bgStars) {
-      // SHARED: geometry / material はモジュールキャッシュ済み。dispose しない。
       this.bgStars.parent?.remove(this.bgStars);
       this.bgStars = null;
     }
-    if (this.destinationPlanet) {
-      disposeObject3D(this.destinationPlanet);
-      this.destinationPlanet = null;
-    }
-    this.destinationPlanetSpinTarget = null;
-
-    this.threeScene.clear();
-    this.stars.length = 0;
-    this.meteorites.length = 0;
   }
 
   getThreeScene(): THREE.Scene {

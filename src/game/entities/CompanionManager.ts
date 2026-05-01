@@ -69,6 +69,7 @@ function makeSharedMesh(
 }
 
 interface CompanionData {
+  stageNumber: number;
   mesh: THREE.Group;
   angleOffset: number;
   orbitRadius: number;
@@ -85,26 +86,7 @@ export class CompanionManager {
   private elapsedTime = 0;
 
   constructor(unlockedPlanets: number[]) {
-    const count = unlockedPlanets.length;
-
-    for (let i = 0; i < count; i++) {
-      const entry = PLANET_ENCYCLOPEDIA.find((e) => e.stageNumber === unlockedPlanets[i]);
-      if (!entry) continue;
-
-      const mesh = CompanionManager.createCompanionMesh(entry);
-      this.companions.push({
-        mesh,
-        angleOffset: 0,
-        orbitRadius: 0,
-        orbitSpeed: 0,
-        orbitTilt: 0,
-        cosTilt: 1,
-        sinTilt: 0,
-        entranceTimer: 0,
-      });
-      this.group.add(mesh);
-    }
-    this.redistributeOrbitParams();
+    this.resetUnlockedPlanets(unlockedPlanets);
   }
 
   addCompanion(stageNumber: number): boolean {
@@ -114,6 +96,7 @@ export class CompanionManager {
     const mesh = CompanionManager.createCompanionMesh(entry);
     mesh.scale.set(0, 0, 0);
     this.companions.push({
+      stageNumber,
       mesh,
       angleOffset: 0,
       orbitRadius: 0,
@@ -126,6 +109,32 @@ export class CompanionManager {
     this.group.add(mesh);
     this.redistributeOrbitParams();
     return true;
+  }
+
+  resetUnlockedPlanets(unlockedPlanets: number[]): void {
+    this.elapsedTime = 0;
+    this.companions.length = 0;
+    this.group.clear();
+
+    for (const stageNumber of unlockedPlanets) {
+      const entry = PLANET_ENCYCLOPEDIA.find((e) => e.stageNumber === stageNumber);
+      if (!entry) continue;
+
+      const mesh = CompanionManager.createCompanionMesh(entry);
+      this.companions.push({
+        stageNumber,
+        mesh,
+        angleOffset: 0,
+        orbitRadius: 0,
+        orbitSpeed: 0,
+        orbitTilt: 0,
+        cosTilt: 1,
+        sinTilt: 0,
+        entranceTimer: 0,
+      });
+      this.group.add(mesh);
+    }
+    this.redistributeOrbitParams();
   }
 
   // Recomputes orbit parameters (angleOffset / orbitRadius / orbitSpeed /
@@ -204,7 +213,8 @@ export class CompanionManager {
     // CompanionManager instances (same policy as Star/Meteorite). Per-instance
     // dispose only detaches meshes from the scene graph; it must NOT dispose
     // the shared resources or subsequent companions would render incorrectly.
-    this.companions = [];
+    this.companions.length = 0;
+    this.elapsedTime = 0;
     this.group.clear();
   }
 

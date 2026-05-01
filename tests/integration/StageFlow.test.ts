@@ -1,7 +1,12 @@
-import { describe, it, expect } from 'vitest';
+// @vitest-environment jsdom
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { SceneManager } from '../../src/game/SceneManager';
 import type { Scene, SceneContext, SceneType } from '../../src/types';
 import * as THREE from 'three';
+import { StageScene } from '../../src/game/scenes/StageScene';
+import type { InputSystem } from '../../src/game/systems/InputSystem';
+import type { AudioManager } from '../../src/game/audio/AudioManager';
+import type { SaveManager } from '../../src/game/storage/SaveManager';
 
 function createTrackingScene(transitionLog: { type: SceneType; context: SceneContext }[], sceneType: SceneType): Scene {
   const threeScene = new THREE.Scene();
@@ -16,6 +21,10 @@ function createTrackingScene(transitionLog: { type: SceneType; context: SceneCon
 }
 
 describe('Stage Flow Integration', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '<div id="hud"></div><div id="ui-overlay"></div>';
+  });
+
   it('follows full flow with lazy scene factories: title → stage1 through stage11 → ending → title', async () => {
     const log: { type: SceneType; context: SceneContext }[] = [];
     const manager = new SceneManager();
@@ -100,5 +109,92 @@ describe('Stage Flow Integration', () => {
 
     await manager.transitionTo('stage', { stageNumber: 1 });
     expect(manager.getCurrentType()).toBe('stage');
+  });
+
+  it('reuses the same StageScene instance and keeps persistent nodes singletons across title round-trips', async () => {
+    const manager = new SceneManager();
+    let stageScene: StageScene | null = null;
+    const inputSystem = {
+      setBoostPressed: vi.fn(),
+      getState: vi.fn(() => ({ moveDirection: 0, boostPressed: false })),
+    } as unknown as InputSystem;
+    const audioManager = {
+      playBGM: vi.fn(),
+      stopBGM: vi.fn(),
+      playSFX: vi.fn(),
+      stopBoostSFX: vi.fn(),
+      startBoostSFX: vi.fn(),
+      isMuted: vi.fn(() => false),
+      toggleMute: vi.fn(() => false),
+      setMuted: vi.fn(),
+      initFromInteraction: vi.fn(),
+    } as unknown as AudioManager;
+    const saveState = {
+      clearedStage: 0,
+      unlockedPlanets: [1, 2],
+      muted: false,
+      tutorialShown: true,
+      bestStageStars: {} as Record<number, number>,
+    };
+    const saveManager = {
+      load: vi.fn(() => ({
+        ...saveState,
+        unlockedPlanets: [...saveState.unlockedPlanets],
+        bestStageStars: { ...saveState.bestStageStars },
+      })),
+      save: vi.fn(),
+      clear: vi.fn(),
+      markStageCleared: vi.fn(() => false),
+      updateBestStageStars: vi.fn(),
+    } as unknown as SaveManager;
+
+    manager.registerScene('title', createTrackingScene([], 'title'));
+    const stageFactory = vi.fn(async () => {
+      stageScene = new StageScene(manager, inputSystem, audioManager, saveManager);
+      return stageScene;
+    });
+    manager.registerSceneFactory('stage', stageFactory);
+
+    await manager.transitionTo('title');
+    await manager.transitionTo('stage', { stageNumber: 1 });
+
+    const stageInternal = stageScene as unknown as {
+      countdownOverlay: { dispose(): void } | null;
+      isStarting: boolean;
+      threeScene: THREE.Scene;
+      spaceship: { mesh: THREE.Group };
+      airShield: { getMesh(): THREE.Mesh };
+      bgStars: THREE.Points | null;
+      companionManager: { getGroup(): THREE.Group } | null;
+    };
+    stageInternal.countdownOverlay?.dispose();
+    stageInternal.countdownOverlay = null;
+    stageInternal.isStarting = false;
+
+    const firstSceneRef = stageInternal.threeScene;
+    const firstShipRef = stageInternal.spaceship.mesh;
+    const firstShieldRef = stageInternal.airShield.getMesh();
+    const firstCompanionGroupRef = stageInternal.companionManager?.getGroup();
+
+    await manager.transitionTo('title');
+    saveState.unlockedPlanets = [1, 2, 3];
+    await manager.transitionTo('stage', { stageNumber: 4 });
+
+    stageInternal.countdownOverlay?.dispose();
+    stageInternal.countdownOverlay = null;
+    stageInternal.isStarting = false;
+
+    expect(stageFactory).toHaveBeenCalledTimes(1);
+    expect(stageInternal.threeScene).toBe(firstSceneRef);
+    expect(stageInternal.spaceship.mesh).toBe(firstShipRef);
+    expect(stageInternal.airShield.getMesh()).toBe(firstShieldRef);
+    expect(stageInternal.bgStars).not.toBeNull();
+    expect(stageInternal.companionManager?.getGroup()).toBe(firstCompanionGroupRef);
+    expect(firstSceneRef.children.filter((child) => child === firstShipRef)).toHaveLength(1);
+    expect(firstSceneRef.children.filter((child) => child === firstShieldRef)).toHaveLength(1);
+    expect(firstSceneRef.children.filter((child) => child === stageInternal.bgStars)).toHaveLength(1);
+    expect(firstSceneRef.children.filter((child) => child === firstCompanionGroupRef)).toHaveLength(1);
+    expect(firstSceneRef.children.filter((child) => child.type === 'AmbientLight')).toHaveLength(1);
+    expect(firstSceneRef.children.filter((child) => child.type === 'DirectionalLight')).toHaveLength(1);
   });
 });
