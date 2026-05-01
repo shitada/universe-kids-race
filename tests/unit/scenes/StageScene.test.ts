@@ -284,3 +284,190 @@ describe('StageScene boost activation SFX feedback (PC keyboard parity with HUD)
     expect(inputState.boostPressed).toBe(false);
   });
 });
+
+describe('StageScene best-stage-stars-update feedback on clear', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '<div id="hud"></div><div id="ui-overlay"></div>';
+  });
+
+  function setupClearScene(opts: {
+    stageNumber: number;
+    earnedStars: number;
+    previousBest: number;
+    alreadyUnlocked: boolean;
+  }): {
+    scene: StageScene;
+    audioManager: { playSFX: ReturnType<typeof vi.fn>; stopBoostSFX: ReturnType<typeof vi.fn> };
+    saveManager: {
+      load: ReturnType<typeof vi.fn>;
+      updateBestStageStars: ReturnType<typeof vi.fn>;
+    };
+  } {
+    const sceneManager = { requestTransition: vi.fn() } as unknown as SceneManager;
+    const inputSystem = {} as InputSystem;
+    const audioManager = {
+      playSFX: vi.fn(),
+      stopBoostSFX: vi.fn(),
+    } as unknown as AudioManager;
+    const unlockedPlanets = opts.alreadyUnlocked ? [opts.stageNumber] : [];
+    // load() must reflect the previously stored best (i.e. the snapshot
+    // taken BEFORE updateBestStageStars() runs). The implementation must
+    // capture the prior value first, otherwise this snapshot is lost.
+    const saveManager = {
+      load: vi.fn(() => ({
+        clearedStage: 0,
+        unlockedPlanets,
+        muted: false,
+        bestStageStars: { [opts.stageNumber]: opts.previousBest },
+      })),
+      updateBestStageStars: vi.fn(),
+    } as unknown as SaveManager;
+
+    const scene = new StageScene(sceneManager, inputSystem, audioManager, saveManager);
+    const internal = scene as unknown as {
+      stageNumber: number;
+      scoreSystem: { getStarCount(): number };
+      companionManager: unknown | null;
+    };
+    internal.stageNumber = opts.stageNumber;
+    internal.scoreSystem = { getStarCount: () => opts.earnedStars } as { getStarCount(): number };
+    internal.companionManager = null;
+
+    return {
+      scene,
+      audioManager: audioManager as unknown as {
+        playSFX: ReturnType<typeof vi.fn>;
+        stopBoostSFX: ReturnType<typeof vi.fn>;
+      },
+      saveManager: saveManager as unknown as {
+        load: ReturnType<typeof vi.fn>;
+        updateBestStageStars: ReturnType<typeof vi.fn>;
+      },
+    };
+  }
+
+  it('shows "じこベストこうしん" message and plays rainbowCollect SFX when star count exceeds previous best', () => {
+    const { scene, audioManager } = setupClearScene({
+      stageNumber: 2,
+      earnedStars: 4,
+      previousBest: 2,
+      alreadyUnlocked: true,
+    });
+
+    (scene as unknown as { onStageClear(): void }).onStageClear();
+
+    const overlay = document.getElementById('ui-overlay');
+    expect(overlay?.textContent).toContain('じこベストこうしん');
+    expect(overlay?.textContent).toContain('⭐');
+    expect(overlay?.textContent).toContain('4');
+
+    const sfxCalls = audioManager.playSFX.mock.calls.map((c) => c[0]);
+    expect(sfxCalls).toContain('stageClear');
+    expect(sfxCalls).toContain('rainbowCollect');
+    // SFX order: stageClear plays first, then rainbowCollect for the best update.
+    expect(sfxCalls.indexOf('rainbowCollect')).toBeGreaterThan(sfxCalls.indexOf('stageClear'));
+  });
+
+  it('shows "じこベストこうしん" on first clear (previous best is 0) when stars > 0', () => {
+    const { scene, audioManager } = setupClearScene({
+      stageNumber: 1,
+      earnedStars: 1,
+      previousBest: 0,
+      alreadyUnlocked: false,
+    });
+
+    (scene as unknown as { onStageClear(): void }).onStageClear();
+
+    const overlay = document.getElementById('ui-overlay');
+    expect(overlay?.textContent).toContain('じこベストこうしん');
+    const sfxCalls = audioManager.playSFX.mock.calls.map((c) => c[0]);
+    expect(sfxCalls).toContain('rainbowCollect');
+  });
+
+  it('does NOT show best-update message when star count equals previous best', () => {
+    const { scene, audioManager } = setupClearScene({
+      stageNumber: 3,
+      earnedStars: 3,
+      previousBest: 3,
+      alreadyUnlocked: true,
+    });
+
+    (scene as unknown as { onStageClear(): void }).onStageClear();
+
+    const overlay = document.getElementById('ui-overlay');
+    expect(overlay?.textContent).not.toContain('じこベストこうしん');
+    const sfxCalls = audioManager.playSFX.mock.calls.map((c) => c[0]);
+    expect(sfxCalls).not.toContain('rainbowCollect');
+  });
+
+  it('does NOT show best-update message when star count is below previous best', () => {
+    const { scene, audioManager } = setupClearScene({
+      stageNumber: 3,
+      earnedStars: 1,
+      previousBest: 4,
+      alreadyUnlocked: true,
+    });
+
+    (scene as unknown as { onStageClear(): void }).onStageClear();
+
+    const overlay = document.getElementById('ui-overlay');
+    expect(overlay?.textContent).not.toContain('じこベストこうしん');
+    const sfxCalls = audioManager.playSFX.mock.calls.map((c) => c[0]);
+    expect(sfxCalls).not.toContain('rainbowCollect');
+  });
+
+  it('inserts the best-update line between "やったね" and "⭐ N こ" lines', () => {
+    const { scene } = setupClearScene({
+      stageNumber: 2,
+      earnedStars: 5,
+      previousBest: 1,
+      alreadyUnlocked: true,
+    });
+
+    (scene as unknown as { onStageClear(): void }).onStageClear();
+
+    const overlayDiv = (scene as unknown as { clearOverlay: HTMLDivElement | null })
+      .clearOverlay;
+    expect(overlayDiv).not.toBeNull();
+    const texts = Array.from(overlayDiv!.children).map((el) => (el as HTMLElement).textContent ?? '');
+    const yattaneIdx = texts.findIndex((t) => t.includes('やったね'));
+    const bestIdx = texts.findIndex((t) => t.includes('じこベストこうしん'));
+    const scoreIdx = texts.findIndex((t) => t.startsWith('⭐'));
+    expect(yattaneIdx).toBeGreaterThanOrEqual(0);
+    expect(bestIdx).toBeGreaterThan(yattaneIdx);
+    expect(scoreIdx).toBeGreaterThan(bestIdx);
+  });
+
+  it('injects @keyframes bestStageStarsPop into document.head when best is updated', () => {
+    document.getElementById('best-stage-stars-animation')?.remove();
+
+    const { scene } = setupClearScene({
+      stageNumber: 2,
+      earnedStars: 3,
+      previousBest: 1,
+      alreadyUnlocked: true,
+    });
+
+    (scene as unknown as { onStageClear(): void }).onStageClear();
+
+    const styleEl = document.getElementById('best-stage-stars-animation');
+    expect(styleEl).not.toBeNull();
+    expect(styleEl?.tagName).toBe('STYLE');
+    expect(styleEl?.textContent).toContain('@keyframes bestStageStarsPop');
+  });
+
+  it('does NOT inject the keyframes style when best is not updated', () => {
+    document.getElementById('best-stage-stars-animation')?.remove();
+
+    const { scene } = setupClearScene({
+      stageNumber: 3,
+      earnedStars: 2,
+      previousBest: 4,
+      alreadyUnlocked: true,
+    });
+
+    (scene as unknown as { onStageClear(): void }).onStageClear();
+
+    expect(document.getElementById('best-stage-stars-animation')).toBeNull();
+  });
+});
