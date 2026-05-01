@@ -236,28 +236,27 @@ export class BoostFlameEffect {
   /**
    * Hide the flame and reset all transient state. Geometry/material
    * remain allocated so that the next start() can reuse them.
+   *
+   * 観測されない CPU 書き込み・GPU アップロードを避けるため、TypedArray
+   * (positions / colors / lifetimes / velocities) の MAX_PARTICLES 全域
+   * ワイプは行わない。
+   * - points.visible = false により描画自体が停止する。
+   * - geometry.setDrawRange(0, 0) で描画範囲も 0 になる。
+   * - maxAliveIndex = -1 により次回 update() のスキャン上限は 0 となり、
+   *   残存 lifetime によって live 粒子と誤検出されるスロットは存在しない。
+   * - 次回 start() 後の emit() は this.index を 0 から進めながら使用スロットの
+   *   lifetime / color / position / velocity を必ず上書きするため、過去の
+   *   残存データが描画に寄与することはない。
+   * したがって positionAttr / colorAttr の needsUpdate も立てる必要がない。
+   * pending な addUpdateRange は次フレーム以降の混乱を避けるためクリアする。
    */
   remove(): void {
     if (!this.points) return;
-    const MAX = BoostFlameEffect.MAX_PARTICLES;
-    if (this.lifetimes) this.lifetimes.fill(0);
-    if (this.colors) this.colors.fill(0);
-    if (this.velocities) this.velocities.fill(0);
-    if (this.positions) {
-      for (let i = 0; i < MAX; i++) {
-        const i3 = i * 3;
-        this.positions[i3] = 0;
-        this.positions[i3 + 1] = 0;
-        this.positions[i3 + 2] = BoostFlameEffect.OFFSCREEN_Z;
-      }
-    }
     if (this.positionAttr) {
       this.positionAttr.clearUpdateRanges();
-      this.positionAttr.needsUpdate = true;
     }
     if (this.colorAttr) {
       this.colorAttr.clearUpdateRanges();
-      this.colorAttr.needsUpdate = true;
     }
     this.index = 0;
     this.emitting = false;
