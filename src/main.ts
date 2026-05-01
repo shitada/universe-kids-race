@@ -148,6 +148,12 @@ subscribeViewportResize(window, scheduleResize);
 // window.focus). All operations are idempotent so duplicate dispatches are
 // safe. iPad Safari does not always fire `visibilitychange` on bfcache
 // restore or URL bar / share sheet exits, so we listen on multiple events.
+//
+// During stage gameplay we also display a "3 → 2 → 1 → スタート！" countdown
+// before re-enabling input/spawn/forward motion. Constitution I (子供ファー
+// スト): 画面から目を離していた子どもが復帰直後に隕石へ即衝突するのを防ぐ。
+// Title / ending / mid-clear-transition stay on the immediate-resume path so
+// menus do not become unresponsive.
 function resumeFromBackground(): void {
   gameLoop.resume();
   audioManager.ensureResumed();
@@ -156,6 +162,12 @@ function resumeFromBackground(): void {
   const { width, height } = getViewportSize();
   resizeCoalescer.schedule(width, height);
   resizeCoalescer.flush();
+  // StageScene.requestResumeCountdown() itself guards against being fired
+  // during the start countdown / clear transition / non-stage scenes, so we
+  // only need a coarse "is the stage scene active?" check here.
+  if (sceneManager.getCurrentType() === 'stage') {
+    stageScene.requestResumeCountdown();
+  }
 }
 
 // Auto-pause on background (T053 early integration)
