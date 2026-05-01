@@ -9,8 +9,27 @@ function defaults(): SaveData {
   return { ...DEFAULT_DATA, unlockedPlanets: [], bestStageStars: {} };
 }
 
+// Returns a deep copy of SaveData. Uses structuredClone when available
+// (modern iPad Safari, Node 17+, jsdom v22+), falling back to JSON round-trip
+// for older test runners. Used to ensure callers can never mutate the
+// in-memory cache held by SaveManager.
+function cloneSaveData(src: SaveData): SaveData {
+  const sc = (globalThis as { structuredClone?: (v: unknown) => unknown }).structuredClone;
+  if (typeof sc === 'function') {
+    return sc(src) as SaveData;
+  }
+  return JSON.parse(JSON.stringify(src)) as SaveData;
+}
+
 export class SaveManager {
-  load(): SaveData {
+  // In-memory cache of the validated SaveData. Populated lazily on the first
+  // load() call and invalidated on save()/clear()/reset paths. This avoids
+  // the per-call cost of localStorage.getItem + JSON.parse + full revalidation
+  // (Constitution IV: 60fps on iPad Safari). Single-tab game; cross-tab
+  // storage events are out of scope (YAGNI).
+  private cached: SaveData | null = null;
+
+  private loadFromStorage(): SaveData {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return defaults();
@@ -74,10 +93,21 @@ export class SaveManager {
     }
   }
 
+  load(): SaveData {
+    if (this.cached === null) {
+      this.cached = this.loadFromStorage();
+    }
+    return cloneSaveData(this.cached);
+  }
+
   save(data: SaveData): void {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      this.cached = cloneSaveData(data);
     } catch (e) {
+      // On failure, conservatively invalidate the cache so the next load()
+      // re-reads from storage and reflects whatever actually persisted.
+      this.cached = null;
       console.warn('SaveManager.save failed:', e);
     }
   }
@@ -85,6 +115,7 @@ export class SaveManager {
   clear(): void {
     try {
       localStorage.removeItem(STORAGE_KEY);
+      this.cached = null;
     } catch (e) {
       console.warn('SaveManager.clear failed:', e);
     }
@@ -104,7 +135,13 @@ export class SaveManager {
         next.lastStablePixelTier = lastStablePixelTier;
       }
       this.save(next);
+      // save() already updates this.cached, but explicitly reaffirm the
+      // contract: after this call the cache must reflect the reset state.
+      this.cached = cloneSaveData(next);
     } catch (e) {
+      // Conservatively drop the cache so the next load() re-reads from
+      // storage (which may be in an unknown intermediate state).
+      this.cached = null;
       console.warn('SaveManager.resetSessionDataPreservingMuted failed:', e);
     }
   }
