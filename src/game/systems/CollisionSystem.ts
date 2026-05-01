@@ -44,13 +44,25 @@ export class CollisionSystem {
     // exceeds the collision radius. `starCollisionDist(Sq)` is loop-invariant
     // because `Star.radius` is constant across all instances and `companionBonus`
     // is fixed within this call.
+    //
+    // Traversal order invariant (mirrors SpawnSystem.isXySafeAgainstEntities,
+    // SpawnSystem.ts:183-192): `stars` is maintained in spawn order, which equals
+    // z-descending order — spawn z monotonically decreases (lastStarSpawnZ -=
+    // starSpacing) and StageScene.cleanupPassedObjects performs in-place
+    // compaction that preserves order. Therefore `dz = sp.z - star.position.z`
+    // is monotonically non-decreasing as the index grows: once `dz > starCollisionDist`,
+    // every subsequent entry is even further ahead in -Z and cannot collide,
+    // so we can `break` out of the loop. The opposite branch (`dz < -starCollisionDist`)
+    // is kept as `continue` to act as a safety net in case the ordering invariant
+    // is ever violated by future changes.
     if (stars.length > 0) {
       const starCollisionDist = 1.0 + stars[0].radius + companionBonus;
       const starCollisionDistSq = starCollisionDist * starCollisionDist;
       for (const star of stars) {
         if (star.isCollected) continue;
         const dz = sp.z - star.position.z;
-        if (dz > starCollisionDist || dz < -starCollisionDist) continue;
+        if (dz > starCollisionDist) break;
+        if (dz < -starCollisionDist) continue;
         const dx = sp.x - star.position.x;
         const dy = sp.y - star.position.y;
         const distSq = dx * dx + dy * dy + dz * dz;
@@ -64,13 +76,17 @@ export class CollisionSystem {
     // Meteorite collisions (skip during SLOWDOWN invincibility) — squared distance comparison.
     // Same Z-axis early-skip optimization as the star loop. `meteoriteCollisionDist(Sq)`
     // is loop-invariant because `Meteorite.radius` is constant across all instances.
+    // Same z-descending order invariant applies (see star loop comment above and
+    // SpawnSystem.ts:183-192): `meteorites` is in spawn order, so once
+    // `dz > meteoriteCollisionDist`, every later entry is further ahead → break.
     if (spaceship.speedState !== 'SLOWDOWN' && meteorites.length > 0) {
       const meteoriteCollisionDist = 1.0 + meteorites[0].radius;
       const meteoriteCollisionDistSq = meteoriteCollisionDist * meteoriteCollisionDist;
       for (const met of meteorites) {
         if (!met.isActive) continue;
         const dz = sp.z - met.position.z;
-        if (dz > meteoriteCollisionDist || dz < -meteoriteCollisionDist) continue;
+        if (dz > meteoriteCollisionDist) break;
+        if (dz < -meteoriteCollisionDist) continue;
         const dx = sp.x - met.position.x;
         const dy = sp.y - met.position.y;
         const distSq = dx * dx + dy * dy + dz * dz;
