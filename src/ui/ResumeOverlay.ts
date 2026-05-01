@@ -18,6 +18,7 @@
  *   overlay.show(() => {
  *     gameLoop.resume();
  *     audioManager.ensureResumed();
+ *     stageScene.requestResumeCountdown();
  *   });
  *   // 後始末
  *   overlay.dispose();
