@@ -42,6 +42,19 @@ describe('HUD ↔ HomeConfirmOverlay 連携', () => {
     expect(document.querySelector('[data-home-confirm-overlay]')).not.toBeNull();
   });
 
+  it('🏠 ボタンタップで確認表示開始通知が 1 回だけ発火する', () => {
+    const onOpen = vi.fn();
+    hud.show('テスト');
+    hud.setHomeCallback(() => {});
+    hud.setHomeConfirmOpenCallback(onOpen);
+
+    const btn = getHomeBtn();
+    btn.dispatchEvent(new Event('pointerdown'));
+    btn.dispatchEvent(new Event('pointerdown'));
+
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
   it('オーバーレイの「🏠 タイトルへ もどる」で onHomeCallback が発火する', () => {
     const cb = vi.fn();
     hud.show('テスト');
@@ -57,14 +70,17 @@ describe('HUD ↔ HomeConfirmOverlay 連携', () => {
 
   it('オーバーレイの「✋ つづける」で onHomeCallback は発火せずオーバーレイのみ閉じる', () => {
     const cb = vi.fn();
+    const onCancel = vi.fn();
     hud.show('テスト');
     hud.setHomeCallback(cb);
+    hud.setHomeConfirmCancelCallback(onCancel);
     getHomeBtn().dispatchEvent(new Event('pointerdown'));
     const continueBtn = document.querySelector<HTMLButtonElement>(
       '[data-home-confirm-continue]',
     )!;
     continueBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     expect(cb).not.toHaveBeenCalled();
+    expect(onCancel).toHaveBeenCalledTimes(1);
     expect(document.querySelector('[data-home-confirm-overlay]')).toBeNull();
   });
 

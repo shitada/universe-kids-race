@@ -19,6 +19,8 @@ export class HUD {
   private onBoostCallback: (() => void) | null = null;
   private onBoostDeniedCallback: (() => void) | null = null;
   private onHomeCallback: (() => void) | null = null;
+  private onHomeConfirmOpenCallback: (() => void) | null = null;
+  private onHomeConfirmCancelCallback: (() => void) | null = null;
   private onMuteCallback: (() => void) | null = null;
   private muted = false;
   private lastCooldownProgress = 1.0;
@@ -75,12 +77,19 @@ export class HUD {
       if (this.homeButton) {
         this.homeButton.style.transform = 'scale(0.9)';
       }
+      if (this.homeConfirmOverlay.isVisible()) {
+        return;
+      }
+      if (!document.getElementById('ui-overlay')) {
+        return;
+      }
       // Show child-friendly confirmation overlay instead of firing
       // onHomeCallback immediately, to prevent accidental taps from
       // losing stage progress (Constitution I: 子供ファースト).
+      this.onHomeConfirmOpenCallback?.();
       this.homeConfirmOverlay.show(
         () => this.onHomeCallback?.(),
-        () => {},
+        () => this.onHomeConfirmCancelCallback?.(),
       );
     });
     this.homeButton.addEventListener('pointerup', releaseHomePress);
@@ -371,6 +380,14 @@ export class HUD {
 
   setHomeCallback(callback: () => void): void {
     this.onHomeCallback = callback;
+  }
+
+  setHomeConfirmOpenCallback(callback: () => void): void {
+    this.onHomeConfirmOpenCallback = callback;
+  }
+
+  setHomeConfirmCancelCallback(callback: () => void): void {
+    this.onHomeConfirmCancelCallback = callback;
   }
 
   setMuteCallback(callback: () => void): void {
