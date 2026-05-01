@@ -171,6 +171,7 @@ function handleVisibilityRestore(): void {
   if (sceneManager.getCurrentType() === 'stage' && gameLoop.isPaused()) {
     resumeOverlay.show(() => {
       resumeGame();
+      stageScene.requestResumeCountdown();
     });
   } else {
     resumeOverlay.hide();
