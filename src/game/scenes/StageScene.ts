@@ -1018,6 +1018,7 @@ export class StageScene implements Scene {
   private onStageClear(): void {
     this.isCleared = true;
     this.clearTimer = 0;
+    const isNewPlanetUnlock = this.saveManager.markStageCleared(this.stageNumber);
     this.audioManager.playSFX('stageClear');
     this.audioManager.stopBoostSFX();
     this.boostFlameEffect.remove();
@@ -1033,19 +1034,18 @@ export class StageScene implements Scene {
     const isBestUpdated = earnedStars > previousBest;
 
     // Add companion if this is a new planet unlock
-    const saveData = this.saveManager.load();
-    if (!saveData.unlockedPlanets.includes(this.stageNumber)) {
+    if (isNewPlanetUnlock) {
       this.companionManager?.addCompanion(this.stageNumber);
     }
 
-    this.showClearMessage(isBestUpdated, earnedStars);
+    this.showClearMessage(isBestUpdated, earnedStars, isNewPlanetUnlock);
 
     if (isBestUpdated) {
       this.audioManager.playSFX('rainbowCollect');
     }
   }
 
-  private showClearMessage(isBestUpdated = false, _earnedStars?: number): void {
+  private showClearMessage(isBestUpdated = false, _earnedStars?: number, isNewPlanetUnlock = false): void {
     const uiOverlay = document.getElementById('ui-overlay');
     if (!uiOverlay) return;
 
@@ -1103,8 +1103,7 @@ export class StageScene implements Scene {
     this.clearOverlay.appendChild(score);
 
     // Card acquisition notification for newly unlocked planets
-    const saveData = this.saveManager.load();
-    if (!saveData.unlockedPlanets.includes(this.stageNumber)) {
+    if (isNewPlanetUnlock) {
       const entry = PLANET_ENCYCLOPEDIA.find((e) => e.stageNumber === this.stageNumber);
       if (entry) {
         const cardMsg = document.createElement('div');

@@ -156,11 +156,9 @@ sceneManager.setLoadStateHandler((isLoading, sceneType) => {
 sceneManager.setTransitionHandler(
   createSceneTransitionHandler({
     sceneManager,
-    saveManager,
     pixelRatioController,
     applyPixelRatioTier,
     maxTier: MAX_TIER,
-    totalStages: TOTAL_STAGES,
     now: () => performance.now(),
   }),
 );

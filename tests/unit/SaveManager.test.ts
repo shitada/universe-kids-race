@@ -555,6 +555,52 @@ describe('SaveManager', () => {
     });
   });
 
+  describe('markStageCleared', () => {
+    it('updates clearedStage and unlockedPlanets for a newly cleared stage', () => {
+      const manager = new SaveManager();
+
+      const isNewUnlock = manager.markStageCleared(3);
+
+      expect(isNewUnlock).toBe(true);
+      expect(manager.load().clearedStage).toBe(3);
+      expect(manager.load().unlockedPlanets).toEqual([3]);
+    });
+
+    it('does not duplicate unlockedPlanets when the same stage is cleared again', () => {
+      const manager = new SaveManager();
+      manager.save({ clearedStage: 3, unlockedPlanets: [1, 3], muted: true });
+
+      const isNewUnlock = manager.markStageCleared(3);
+
+      expect(isNewUnlock).toBe(false);
+      expect(manager.load().clearedStage).toBe(3);
+      expect(manager.load().unlockedPlanets).toEqual([1, 3]);
+      expect(manager.load().muted).toBe(true);
+    });
+
+    it('does not roll clearedStage back when a lower stage is marked later', () => {
+      const manager = new SaveManager();
+      manager.save({ clearedStage: 5, unlockedPlanets: [2, 5] });
+
+      const isNewUnlock = manager.markStageCleared(3);
+
+      expect(isNewUnlock).toBe(true);
+      expect(manager.load().clearedStage).toBe(5);
+      expect(manager.load().unlockedPlanets).toEqual([2, 5, 3]);
+    });
+
+    it('ignores invalid stage numbers', () => {
+      const manager = new SaveManager();
+
+      expect(manager.markStageCleared(0)).toBe(false);
+      expect(manager.markStageCleared(TOTAL_STAGES + 1)).toBe(false);
+      expect(manager.markStageCleared(1.5)).toBe(false);
+
+      expect(manager.load().clearedStage).toBe(0);
+      expect(manager.load().unlockedPlanets).toEqual([]);
+    });
+  });
+
   describe('lastStablePixelTier persistence', () => {
     it('returns undefined when field is missing (legacy save)', () => {
       storage.set(

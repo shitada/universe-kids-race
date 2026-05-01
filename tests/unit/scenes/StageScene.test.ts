@@ -302,13 +302,15 @@ describe('StageScene best-stage-stars-update feedback on clear', () => {
     alreadyUnlocked: boolean;
   }): {
     scene: StageScene;
+    sceneManager: { requestTransition: ReturnType<typeof vi.fn> };
     audioManager: { playSFX: ReturnType<typeof vi.fn>; stopBoostSFX: ReturnType<typeof vi.fn> };
     saveManager: {
       load: ReturnType<typeof vi.fn>;
+      markStageCleared: ReturnType<typeof vi.fn>;
       updateBestStageStars: ReturnType<typeof vi.fn>;
     };
   } {
-    const sceneManager = { requestTransition: vi.fn() } as unknown as SceneManager;
+    const sceneManager = { requestTransition: vi.fn() };
     const inputSystem = {} as InputSystem;
     const audioManager = {
       playSFX: vi.fn(),
@@ -325,10 +327,11 @@ describe('StageScene best-stage-stars-update feedback on clear', () => {
         muted: false,
         bestStageStars: { [opts.stageNumber]: opts.previousBest },
       })),
+      markStageCleared: vi.fn(() => !opts.alreadyUnlocked),
       updateBestStageStars: vi.fn(),
     } as unknown as SaveManager;
 
-    const scene = new StageScene(sceneManager, inputSystem, audioManager, saveManager);
+    const scene = new StageScene(sceneManager as unknown as SceneManager, inputSystem, audioManager, saveManager);
     const internal = scene as unknown as {
       stageNumber: number;
       scoreSystem: { getStarCount(): number };
@@ -340,16 +343,36 @@ describe('StageScene best-stage-stars-update feedback on clear', () => {
 
     return {
       scene,
+      sceneManager,
       audioManager: audioManager as unknown as {
         playSFX: ReturnType<typeof vi.fn>;
         stopBoostSFX: ReturnType<typeof vi.fn>;
       },
       saveManager: saveManager as unknown as {
         load: ReturnType<typeof vi.fn>;
+        markStageCleared: ReturnType<typeof vi.fn>;
         updateBestStageStars: ReturnType<typeof vi.fn>;
       },
     };
   }
+
+  it('marks the stage as cleared immediately before any transition', () => {
+    const { scene, sceneManager, saveManager } = setupClearScene({
+      stageNumber: 4,
+      earnedStars: 2,
+      previousBest: 1,
+      alreadyUnlocked: false,
+    });
+
+    (scene as unknown as { onStageClear(): void }).onStageClear();
+
+    expect(saveManager.markStageCleared).toHaveBeenCalledTimes(1);
+    expect(saveManager.markStageCleared).toHaveBeenCalledWith(4);
+    expect(saveManager.markStageCleared.mock.invocationCallOrder[0]).toBeLessThan(
+      saveManager.updateBestStageStars.mock.invocationCallOrder[0],
+    );
+    expect(sceneManager.requestTransition).not.toHaveBeenCalled();
+  });
 
   it('shows "じこベストこうしん" message and plays rainbowCollect SFX when star count exceeds previous best', () => {
     const { scene, audioManager } = setupClearScene({
