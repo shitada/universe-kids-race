@@ -75,6 +75,11 @@ export class BoostLinesEffect {
     } else {
       this.writeCursor = (this.writeCursor + BoostLinesEffect.LINES_PER_FRAME) % BoostLinesEffect.LINE_COUNT;
     }
+    // ParticleBurst と同様に、実際に書き換えたスライスのみを GPU に転送する。
+    // LINE_COUNT % LINES_PER_FRAME === 0 のため、round-robin の更新範囲は常に
+    // ラップせず連続範囲となり、addUpdateRange 1 回で完結する。
+    this.positionAttr!.clearUpdateRanges();
+    this.positionAttr!.addUpdateRange(startIndex * 6, updateCount * 6);
     this.positionAttr!.needsUpdate = true;
     if (this.lastVisible !== true) {
       this.lines.visible = true;
