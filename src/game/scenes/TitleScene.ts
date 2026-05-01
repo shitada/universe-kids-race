@@ -7,6 +7,9 @@ import { TutorialOverlay } from '../../ui/TutorialOverlay';
 import { EncyclopediaOverlay } from '../../ui/EncyclopediaOverlay';
 import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButton';
 import { TOTAL_STAGES } from '../config/StageConfig';
+import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
+import { formatEncyclopediaLabel } from '../../ui/formatEncyclopediaLabel';
+import { getViewportSize } from '../utils/getViewportSize';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // SHARED background-star resources for TitleScene
@@ -82,6 +85,7 @@ export class TitleScene implements Scene {
   private muteHandle: MuteButtonHandle | null = null;
   private tutorialOverlay = new TutorialOverlay();
   private encyclopediaOverlay = new EncyclopediaOverlay();
+  private encyclopediaBtn: HTMLButtonElement | null = null;
   // タイトル滞在中、初回 user gesture（AudioContext 初期化）を待つフラグ。
   // iPad Safari の AudioContext は user gesture 必須のため、enter() 直後の
   // 即時 playBGM(0) は AudioManager が既に初期化済みのとき（再訪問時）のみ
@@ -95,9 +99,10 @@ export class TitleScene implements Scene {
     this.audioManager = audioManager;
     this.threeScene = new THREE.Scene();
     this.threeScene.background = new THREE.Color(0x000020);
+    const { width: vw, height: vh } = getViewportSize();
     this.camera = new THREE.PerspectiveCamera(
       60,
-      window.innerWidth / window.innerHeight,
+      vw / vh,
       0.1,
       1000,
     );
@@ -232,7 +237,11 @@ export class TitleScene implements Scene {
 
     // Encyclopedia button
     const encyclopediaBtn = document.createElement('button');
-    encyclopediaBtn.textContent = 'ずかん';
+    const initialSaveData = this.saveManager.load();
+    encyclopediaBtn.textContent = formatEncyclopediaLabel(
+      initialSaveData.unlockedPlanets.length,
+      PLANET_ENCYCLOPEDIA.length,
+    );
     encyclopediaBtn.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
       font-size: 1.2rem;
@@ -244,16 +253,18 @@ export class TitleScene implements Scene {
       color: #fff;
       cursor: pointer;
       touch-action: manipulation;
+      white-space: nowrap;
       position: absolute;
       bottom: max(2rem, calc(env(safe-area-inset-bottom, 0px) + 1rem));
       left: max(2rem, calc(env(safe-area-inset-left, 0px) + 1rem));
     `;
+    this.encyclopediaBtn = encyclopediaBtn;
     encyclopediaBtn.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
       const saveData = this.saveManager.load();
       this.encyclopediaOverlay.show(
         saveData.unlockedPlanets,
-        () => {},
+        () => this.refreshEncyclopediaButtonLabel(),
         (stageNumber) => {
           this.audioManager.initSync();
           this.sceneManager.requestTransition('stage', {
@@ -262,6 +273,7 @@ export class TitleScene implements Scene {
             totalStarCount: 0,
           });
         },
+        saveData.bestStageStars ?? {},
       );
     });
 
@@ -282,6 +294,15 @@ export class TitleScene implements Scene {
         this.bgmPending = false;
       }
     }, { once: true });
+  }
+
+  private refreshEncyclopediaButtonLabel(): void {
+    if (!this.encyclopediaBtn) return;
+    const saveData = this.saveManager.load();
+    this.encyclopediaBtn.textContent = formatEncyclopediaLabel(
+      saveData.unlockedPlanets.length,
+      PLANET_ENCYCLOPEDIA.length,
+    );
   }
 
   update(deltaTime: number): void {
@@ -309,6 +330,7 @@ export class TitleScene implements Scene {
       this.overlay.remove();
       this.overlay = null;
     }
+    this.encyclopediaBtn = null;
     if (this.muteHandle) {
       this.muteHandle.remove();
       this.muteHandle = null;
@@ -320,7 +342,8 @@ export class TitleScene implements Scene {
   }
 
   getCamera(): THREE.Camera {
-    const aspect = window.innerWidth / window.innerHeight;
+    const { width, height } = getViewportSize();
+    const aspect = width / height;
     if (aspect !== this.lastAspect && Number.isFinite(aspect) && aspect > 0) {
       this.camera.aspect = aspect;
       this.camera.updateProjectionMatrix();

@@ -1,4 +1,5 @@
 import { createMuteButton, type MuteButtonHandle } from './createMuteButton';
+import { HomeConfirmOverlay } from './HomeConfirmOverlay';
 
 export class HUD {
   private container: HTMLDivElement | null = null;
@@ -7,6 +8,7 @@ export class HUD {
   private starCountEl: HTMLSpanElement | null = null;
   private boostButton: HTMLButtonElement | null = null;
   private homeButton: HTMLButtonElement | null = null;
+  private homeConfirmOverlay: HomeConfirmOverlay = new HomeConfirmOverlay();
   private muteButton: HTMLButtonElement | null = null;
   private muteHandle: MuteButtonHandle | null = null;
   private cooldownContainer: HTMLDivElement | null = null;
@@ -73,7 +75,13 @@ export class HUD {
       if (this.homeButton) {
         this.homeButton.style.transform = 'scale(0.9)';
       }
-      this.onHomeCallback?.();
+      // Show child-friendly confirmation overlay instead of firing
+      // onHomeCallback immediately, to prevent accidental taps from
+      // losing stage progress (Constitution I: 子供ファースト).
+      this.homeConfirmOverlay.show(
+        () => this.onHomeCallback?.(),
+        () => {},
+      );
     });
     this.homeButton.addEventListener('pointerup', releaseHomePress);
     this.homeButton.addEventListener('pointercancel', releaseHomePress);
@@ -547,6 +555,7 @@ export class HUD {
   }
 
   hide(): void {
+    this.homeConfirmOverlay.hide();
     if (this.homeButton) {
       this.homeButton.remove();
       this.homeButton = null;

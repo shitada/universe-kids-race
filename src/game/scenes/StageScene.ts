@@ -22,6 +22,7 @@ import { CompanionManager } from '../entities/CompanionManager';
 import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
 import { disposeObject3D } from '../utils/disposeObject3D';
 import { followCameraZ } from '../utils/followCameraZ';
+import { getViewportSize } from '../utils/getViewportSize';
 
 const BG_STAR_PARALLAX = 1.0;
 
@@ -54,6 +55,15 @@ function getPlanetTexture(key: string, factory: () => THREE.CanvasTexture): THRE
   let tex = planetTextureCache.get(key);
   if (!tex) {
     tex = factory();
+    // Constitution IV（iPad Safari で 60fps 維持）対応:
+    // 手続き的に生成する惑星 CanvasTexture はミップマップ生成と
+    // LinearMipmapLinearFilter を無効化し、GPU 常駐サイズと
+    // ステージ初回入場時のテクスチャアップロード負荷を削減する。
+    // 目的地惑星はカメラから手前〜中距離で表示されるため、
+    // LinearFilter でも視覚的劣化はほぼ知覚されない。
+    tex.generateMipmaps = false;
+    tex.minFilter = THREE.LinearFilter;
+    tex.needsUpdate = true;
     planetTextureCache.set(key, tex);
   }
   return tex;
@@ -274,15 +284,24 @@ export class StageScene implements Scene {
   private isStarting = false;
   private countdownOverlay: CountdownOverlay | null = null;
 
+  // Background-resume countdown ("3 → 2 → 1 → スタート！" after Safari
+  // returns from background). Constitution I (子供ファースト): 復帰直後の
+  // 理不尽な衝突を防ぐ。While `awaitingResume` is true, the same input/
+  // spawn/forward-motion gate as `isStarting` applies so the spaceship
+  // does not move until the child is ready.
+  private awaitingResume = false;
+  private resumeCountdownOverlay: CountdownOverlay | null = null;
+
   constructor(sceneManager: SceneManager, inputSystem: InputSystem, audioManager: AudioManager, saveManager: SaveManager) {
     this.sceneManager = sceneManager;
     this.inputSystem = inputSystem;
     this.audioManager = audioManager;
     this.saveManager = saveManager;
     this.threeScene = new THREE.Scene();
+    const { width: vw, height: vh } = getViewportSize();
     this.camera = new THREE.PerspectiveCamera(
       60,
-      window.innerWidth / window.innerHeight,
+      vw / vh,
       0.1,
       2000,
     );
@@ -414,6 +433,53 @@ export class StageScene implements Scene {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * バックグラウンド復帰時に呼ぶための公開 API。
+   * このシーンが「プレイ中」であることを示し、`requestResumeCountdown()` の
+   * 発火可否を main.ts 側から判断するために使う。
+   *
+   * プレイ中の定義:
+   *   - `enter()` 済み (stageConfig が初期化されている)
+   *   - クリア演出中 (`isCleared`) ではない
+   *   - 開始時カウントダウン中 (`isStarting`) ではない
+   *   - 既に復帰カウントダウン中 (`awaitingResume`) ではない
+   */
+  isPlaying(): boolean {
+    if (!this.stageConfig) return false;
+    if (this.isCleared) return false;
+    if (this.isStarting) return false;
+    if (this.awaitingResume) return false;
+    return true;
+  }
+
+  /**
+   * バックグラウンド復帰直後に「3・2・1・スタート！」を挟んでから
+   * プレイを再開させる。プレイ中でない場合や既に復帰カウントダウン中の
+   * 場合は何もしない（多重表示防止）。
+   *
+   * Constitution I (子供ファースト): 画面から目を離している間に隕石へ
+   * 即衝突する事故を防ぐ。
+   */
+  requestResumeCountdown(): void {
+    if (!this.isPlaying()) return;
+    if (this.resumeCountdownOverlay) return;
+    if (this.shouldSkipCountdown()) return;
+
+    this.awaitingResume = true;
+    this.resumeCountdownOverlay = new CountdownOverlay({
+      onTick: () => {
+        this.audioManager.playSFX('countdownTick');
+      },
+      onGo: () => {
+        this.audioManager.playSFX('countdownGo');
+      },
+    });
+    this.resumeCountdownOverlay.show(() => {
+      this.awaitingResume = false;
+      this.resumeCountdownOverlay = null;
+    });
   }
 
   private createBackground(): void {
@@ -609,12 +675,13 @@ export class StageScene implements Scene {
       return;
     }
 
-    // Countdown gate: while the start countdown is showing, freeze input,
-    // spawning, and ship forward motion. Only the destination planet's
-    // gentle spin and background-star centering keep moving so the scene
-    // feels alive (Constitution I/IV).
-    if (this.isStarting) {
+    // Countdown gate: while the start countdown OR the background-resume
+    // countdown is showing, freeze input, spawning, and ship forward motion.
+    // Only the destination planet's gentle spin and background-star centering
+    // keep moving so the scene feels alive (Constitution I/IV).
+    if (this.isStarting || this.awaitingResume) {
       this.countdownOverlay?.tick(deltaTime);
+      this.resumeCountdownOverlay?.tick(deltaTime);
       if (this.destinationPlanetSpinTarget) {
         this.destinationPlanetSpinTarget.rotation.y +=
           deltaTime * StageScene.DESTINATION_PLANET_SPIN_SPEED;
@@ -918,6 +985,9 @@ export class StageScene implements Scene {
     this.audioManager.stopBoostSFX();
     this.boostFlameEffect.remove();
 
+    // Persist best (highest) star count for this stage.
+    this.saveManager.updateBestStageStars(this.stageNumber, this.scoreSystem.getStarCount());
+
     // Add companion if this is a new planet unlock
     const saveData = this.saveManager.load();
     if (!saveData.unlockedPlanets.includes(this.stageNumber)) {
@@ -1021,7 +1091,12 @@ export class StageScene implements Scene {
       this.countdownOverlay.dispose();
       this.countdownOverlay = null;
     }
+    if (this.resumeCountdownOverlay) {
+      this.resumeCountdownOverlay.dispose();
+      this.resumeCountdownOverlay = null;
+    }
     this.isStarting = false;
+    this.awaitingResume = false;
     this.boostFlameEffect.dispose();
     this.companionManager?.dispose();
     this.companionManager = null;
@@ -1064,7 +1139,8 @@ export class StageScene implements Scene {
   }
 
   getCamera(): THREE.Camera {
-    const aspect = window.innerWidth / window.innerHeight;
+    const { width, height } = getViewportSize();
+    const aspect = width / height;
     if (aspect !== this.lastAspect && Number.isFinite(aspect) && aspect > 0) {
       this.camera.aspect = aspect;
       this.camera.updateProjectionMatrix();

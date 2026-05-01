@@ -205,6 +205,92 @@ describe('InputSystem — pointermove tracking', () => {
   });
 });
 
+describe('InputSystem — passive pointermove & cached width', () => {
+  it('registers pointermove with { passive: true } and removes it with the same options', () => {
+    const canvas = document.createElement('canvas');
+    Object.defineProperty(canvas, 'clientWidth', { value: 800 });
+    const addSpy: Array<{ type: string; options: unknown }> = [];
+    const removeSpy: Array<{ type: string; options: unknown }> = [];
+    const origAdd = canvas.addEventListener.bind(canvas);
+    const origRemove = canvas.removeEventListener.bind(canvas);
+    canvas.addEventListener = ((
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | AddEventListenerOptions,
+    ) => {
+      addSpy.push({ type, options });
+      return origAdd(type, listener, options);
+    }) as typeof canvas.addEventListener;
+    canvas.removeEventListener = ((
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | EventListenerOptions,
+    ) => {
+      removeSpy.push({ type, options });
+      return origRemove(type, listener, options);
+    }) as typeof canvas.removeEventListener;
+
+    const input = new InputSystem();
+    input.setup(canvas);
+    const moveAdd = addSpy.find((e) => e.type === 'pointermove');
+    expect(moveAdd).toBeDefined();
+    expect(moveAdd!.options).toEqual({ passive: true });
+
+    // Other pointer listeners must remain non-passive (default — no options arg).
+    const downAdd = addSpy.find((e) => e.type === 'pointerdown');
+    expect(downAdd).toBeDefined();
+    expect(downAdd!.options).toBeUndefined();
+
+    input.dispose();
+    const moveRemove = removeSpy.find((e) => e.type === 'pointermove');
+    expect(moveRemove).toBeDefined();
+    expect(moveRemove!.options).toEqual({ passive: true });
+  });
+
+  it('sideOf() uses the cached width from notifyResize() instead of clientWidth', () => {
+    const canvas = document.createElement('canvas');
+    // Initial DOM width 1000 → half=500, deadZone=20 → clientX=600 is right.
+    Object.defineProperty(canvas, 'clientWidth', { configurable: true, value: 1000 });
+    document.body.appendChild(canvas);
+    const input = new InputSystem();
+    input.setup(canvas);
+
+    // Now mutate clientWidth in a way notifyResize would NOT see, and also
+    // call notifyResize with a *different* width to prove sideOf trusts the
+    // cached value rather than re-reading clientWidth.
+    Object.defineProperty(canvas, 'clientWidth', { configurable: true, value: 200 });
+    input.notifyResize(2000); // half=1000, deadZone=40 → clientX=600 is left
+
+    canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 600, pointerId: 1, bubbles: true }));
+    expect(input.getState().moveDirection).toBe(-1);
+
+    // Update cache again — boundary moves back so clientX=600 becomes right.
+    input.notifyResize(800); // half=400, deadZone=16 → clientX=600 is right
+    canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 600, pointerId: 1, bubbles: true }));
+    expect(input.getState().moveDirection).toBe(1);
+
+    input.dispose();
+    canvas.remove();
+  });
+
+  it('notifyResize ignores non-positive widths (defensive)', () => {
+    const canvas = document.createElement('canvas');
+    Object.defineProperty(canvas, 'clientWidth', { configurable: true, value: 1000 });
+    document.body.appendChild(canvas);
+    const input = new InputSystem();
+    input.setup(canvas);
+
+    input.notifyResize(0);
+    input.notifyResize(-50);
+    // Cached width should remain the original 1000 (half=500); clientX=900 → right
+    canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 900, pointerId: 1, bubbles: true }));
+    expect(input.getState().moveDirection).toBe(1);
+
+    input.dispose();
+    canvas.remove();
+  });
+});
+
 describe('InputSystem — focus/visibility reset', () => {
   let input: InputSystem;
   let canvas: HTMLCanvasElement;

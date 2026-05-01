@@ -144,4 +144,103 @@ describe('disposeObject3D', () => {
 
     expect(parent.children).toHaveLength(0);
   });
+
+  describe('userData.sharedAssets', () => {
+    it('does not dispose geometry/material on a single shared mesh', () => {
+      const geo = new THREE.BoxGeometry();
+      const mat = new THREE.MeshBasicMaterial();
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.userData.sharedAssets = true;
+      const geoSpy = vi.spyOn(geo, 'dispose');
+      const matSpy = vi.spyOn(mat, 'dispose');
+
+      disposeObject3D(mesh);
+
+      expect(geoSpy).not.toHaveBeenCalled();
+      expect(matSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not dispose descendants of a shared node', () => {
+      const sharedGeo = new THREE.BoxGeometry();
+      const sharedMat = new THREE.MeshBasicMaterial();
+      const sharedMesh = new THREE.Mesh(sharedGeo, sharedMat);
+      sharedMesh.userData.sharedAssets = true;
+
+      const childGeo = new THREE.SphereGeometry(1);
+      const childMat = new THREE.MeshBasicMaterial();
+      const childMesh = new THREE.Mesh(childGeo, childMat);
+      sharedMesh.add(childMesh);
+
+      const sharedGeoSpy = vi.spyOn(sharedGeo, 'dispose');
+      const sharedMatSpy = vi.spyOn(sharedMat, 'dispose');
+      const childGeoSpy = vi.spyOn(childGeo, 'dispose');
+      const childMatSpy = vi.spyOn(childMat, 'dispose');
+
+      disposeObject3D(sharedMesh);
+
+      expect(sharedGeoSpy).not.toHaveBeenCalled();
+      expect(sharedMatSpy).not.toHaveBeenCalled();
+      expect(childGeoSpy).not.toHaveBeenCalled();
+      expect(childMatSpy).not.toHaveBeenCalled();
+    });
+
+    it('disposes only non-shared meshes when mixed within a group', () => {
+      const group = new THREE.Group();
+
+      const sharedGeo = new THREE.BoxGeometry();
+      const sharedMat = new THREE.MeshBasicMaterial();
+      const sharedMesh = new THREE.Mesh(sharedGeo, sharedMat);
+      sharedMesh.userData.sharedAssets = true;
+
+      const normalGeo = new THREE.SphereGeometry(1);
+      const normalMat = new THREE.MeshBasicMaterial();
+      const normalMesh = new THREE.Mesh(normalGeo, normalMat);
+
+      group.add(sharedMesh);
+      group.add(normalMesh);
+
+      const sharedGeoSpy = vi.spyOn(sharedGeo, 'dispose');
+      const sharedMatSpy = vi.spyOn(sharedMat, 'dispose');
+      const normalGeoSpy = vi.spyOn(normalGeo, 'dispose');
+      const normalMatSpy = vi.spyOn(normalMat, 'dispose');
+
+      disposeObject3D(group);
+
+      expect(sharedGeoSpy).not.toHaveBeenCalled();
+      expect(sharedMatSpy).not.toHaveBeenCalled();
+      expect(normalGeoSpy).toHaveBeenCalledTimes(1);
+      expect(normalMatSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('still removes a shared root from its parent', () => {
+      const parent = new THREE.Group();
+      const sharedMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(),
+        new THREE.MeshBasicMaterial(),
+      );
+      sharedMesh.userData.sharedAssets = true;
+      parent.add(sharedMesh);
+
+      disposeObject3D(sharedMesh);
+
+      expect(parent.children).toHaveLength(0);
+    });
+
+    it('does not dispose textures within a shared subtree', () => {
+      const sharedRoot = new THREE.Group();
+      sharedRoot.userData.sharedAssets = true;
+      const tex = new THREE.Texture();
+      const mat = new THREE.MeshBasicMaterial({ map: tex });
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(), mat);
+      sharedRoot.add(mesh);
+
+      const texSpy = vi.spyOn(tex, 'dispose');
+      const matSpy = vi.spyOn(mat, 'dispose');
+
+      disposeObject3D(sharedRoot);
+
+      expect(texSpy).not.toHaveBeenCalled();
+      expect(matSpy).not.toHaveBeenCalled();
+    });
+  });
 });

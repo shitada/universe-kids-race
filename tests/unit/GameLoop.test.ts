@@ -260,4 +260,40 @@ describe('GameLoop', () => {
     expect(loop.isPaused()).toBe(false);
     expect(loop.isRunning()).toBe(false);
   });
+
+  it('caps updateCallback deltaTime at 100ms but feeds raw deltaTime to the FPS monitor', () => {
+    const loop = new GameLoop();
+    const deltas: number[] = [];
+    loop.start(
+      (dt) => deltas.push(dt),
+      () => {},
+    );
+
+    // Warm up the monitor with steady 60fps frames so getFps() reflects ~60.
+    for (let i = 0; i < 30; i += 1) {
+      advance(1000 / 60);
+    }
+    expect(loop.getFps()).toBeGreaterThanOrEqual(55);
+    expect(loop.getFps()).toBeLessThanOrEqual(65);
+
+    // Single 200ms hitch: updateCallback must be capped to 0.1s, but the
+    // FrameRateMonitor receives the raw 0.2s value, which exceeds neither its
+    // 0.5s spike filter — so it counts as a real (slow) frame, not a 10fps cap.
+    deltas.length = 0;
+    advance(200);
+    expect(deltas).toHaveLength(1);
+    expect(deltas[0]).toBeCloseTo(0.1, 5);
+
+    // A 600ms hitch must be capped for the simulation AND filtered out by the
+    // monitor's own spike guard, so getFps() should not collapse toward ~1.6fps.
+    const fpsBeforeBigHitch = loop.getFps();
+    deltas.length = 0;
+    advance(600);
+    expect(deltas).toHaveLength(1);
+    expect(deltas[0]).toBeCloseTo(0.1, 5);
+    // Spike filter (>0.5s) discards the sample, so fps should be essentially unchanged.
+    expect(loop.getFps()).toBeCloseTo(fpsBeforeBigHitch, 1);
+
+    loop.stop();
+  });
 });

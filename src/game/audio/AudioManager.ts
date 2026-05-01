@@ -445,6 +445,16 @@ export class AudioManager {
         return;
       }
 
+      // While muted, skip creating short-lived voices (arpeggio/melody).
+      // Persistent layers (bass/pad) are already silenced via masterGain=0,
+      // and we keep the tick cadence so unmute resumes within one beat.
+      // Same approach as playSFX muted skip optimization.
+      if (this.muted) {
+        beat = (beat + 1) % totalBeats;
+        this.bgmTimer = setTimeout(tick, beatInterval * 1000);
+        return;
+      }
+
       const chordIndex = Math.floor(beat / config.beatsPerChord) % config.chords.length;
       const beatInChord = beat % config.beatsPerChord;
 
@@ -644,6 +654,10 @@ export class AudioManager {
   }
 
   playSFX(type: SFXType): void {
+    // Mute 中は WebAudio ノード生成を完全にスキップして iPad Safari の負荷を抑える。
+    // lastSfxTime は更新しないため、unmute 直後の最初の SFX が coalesce で誤抑止されない。
+    // ensureResumed() もミュート中は呼ばない（不要なリジューム試行を避ける）。
+    if (this.muted) return;
     this.ensureResumed();
     if (!this.initialized || !this.ctx) return;
     const now = this.ctx.currentTime;

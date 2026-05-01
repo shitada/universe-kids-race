@@ -36,26 +36,42 @@ function disposeMaterial(material: THREE.Material): void {
  * Object3D を再帰的に traverse して geometry / material / テクスチャを dispose する。
  * 親があれば親からも remove する。
  */
+function hasSharedAssets(object: THREE.Object3D): boolean {
+  return Boolean(
+    object.userData && (object.userData as { sharedAssets?: boolean }).sharedAssets,
+  );
+}
+
+function disposeNode(object: THREE.Object3D): void {
+  const mesh = object as THREE.Mesh & { material?: THREE.Material | THREE.Material[] };
+  if ((mesh as { geometry?: THREE.BufferGeometry }).geometry) {
+    (mesh as { geometry: THREE.BufferGeometry }).geometry.dispose();
+  }
+  const material = mesh.material;
+  if (material) {
+    if (Array.isArray(material)) {
+      for (const m of material) disposeMaterial(m);
+    } else {
+      disposeMaterial(material);
+    }
+  }
+}
+
 export function disposeObject3D(object: THREE.Object3D): void {
-  object.traverse((child) => {
-    // SHARED 資源（モジュールレベルでキャッシュされた geometry/material/texture を
-    // 持つ Mesh）は dispose しない。Star / Meteorite と同じ規約。
-    if (child.userData && (child.userData as { sharedAssets?: boolean }).sharedAssets) {
-      return;
+  // THREE.Object3D.traverse はコールバックの戻り値を無視して必ず子孫まで再帰するため、
+  // sharedAssets の付いたノード「およびその子孫」をまとめてスキップできるよう
+  // 自前のスタックでサブツリー単位の枝刈りを行う。
+  const stack: THREE.Object3D[] = [object];
+  while (stack.length > 0) {
+    const node = stack.pop()!;
+    if (hasSharedAssets(node)) {
+      continue;
     }
-    const mesh = child as THREE.Mesh & { material?: THREE.Material | THREE.Material[] };
-    if ((mesh as { geometry?: THREE.BufferGeometry }).geometry) {
-      (mesh as { geometry: THREE.BufferGeometry }).geometry.dispose();
+    disposeNode(node);
+    for (const child of node.children) {
+      stack.push(child);
     }
-    const material = mesh.material;
-    if (material) {
-      if (Array.isArray(material)) {
-        for (const m of material) disposeMaterial(m);
-      } else {
-        disposeMaterial(material);
-      }
-    }
-  });
+  }
   if (object.parent) {
     object.parent.remove(object);
   }

@@ -78,13 +78,17 @@ export class GameLoop {
 
   private loop = (now: number): void => {
     if (!this.running) return;
-    const deltaTime = Math.min((now - this.lastTime) / 1000, 0.1); // cap at 100ms
+    const rawDeltaTime = (now - this.lastTime) / 1000;
+    const deltaTime = Math.min(rawDeltaTime, 0.1); // cap at 100ms for simulation stability
     this.lastTime = now;
 
     this.updateCallback?.(deltaTime);
     this.renderCallback?.();
 
-    this.monitor.update(deltaTime);
+    // Pass the uncapped deltaTime to the FPS monitor so its own spike filter
+    // (>0.5s) can correctly discard transient hitches instead of being fed a
+    // capped 100ms value that masquerades as a sustained 10fps sample.
+    this.monitor.update(rawDeltaTime);
     if (this.fpsSampleCallback && now - this.lastFpsSampleAt >= FPS_SAMPLE_INTERVAL_MS) {
       this.fpsSampleCallback(this.monitor.getFps());
       this.lastFpsSampleAt = now;
