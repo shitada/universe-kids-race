@@ -17,6 +17,8 @@ import { createRenderer } from './game/utils/createRenderer';
 import { getViewportSize, subscribeViewportResize } from './game/utils/getViewportSize';
 import { ContextLossOverlay } from './ui/ContextLossOverlay';
 import { ResumeOverlay } from './ui/ResumeOverlay';
+import { OrientationHintOverlay } from './ui/OrientationHintOverlay';
+import { createOrientationHintHandler } from './game/utils/createOrientationHintHandler';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 
@@ -166,8 +168,17 @@ function refreshViewportAfterRestore(): void {
 // 前にタップで再開できる)。Stage シーン以外では即時自動再開する。
 const resumeOverlay = new ResumeOverlay();
 
+// True while the device is held in portrait. Suppresses the ResumeOverlay
+// so that the orientation hint takes priority and we don't double-stack
+// pause prompts when the user simply rotated the iPad (Constitution III).
+let isPortraitLocked = false;
+
 function handleVisibilityRestore(): void {
   refreshViewportAfterRestore();
+  if (isPortraitLocked) {
+    // Stay paused until landscape is restored; orientation hint owns the UI.
+    return;
+  }
   if (sceneManager.getCurrentType() === 'stage' && gameLoop.isPaused()) {
     resumeOverlay.show(() => {
       resumeGame();
@@ -187,6 +198,37 @@ createVisibilityPauseHandler({
   },
   onShow: handleVisibilityRestore,
 });
+
+// Orientation hint (Constitution III/V: iPad Safari is the only target and
+// must be played in landscape). When the device is rotated to portrait we
+// pause the loop, hide any ResumeOverlay, and show a kid-friendly hint;
+// rotating back to landscape removes the hint and resumes cleanly.
+const orientationHintOverlay = new OrientationHintOverlay();
+const orientationHintHandler = createOrientationHintHandler({
+  onPortrait: () => {
+    isPortraitLocked = true;
+    // Always hide ResumeOverlay so we don't end up with two stacked prompts.
+    resumeOverlay.hide();
+    orientationHintOverlay.show();
+    gameLoop.pause();
+    audioManager.suspend();
+  },
+  onLandscape: () => {
+    if (!isPortraitLocked) return;
+    isPortraitLocked = false;
+    orientationHintOverlay.hide();
+    // Re-sync viewport / pixel ratio: rotating changes both.
+    refreshViewportAfterRestore();
+    // Resume audio + loop directly. We deliberately skip ResumeOverlay here:
+    // the user just rotated, they did not background the app, so demanding
+    // an extra tap would feel like a bug (acceptance criterion: no double
+    // countdown after rotation).
+    resumeGame();
+  },
+});
+// Synchronous initial check so a portrait boot shows the hint before the
+// first rendered frame.
+orientationHintHandler.evaluate();
 
 // WebGL context loss recovery (iPad Safari background/memory pressure).
 // Without this, the canvas freezes black with no path back. We pause the
