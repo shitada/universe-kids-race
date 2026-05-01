@@ -645,4 +645,125 @@ describe('SaveManager', () => {
       warnSpy.mockRestore();
     });
   });
+
+  describe('memory cache', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('does not re-read localStorage on subsequent load() calls', () => {
+      const manager = new SaveManager();
+      manager.save({ clearedStage: 1, unlockedPlanets: [1] });
+      // First load() may read storage; clear spy counts so we can measure
+      // post-cache behaviour precisely.
+      manager.load();
+      const baseline = localStorageMock.getItem.mock.calls.length;
+      manager.load();
+      manager.load();
+      manager.load();
+      expect(localStorageMock.getItem.mock.calls.length).toBe(baseline);
+    });
+
+    it('returns independent copies so callers cannot mutate the cache', () => {
+      const manager = new SaveManager();
+      manager.save({
+        clearedStage: 2,
+        unlockedPlanets: [1, 2],
+        bestStageStars: { 1: 3 },
+      });
+      const a = manager.load();
+      const b = manager.load();
+      expect(a).not.toBe(b);
+      expect(a.unlockedPlanets).not.toBe(b.unlockedPlanets);
+      expect(a.bestStageStars).not.toBe(b.bestStageStars);
+
+      // Mutate the first copy; subsequent loads must still see pristine data.
+      a.unlockedPlanets.push(99);
+      a.bestStageStars![1] = 0;
+      a.clearedStage = 999;
+
+      const c = manager.load();
+      expect(c.unlockedPlanets).toEqual([1, 2]);
+      expect(c.bestStageStars).toEqual({ 1: 3 });
+      expect(c.clearedStage).toBe(2);
+    });
+
+    it('reflects the latest data after save() (cache updated)', () => {
+      const manager = new SaveManager();
+      manager.save({ clearedStage: 1, unlockedPlanets: [1] });
+      expect(manager.load().clearedStage).toBe(1);
+      manager.save({ clearedStage: 3, unlockedPlanets: [1, 2, 3] });
+      const loaded = manager.load();
+      expect(loaded.clearedStage).toBe(3);
+      expect(loaded.unlockedPlanets).toEqual([1, 2, 3]);
+    });
+
+    it('returns defaults after clear() (cache invalidated)', () => {
+      const manager = new SaveManager();
+      manager.save({ clearedStage: 4, unlockedPlanets: [1, 2, 3, 4] });
+      manager.load();
+      manager.clear();
+      const loaded = manager.load();
+      expect(loaded.clearedStage).toBe(0);
+      expect(loaded.unlockedPlanets).toEqual([]);
+      expect(loaded.bestStageStars).toEqual({});
+    });
+
+    it('updateBestStageStars + saveLastStablePixelTier reflect both updates via cached load()', () => {
+      const manager = new SaveManager();
+      manager.save({
+        clearedStage: 2,
+        unlockedPlanets: [1, 2],
+        muted: true,
+        bestStageStars: { 1: 1 },
+      });
+      manager.updateBestStageStars(2, 3);
+      manager.saveLastStablePixelTier(2);
+      const loaded = manager.load();
+      expect(loaded.bestStageStars).toEqual({ 1: 1, 2: 3 });
+      expect(loaded.lastStablePixelTier).toBe(2);
+      expect(loaded.muted).toBe(true);
+      expect(loaded.clearedStage).toBe(2);
+      expect(loaded.unlockedPlanets).toEqual([1, 2]);
+    });
+
+    it('resetSessionDataPreservingMuted preserves muted/lastStablePixelTier and resets the rest', () => {
+      const manager = new SaveManager();
+      manager.save({
+        clearedStage: 5,
+        unlockedPlanets: [1, 2, 3, 4, 5],
+        muted: true,
+        bestStageStars: { 1: 3, 2: 2 },
+        lastStablePixelTier: 3,
+      });
+      manager.resetSessionDataPreservingMuted();
+      const loaded = manager.load();
+      expect(loaded.muted).toBe(true);
+      expect(loaded.lastStablePixelTier).toBe(3);
+      expect(loaded.clearedStage).toBe(0);
+      expect(loaded.unlockedPlanets).toEqual([]);
+      expect(loaded.bestStageStars).toEqual({});
+    });
+
+    it('invalidates the cache when save() throws so the next load() re-reads storage', () => {
+      const manager = new SaveManager();
+      manager.save({ clearedStage: 1, unlockedPlanets: [1] });
+      manager.load(); // populate cache
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const setItemSpy = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+        throw new Error('QuotaExceededError');
+      });
+      manager.save({ clearedStage: 99, unlockedPlanets: [] });
+      setItemSpy.mockRestore();
+      warnSpy.mockRestore();
+
+      const before = localStorageMock.getItem.mock.calls.length;
+      const loaded = manager.load();
+      // Re-read should have happened (cache was invalidated on save failure).
+      expect(localStorageMock.getItem.mock.calls.length).toBeGreaterThan(before);
+      // And it should reflect what's actually in storage (the previous save).
+      expect(loaded.clearedStage).toBe(1);
+    });
+  });
 });
