@@ -67,6 +67,10 @@ export class Meteorite {
     this.mesh.position.set(x, y, z);
     this.mesh.rotation.set(0, 0, 0);
     this.isActive = true;
+    // Ensure visibility is restored when a pooled meteorite is reused; a
+    // previous hit may have set mesh.visible = false (see StageScene meteorite
+    // collision handling).
+    this.mesh.visible = true;
   }
 
   /**
@@ -77,6 +81,9 @@ export class Meteorite {
     this.mesh.parent?.remove(this.mesh);
     this.mesh.rotation.set(0, 0, 0);
     this.isActive = true;
+    // Restore visibility before the mesh re-enters the pool so the next
+    // re-add to the scene is guaranteed visible.
+    this.mesh.visible = true;
   }
 
   dispose(): void {

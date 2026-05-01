@@ -823,7 +823,25 @@ export class StageScene implements Scene {
       // collision range). cleanupPassedObjects() will recycle it once it
       // scrolls past behindThreshold.
       if (collisionResult.meteoriteHit) {
-        collisionResult.meteoriteHit.isActive = false;
+        const hit = collisionResult.meteoriteHit;
+        hit.isActive = false;
+        // Hide the hit meteorite immediately so it does not appear to fly
+        // past the spaceship after collision; mirrors the "stars vanish on
+        // pickup" feedback for UX consistency. Visibility is restored by
+        // Meteorite.reset()/recycle() before the mesh re-enters the pool.
+        hit.mesh.visible = false;
+        // Subtle orange particle burst at the hit position to signal impact
+        // without distracting from gameplay; uses the non-rainbow burst
+        // variant for the same low cost as a regular star pickup.
+        this.particleBurstManager.emit(
+          this.threeScene,
+          hit.position.x,
+          hit.position.y,
+          hit.position.z,
+          0xffaa44,
+          24,
+          false,
+        );
       }
       this.spaceship.onMeteoriteHit();
       this.boostSystem.cancel();

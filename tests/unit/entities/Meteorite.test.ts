@@ -80,6 +80,17 @@ describe('Meteorite', () => {
     expect(met.isActive).toBe(true);
   });
 
+  it('reset() restores mesh.visible to true so a previously-hit pooled meteorite is visible again', () => {
+    const met = new Meteorite(0, 0, 0);
+    // Simulate StageScene hiding the mesh on collision.
+    met.mesh.visible = false;
+    met.isActive = false;
+
+    met.reset(1, 2, -3);
+
+    expect(met.mesh.visible).toBe(true);
+  });
+
   it('recycle() detaches mesh from parent and preserves shared resources', () => {
     const met = new Meteorite(0, 0, 0);
     const parent = new THREE.Group();
@@ -98,5 +109,16 @@ describe('Meteorite', () => {
     expect(met.isActive).toBe(true);
     expect(geoSpy).not.toHaveBeenCalled();
     expect(matSpy).not.toHaveBeenCalled();
+  });
+
+  it('recycle() restores mesh.visible to true so the pooled mesh is visible the next time it is added back to the scene', () => {
+    const met = new Meteorite(0, 0, 0);
+    const parent = new THREE.Group();
+    parent.add(met.mesh);
+    met.mesh.visible = false;
+
+    met.recycle();
+
+    expect(met.mesh.visible).toBe(true);
   });
 });
