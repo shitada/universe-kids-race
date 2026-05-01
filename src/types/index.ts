@@ -58,6 +58,7 @@ export interface SaveData {
   clearedStage: number;
   unlockedPlanets: number[];
   muted?: boolean;
+  bestStageStars?: Record<number, number>;
 }
 
 // Planet encyclopedia

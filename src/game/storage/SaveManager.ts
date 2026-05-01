@@ -3,10 +3,10 @@ import { TOTAL_STAGES } from '../config/StageConfig';
 
 const STORAGE_KEY = 'universe-kids-race-save';
 const SESSION_KEY = 'universe-kids-race-session';
-const DEFAULT_DATA: SaveData = { clearedStage: 0, unlockedPlanets: [], muted: false };
+const DEFAULT_DATA: SaveData = { clearedStage: 0, unlockedPlanets: [], muted: false, bestStageStars: {} };
 
 function defaults(): SaveData {
-  return { ...DEFAULT_DATA, unlockedPlanets: [] };
+  return { ...DEFAULT_DATA, unlockedPlanets: [], bestStageStars: {} };
 }
 
 export class SaveManager {
@@ -32,6 +32,27 @@ export class SaveManager {
 
       // Validate muted (default false; backward compatible with saves missing the field)
       data.muted = data.muted === true;
+
+      // Validate bestStageStars (backward compatible; missing or malformed → {})
+      const rawBest = (data as { bestStageStars?: unknown }).bestStageStars;
+      const validatedBest: Record<number, number> = {};
+      if (rawBest && typeof rawBest === 'object' && !Array.isArray(rawBest)) {
+        for (const [k, v] of Object.entries(rawBest as Record<string, unknown>)) {
+          const stage = Number(k);
+          if (
+            Number.isInteger(stage) &&
+            stage >= 1 &&
+            stage <= TOTAL_STAGES &&
+            String(stage) === k &&
+            typeof v === 'number' &&
+            Number.isInteger(v) &&
+            v >= 0
+          ) {
+            validatedBest[stage] = v;
+          }
+        }
+      }
+      data.bestStageStars = validatedBest;
 
       return data;
     } catch {
@@ -62,9 +83,36 @@ export class SaveManager {
     try {
       const muted = this.load().muted === true;
       this.clear();
-      this.save({ clearedStage: 0, unlockedPlanets: [], muted });
+      this.save({ clearedStage: 0, unlockedPlanets: [], muted, bestStageStars: {} });
     } catch (e) {
       console.warn('SaveManager.resetSessionDataPreservingMuted failed:', e);
+    }
+  }
+
+  // Updates the best (highest) star count for the given stage. Only persists
+  // if the new count exceeds the previously stored value, so replays that
+  // earn fewer stars never overwrite a child's best record.
+  updateBestStageStars(stageNumber: number, starCount: number): void {
+    if (
+      !Number.isInteger(stageNumber) ||
+      stageNumber < 1 ||
+      stageNumber > TOTAL_STAGES ||
+      !Number.isInteger(starCount) ||
+      starCount < 0
+    ) {
+      return;
+    }
+    try {
+      const data = this.load();
+      const best = data.bestStageStars ?? {};
+      const current = best[stageNumber] ?? 0;
+      if (starCount > current) {
+        best[stageNumber] = starCount;
+        data.bestStageStars = best;
+        this.save(data);
+      }
+    } catch (e) {
+      console.warn('SaveManager.updateBestStageStars failed:', e);
     }
   }
 

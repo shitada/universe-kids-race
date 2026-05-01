@@ -929,6 +929,9 @@ export class StageScene implements Scene {
     this.audioManager.stopBoostSFX();
     this.boostFlameEffect.remove();
 
+    // Persist best (highest) star count for this stage.
+    this.saveManager.updateBestStageStars(this.stageNumber, this.scoreSystem.getStarCount());
+
     // Add companion if this is a new planet unlock
     const saveData = this.saveManager.load();
     if (!saveData.unlockedPlanets.includes(this.stageNumber)) {
