@@ -22,6 +22,11 @@ export class Meteorite {
   // this invariance to hoist the collision-radius computation out of its hot
   // loop.
   readonly radius = 1.0;
+  // Set to `false` by StageScene when this meteorite has been consumed by a
+  // collision; CollisionSystem.check() then skips it on subsequent frames so
+  // the same meteorite cannot register a duplicate hit (e.g. while still
+  // within collision range after SLOWDOWN invincibility ends). Reset back to
+  // `true` by `reset()` / `recycle()` when the instance returns to the pool.
   isActive = true;
   mesh: THREE.Mesh;
 

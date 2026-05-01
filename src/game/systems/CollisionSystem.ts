@@ -5,6 +5,13 @@ import type { Meteorite } from '../entities/Meteorite';
 export interface CollisionResult {
   starCollisions: Star[];
   meteoriteCollision: boolean;
+  // Reference to the Meteorite that triggered the collision this frame, or
+  // null if no meteorite was hit. Callers should set `meteoriteHit.isActive
+  // = false` after handling the hit so the same meteorite is skipped on
+  // subsequent frames (the loop below early-continues on `!met.isActive`).
+  // Lifetime: same as the enclosing CollisionResult buffer — only valid
+  // until the next `check()` call.
+  meteoriteHit: Meteorite | null;
 }
 
 export class CollisionSystem {
@@ -15,6 +22,7 @@ export class CollisionSystem {
   private readonly result: CollisionResult = {
     starCollisions: [],
     meteoriteCollision: false,
+    meteoriteHit: null,
   };
 
   /**
@@ -35,6 +43,7 @@ export class CollisionSystem {
     const result = this.result;
     result.starCollisions.length = 0;
     result.meteoriteCollision = false;
+    result.meteoriteHit = null;
 
     const sp = spaceship.position;
 
@@ -92,6 +101,7 @@ export class CollisionSystem {
         const distSq = dx * dx + dy * dy + dz * dz;
         if (distSq < meteoriteCollisionDistSq) {
           result.meteoriteCollision = true;
+          result.meteoriteHit = met;
           break;
         }
       }

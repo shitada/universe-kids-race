@@ -817,6 +817,14 @@ export class StageScene implements Scene {
 
     // Meteorite hit
     if (collisionResult.meteoriteCollision) {
+      // Mark the hit meteorite consumed so subsequent frames early-continue
+      // in CollisionSystem.check() and cannot register a duplicate hit (e.g.
+      // after SLOWDOWN invincibility ends but the meteorite is still within
+      // collision range). cleanupPassedObjects() will recycle it once it
+      // scrolls past behindThreshold.
+      if (collisionResult.meteoriteHit) {
+        collisionResult.meteoriteHit.isActive = false;
+      }
       this.spaceship.onMeteoriteHit();
       this.boostSystem.cancel();
       this.damageTimer = StageScene.DAMAGE_FLASH_DURATION;
