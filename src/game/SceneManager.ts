@@ -9,6 +9,9 @@ export class SceneManager {
   private sceneLoadPromises = new Map<SceneType, Promise<Scene>>();
   private currentScene: Scene | null = null;
   private currentType: SceneType | null = null;
+  private transitionRequestId = 0;
+  private activeLoadStateRequestId: number | null = null;
+  private activeLoadStateSceneType: SceneType | null = null;
   private onTransitionRequest:
     | ((sceneType: SceneType, context?: SceneContext) => void | Promise<void>)
     | null = null;
@@ -53,7 +56,8 @@ export class SceneManager {
       return this.inFlightTransition.promise;
     }
 
-    const promise = this.performTransition(sceneType, context);
+    const requestId = ++this.transitionRequestId;
+    const promise = this.performTransition(sceneType, context, requestId);
     this.inFlightTransition = { sceneType, promise };
     return promise.finally(() => {
       if (this.inFlightTransition?.promise === promise) {
@@ -91,18 +95,56 @@ export class SceneManager {
     return scenePromise;
   }
 
-  private performTransition(sceneType: SceneType, context: SceneContext): Promise<void> {
+  private isLatestTransitionRequest(requestId: number): boolean {
+    return this.transitionRequestId === requestId;
+  }
+
+  private setActiveLoadState(requestId: number, sceneType: SceneType): void {
+    this.activeLoadStateRequestId = requestId;
+    this.activeLoadStateSceneType = sceneType;
+    this.onLoadStateChange?.(true, sceneType);
+  }
+
+  private clearActiveLoadState(requestId: number): void {
+    if (this.activeLoadStateRequestId !== requestId || !this.activeLoadStateSceneType) {
+      return;
+    }
+
+    const sceneType = this.activeLoadStateSceneType;
+    this.activeLoadStateRequestId = null;
+    this.activeLoadStateSceneType = null;
+    this.onLoadStateChange?.(false, sceneType);
+  }
+
+  private clearSupersededLoadState(nextRequestId: number): void {
+    if (
+      this.activeLoadStateRequestId === null ||
+      this.activeLoadStateRequestId >= nextRequestId ||
+      !this.activeLoadStateSceneType
+    ) {
+      return;
+    }
+
+    const sceneType = this.activeLoadStateSceneType;
+    this.activeLoadStateRequestId = null;
+    this.activeLoadStateSceneType = null;
+    this.onLoadStateChange?.(false, sceneType);
+  }
+
+  private performTransition(sceneType: SceneType, context: SceneContext, requestId: number): Promise<void> {
     const isLazyLoadNeeded =
       !this.scenes.has(sceneType) &&
       (this.sceneLoadPromises.has(sceneType) || this.sceneFactories.has(sceneType));
 
     if (isLazyLoadNeeded) {
-      this.onLoadStateChange?.(true, sceneType);
+      this.setActiveLoadState(requestId, sceneType);
+    } else {
+      this.clearSupersededLoadState(requestId);
     }
 
     return this.resolveScene(sceneType)
       .then((nextScene) => {
-        if (!nextScene) return;
+        if (!nextScene || !this.isLatestTransitionRequest(requestId)) return;
 
         if (this.currentScene) {
           this.currentScene.exit();
@@ -113,8 +155,8 @@ export class SceneManager {
         this.currentScene.enter(context);
       })
       .finally(() => {
-        if (isLazyLoadNeeded) {
-          this.onLoadStateChange?.(false, sceneType);
+        if (isLazyLoadNeeded && this.isLatestTransitionRequest(requestId)) {
+          this.clearActiveLoadState(requestId);
         }
       });
   }

@@ -15,6 +15,15 @@ function createMockScene(): Scene {
   };
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolver) => {
+    resolve = resolver;
+  });
+
+  return { promise, resolve };
+}
+
 describe('SceneManager', () => {
   it('registers and transitions to a scene', async () => {
     const manager = new SceneManager();
@@ -153,5 +162,84 @@ describe('SceneManager', () => {
     expect(factory).toHaveBeenCalledTimes(1);
     expect(loadStateHandler).not.toHaveBeenCalled();
     expect(stageScene.enter).toHaveBeenCalledWith({ stageNumber: 1 });
+  });
+
+  it('keeps the latest title transition when an older lazy ending resolves later', async () => {
+    const manager = new SceneManager();
+    const titleScene = createMockScene();
+    const endingScene = createMockScene();
+    const endingDeferred = createDeferred<Scene>();
+    const loadStateHandler = vi.fn();
+
+    manager.registerScene('title', titleScene);
+    manager.registerSceneFactory('ending', () => endingDeferred.promise);
+    manager.setLoadStateHandler(loadStateHandler);
+
+    await manager.transitionTo('title');
+
+    const endingTransition = manager.transitionTo('ending', { totalScore: 1500, totalStarCount: 10 });
+    await manager.transitionTo('title');
+
+    expect(manager.getCurrentType()).toBe('title');
+    expect(titleScene.exit).toHaveBeenCalledTimes(1);
+    expect(titleScene.enter).toHaveBeenCalledTimes(2);
+    expect(loadStateHandler.mock.calls).toEqual([
+      [true, 'ending'],
+      [false, 'ending'],
+    ]);
+
+    endingDeferred.resolve(endingScene);
+    await endingTransition;
+
+    expect(manager.getCurrentType()).toBe('title');
+    expect(endingScene.enter).not.toHaveBeenCalled();
+    expect(titleScene.exit).toHaveBeenCalledTimes(1);
+    expect(loadStateHandler).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignores stale lazy transitions for scene changes and loading state cleanup', async () => {
+    const manager = new SceneManager();
+    const titleScene = createMockScene();
+    const stageScene = createMockScene();
+    const endingScene = createMockScene();
+    const endingDeferred = createDeferred<Scene>();
+    const stageDeferred = createDeferred<Scene>();
+    const loadStateHandler = vi.fn();
+
+    manager.registerScene('title', titleScene);
+    manager.registerSceneFactory('ending', () => endingDeferred.promise);
+    manager.registerSceneFactory('stage', () => stageDeferred.promise);
+    manager.setLoadStateHandler(loadStateHandler);
+
+    await manager.transitionTo('title');
+
+    const staleEndingTransition = manager.transitionTo('ending', { totalScore: 1500, totalStarCount: 10 });
+    const latestStageTransition = manager.transitionTo('stage', { stageNumber: 1 });
+
+    expect(loadStateHandler.mock.calls).toEqual([
+      [true, 'ending'],
+      [true, 'stage'],
+    ]);
+
+    endingDeferred.resolve(endingScene);
+    await staleEndingTransition;
+
+    expect(manager.getCurrentType()).toBe('title');
+    expect(titleScene.exit).not.toHaveBeenCalled();
+    expect(endingScene.enter).not.toHaveBeenCalled();
+    expect(loadStateHandler).toHaveBeenCalledTimes(2);
+
+    stageDeferred.resolve(stageScene);
+    await latestStageTransition;
+
+    expect(manager.getCurrentType()).toBe('stage');
+    expect(titleScene.exit).toHaveBeenCalledTimes(1);
+    expect(stageScene.enter).toHaveBeenCalledWith({ stageNumber: 1 });
+    expect(endingScene.enter).not.toHaveBeenCalled();
+    expect(loadStateHandler.mock.calls).toEqual([
+      [true, 'ending'],
+      [true, 'stage'],
+      [false, 'stage'],
+    ]);
   });
 });
