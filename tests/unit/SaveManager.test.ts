@@ -554,4 +554,95 @@ describe('SaveManager', () => {
       expect(data.bestStageStars).toEqual({ 2: 6 });
     });
   });
+
+  describe('lastStablePixelTier persistence', () => {
+    it('returns undefined when field is missing (legacy save)', () => {
+      storage.set(
+        'universe-kids-race-save',
+        JSON.stringify({ clearedStage: 3, unlockedPlanets: [1, 2] }),
+      );
+      const manager = new SaveManager();
+      expect(manager.load().lastStablePixelTier).toBeUndefined();
+    });
+
+    it('round-trips a valid tier through save/load', () => {
+      const manager = new SaveManager();
+      manager.save({ clearedStage: 1, unlockedPlanets: [], lastStablePixelTier: 1 });
+      expect(manager.load().lastStablePixelTier).toBe(1);
+    });
+
+    it('drops negative tier values', () => {
+      storage.set(
+        'universe-kids-race-save',
+        JSON.stringify({ clearedStage: 0, unlockedPlanets: [], lastStablePixelTier: -1 }),
+      );
+      const manager = new SaveManager();
+      expect(manager.load().lastStablePixelTier).toBeUndefined();
+    });
+
+    it('drops non-integer tier values', () => {
+      storage.set(
+        'universe-kids-race-save',
+        JSON.stringify({ clearedStage: 0, unlockedPlanets: [], lastStablePixelTier: 1.5 }),
+      );
+      const manager = new SaveManager();
+      expect(manager.load().lastStablePixelTier).toBeUndefined();
+    });
+
+    it('drops non-numeric tier values without throwing', () => {
+      storage.set(
+        'universe-kids-race-save',
+        JSON.stringify({ clearedStage: 0, unlockedPlanets: [], lastStablePixelTier: 'low' }),
+      );
+      const manager = new SaveManager();
+      expect(() => manager.load()).not.toThrow();
+      expect(manager.load().lastStablePixelTier).toBeUndefined();
+    });
+
+    it('saveLastStablePixelTier persists the value alongside existing data', () => {
+      const manager = new SaveManager();
+      manager.save({ clearedStage: 4, unlockedPlanets: [1, 2, 3], muted: true });
+      manager.saveLastStablePixelTier(0);
+      const data = manager.load();
+      expect(data.lastStablePixelTier).toBe(0);
+      expect(data.clearedStage).toBe(4);
+      expect(data.unlockedPlanets).toEqual([1, 2, 3]);
+      expect(data.muted).toBe(true);
+    });
+
+    it('saveLastStablePixelTier ignores negative or non-integer values', () => {
+      const manager = new SaveManager();
+      manager.save({ clearedStage: 0, unlockedPlanets: [] });
+      manager.saveLastStablePixelTier(-1);
+      manager.saveLastStablePixelTier(1.5);
+      manager.saveLastStablePixelTier(Number.NaN);
+      expect(manager.load().lastStablePixelTier).toBeUndefined();
+    });
+
+    it('resetSessionDataPreservingMuted preserves lastStablePixelTier as a perf hint', () => {
+      const manager = new SaveManager();
+      manager.save({
+        clearedStage: 5,
+        unlockedPlanets: [1, 2, 3],
+        muted: true,
+        lastStablePixelTier: 1,
+      });
+      manager.resetSessionDataPreservingMuted();
+      const data = manager.load();
+      expect(data.clearedStage).toBe(0);
+      expect(data.unlockedPlanets).toEqual([]);
+      expect(data.muted).toBe(true);
+      expect(data.lastStablePixelTier).toBe(1);
+    });
+
+    it('does not throw when localStorage.setItem fails', () => {
+      const manager = new SaveManager();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+        throw new Error('QuotaExceededError');
+      });
+      expect(() => manager.saveLastStablePixelTier(0)).not.toThrow();
+      warnSpy.mockRestore();
+    });
+  });
 });

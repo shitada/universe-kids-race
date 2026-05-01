@@ -205,4 +205,66 @@ describe('AdaptivePixelRatioController', () => {
     expect(onTierChange).toHaveBeenCalledTimes(2);
     expect(onTierChange).toHaveBeenLastCalledWith(1);
   });
+
+  describe('initialTier option', () => {
+    it('starts at the supplied initialTier when within range', () => {
+      const onTierChange = vi.fn();
+      const controller = new AdaptivePixelRatioController(2, onTierChange, {}, 1);
+      expect(controller.getCurrentTier()).toBe(1);
+      // Constructor must not fire onTierChange (caller applies the initial
+      // pixel ratio explicitly to avoid a redundant setSize on boot).
+      expect(onTierChange).not.toHaveBeenCalled();
+    });
+
+    it('clamps initialTier above maxTier down to maxTier', () => {
+      const controller = new AdaptivePixelRatioController(2, vi.fn(), {}, 99);
+      expect(controller.getCurrentTier()).toBe(2);
+    });
+
+    it('clamps negative initialTier up to 0', () => {
+      const controller = new AdaptivePixelRatioController(2, vi.fn(), {}, -5);
+      expect(controller.getCurrentTier()).toBe(0);
+    });
+
+    it('floors fractional initialTier', () => {
+      const controller = new AdaptivePixelRatioController(2, vi.fn(), {}, 1.9);
+      expect(controller.getCurrentTier()).toBe(1);
+    });
+
+    it('falls back to maxTier when initialTier is undefined', () => {
+      const controller = new AdaptivePixelRatioController(2, vi.fn(), {}, undefined);
+      expect(controller.getCurrentTier()).toBe(2);
+    });
+
+    it('downscales from initialTier rather than maxTier', () => {
+      const onTierChange = vi.fn();
+      const controller = new AdaptivePixelRatioController(2, onTierChange, {}, 1);
+      let now = 10_000;
+      controller.sample(20, now);
+      now += T.downscaleSustainMs;
+      controller.sample(20, now);
+      expect(controller.getCurrentTier()).toBe(0);
+      expect(onTierChange).toHaveBeenCalledTimes(1);
+      expect(onTierChange).toHaveBeenLastCalledWith(0);
+    });
+
+    it('upscales from initialTier toward maxTier', () => {
+      const onTierChange = vi.fn();
+      const controller = new AdaptivePixelRatioController(2, onTierChange, {}, 0);
+      let now = 10_000;
+      controller.sample(60, now);
+      now += T.upscaleSustainMs;
+      controller.sample(60, now);
+      expect(controller.getCurrentTier()).toBe(1);
+      expect(onTierChange).toHaveBeenCalledTimes(1);
+      expect(onTierChange).toHaveBeenLastCalledWith(1);
+    });
+
+    it('reset returns to maxTier (not initialTier) preserving existing recovery semantics', () => {
+      const controller = new AdaptivePixelRatioController(2, vi.fn(), {}, 0);
+      expect(controller.getCurrentTier()).toBe(0);
+      controller.reset();
+      expect(controller.getCurrentTier()).toBe(2);
+    });
+  });
 });

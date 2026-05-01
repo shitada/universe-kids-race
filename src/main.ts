@@ -71,7 +71,49 @@ function applyPixelRatioTier(tier: number): void {
 }
 
 applyPixelRatioTier(MAX_TIER);
-const pixelRatioController = new AdaptivePixelRatioController(MAX_TIER, applyPixelRatioTier);
+
+const saveManager = new SaveManager();
+
+// Session management: detect Safari swipe termination. Run before reading the
+// persisted pixel-ratio tier so a stale value is not preserved into a fresh
+// session — though resetSessionDataPreservingMuted does intentionally keep
+// the tier as a performance hint, not progress data.
+if (saveManager.isFreshSession()) {
+  saveManager.resetSessionDataPreservingMuted();
+}
+
+// Restore previous session's stable adaptive pixel-ratio tier (if any) so
+// slower iPads do not need to re-discover the downscale on every launch
+// (Constitution IV: 60fps on iPad Safari).
+const savedTierRaw = saveManager.load().lastStablePixelTier;
+const initialPixelTier =
+  typeof savedTierRaw === 'number'
+    ? Math.max(0, Math.min(MAX_TIER, Math.floor(savedTierRaw)))
+    : MAX_TIER;
+
+// Track the last-applied tier so onTierChange can persist only on downscale.
+// Held in a closure-friendly mutable object so the controller's onTierChange
+// callback (declared in the same scope as the controller itself) can mutate it.
+const lastAppliedTier = { value: initialPixelTier };
+
+const pixelRatioController = new AdaptivePixelRatioController(
+  MAX_TIER,
+  (newTier: number) => {
+    applyPixelRatioTier(newTier);
+    // Persist downscales immediately so the next launch starts at the lower
+    // tier. Upscales are not persisted: the existing upscale heuristic will
+    // rediscover them naturally on the next session if conditions allow.
+    if (newTier < lastAppliedTier.value) {
+      saveManager.saveLastStablePixelTier(newTier);
+    }
+    lastAppliedTier.value = newTier;
+  },
+  {},
+  initialPixelTier,
+);
+if (initialPixelTier !== MAX_TIER) {
+  applyPixelRatioTier(initialPixelTier);
+}
 const initialViewport = getViewportSize();
 renderer.setSize(initialViewport.width, initialViewport.height);
 lastAppliedWidth = initialViewport.width;
@@ -81,13 +123,7 @@ renderer.setClearColor(0x000020);
 inputSystem.setup(canvas);
 
 const gameLoop = new GameLoop();
-const saveManager = new SaveManager();
 const audioManager = new AudioManager();
-
-// Session management: detect Safari swipe termination
-if (saveManager.isFreshSession()) {
-  saveManager.resetSessionDataPreservingMuted();
-}
 
 // Restore persisted mute state before any audio is initialised so the very
 // first BGM/SFX honours it without an audible blip.
@@ -206,6 +242,7 @@ createWebGLContextLossHandler(canvas, {
     contextLossOverlay.hide();
     pixelRatioController.reset();
     applyPixelRatioTier(MAX_TIER);
+    lastAppliedTier.value = MAX_TIER;
     handleVisibilityRestore();
   },
 });

@@ -38,11 +38,21 @@ export class AdaptivePixelRatioController {
     maxTier: number,
     onTierChange: (newTier: number) => void,
     thresholds: Partial<AdaptivePixelRatioThresholds> = {},
+    initialTier?: number,
   ) {
     this.maxTier = maxTier;
     this.onTierChange = onTierChange;
     this.thresholds = { ...DEFAULT_ADAPTIVE_PIXEL_RATIO_THRESHOLDS, ...thresholds };
-    this.currentTier = maxTier;
+    // Optional initialTier lets callers seed from persisted state (e.g.
+    // SaveManager.lastStablePixelTier) so slower iPads do not always start at
+    // MAX_TIER and incur an initial-frame downscale hitch (Constitution IV).
+    // onTierChange is intentionally NOT fired here: the caller is expected to
+    // apply the initial pixel ratio explicitly to avoid a redundant setSize.
+    if (typeof initialTier === 'number' && Number.isFinite(initialTier)) {
+      this.currentTier = Math.max(0, Math.min(maxTier, Math.floor(initialTier)));
+    } else {
+      this.currentTier = maxTier;
+    }
   }
 
   sample(fps: number, now: number): void {
