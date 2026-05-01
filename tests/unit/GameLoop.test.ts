@@ -237,6 +237,30 @@ describe('GameLoop', () => {
     expect(rafCallback).toBeNull();
   });
 
+  it('isPaused() reflects pause/resume/stop transitions', () => {
+    const loop = new GameLoop();
+    expect(loop.isPaused()).toBe(false);
+
+    loop.start(() => {}, () => {});
+    expect(loop.isPaused()).toBe(false);
+    expect(loop.isRunning()).toBe(true);
+
+    loop.pause();
+    expect(loop.isPaused()).toBe(true);
+    expect(loop.isRunning()).toBe(false);
+
+    loop.resume();
+    expect(loop.isPaused()).toBe(false);
+    expect(loop.isRunning()).toBe(true);
+
+    loop.pause();
+    expect(loop.isPaused()).toBe(true);
+
+    loop.stop();
+    expect(loop.isPaused()).toBe(false);
+    expect(loop.isRunning()).toBe(false);
+  });
+
   it('caps updateCallback deltaTime at 100ms but feeds raw deltaTime to the FPS monitor', () => {
     const loop = new GameLoop();
     const deltas: number[] = [];

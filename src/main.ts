@@ -12,10 +12,11 @@ import { TOTAL_STAGES } from './game/config/StageConfig';
 import { createResizeCoalescer } from './game/utils/ResizeCoalescer';
 import { createSceneTransitionHandler } from './game/utils/createSceneTransitionHandler';
 import { createWebGLContextLossHandler } from './game/utils/createWebGLContextLossHandler';
-import { createWebGLContextRestoredHandler } from './game/utils/createWebGLContextRestoredHandler';
+import { createVisibilityPauseHandler } from './game/utils/createVisibilityPauseHandler';
 import { createRenderer } from './game/utils/createRenderer';
 import { getViewportSize, subscribeViewportResize } from './game/utils/getViewportSize';
 import { ContextLossOverlay } from './ui/ContextLossOverlay';
+import { ResumeOverlay } from './ui/ResumeOverlay';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 
@@ -144,55 +145,47 @@ function scheduleResize(): void {
 }
 subscribeViewportResize(window, scheduleResize);
 
-// Resume from any background state (visibilitychange, bfcache pageshow,
-// window.focus). All operations are idempotent so duplicate dispatches are
-// safe. iPad Safari does not always fire `visibilitychange` on bfcache
-// restore or URL bar / share sheet exits, so we listen on multiple events.
-//
-// During stage gameplay we also display a "3 → 2 → 1 → スタート！" countdown
-// before re-enabling input/spawn/forward motion. Constitution I (子供ファー
-// スト): 画面から目を離していた子どもが復帰直後に隕石へ即衝突するのを防ぐ。
-// Title / ending / mid-clear-transition stay on the immediate-resume path so
-// menus do not become unresponsive.
-function resumeFromBackground(): void {
+// Resume the game loop / audio. Idempotent: safe to call from multiple
+// visibility-restore signals (visibilitychange, bfcache pageshow, focus).
+function resumeGame(): void {
   gameLoop.resume();
   audioManager.ensureResumed();
+}
+
+// Re-sync viewport / pixel ratio after returning from background. Cosmetic
+// only; runs immediately on every restore signal regardless of scene because
+// it does not affect gameplay state.
+function refreshViewportAfterRestore(): void {
   pixelRatioController.notifyResume(performance.now());
-  // Re-sync size in case viewport changed while in background.
   const { width, height } = getViewportSize();
   resizeCoalescer.schedule(width, height);
   resizeCoalescer.flush();
-  // StageScene.requestResumeCountdown() itself guards against being fired
-  // during the start countdown / clear transition / non-stage scenes, so we
-  // only need a coarse "is the stage scene active?" check here.
-  if (sceneManager.getCurrentType() === 'stage') {
-    stageScene.requestResumeCountdown();
+}
+
+// Tap-to-resume overlay (Constitution I: 子供が戻ってきたとき隕石にぶつかる
+// 前にタップで再開できる)。Stage シーン以外では即時自動再開する。
+const resumeOverlay = new ResumeOverlay();
+
+function handleVisibilityRestore(): void {
+  refreshViewportAfterRestore();
+  if (sceneManager.getCurrentType() === 'stage' && gameLoop.isPaused()) {
+    resumeOverlay.show(() => {
+      resumeGame();
+    });
+  } else {
+    resumeOverlay.hide();
+    resumeGame();
   }
 }
 
-// Auto-pause on background (T053 early integration)
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
+// Auto-pause on visibilitychange / pagehide / blur, auto-resume (or show
+// overlay) on visibilitychange / bfcache pageshow / focus.
+createVisibilityPauseHandler({
+  onHide: () => {
     gameLoop.pause();
     audioManager.suspend();
-  } else {
-    resumeFromBackground();
-  }
-});
-
-// bfcache restore on iPad Safari (Back/Forward cache, tab restore). In this
-// path `visibilitychange` is not fired but `pageshow` arrives with
-// event.persisted === true.
-window.addEventListener('pageshow', (event: PageTransitionEvent) => {
-  if (event.persisted) {
-    resumeFromBackground();
-  }
-});
-
-// URL bar editing / share sheet on iPad Safari can stop rAF without firing
-// `visibilitychange`; only `focus` fires when the user returns.
-window.addEventListener('focus', () => {
-  resumeFromBackground();
+  },
+  onShow: handleVisibilityRestore,
 });
 
 // WebGL context loss recovery (iPad Safari background/memory pressure).
@@ -208,16 +201,10 @@ createWebGLContextLossHandler(canvas, {
       window.location.reload();
     });
   },
-  onRestored: createWebGLContextRestoredHandler({
-    pixelRatioController,
-    applyPixelRatioTier,
-    maxTier: MAX_TIER,
-    getViewportSize,
-    scheduleResize: (w, h) => resizeCoalescer.schedule(w, h),
-    flushResize: () => resizeCoalescer.flush(),
-    gameLoopResume: () => gameLoop.resume(),
-    audioEnsureResumed: () => audioManager.ensureResumed(),
-    hideOverlay: () => contextLossOverlay.hide(),
-    now: () => performance.now(),
-  }),
+  onRestored: () => {
+    contextLossOverlay.hide();
+    pixelRatioController.reset();
+    applyPixelRatioTier(MAX_TIER);
+    handleVisibilityRestore();
+  },
 });
