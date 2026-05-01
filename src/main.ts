@@ -15,6 +15,7 @@ import { createWebGLContextLossHandler } from './game/utils/createWebGLContextLo
 import { createVisibilityPauseHandler } from './game/utils/createVisibilityPauseHandler';
 import { createRenderer } from './game/utils/createRenderer';
 import { getViewportSize, subscribeViewportResize } from './game/utils/getViewportSize';
+import { resolveInitialPixelTier } from './game/utils/resolveInitialPixelTier';
 import { ContextLossOverlay } from './ui/ContextLossOverlay';
 import { ResumeOverlay } from './ui/ResumeOverlay';
 
@@ -70,8 +71,6 @@ function applyPixelRatioTier(tier: number): void {
   applyRendererSize(w0, h0);
 }
 
-applyPixelRatioTier(MAX_TIER);
-
 const saveManager = new SaveManager();
 
 // Session management: detect Safari swipe termination. Run before reading the
@@ -84,12 +83,16 @@ if (saveManager.isFreshSession()) {
 
 // Restore previous session's stable adaptive pixel-ratio tier (if any) so
 // slower iPads do not need to re-discover the downscale on every launch
-// (Constitution IV: 60fps on iPad Safari).
-const savedTierRaw = saveManager.load().lastStablePixelTier;
-const initialPixelTier =
-  typeof savedTierRaw === 'number'
-    ? Math.max(0, Math.min(MAX_TIER, Math.floor(savedTierRaw)))
-    : MAX_TIER;
+// (Constitution IV: 60fps on iPad Safari). Resolved before the first
+// applyPixelRatioTier() call so we configure the renderer's framebuffer
+// exactly once at cold start instead of allocating at MAX_TIER and then
+// immediately reallocating at the persisted lower tier (PR #130 follow-up).
+const initialPixelTier = resolveInitialPixelTier(
+  saveManager.load().lastStablePixelTier,
+  MAX_TIER,
+);
+
+applyPixelRatioTier(initialPixelTier);
 
 // Track the last-applied tier so onTierChange can persist only on downscale.
 // Held in a closure-friendly mutable object so the controller's onTierChange
@@ -111,13 +114,6 @@ const pixelRatioController = new AdaptivePixelRatioController(
   {},
   initialPixelTier,
 );
-if (initialPixelTier !== MAX_TIER) {
-  applyPixelRatioTier(initialPixelTier);
-}
-const initialViewport = getViewportSize();
-renderer.setSize(initialViewport.width, initialViewport.height);
-lastAppliedWidth = initialViewport.width;
-lastAppliedHeight = initialViewport.height;
 renderer.setClearColor(0x000020);
 
 inputSystem.setup(canvas);
