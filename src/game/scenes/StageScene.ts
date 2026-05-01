@@ -1011,8 +1011,15 @@ export class StageScene implements Scene {
     this.audioManager.stopBoostSFX();
     this.boostFlameEffect.remove();
 
+    // Capture previous best BEFORE updating, so we can show "じこベスト
+    // こうしん" feedback only when the child actually improved.
+    const earnedStars = this.scoreSystem.getStarCount();
+    const previousBest = this.saveManager.load().bestStageStars?.[this.stageNumber] ?? 0;
+
     // Persist best (highest) star count for this stage.
-    this.saveManager.updateBestStageStars(this.stageNumber, this.scoreSystem.getStarCount());
+    this.saveManager.updateBestStageStars(this.stageNumber, earnedStars);
+
+    const isBestUpdated = earnedStars > previousBest;
 
     // Add companion if this is a new planet unlock
     const saveData = this.saveManager.load();
@@ -1020,10 +1027,14 @@ export class StageScene implements Scene {
       this.companionManager?.addCompanion(this.stageNumber);
     }
 
-    this.showClearMessage();
+    this.showClearMessage(isBestUpdated, earnedStars);
+
+    if (isBestUpdated) {
+      this.audioManager.playSFX('rainbowCollect');
+    }
   }
 
-  private showClearMessage(): void {
+  private showClearMessage(isBestUpdated = false, _earnedStars?: number): void {
     const uiOverlay = document.getElementById('ui-overlay');
     if (!uiOverlay) return;
 
@@ -1049,8 +1060,10 @@ export class StageScene implements Scene {
       margin-bottom: 1rem;
     `;
 
+    const starCount = _earnedStars ?? this.scoreSystem.getStarCount();
+
     const score = document.createElement('div');
-    score.textContent = `⭐ ${this.scoreSystem.getStarCount()} こ あつめたよ！`;
+    score.textContent = `⭐ ${starCount} こ あつめたよ！`;
     score.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
       font-size: 1.5rem;
@@ -1059,6 +1072,22 @@ export class StageScene implements Scene {
     `;
 
     this.clearOverlay.appendChild(msg);
+
+    if (isBestUpdated) {
+      const bestMsg = document.createElement('div');
+      bestMsg.textContent = `✨ じこベストこうしん！ ⭐ ${starCount} こ`;
+      bestMsg.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #FFD700;
+        margin-bottom: 0.6rem;
+        text-shadow: 0 0 12px rgba(255, 215, 0, 0.6);
+        animation: bestStageStarsPop 0.6s ease-out;
+      `;
+      this.clearOverlay.appendChild(bestMsg);
+    }
+
     this.clearOverlay.appendChild(score);
 
     // Card acquisition notification for newly unlocked planets
