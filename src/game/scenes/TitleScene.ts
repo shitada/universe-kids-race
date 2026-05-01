@@ -138,6 +138,23 @@ export class TitleScene implements Scene {
     } else {
       this.bgmPending = true;
     }
+
+    // First-run onboarding: auto-show the tutorial overlay on the very first
+    // TitleScene entry (Constitution I). The TutorialOverlay is modal
+    // (z-index: 30, full-viewport) so it visually overlays the title controls
+    // until the child taps "とじる". Closing flips the persisted flag so this
+    // runs at most once per save data lifetime; the manual "あそびかた" button
+    // remains available for later replays. Registration order matters: the
+    // overlay's pointerdown for AudioContext init ({once: true}) is attached
+    // by createOverlay() above, so the close-tap on the tutorial does not
+    // consume it (the tutorial overlay is a separate DOM subtree).
+    const saveData = this.saveManager.load();
+    if (!saveData.tutorialShown) {
+      this.tutorialOverlay.show(() => {
+        this.tutorialOverlay.hide();
+        this.saveManager.markTutorialShown();
+      });
+    }
   }
 
   private createMuteButton(): void {

@@ -3,10 +3,10 @@ import { TOTAL_STAGES } from '../config/StageConfig';
 
 const STORAGE_KEY = 'universe-kids-race-save';
 const SESSION_KEY = 'universe-kids-race-session';
-const DEFAULT_DATA: SaveData = { clearedStage: 0, unlockedPlanets: [], muted: false, bestStageStars: {} };
+const DEFAULT_DATA: SaveData = { clearedStage: 0, unlockedPlanets: [], muted: false, bestStageStars: {}, tutorialShown: false };
 
 function defaults(): SaveData {
-  return { ...DEFAULT_DATA, unlockedPlanets: [], bestStageStars: {} };
+  return { ...DEFAULT_DATA, unlockedPlanets: [], bestStageStars: {}, tutorialShown: false };
 }
 
 // Returns a deep copy of SaveData. Uses structuredClone when available
@@ -51,6 +51,11 @@ export class SaveManager {
 
       // Validate muted (default false; backward compatible with saves missing the field)
       data.muted = data.muted === true;
+
+      // Validate tutorialShown (default false; backward compatible with saves
+      // predating the first-run onboarding feature). Any non-boolean value is
+      // normalized to false so legacy users see the tutorial once.
+      data.tutorialShown = data.tutorialShown === true;
 
       // Validate bestStageStars (backward compatible; missing or malformed → {})
       const rawBest = (data as { bestStageStars?: unknown }).bestStageStars;
@@ -170,6 +175,22 @@ export class SaveManager {
       }
     } catch (e) {
       console.warn('SaveManager.updateBestStageStars failed:', e);
+    }
+  }
+
+  // Marks the first-run tutorial overlay as shown so subsequent TitleScene
+  // entries don't auto-display it. Idempotent: calling it after the flag is
+  // already true short-circuits to avoid an unnecessary localStorage write.
+  markTutorialShown(): void {
+    try {
+      const data = this.load();
+      if (data.tutorialShown === true) {
+        return;
+      }
+      data.tutorialShown = true;
+      this.save(data);
+    } catch (e) {
+      console.warn('SaveManager.markTutorialShown failed:', e);
     }
   }
 

@@ -63,6 +63,10 @@ export interface SaveData {
   // Persisted so the next launch can start at the same tier and avoid the
   // initial-frame downscale hitch on slower iPads (Constitution IV).
   lastStablePixelTier?: number;
+  // Set to true after the player has dismissed the first-run tutorial overlay
+  // on the title screen. When false / missing, TitleScene auto-shows the
+  // TutorialOverlay once on entry to introduce controls to new players.
+  tutorialShown?: boolean;
 }
 
 // Planet encyclopedia
