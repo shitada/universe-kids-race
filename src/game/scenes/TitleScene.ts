@@ -173,6 +173,7 @@ export class TitleScene implements Scene {
     const saveData = this.saveManager.load();
     if (!saveData.tutorialShown) {
       this.tutorialOverlay.show(() => {
+        this.ensureTitleAudioInitialized(true);
         this.tutorialOverlay.hide();
         this.saveManager.markTutorialShown();
       });
@@ -186,6 +187,7 @@ export class TitleScene implements Scene {
       initialMuted: this.audioManager.isMuted(),
       container,
       onToggle: () => {
+        this.ensureTitleAudioInitialized(true);
         const newMuted = this.audioManager.toggleMute();
         this.muteHandle?.setMuted(newMuted);
         const data = this.saveManager.load();
@@ -223,7 +225,7 @@ export class TitleScene implements Scene {
       saveData.unlockedPlanets,
       () => this.refreshEncyclopediaButtonLabel(),
       (stageNumber) => {
-        this.audioManager.initSync();
+        this.ensureTitleAudioInitialized(false);
         this.sceneManager.requestTransition('stage', {
           stageNumber,
           totalScore: 0,
@@ -304,7 +306,7 @@ export class TitleScene implements Scene {
       // ここで playBGM(0) は呼ばない。直後の StageScene.enter() が
       // playBGM(stageNumber) を呼び、内部の stopBGM() でタイトル BGM を即停止
       // するため、タイトル BGM は実質的に再生されない無駄な処理になっていた。
-      this.audioManager.initSync();
+      this.ensureTitleAudioInitialized(false);
       const saveData = this.saveManager.load();
       const startStage = Math.min(saveData.clearedStage + 1, TOTAL_STAGES);
       this.sceneManager.requestTransition('stage', { stageNumber: startStage });
@@ -330,7 +332,9 @@ export class TitleScene implements Scene {
     `;
     tutorialBtn.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
+      this.ensureTitleAudioInitialized(true);
       this.tutorialOverlay.show(() => {
+        this.ensureTitleAudioInitialized(true);
         this.tutorialOverlay.hide();
       });
     });
@@ -361,6 +365,7 @@ export class TitleScene implements Scene {
     this.encyclopediaBtn = encyclopediaBtn;
     encyclopediaBtn.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
+      this.ensureTitleAudioInitialized(true);
       void this.openEncyclopedia();
     });
 
@@ -375,12 +380,20 @@ export class TitleScene implements Scene {
     // できない（user gesture 必須）。ここで initSync() 直後に bgmPending を
     // 確認し、まだ再生されていなければ BGM_0 を開始する。
     this.overlay.addEventListener('pointerdown', () => {
-      this.audioManager.initSync();
-      if (this.bgmPending) {
-        this.audioManager.playBGM(0);
-        this.bgmPending = false;
-      }
+      this.ensureTitleAudioInitialized(true);
     }, { once: true });
+  }
+
+  private ensureTitleAudioInitialized(playTitleBgm: boolean): void {
+    if (!this.bgmPending && this.audioManager.isInitialized()) {
+      return;
+    }
+
+    this.audioManager.initSync();
+    if (playTitleBgm && this.bgmPending) {
+      this.audioManager.playBGM(0);
+    }
+    this.bgmPending = false;
   }
 
   private refreshEncyclopediaButtonLabel(): void {
