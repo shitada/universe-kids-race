@@ -159,7 +159,7 @@ describe('BoostFlameEffect', () => {
     fx.dispose();
   });
 
-  it('remove() hides Points and resets emission state immediately', () => {
+  it('remove() hides Points, stops emission, and zeroes drawRange immediately (observable invariants only)', () => {
     const scene = new THREE.Scene();
     const fx = new BoostFlameEffect();
     fx.init(scene);
@@ -168,13 +168,82 @@ describe('BoostFlameEffect', () => {
     expect(fx.getObject()!.visible).toBe(true);
 
     fx.remove();
-    expect(fx.getObject()!.visible).toBe(false);
+    const obj = fx.getObject()!;
+    expect(obj.visible).toBe(false);
     expect(fx.isEmitting()).toBe(false);
+    expect(fx.getMaxAliveIndex()).toBe(-1);
+    const geom = obj.geometry as THREE.BufferGeometry;
+    expect(geom.drawRange.start).toBe(0);
+    expect(geom.drawRange.count).toBe(0);
+    fx.dispose();
+  });
 
-    const arr = (fx.getObject()!.geometry as THREE.BufferGeometry).getAttribute('position').array as Float32Array;
-    for (let i = 0; i < BoostFlameEffect.MAX_PARTICLES; i++) {
-      expect(arr[i * 3 + 2]).toBe(99999);
+  it('remove() does NOT scan/wipe MAX_PARTICLES TypedArrays (stale slot data is left in place)', () => {
+    const scene = new THREE.Scene();
+    const fx = new BoostFlameEffect();
+    fx.init(scene);
+    fx.start();
+    fx.emit({ x: 1, y: 2, z: 3 }, 0); // dirty slots 0..7
+
+    const obj = fx.getObject()!;
+    const positions = (obj.geometry as THREE.BufferGeometry).getAttribute('position').array as Float32Array;
+    const colors = (obj.geometry as THREE.BufferGeometry).getAttribute('color').array as Float32Array;
+    const beforePositions = new Float32Array(positions);
+    const beforeColors = new Float32Array(colors);
+
+    fx.remove();
+
+    // remove() must not have modified any TypedArray entry.
+    expect(positions).toEqual(beforePositions);
+    expect(colors).toEqual(beforeColors);
+    fx.dispose();
+  });
+
+  it('remove() does NOT bump positionAttr/colorAttr.version (no GPU upload at boost end)', () => {
+    const scene = new THREE.Scene();
+    const fx = new BoostFlameEffect();
+    fx.init(scene);
+    fx.start();
+    fx.emit(SHIP, 0); // emit legitimately bumps versions
+    const obj = fx.getObject()!;
+    const positionAttr = (obj.geometry as THREE.BufferGeometry).getAttribute('position') as THREE.BufferAttribute;
+    const colorAttr = (obj.geometry as THREE.BufferGeometry).getAttribute('color') as THREE.BufferAttribute;
+    const posVer = positionAttr.version;
+    const colVer = colorAttr.version;
+
+    fx.remove();
+
+    expect(positionAttr.version).toBe(posVer);
+    expect(colorAttr.version).toBe(colVer);
+    fx.dispose();
+  });
+
+  it('start() + emit() after remove() overwrites stale slots; old positions are out of draw range', () => {
+    const scene = new THREE.Scene();
+    const fx = new BoostFlameEffect();
+    fx.init(scene);
+    fx.start();
+    // Three emits => slots 0..23 hold stale "old boost" data (z = 5+2 = 7).
+    fx.emit({ x: 5, y: 5, z: 5 }, 0);
+    fx.emit({ x: 5, y: 5, z: 5 }, 0);
+    fx.emit({ x: 5, y: 5, z: 5 }, 0);
+
+    fx.remove();
+    fx.start();
+
+    const geom = fx.getObject()!.geometry as THREE.BufferGeometry;
+    expect(geom.drawRange.count).toBe(0); // immediately after start, nothing drawn
+
+    fx.emit({ x: -10, y: -10, z: -10 }, 0); // 8 fresh particles at slots 0..7
+    const positions = geom.getAttribute('position').array as Float32Array;
+    // Slots 0..7 must reflect the new emit (z = -10 + 2 = -8), not the old z = 7.
+    for (let i = 0; i < 8; i++) {
+      expect(positions[i * 3 + 2]).toBeCloseTo(-8);
     }
+    // Draw range stops at 8 — stale slots 8..23 are not drawn even if their
+    // data is still around.
+    expect(geom.drawRange.start).toBe(0);
+    expect(geom.drawRange.count).toBe(8);
     fx.dispose();
   });
 
