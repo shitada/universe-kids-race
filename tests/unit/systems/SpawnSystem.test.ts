@@ -22,13 +22,24 @@ describe('SpawnSystem', () => {
   });
 
   it('spawns meteorites after interval elapses', () => {
-    const system = new SpawnSystem();
-    // First call, not enough time
-    let result = system.update(1.0, -10, testConfig);
-    expect(result.newMeteorites).toHaveLength(0);
-    // After 3 seconds total
-    result = system.update(2.1, -30, testConfig);
-    expect(result.newMeteorites.length).toBeGreaterThanOrEqual(1);
+    // Determinise Math.random so the meteorite's safety-margin reroll cannot
+    // exhaust and skip the spawn. With a constant 0.1, stars in call 2 land at
+    // z=-100/-120 and the meteorite at z=-112; |dz| > SAFE_Z_BAND (=3.0) so the
+    // xy check is short-circuited and the meteorite is always emitted. Without
+    // this stub, the test is flaky under full-suite runs because Math.random's
+    // state at entry can produce 4 colliding xy re-rolls in a row.
+    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.1);
+    try {
+      const system = new SpawnSystem();
+      // First call, not enough time
+      let result = system.update(1.0, -10, testConfig);
+      expect(result.newMeteorites).toHaveLength(0);
+      // After 3 seconds total
+      result = system.update(2.1, -30, testConfig);
+      expect(result.newMeteorites.length).toBeGreaterThanOrEqual(1);
+    } finally {
+      randSpy.mockRestore();
+    }
   });
 
   it('stars include roughly 10% rainbow type', () => {
