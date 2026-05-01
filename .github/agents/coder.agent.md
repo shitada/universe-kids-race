@@ -1,6 +1,6 @@
 ---
 description: proposer の提案を受けてコード実装・テスト作成・コミットを行う実装エージェント。
-model: "Claude Opus 4.7 (copilot)"
+model: "gpt-5.4"
 tools: ["read", "search", "edit", "execute"]
 ---
 

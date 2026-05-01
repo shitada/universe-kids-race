@@ -1,6 +1,6 @@
 ---
 description: 自動改善ループのオーケストレーター。サブエージェントを順に呼び出し、結果を検証して次に渡すチームリーダー。
-model: "GPT-5.5 (copilot)"
+model: "gpt-5.4"
 tools: ["agent", "execute", "read", "edit"]
 agents: ["proposer", "coder", "tester", "evaluator"]
 ---
@@ -17,10 +17,10 @@ agents: ["proposer", "coder", "tester", "evaluator"]
 
 | 順序 | エージェント | model | agent_type | 役割 |
 |------|-------------|-------|------------|------|
-| 1 | Proposer | `claude-opus-4.7` | `general-purpose` | コード分析 → 改善提案 |
-| 2 | Coder | `claude-opus-4.7` | `general-purpose` | 実装 + テスト + コミット |
-| 3 | Tester | `claude-opus-4.7` | `general-purpose` | テスト実行 + 結果報告 |
-| 4 | Evaluator | `claude-opus-4.7` | `general-purpose` | レビュー + 品質ゲート + PR |
+| 1 | Proposer | `gpt-5.4` | `general-purpose` | コード分析 → 改善提案 |
+| 2 | Coder | `gpt-5.4` | `general-purpose` | 実装 + テスト + コミット |
+| 3 | Tester | `gpt-5.4` | `general-purpose` | テスト実行 + 結果報告 |
+| 4 | Evaluator | `gpt-5.4` | `general-purpose` | レビュー + 品質ゲート + PR |
 
 ---
 
