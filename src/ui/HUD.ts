@@ -6,6 +6,8 @@ export class HUD {
   private stageNameEl: HTMLDivElement | null = null;
   private scoreEl: HTMLSpanElement | null = null;
   private starCountEl: HTMLSpanElement | null = null;
+  private bestStarContainerEl: HTMLSpanElement | null = null;
+  private bestStarCountEl: HTMLSpanElement | null = null;
   private boostButton: HTMLButtonElement | null = null;
   private homeButton: HTMLButtonElement | null = null;
   private homeConfirmOverlay: HomeConfirmOverlay = new HomeConfirmOverlay();
@@ -38,6 +40,15 @@ export class HUD {
   // redundant textContent writes (which can trigger layout/paint on iPad Safari).
   private lastScore = -1;
   private lastStarCount = -1;
+  // Personal best (⭐) sub-label state. bestStarCount is the value passed via
+  // setBestStarCount() (0 = unset / never cleared, hides the sub-label).
+  // lastBestStarCount caches the last DOM-written value to skip redundant
+  // textContent writes (Constitution IV: 60fps差分書き込み).
+  // bestStarPulsed guards the one-shot pulse so we only flash once when the
+  // child crosses their previous best within a single stage entry.
+  private bestStarCount = 0;
+  private lastBestStarCount = -1;
+  private bestStarPulsed = false;
 
   show(stageName?: string, planetColor?: number): void {
     const hudRoot = document.getElementById('hud');
@@ -141,6 +152,28 @@ export class HUD {
     this.starCountEl = document.createElement('span');
     this.starCountEl.textContent = '0';
     starDiv.appendChild(this.starCountEl);
+
+    // Personal best sub-label: ベスト ⭐N. Hidden until setBestStarCount(>0)
+    // is called (e.g. fresh stage with no previous record). Uses a small,
+    // low-contrast 宇宙テーマ薄青色 so the main star count stays dominant.
+    this.bestStarContainerEl = document.createElement('span');
+    this.bestStarContainerEl.setAttribute('data-hud-best-star', '');
+    this.bestStarContainerEl.style.cssText = `
+      margin-left: 0.6rem;
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: 0.6em;
+      font-weight: 700;
+      color: #9ec5ff;
+      opacity: 0.7;
+      display: none;
+      vertical-align: middle;
+      transform-origin: center;
+    `;
+    this.bestStarContainerEl.textContent = 'ベスト ⭐';
+    this.bestStarCountEl = document.createElement('span');
+    this.bestStarCountEl.textContent = '0';
+    this.bestStarContainerEl.appendChild(this.bestStarCountEl);
+    starDiv.appendChild(this.bestStarContainerEl);
 
     this.container.appendChild(scoreDiv);
     this.container.appendChild(starDiv);
@@ -425,6 +458,43 @@ export class HUD {
         this.flashCount(this.starCountEl);
       }
     }
+    // Pulse the best sub-label once when the child first surpasses their
+    // previous personal best within this stage entry. Guarded by
+    // bestStarPulsed so subsequent stars don't re-trigger.
+    if (
+      this.bestStarCount > 0 &&
+      !this.bestStarPulsed &&
+      starCount > this.bestStarCount &&
+      this.bestStarContainerEl &&
+      this.bestStarContainerEl.style.display !== 'none'
+    ) {
+      this.bestStarPulsed = true;
+      this.flashCount(this.bestStarContainerEl);
+    }
+  }
+
+  /**
+   * Set the personal best ⭐ count for the current stage entry.
+   * - stageBest <= 0 (or non-integer) → hides the sub-label.
+   * - stageBest > 0 → shows `ベスト ⭐N` and resets the one-shot pulse guard,
+   *   so re-entering the same stage with a new best immediately reflects it
+   *   and a fresh pulse can fire if the child surpasses it again.
+   */
+  setBestStarCount(stageBest: number): void {
+    const value = Number.isInteger(stageBest) && stageBest > 0 ? stageBest : 0;
+    this.bestStarCount = value;
+    this.bestStarPulsed = false;
+    if (!this.bestStarContainerEl || !this.bestStarCountEl) return;
+    if (value > 0) {
+      if (this.lastBestStarCount !== value) {
+        this.bestStarCountEl.textContent = String(value);
+        this.lastBestStarCount = value;
+      }
+      this.bestStarContainerEl.style.display = '';
+    } else {
+      this.bestStarContainerEl.style.display = 'none';
+      this.lastBestStarCount = -1;
+    }
   }
 
   private flashCount(el: HTMLElement): void {
@@ -614,5 +684,10 @@ export class HUD {
     this.lastStarCount = -1;
     this.scoreEl = null;
     this.starCountEl = null;
+    this.bestStarContainerEl = null;
+    this.bestStarCountEl = null;
+    this.bestStarCount = 0;
+    this.lastBestStarCount = -1;
+    this.bestStarPulsed = false;
   }
 }

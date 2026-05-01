@@ -404,6 +404,10 @@ export class StageScene implements Scene {
 
     // Companions
     const saveData = this.saveManager.load();
+    // Show personal best ⭐ for this stage in the HUD so the child can see
+    // their target score during play. enter() runs on every (re)entry so a
+    // freshly-updated best (from a prior clear) is reflected immediately.
+    this.hud.setBestStarCount(saveData.bestStageStars?.[this.stageNumber] ?? 0);
     this.companionManager = new CompanionManager(saveData.unlockedPlanets);
     this.threeScene.add(this.companionManager.getGroup());
 
