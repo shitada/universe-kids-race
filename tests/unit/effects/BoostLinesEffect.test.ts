@@ -133,4 +133,74 @@ describe('BoostLinesEffect', () => {
     expect(positionAttr.usage).toBe(THREE.DynamicDrawUsage);
     effect.dispose();
   });
+
+  it('writes all 20 segments on the first boost frame (initial-burst guarantee)', () => {
+    const scene = new THREE.Scene();
+    const effect = new BoostLinesEffect();
+    effect.init(scene);
+    const obj = effect.getObject()!;
+    const positionAttr = (obj.geometry as THREE.BufferGeometry).getAttribute('position') as THREE.BufferAttribute;
+
+    effect.update(true, 5, -3);
+
+    const arr = positionAttr.array as Float32Array;
+    for (let i = 0; i < 20; i++) {
+      const base = i * 6;
+      const x = arr[base];
+      const z = arr[base + 2];
+      expect(x).toBeGreaterThanOrEqual(5 - 2);
+      expect(x).toBeLessThanOrEqual(5 + 2);
+      expect(z).toBeGreaterThanOrEqual(-3 + 2);
+    }
+
+    effect.dispose();
+  });
+
+  it('round-robins so all 20 segments are refreshed within 5 frames after the initial burst', () => {
+    const scene = new THREE.Scene();
+    const effect = new BoostLinesEffect();
+    effect.init(scene);
+    const obj = effect.getObject()!;
+    const positionAttr = (obj.geometry as THREE.BufferGeometry).getAttribute('position') as THREE.BufferAttribute;
+    const arr = positionAttr.array as Float32Array;
+
+    // First boost frame: full 20-line initialisation. Snapshot it as the baseline.
+    effect.update(true, 0, 0);
+    const baseline = new Float32Array(arr);
+
+    const refreshed = new Set<number>();
+    // Subsequent 5 frames should each refresh LINES_PER_FRAME (=4) entries → 20 total.
+    for (let frame = 0; frame < 5; frame++) {
+      effect.update(true, 0, 0);
+      for (let i = 0; i < 20; i++) {
+        const base = i * 6;
+        // Compare the second endpoint's z, which always uses Math.random() and is
+        // virtually never equal across rolls.
+        if (arr[base + 5] !== baseline[base + 5]) {
+          refreshed.add(i);
+        }
+      }
+    }
+    expect(refreshed.size).toBe(20);
+
+    effect.dispose();
+  });
+
+  it('limits Math.random() calls per non-initial boost frame to 24 or fewer', () => {
+    const scene = new THREE.Scene();
+    const effect = new BoostLinesEffect();
+    effect.init(scene);
+
+    // Initial boost frame initialises all 20 lines (~120 random calls); ignore it.
+    effect.update(true, 0, 0);
+
+    const spy = vi.spyOn(Math, 'random');
+    effect.update(true, 0, 0);
+    const callsPerFrame = spy.mock.calls.length;
+    spy.mockRestore();
+
+    expect(callsPerFrame).toBeLessThanOrEqual(24);
+
+    effect.dispose();
+  });
 });
