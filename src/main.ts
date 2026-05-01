@@ -205,19 +205,36 @@ const resumeOverlay = new ResumeOverlay();
 // pause prompts when the user simply rotated the iPad (Constitution III).
 let isPortraitLocked = false;
 
+// True while a background-induced pause has not yet been "consumed" by a
+// ResumeOverlay tap (or by an immediate auto-resume in non-stage scenes).
+// Needed so a portrait→landscape rotation that happens AFTER the page is
+// re-shown still routes through ResumeOverlay (Constitution I: prevent the
+// child from being thrown straight back into the meteor shower). When the
+// pause was caused purely by rotation, this stays false and onLandscape
+// resumes immediately to avoid a double countdown (spec 011).
+let pendingBackgroundResume = false;
+
+function showStageResumeOverlay(): void {
+  resumeOverlay.show(() => {
+    pendingBackgroundResume = false;
+    resumeGame();
+    stageScene.requestResumeCountdown();
+  });
+}
+
 function handleVisibilityRestore(): void {
   refreshViewportAfterRestore();
   if (isPortraitLocked) {
     // Stay paused until landscape is restored; orientation hint owns the UI.
+    // Keep `pendingBackgroundResume` set so onLandscape can route through
+    // ResumeOverlay instead of resuming silently.
     return;
   }
   if (sceneManager.getCurrentType() === 'stage' && gameLoop.isPaused()) {
-    resumeOverlay.show(() => {
-      resumeGame();
-      stageScene.requestResumeCountdown();
-    });
+    showStageResumeOverlay();
   } else {
     resumeOverlay.hide();
+    pendingBackgroundResume = false;
     resumeGame();
   }
 }
@@ -226,6 +243,7 @@ function handleVisibilityRestore(): void {
 // overlay) on visibilitychange / bfcache pageshow / focus.
 createVisibilityPauseHandler({
   onHide: () => {
+    pendingBackgroundResume = true;
     gameLoop.pause();
     audioManager.suspend();
   },
@@ -252,11 +270,22 @@ const orientationHintHandler = createOrientationHintHandler({
     orientationHintOverlay.hide();
     // Re-sync viewport / pixel ratio: rotating changes both.
     refreshViewportAfterRestore();
-    // Resume audio + loop directly. We deliberately skip ResumeOverlay here:
-    // the user just rotated, they did not background the app, so demanding
-    // an extra tap would feel like a bug (acceptance criterion: no double
-    // countdown after rotation).
-    resumeGame();
+    // If a backgrounded pause is still un-consumed (the page was hidden,
+    // came back in portrait, and is only now landscape again), the safe
+    // thing is to route through ResumeOverlay so the child taps before
+    // the meteor shower resumes (Constitution I). Otherwise the pause was
+    // caused purely by the rotation itself and we resume immediately to
+    // avoid a double countdown (spec 011 / acceptance criterion 2).
+    if (
+      pendingBackgroundResume &&
+      sceneManager.getCurrentType() === 'stage' &&
+      gameLoop.isPaused()
+    ) {
+      showStageResumeOverlay();
+    } else {
+      pendingBackgroundResume = false;
+      resumeGame();
+    }
   },
 });
 // Synchronous initial check so a portrait boot shows the hint before the
