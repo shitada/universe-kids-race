@@ -19,6 +19,7 @@ export class SceneManager {
   private inFlightTransition:
     | {
         sceneType: SceneType;
+        context: SceneContext;
         promise: Promise<void>;
       }
     | null = null;
@@ -52,18 +53,32 @@ export class SceneManager {
   }
 
   transitionTo(sceneType: SceneType, context: SceneContext = {}): Promise<void> {
-    if (this.inFlightTransition?.sceneType === sceneType) {
+    if (
+      this.inFlightTransition?.sceneType === sceneType &&
+      this.hasSameContext(this.inFlightTransition.context, context)
+    ) {
       return this.inFlightTransition.promise;
     }
 
     const requestId = ++this.transitionRequestId;
     const promise = this.performTransition(sceneType, context, requestId);
-    this.inFlightTransition = { sceneType, promise };
+    this.inFlightTransition = { sceneType, context, promise };
     return promise.finally(() => {
       if (this.inFlightTransition?.promise === promise) {
         this.inFlightTransition = null;
       }
     });
+  }
+
+  private hasSameContext(left: SceneContext, right: SceneContext): boolean {
+    const leftEntries = Object.entries(left);
+    const rightEntries = Object.entries(right);
+
+    if (leftEntries.length !== rightEntries.length) {
+      return false;
+    }
+
+    return leftEntries.every(([key, value]) => Object.is(right[key as keyof SceneContext], value));
   }
 
   private resolveScene(sceneType: SceneType): Promise<Scene | null> {
