@@ -247,8 +247,11 @@ export class StageScene implements Scene {
   private stageNumber = 1;
   private isCleared = false;
   private clearTimer = 0;
-  private clearDelay = 2.5;
   private clearOverlay: HTMLDivElement | null = null;
+  private clearContinueButton: HTMLButtonElement | null = null;
+  private isClearContinueEnabled = false;
+  private hasHandledClearContinue = false;
+  private static readonly CLEAR_CONTINUE_DELAY = 0.6;
 
   // Damage animation
   private damageTimer = 0;
@@ -332,6 +335,8 @@ export class StageScene implements Scene {
     this.stageConfig = getStageConfig(this.stageNumber);
     this.isCleared = false;
     this.clearTimer = 0;
+    this.isClearContinueEnabled = false;
+    this.hasHandledClearContinue = false;
     this.damageTimer = 0;
     this.elapsedTime = 0;
     this.destinationPlanetSpinTarget = null;
@@ -690,6 +695,9 @@ export class StageScene implements Scene {
       this.clearOverlay.remove();
       this.clearOverlay = null;
     }
+    this.clearContinueButton = null;
+    this.isClearContinueEnabled = false;
+    this.hasHandledClearContinue = false;
     this.removeDestinationPlanet();
     this.particleBurstManager.clear(this.threeScene);
     this.spawnSystem.recycleAll();
@@ -708,9 +716,7 @@ export class StageScene implements Scene {
         this.spaceship.position.y,
         this.spaceship.position.z,
       );
-      if (this.clearTimer >= this.clearDelay) {
-        this.handleStageComplete();
-      }
+      this.revealClearContinueButtonIfReady();
       return;
     }
 
@@ -1059,6 +1065,8 @@ export class StageScene implements Scene {
   private onStageClear(): void {
     this.isCleared = true;
     this.clearTimer = 0;
+    this.isClearContinueEnabled = false;
+    this.hasHandledClearContinue = false;
     const isNewPlanetUnlock = this.saveManager.markStageCleared(this.stageNumber);
     this.audioManager.playSFX('stageClear');
     this.audioManager.stopBoostSFX();
@@ -1091,7 +1099,10 @@ export class StageScene implements Scene {
     if (!uiOverlay) return;
 
     this.clearOverlay = document.createElement('div');
+    this.clearOverlay.setAttribute('data-stage-clear-overlay', '');
     this.clearOverlay.style.cssText = `
+      position: absolute;
+      inset: 0;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -1099,6 +1110,11 @@ export class StageScene implements Scene {
       width: 100%;
       height: 100%;
       background: rgba(0, 0, 32, 0.6);
+      pointer-events: auto;
+      z-index: 40;
+      padding: 1.2rem;
+      box-sizing: border-box;
+      text-align: center;
     `;
 
     const msg = document.createElement('div');
@@ -1173,7 +1189,73 @@ export class StageScene implements Scene {
       }
     }
 
+    const continueButton = document.createElement('button');
+    const continueLabel = this.stageNumber >= TOTAL_STAGES ? 'おいわいへ' : 'つぎへ';
+    continueButton.setAttribute('data-stage-clear-continue', '');
+    continueButton.setAttribute('aria-label', continueLabel);
+    continueButton.textContent = continueLabel;
+    continueButton.disabled = true;
+    continueButton.style.cssText = `
+      margin-top: 1.4rem;
+      min-width: min(78vw, 320px);
+      min-height: 88px;
+      padding: 1rem 1.8rem;
+      border: none;
+      border-radius: 999px;
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: clamp(1.5rem, 5vmin, 2.1rem);
+      font-weight: 900;
+      color: #00163a;
+      background: linear-gradient(135deg, #ffe66d, #ffb347);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      touch-action: manipulation;
+      transform: scale(1);
+      transition: opacity 0.18s ease-out, transform 0.08s ease-out;
+    `;
+
+    const activate = (event: Event): void => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
+      this.hasHandledClearContinue = true;
+      continueButton.disabled = true;
+      continueButton.style.pointerEvents = 'none';
+      continueButton.style.transform = 'scale(1)';
+      this.handleStageComplete();
+    };
+    const release = (): void => {
+      if (this.clearContinueButton) {
+        this.clearContinueButton.style.transform = 'scale(1)';
+      }
+    };
+    continueButton.addEventListener('pointerdown', (event) => {
+      if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
+      continueButton.style.transform = 'scale(0.96)';
+      activate(event);
+    });
+    continueButton.addEventListener('click', activate);
+    continueButton.addEventListener('pointerup', release);
+    continueButton.addEventListener('pointercancel', release);
+    continueButton.addEventListener('pointerleave', release);
+    this.clearContinueButton = continueButton;
+    this.clearOverlay.appendChild(continueButton);
+
     uiOverlay.appendChild(this.clearOverlay);
+  }
+
+  private revealClearContinueButtonIfReady(): void {
+    if (this.isClearContinueEnabled) return;
+    if (this.clearTimer < StageScene.CLEAR_CONTINUE_DELAY) return;
+    if (!this.clearContinueButton) return;
+
+    this.isClearContinueEnabled = true;
+    this.clearContinueButton.disabled = false;
+    this.clearContinueButton.style.opacity = '1';
+    this.clearContinueButton.style.visibility = 'visible';
+    this.clearContinueButton.style.pointerEvents = 'auto';
   }
 
   private injectBestStageStarsAnimation(): void {
