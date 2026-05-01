@@ -130,15 +130,29 @@ let stageScene: StageScene | null = null;
 audioManager.setMuted(saveManager.load().muted === true);
 
 const titleScene = new TitleScene(sceneManager, saveManager, audioManager);
+let stageSceneModulePromise: Promise<typeof import('./game/scenes/StageScene')> | null = null;
+let endingSceneModulePromise: Promise<typeof import('./game/scenes/EndingScene')> | null = null;
+
+const loadStageSceneModule = (): Promise<typeof import('./game/scenes/StageScene')> => {
+  stageSceneModulePromise ??= import('./game/scenes/StageScene');
+  return stageSceneModulePromise;
+};
+
+const loadEndingSceneModule = (): Promise<typeof import('./game/scenes/EndingScene')> => {
+  endingSceneModulePromise ??= import('./game/scenes/EndingScene');
+  return endingSceneModulePromise;
+};
 
 sceneManager.registerScene('title', titleScene);
+sceneManager.registerSceneModulePrefetch('stage', loadStageSceneModule);
+sceneManager.registerSceneModulePrefetch('ending', loadEndingSceneModule);
 sceneManager.registerSceneFactory('stage', async () => {
-  const { StageScene } = await import('./game/scenes/StageScene');
+  const { StageScene } = await loadStageSceneModule();
   stageScene = new StageScene(sceneManager, inputSystem, audioManager, saveManager);
   return stageScene;
 });
 sceneManager.registerSceneFactory('ending', async () => {
-  const { EndingScene } = await import('./game/scenes/EndingScene');
+  const { EndingScene } = await loadEndingSceneModule();
   return new EndingScene(sceneManager, saveManager, audioManager);
 });
 sceneManager.setLoadStateHandler((isLoading, sceneType) => {
@@ -177,7 +191,7 @@ const schedulePrefetch = (cb: () => void): void => {
   window.setTimeout(cb, 800);
 };
 schedulePrefetch(() => {
-  void sceneManager.prefetchScene('stage').catch(() => {});
+  void sceneManager.prefetchSceneModule('stage').catch(() => {});
 });
 
 gameLoop.start(
