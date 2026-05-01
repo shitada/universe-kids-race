@@ -291,6 +291,8 @@ export class StageScene implements Scene {
   // does not move until the child is ready.
   private awaitingResume = false;
   private resumeCountdownOverlay: CountdownOverlay | null = null;
+  private isHomeConfirmOpen = false;
+  private shouldResumeAfterHomeConfirm = false;
 
   constructor(sceneManager: SceneManager, inputSystem: InputSystem, audioManager: AudioManager, saveManager: SaveManager) {
     this.sceneManager = sceneManager;
@@ -317,6 +319,8 @@ export class StageScene implements Scene {
     this.damageTimer = 0;
     this.elapsedTime = 0;
     this.destinationPlanetSpinTarget = null;
+    this.isHomeConfirmOpen = false;
+    this.shouldResumeAfterHomeConfirm = false;
 
     // Restore total scores if passed
     if (context.totalScore !== undefined) {
@@ -372,7 +376,21 @@ export class StageScene implements Scene {
       this.audioManager.playSFX('boostDenied');
     });
     this.hud.setHomeCallback(() => {
+      this.isHomeConfirmOpen = false;
+      this.shouldResumeAfterHomeConfirm = false;
       this.sceneManager.requestTransition('title');
+    });
+    this.hud.setHomeConfirmOpenCallback(() => {
+      this.shouldResumeAfterHomeConfirm = this.isPlaying();
+      this.isHomeConfirmOpen = true;
+    });
+    this.hud.setHomeConfirmCancelCallback(() => {
+      const shouldResume = this.shouldResumeAfterHomeConfirm;
+      this.isHomeConfirmOpen = false;
+      this.shouldResumeAfterHomeConfirm = false;
+      if (shouldResume) {
+        this.requestResumeCountdown();
+      }
     });
     this.hud.setMuteState(this.audioManager.isMuted());
     this.hud.setMuteCallback(() => {
@@ -451,6 +469,7 @@ export class StageScene implements Scene {
     if (this.isCleared) return false;
     if (this.isStarting) return false;
     if (this.awaitingResume) return false;
+    if (this.isHomeConfirmOpen) return false;
     return true;
   }
 
@@ -679,9 +698,11 @@ export class StageScene implements Scene {
     // countdown is showing, freeze input, spawning, and ship forward motion.
     // Only the destination planet's gentle spin and background-star centering
     // keep moving so the scene feels alive (Constitution I/IV).
-    if (this.isStarting || this.awaitingResume) {
-      this.countdownOverlay?.tick(deltaTime);
-      this.resumeCountdownOverlay?.tick(deltaTime);
+    if (this.isStarting || this.awaitingResume || this.isHomeConfirmOpen) {
+      if (!this.isHomeConfirmOpen) {
+        this.countdownOverlay?.tick(deltaTime);
+        this.resumeCountdownOverlay?.tick(deltaTime);
+      }
       if (this.destinationPlanetSpinTarget) {
         this.destinationPlanetSpinTarget.rotation.y +=
           deltaTime * StageScene.DESTINATION_PLANET_SPIN_SPEED;
@@ -1178,6 +1199,8 @@ export class StageScene implements Scene {
     }
     this.isStarting = false;
     this.awaitingResume = false;
+    this.isHomeConfirmOpen = false;
+    this.shouldResumeAfterHomeConfirm = false;
     this.boostFlameEffect.dispose();
     this.companionManager?.dispose();
     this.companionManager = null;
