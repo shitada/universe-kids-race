@@ -221,3 +221,115 @@ describe('StageScene.cleanupPassedObjects', () => {
     expect(internals.meteorites).toEqual([m2]);
   });
 });
+
+describe('StageScene exit cleanup', () => {
+  it('keeps persistent nodes but removes stage-specific nodes on exit', () => {
+    document.body.innerHTML = '<div id="hud"></div><div id="ui-overlay"></div>';
+
+    const sceneManager = { requestTransition: vi.fn() } as unknown as SceneManager;
+    const inputSystem = {
+      setBoostPressed: vi.fn(),
+      getState: vi.fn(() => ({ moveDirection: 0, boostPressed: false })),
+    } as unknown as InputSystem;
+    const audioManager = {
+      playBGM: vi.fn(),
+      stopBGM: vi.fn(),
+      playSFX: vi.fn(),
+      stopBoostSFX: vi.fn(),
+      startBoostSFX: vi.fn(),
+      isMuted: vi.fn(() => false),
+      toggleMute: vi.fn(() => false),
+      setMuted: vi.fn(),
+      initFromInteraction: vi.fn(),
+    } as unknown as AudioManager;
+    const saveManager = {
+      load: vi.fn(() => ({ clearedStage: 0, unlockedPlanets: [1, 2], muted: false, tutorialShown: true })),
+      save: vi.fn(),
+      clear: vi.fn(),
+      markStageCleared: vi.fn(() => false),
+      updateBestStageStars: vi.fn(),
+    } as unknown as SaveManager;
+    const stageScene = new StageScene(sceneManager, inputSystem, audioManager, saveManager);
+    const internal = stageScene as unknown as {
+      threeScene: THREE.Scene;
+      spaceship: { mesh: THREE.Group; position: { z: number } };
+      airShield: { getMesh(): THREE.Mesh };
+      bgStars: THREE.Points | null;
+      companionManager: { getGroup(): THREE.Group } | null;
+      boostLinesEffect: { getObject(): THREE.LineSegments | null };
+      boostFlameEffect: { getObject(): THREE.Points | null };
+      destinationPlanet: THREE.Group | null;
+      stageConfig: {
+        meteoriteInterval: number;
+        starDensity: number;
+        stageLength: number;
+        stageNumber: number;
+        destination: string;
+        emoji: string;
+        displayName: string;
+        planetColor: number;
+      };
+      spawnSystem: {
+        update(
+          deltaTime: number,
+          spaceshipZ: number,
+          config: {
+            meteoriteInterval: number;
+            starDensity: number;
+            stageLength: number;
+            stageNumber: number;
+            destination: string;
+            emoji: string;
+            displayName: string;
+            planetColor: number;
+          },
+        ): { newStars: Star[]; newMeteorites: Meteorite[] };
+      };
+      stars: Star[];
+      meteorites: Meteorite[];
+      countdownOverlay: { dispose(): void } | null;
+      isStarting: boolean;
+    };
+
+    stageScene.enter({ stageNumber: 1 });
+    internal.countdownOverlay?.dispose();
+    internal.countdownOverlay = null;
+    internal.isStarting = false;
+
+    const persistentNodes = [
+      internal.spaceship.mesh,
+      internal.airShield.getMesh(),
+      internal.companionManager?.getGroup(),
+      internal.boostLinesEffect.getObject(),
+      internal.boostFlameEffect.getObject(),
+    ].filter((node): node is THREE.Object3D => node instanceof THREE.Object3D);
+    const destinationPlanetRef = internal.destinationPlanet;
+
+    const spawnResult = internal.spawnSystem.update(
+      internal.stageConfig.meteoriteInterval,
+      internal.spaceship.position.z,
+      { ...internal.stageConfig, starDensity: 1 },
+    );
+    for (const star of spawnResult.newStars) {
+      internal.stars.push(star);
+      internal.threeScene.add(star.mesh);
+    }
+    for (const met of spawnResult.newMeteorites) {
+      internal.meteorites.push(met);
+      internal.threeScene.add(met.mesh);
+    }
+
+    expect(internal.stars.length + internal.meteorites.length).toBeGreaterThan(0);
+
+    stageScene.exit();
+
+    expect(destinationPlanetRef?.parent).toBeNull();
+    expect(internal.destinationPlanet).toBeNull();
+    expect(internal.bgStars).toBeNull();
+    expect(internal.stars).toHaveLength(0);
+    expect(internal.meteorites).toHaveLength(0);
+    for (const node of persistentNodes) {
+      expect(node.parent).toBe(internal.threeScene);
+    }
+  });
+});

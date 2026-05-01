@@ -552,6 +552,120 @@ describe('StageScene cumulative totals on re-entry', () => {
     internal.isStarting = false;
   }
 
+  it('reuses persistent Three.js objects across exit and re-entry without duplicating them', () => {
+    const saveState = {
+      clearedStage: 0,
+      unlockedPlanets: [1, 2],
+      muted: false,
+      tutorialShown: true,
+      bestStageStars: {} as Record<number, number>,
+    };
+    const sceneManager = { requestTransition: vi.fn() };
+    const inputSystem = {
+      setBoostPressed: vi.fn(),
+      getState: vi.fn(() => ({ moveDirection: 0, boostPressed: false })),
+    } as unknown as InputSystem;
+    const audioManager = {
+      playBGM: vi.fn(),
+      stopBGM: vi.fn(),
+      playSFX: vi.fn(),
+      stopBoostSFX: vi.fn(),
+      startBoostSFX: vi.fn(),
+      isMuted: vi.fn(() => false),
+      toggleMute: vi.fn(() => false),
+    } as unknown as AudioManager;
+    const saveManager = {
+      load: vi.fn(() => ({
+        ...saveState,
+        unlockedPlanets: [...saveState.unlockedPlanets],
+        bestStageStars: { ...saveState.bestStageStars },
+      })),
+      save: vi.fn(),
+      clear: vi.fn(),
+      markStageCleared: vi.fn(() => false),
+      updateBestStageStars: vi.fn(),
+    } as unknown as SaveManager;
+    const scene = new StageScene(sceneManager as unknown as SceneManager, inputSystem, audioManager, saveManager);
+    const internal = scene as unknown as {
+      threeScene: THREE.Scene;
+      spaceship: {
+        position: { x: number; y: number; z: number };
+        speedState: string;
+        mesh: THREE.Group;
+        activateBoost(): void;
+      };
+      airShield: {
+        getMesh(): THREE.Mesh;
+        getMode(): string;
+        setShieldMode(mode: 'BOOST' | 'OFF'): void;
+      };
+      bgStars: THREE.Points | null;
+      companionManager: {
+        getCount(): number;
+        getGroup(): THREE.Group;
+      } | null;
+      boostLinesEffect: { getObject(): THREE.LineSegments | null };
+      boostFlameEffect: { getObject(): THREE.Points | null };
+      destinationPlanet: THREE.Group | null;
+      clearOverlay: HTMLDivElement | null;
+      damageTimer: number;
+    };
+
+    scene.enter({ stageNumber: 1 });
+    skipCountdown(scene);
+
+    const threeSceneRef = internal.threeScene;
+    const spaceshipRef = internal.spaceship;
+    const spaceshipMeshRef = internal.spaceship.mesh;
+    const airShieldMeshRef = internal.airShield.getMesh();
+    const companionManagerRef = internal.companionManager;
+    const companionGroupRef = companionManagerRef?.getGroup() ?? null;
+    const boostLinesRef = internal.boostLinesEffect.getObject();
+    const boostFlameRef = internal.boostFlameEffect.getObject();
+    const destinationPlanetRef = internal.destinationPlanet;
+
+    internal.spaceship.position.x = 6;
+    internal.spaceship.position.z = -120;
+    internal.spaceship.mesh.position.set(6, 0, -120);
+    internal.spaceship.activateBoost();
+    internal.airShield.setShieldMode('BOOST');
+    internal.damageTimer = 1;
+    internal.clearOverlay = document.createElement('div');
+    document.getElementById('ui-overlay')?.appendChild(internal.clearOverlay);
+
+    scene.exit();
+    saveState.unlockedPlanets = [1, 2, 3, 4];
+    scene.enter({ stageNumber: 4 });
+    skipCountdown(scene);
+
+    expect(internal.threeScene).toBe(threeSceneRef);
+    expect(internal.spaceship).toBe(spaceshipRef);
+    expect(internal.spaceship.mesh).toBe(spaceshipMeshRef);
+    expect(internal.airShield.getMesh()).toBe(airShieldMeshRef);
+    expect(internal.bgStars).not.toBeNull();
+    expect(internal.companionManager).toBe(companionManagerRef);
+    expect(internal.companionManager?.getGroup()).toBe(companionGroupRef);
+    expect(internal.boostLinesEffect.getObject()).toBe(boostLinesRef);
+    expect(internal.boostFlameEffect.getObject()).toBe(boostFlameRef);
+    expect(internal.destinationPlanet).not.toBe(destinationPlanetRef);
+
+    expect(internal.damageTimer).toBe(0);
+    expect(internal.clearOverlay).toBeNull();
+    expect(internal.spaceship.position).toEqual({ x: 0, y: 0, z: 0 });
+    expect(internal.spaceship.speedState).toBe('NORMAL');
+    expect(internal.airShield.getMode()).toBe('OFF');
+    expect(internal.airShield.getMesh().visible).toBe(false);
+    expect(internal.companionManager?.getCount()).toBe(4);
+    expect(companionGroupRef?.children).toHaveLength(4);
+
+    expect(threeSceneRef.children.filter((child) => child === spaceshipMeshRef)).toHaveLength(1);
+    expect(threeSceneRef.children.filter((child) => child === airShieldMeshRef)).toHaveLength(1);
+    expect(threeSceneRef.children.filter((child) => child === internal.bgStars)).toHaveLength(1);
+    expect(threeSceneRef.children.filter((child) => child === companionGroupRef)).toHaveLength(1);
+    expect(threeSceneRef.children.filter((child) => child.type === 'AmbientLight')).toHaveLength(1);
+    expect(threeSceneRef.children.filter((child) => child.type === 'DirectionalLight')).toHaveLength(1);
+  });
+
   it('resets cached cumulative totals to zero when re-entered without totals context', () => {
     const { scene } = createEnterableStageScene();
     const internal = scene as unknown as {

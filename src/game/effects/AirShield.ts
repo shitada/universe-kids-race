@@ -130,6 +130,22 @@ export class AirShield {
     return this.mesh;
   }
 
+  reset(x = 0, y = 0, z = 0): void {
+    this.elapsedTime = 0;
+    this.mode = 'OFF';
+    this.lastMode = null;
+    this.opacityScale = 1;
+    this.material.color.setHex(0x44aaff);
+    this.material.opacity = 0.15;
+    this.mesh.visible = false;
+    this.mesh.scale.set(1, 1, 1);
+    this.mesh.position.set(x, y, z);
+    this.pendingX = x;
+    this.pendingY = y;
+    this.pendingZ = z;
+    this.positionDirty = false;
+  }
+
   dispose(): void {
     this.mesh.geometry.dispose();
     this.material.dispose();
