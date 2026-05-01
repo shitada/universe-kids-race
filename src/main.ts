@@ -252,6 +252,14 @@ function showStageResumeOverlay(): void {
   });
 }
 
+function shouldShowStageResumeOverlay(): boolean {
+  return (
+    sceneManager.getCurrentType() === 'stage' &&
+    gameLoop.isPaused() &&
+    stageScene?.isPlaying() === true
+  );
+}
+
 function handleVisibilityRestore(): void {
   refreshViewportAfterRestore();
   if (isPortraitLocked) {
@@ -260,7 +268,7 @@ function handleVisibilityRestore(): void {
     // ResumeOverlay instead of resuming silently.
     return;
   }
-  if (sceneManager.getCurrentType() === 'stage' && gameLoop.isPaused()) {
+  if (shouldShowStageResumeOverlay()) {
     showStageResumeOverlay();
   } else {
     resumeOverlay.hide();
@@ -308,8 +316,7 @@ const orientationHintHandler = createOrientationHintHandler({
     // avoid a double countdown (spec 011 / acceptance criterion 2).
     if (
       pendingBackgroundResume &&
-      sceneManager.getCurrentType() === 'stage' &&
-      gameLoop.isPaused()
+      shouldShowStageResumeOverlay()
     ) {
       showStageResumeOverlay();
     } else {

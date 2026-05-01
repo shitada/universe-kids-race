@@ -64,9 +64,11 @@ describe('StageScene background-resume countdown', () => {
     expect(scene.isPlaying()).toBe(false);
   });
 
-  it('isPlaying() is false during the start countdown', () => {
+  it('isPlaying() stays false until the start countdown fully finishes', () => {
     const { scene } = createScene();
     scene.enter({ stageNumber: 1 });
+    const internal = scene as unknown as { update(dt: number): void };
+    internal.update(3.0);
     expect(scene.isPlaying()).toBe(false);
   });
 
