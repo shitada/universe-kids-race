@@ -13,6 +13,11 @@ export class InputSystem {
   // calls preventDefault(); this lets iPad Safari run pointermove on the
   // compositor fast path. DO NOT call preventDefault() inside onPointerMove.
   private static readonly POINTERMOVE_OPTIONS: AddEventListenerOptions = { passive: true };
+  private static readonly BOOST_KEYS = new Set([' ', 'Spacebar']);
+
+  private isBoostKey(e: KeyboardEvent): boolean {
+    return e.code === 'Space' || InputSystem.BOOST_KEYS.has(e.key);
+  }
 
   private getCanvasWidth(): number {
     if (this.canvasWidth > 0) return this.canvasWidth;
@@ -68,16 +73,18 @@ export class InputSystem {
 
   private onKeyDown = (e: KeyboardEvent): void => {
     if (e.repeat) return;
+    if (this.isBoostKey(e)) {
+      e.preventDefault();
+      this.state.boostPressed = true;
+      return;
+    }
+
     switch (e.key) {
       case 'ArrowLeft':
       case 'ArrowRight':
         e.preventDefault();
         this.pressedKeys.add(e.key);
         this.updateDirection();
-        break;
-      case ' ':
-        e.preventDefault();
-        this.state.boostPressed = true;
         break;
     }
   };
