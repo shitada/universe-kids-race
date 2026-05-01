@@ -300,4 +300,81 @@ describe('CollisionSystem', () => {
       expect(result.meteoriteCollision).toBe(false);
     });
   });
+
+  describe('z-descending early-break optimization (SpawnSystem invariant)', () => {
+    // Game coordinate convention: ship moves in -Z (forward). Spawns happen at
+    // ship.z - spawnAheadDistance, so newer spawns have smaller (more negative)
+    // z. Arrays are maintained in spawn order = z-descending order, meaning
+    // dz = sp.z - p.z increases monotonically with array index. CollisionSystem
+    // exploits this by `break`ing once dz > collisionDist.
+    //
+    // Ship at sp.z = 0:
+    //   index 0 (oldest, largest p.z, behind ship): dz <  0
+    //   ...                                         dz ~  0  ← collision range
+    //   index N (newest, smallest p.z, far ahead):  dz >> 0
+    it('star: collects only nearby star when 5 far-ahead stars follow in z-descending order', () => {
+      const sys = new CollisionSystem();
+      const ship = new Spaceship();
+      ship.position = { x: 0, y: 0, z: 0 };
+      // z-descending: nearby first (dz=0), then 5 far-ahead (dz=10..50, all > collisionDist=1.6)
+      const nearby = new Star(0, 0, 0);
+      const farAhead = [
+        new Star(0, 0, -10),
+        new Star(0, 0, -20),
+        new Star(0, 0, -30),
+        new Star(0, 0, -40),
+        new Star(0, 0, -50),
+      ];
+      const stars = [nearby, ...farAhead];
+      const result = sys.check(ship, stars, []);
+      expect(result.starCollisions).toEqual([nearby]);
+      expect(nearby.isCollected).toBe(true);
+      for (const s of farAhead) {
+        expect(s.isCollected).toBe(false);
+      }
+    });
+
+    it('meteorite: detects collision regardless of z-descending order with far-ahead followers', () => {
+      const sys = new CollisionSystem();
+      const ship = new Spaceship();
+      ship.position = { x: 0, y: 0, z: 0 };
+      const nearby = new Meteorite(0, 0, 0);
+      const farAhead = [
+        new Meteorite(0, 0, -10),
+        new Meteorite(0, 0, -20),
+        new Meteorite(0, 0, -30),
+        new Meteorite(0, 0, -40),
+        new Meteorite(0, 0, -50),
+      ];
+      const result = sys.check(ship, [], [nearby, ...farAhead]);
+      expect(result.meteoriteCollision).toBe(true);
+    });
+
+    it('meteorite: detection result is independent of in-array position when z-descending', () => {
+      const sys = new CollisionSystem();
+      const ship = new Spaceship();
+      ship.position = { x: 0, y: 0, z: 0 };
+      // Two layouts: hit at head vs hit at the closest-to-ship slot among many ahead-of-ship entries.
+      // In z-descending order, "behind ship" entries (larger p.z) come first.
+      const layoutA = [new Meteorite(0, 0, 5), new Meteorite(0, 0, 0), new Meteorite(0, 0, -10)];
+      const resA = sys.check(ship, [], layoutA);
+      expect(resA.meteoriteCollision).toBe(true);
+    });
+
+    it('safety net: with order invariant violated, behind-ship `continue` branch still finds in-range entries', () => {
+      // The optimization replaced one branch with `break` (forward), but kept
+      // the behind-ship branch as `continue`. So if the array is mistakenly
+      // ordered with a far-behind entry at index 0 followed by an in-range
+      // entry, detection still works.
+      const sys = new CollisionSystem();
+      const ship = new Spaceship();
+      ship.position = { x: 0, y: 0, z: 0 };
+      const farBehind = new Star(0, 0, 50); // dz = -50 → continue (behind branch)
+      const inRange = new Star(0.3, 0, 0); // dz = 0 → collision
+      const result = sys.check(ship, [farBehind, inRange], []);
+      expect(result.starCollisions).toEqual([inRange]);
+      expect(inRange.isCollected).toBe(true);
+      expect(farBehind.isCollected).toBe(false);
+    });
+  });
 });
