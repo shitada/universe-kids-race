@@ -79,13 +79,20 @@ describe('HUD', () => {
       expect(homeBtn.style.pointerEvents).toBe('auto');
     });
 
-    it('invokes callback on pointerdown', () => {
+    it('invokes callback only after confirm overlay → 🏠 button', () => {
       hud.show('🌙 つきを めざせ！');
       let called = false;
       hud.setHomeCallback(() => { called = true; });
       const hudRoot = document.getElementById('hud')!;
       const homeBtn = hudRoot.querySelector('button') as HTMLButtonElement;
       homeBtn.dispatchEvent(new Event('pointerdown'));
+      // First tap should NOT fire the callback; it shows confirm overlay.
+      expect(called).toBe(false);
+      const backBtn = document.querySelector<HTMLButtonElement>(
+        '[data-home-confirm-back]',
+      )!;
+      expect(backBtn).not.toBeNull();
+      backBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
       expect(called).toBe(true);
     });
 
@@ -139,14 +146,19 @@ describe('HUD', () => {
         expect(btn.style.transform).toBe('scale(1)');
       });
 
-      it('still fires home callback on pointerdown when applying press feedback', () => {
+      it('still applies press feedback on pointerdown and shows confirm overlay (callback fires only via overlay)', () => {
         hud.show('🌙 つきを めざせ！');
         let called = 0;
         hud.setHomeCallback(() => { called++; });
         const btn = getHomeBtn();
         btn.dispatchEvent(new Event('pointerdown'));
-        expect(called).toBe(1);
+        expect(called).toBe(0);
         expect(btn.style.transform).toBe('scale(0.9)');
+        const backBtn = document.querySelector<HTMLButtonElement>(
+          '[data-home-confirm-back]',
+        )!;
+        backBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+        expect(called).toBe(1);
       });
     });
   });
