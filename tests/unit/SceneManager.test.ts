@@ -144,6 +144,45 @@ describe('SceneManager', () => {
     expect(loadStateHandler).toHaveBeenNthCalledWith(2, false, 'stage');
   });
 
+  it('prefers the latest context when the same lazy scene type is requested again', async () => {
+    let resolveScene: ((scene: Scene) => void) | null = null;
+    const manager = new SceneManager();
+    const titleScene = createMockScene();
+    const stageScene = createMockScene();
+    const factory = vi.fn(
+      () =>
+        new Promise<Scene>((resolve) => {
+          resolveScene = resolve;
+        }),
+    );
+    const loadStateHandler = vi.fn();
+
+    manager.registerScene('title', titleScene);
+    manager.registerSceneFactory('stage', factory);
+    manager.setLoadStateHandler(loadStateHandler);
+
+    await manager.transitionTo('title');
+    const first = manager.transitionTo('stage', { stageNumber: 1 });
+    const second = manager.transitionTo('stage', { stageNumber: 5 });
+
+    expect(factory).toHaveBeenCalledTimes(1);
+    expect(loadStateHandler.mock.calls).toEqual([
+      [true, 'stage'],
+      [true, 'stage'],
+    ]);
+
+    resolveScene?.(stageScene);
+    await Promise.all([first, second]);
+
+    expect(stageScene.enter).toHaveBeenCalledTimes(1);
+    expect(stageScene.enter).toHaveBeenCalledWith({ stageNumber: 5 });
+    expect(loadStateHandler.mock.calls).toEqual([
+      [true, 'stage'],
+      [true, 'stage'],
+      [false, 'stage'],
+    ]);
+  });
+
   it('prefetches a lazy scene and skips loading state on the later transition', async () => {
     const manager = new SceneManager();
     const titleScene = createMockScene();
