@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { EncyclopediaOverlay } from '../../src/ui/EncyclopediaOverlay';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { TitleScene } from '../../src/game/scenes/TitleScene';
 import { SceneManager } from '../../src/game/SceneManager';
+import { LoadingOverlay } from '../../src/ui/LoadingOverlay';
+import { EncyclopediaOverlay } from '../../src/ui/EncyclopediaOverlay';
 import type { Scene, SceneContext, SceneType } from '../../src/types';
+import type { SaveManager } from '../../src/game/storage/SaveManager';
+import type { AudioManager } from '../../src/game/audio/AudioManager';
 import * as THREE from 'three';
 
 function createTrackingScene(
@@ -22,46 +26,152 @@ function createTrackingScene(
   };
 }
 
+function createMockSaveManager(): SaveManager {
+  return {
+    load: vi.fn(() => ({
+      clearedStage: 0,
+      unlockedPlanets: [1, 2, 3],
+      tutorialShown: true,
+      bestStageStars: { 2: 4 },
+    })),
+    save: vi.fn(),
+    clear: vi.fn(),
+    markTutorialShown: vi.fn(),
+  } as unknown as SaveManager;
+}
+
+function createMockAudioManager(): AudioManager {
+  return {
+    init: vi.fn(),
+    initSync: vi.fn(),
+    isInitialized: vi.fn(() => true),
+    playBGM: vi.fn(),
+    stopBGM: vi.fn(),
+    isMuted: vi.fn(() => false),
+    toggleMute: vi.fn(() => false),
+    setMuted: vi.fn(),
+    playSFX: vi.fn(),
+    startBoostSFX: vi.fn(),
+    stopBoostSFX: vi.fn(),
+    ensureResumed: vi.fn(),
+    dispose: vi.fn(),
+  } as unknown as AudioManager;
+}
+
+function flushPromises(): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, 0);
+  });
+}
+
 describe('Encyclopedia Stage Selection Integration', () => {
   let uiOverlay: HTMLDivElement;
+  let hud: HTMLDivElement;
 
   beforeEach(() => {
     uiOverlay = document.createElement('div');
     uiOverlay.id = 'ui-overlay';
     document.body.appendChild(uiOverlay);
+    hud = document.createElement('div');
+    hud.id = 'hud';
+    document.body.appendChild(hud);
   });
 
   afterEach(() => {
     uiOverlay.remove();
+    hud.remove();
   });
 
-  it('tapping unlocked planet card transitions to that stage with reset totals', () => {
+  it('lazy-loads the encyclopedia on first open, then transitions to the selected stage', async () => {
     const log: { type: SceneType; context: SceneContext }[] = [];
     const manager = new SceneManager();
-    manager.registerScene('title', createTrackingScene(log, 'title'));
+    const loadingOverlay = new LoadingOverlay();
+    let resolveModule: ((value: { EncyclopediaOverlay: typeof EncyclopediaOverlay }) => void) | null = null;
+    const loadEncyclopediaOverlay = vi.fn(
+      () =>
+        new Promise<{ EncyclopediaOverlay: typeof EncyclopediaOverlay }>((resolve) => {
+          resolveModule = resolve;
+        }),
+    );
+    const titleScene = new TitleScene(
+      manager,
+      createMockSaveManager(),
+      createMockAudioManager(),
+      {
+        loadingOverlay,
+        loadEncyclopediaOverlay,
+      },
+    );
+
+    manager.registerScene('title', titleScene);
     manager.registerScene('stage', createTrackingScene(log, 'stage'));
-    manager.transitionTo('title');
 
-    const overlay = new EncyclopediaOverlay();
-    overlay.show([1, 2, 3], () => {}, (stageNumber) => {
-      manager.requestTransition('stage', {
-        stageNumber,
-        totalScore: 0,
-        totalStarCount: 0,
-      });
-    });
+    await manager.transitionTo('title');
 
+    const encyclopediaBtn = Array.from(uiOverlay.querySelectorAll('button')).find(
+      (button) => button.textContent?.includes('ずかん'),
+    ) as HTMLButtonElement;
+    encyclopediaBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(loadEncyclopediaOverlay).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[data-loading-overlay]')).not.toBeNull();
+    expect(uiOverlay.querySelector('[data-card]')).toBeNull();
+
+    resolveModule?.({ EncyclopediaOverlay });
+    await flushPromises();
+    await flushPromises();
+    await flushPromises();
+
+    expect(document.querySelector('[data-loading-overlay]')).toBeNull();
     const card = uiOverlay.querySelector('[data-card][data-stage="2"]') as HTMLElement;
     expect(card).not.toBeNull();
+
     card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
 
-    const stageEntry = log.find((e) => e.type === 'stage');
-    expect(stageEntry).toBeDefined();
-    expect(stageEntry!.context.stageNumber).toBe(2);
-    expect(stageEntry!.context.totalScore).toBe(0);
-    expect(stageEntry!.context.totalStarCount).toBe(0);
+    expect(manager.getCurrentType()).toBe('stage');
+    expect(log).toContainEqual({
+      type: 'stage',
+      context: { stageNumber: 2, totalScore: 0, totalStarCount: 0 },
+    });
+  });
 
-    // Encyclopedia DOM is gone after selection.
-    expect(uiOverlay.querySelectorAll('[data-card]').length).toBe(0);
+  it('reuses the loaded encyclopedia module on the second open', async () => {
+    const manager = new SceneManager();
+    const loadingOverlay = new LoadingOverlay();
+    const loadEncyclopediaOverlay = vi.fn(async () => ({ EncyclopediaOverlay }));
+    const titleScene = new TitleScene(
+      manager,
+      createMockSaveManager(),
+      createMockAudioManager(),
+      {
+        loadingOverlay,
+        loadEncyclopediaOverlay,
+      },
+    );
+
+    manager.registerScene('title', titleScene);
+    manager.registerScene('stage', createTrackingScene([], 'stage'));
+
+    await manager.transitionTo('title');
+
+    const encyclopediaBtn = () =>
+      Array.from(uiOverlay.querySelectorAll('button')).find(
+        (button) => button.textContent?.includes('ずかん'),
+      ) as HTMLButtonElement;
+
+    encyclopediaBtn().dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+    await flushPromises();
+    const backButton = uiOverlay.querySelector('[data-gallery-back]') as HTMLElement;
+    backButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    encyclopediaBtn().dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+    await flushPromises();
+
+    expect(loadEncyclopediaOverlay).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[data-loading-overlay]')).toBeNull();
+    expect(uiOverlay.querySelector('[data-card][data-stage="2"]')).not.toBeNull();
   });
 });
