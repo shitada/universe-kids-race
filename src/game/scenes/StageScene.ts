@@ -820,8 +820,10 @@ export class StageScene implements Scene {
       // Mark the hit meteorite consumed so subsequent frames early-continue
       // in CollisionSystem.check() and cannot register a duplicate hit (e.g.
       // after SLOWDOWN invincibility ends but the meteorite is still within
-      // collision range). cleanupPassedObjects() will recycle it once it
-      // scrolls past behindThreshold.
+      // collision range). cleanupPassedObjects() runs at the end of this same
+      // frame and returns inactive meteorites to the pool immediately, so we
+      // don't pay 18-36 frames of empty CollisionSystem / scene-graph scans
+      // while waiting for the meteorite to scroll past behindThreshold.
       if (collisionResult.meteoriteHit) {
         const hit = collisionResult.meteoriteHit;
         hit.isActive = false;
@@ -988,11 +990,20 @@ export class StageScene implements Scene {
     let metWrite = 0;
     for (let read = 0; read < meteorites.length; read++) {
       const met = meteorites[read];
-      if (met.position.z > behindThreshold) {
+      // Inactive meteorites have been consumed by a collision earlier in this
+      // same frame (StageScene.update meteorite-hit branch). Returning them
+      // to the pool immediately avoids 18-36 frames of empty CollisionSystem
+      // checks and scene-graph traversals before they would otherwise drift
+      // past behindThreshold at the spaceship's BASE_SPEED..BOOST advance.
+      if (!met.isActive || met.position.z > behindThreshold) {
         this.spawnSystem.releaseMeteorite(met);
       } else {
         // Animate retained meteorites (X/Z rotation) here so this.meteorites
         // is walked only once per frame, mirroring the star retain branch.
+        // The isActive guard is defensive: with the !met.isActive release path
+        // above, all retained meteorites are active, but we keep the check so
+        // any future code path that flips isActive without immediate cleanup
+        // still doesn't animate a consumed meteorite.
         if (met.isActive) {
           met.update(deltaTime, shipZ);
         }

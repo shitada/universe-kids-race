@@ -130,7 +130,7 @@ describe('StageScene cleanupPassedObjects', () => {
     expect(internal.meteorites).toHaveLength(3);
   });
 
-  it('skips meteorite update when isActive is false', () => {
+  it('releases an inactive meteorite to the pool in the same cleanup pass', () => {
     const scene = createScene();
     const internal = scene as unknown as {
       stars: Star[];
@@ -151,9 +151,14 @@ describe('StageScene cleanupPassedObjects', () => {
 
     internal.cleanupPassedObjects(0.1);
 
+    // Inactive meteorites are now released the same frame so they no longer
+    // incur empty CollisionSystem / scene-graph traversal cost while drifting
+    // toward behindThreshold. recycle() resets rotation back to 0 and detaches
+    // the mesh from its parent.
     expect(inactiveMet.mesh.rotation.x).toBe(0);
     expect(inactiveMet.mesh.rotation.z).toBe(0);
-    expect(internal.meteorites).toHaveLength(1);
+    expect(internal.meteorites).toHaveLength(0);
+    expect(inactiveMet.mesh.parent).toBeNull();
   });
 
   it('does not let scene children grow unboundedly across many cleanup cycles', () => {

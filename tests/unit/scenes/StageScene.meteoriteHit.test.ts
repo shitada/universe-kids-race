@@ -73,8 +73,13 @@ describe('StageScene meteorite hit feedback', () => {
 
     internal.update(0.016);
 
-    expect(hit.isActive).toBe(false);
-    expect(hit.mesh.visible).toBe(false);
+    // The hit meteorite is released to the pool inside the same frame's
+    // cleanupPassedObjects() pass. recycle() resets isActive=true and
+    // mesh.visible=true so the instance is ready for re-use; the user-facing
+    // "vanish" effect still happens because the mesh is detached from the
+    // scene before the next render.
+    expect(internal.meteorites).not.toContain(hit);
+    expect(hit.mesh.parent).toBeNull();
     expect(emitSpy).toHaveBeenCalledTimes(1);
 
     const args = emitSpy.mock.calls[0];
@@ -112,5 +117,68 @@ describe('StageScene meteorite hit feedback', () => {
     expect(emitSpy).not.toHaveBeenCalled();
     expect(met.mesh.visible).toBe(true);
     expect(met.isActive).toBe(true);
+  });
+
+  it('returns the hit meteorite to the pool inside the same frame', () => {
+    const { scene } = createScene();
+    const internal = scene as unknown as {
+      collisionSystem: { check: (...args: unknown[]) => unknown };
+      meteorites: Meteorite[];
+      spawnSystem: {
+        releaseMeteorite: (m: Meteorite) => void;
+        getMeteoritePoolSize: () => number;
+      };
+      threeScene: { children: unknown[] };
+      update: (dt: number) => void;
+    };
+
+    // Use the spawn system so the meteorite is owned by the pool — this lets
+    // us assert that `getMeteoritePoolSize()` does not grow (the instance is
+    // returned to the existing pool slot rather than a new allocation).
+    const pool = (
+      internal.spawnSystem as unknown as {
+        meteoritePool: { acquire: (x: number, y: number, z: number) => Meteorite };
+      }
+    ).meteoritePool;
+    const hit = pool.acquire(2, 1, -30);
+    (internal.threeScene as unknown as { add: (o: unknown) => void }).add(hit.mesh);
+
+    internal.meteorites = [hit];
+    const poolSizeBefore = internal.spawnSystem.getMeteoritePoolSize();
+    const meteoriteCountBefore = internal.meteorites.length;
+
+    internal.collisionSystem = {
+      check: () => ({
+        starCollisions: [],
+        meteoriteCollision: true,
+        meteoriteHit: hit,
+      }),
+    };
+
+    const releaseSpy = vi.spyOn(internal.spawnSystem, 'releaseMeteorite');
+
+    internal.update(0.016);
+
+    // Same-frame: the meteorite array shrinks by exactly one and the hit
+    // meteorite is gone (no waiting for it to drift past behindThreshold).
+    expect(internal.meteorites.length).toBe(meteoriteCountBefore - 1);
+    expect(internal.meteorites).not.toContain(hit);
+
+    // The release path went through SpawnSystem.releaseMeteorite (so the
+    // pool's release hook ran), and no new pool slot was allocated.
+    expect(releaseSpy).toHaveBeenCalledWith(hit);
+    expect(internal.spawnSystem.getMeteoritePoolSize()).toBe(poolSizeBefore);
+
+    // The hit mesh is detached from the scene graph.
+    expect(hit.mesh.parent).toBeNull();
+    expect(internal.threeScene.children).not.toContain(hit.mesh);
+
+    // The same instance is reused on the next acquire — confirming it sits
+    // in the available side of the pool rather than being orphaned.
+    const reused = pool.acquire(0, 0, -50);
+    expect(reused).toBe(hit);
+    // recycle()/reset() restored visibility and the active flag.
+    expect(reused.mesh.visible).toBe(true);
+    expect(reused.isActive).toBe(true);
   });
 });
