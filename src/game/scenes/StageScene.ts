@@ -322,13 +322,10 @@ export class StageScene implements Scene {
     this.isHomeConfirmOpen = false;
     this.shouldResumeAfterHomeConfirm = false;
 
-    // Restore total scores if passed
-    if (context.totalScore !== undefined) {
-      this.scoreSystem.setTotalScore(context.totalScore);
-    }
-    if (context.totalStarCount !== undefined) {
-      this.scoreSystem.setTotalStarCount(context.totalStarCount);
-    }
+    const totalScore = context.totalScore ?? 0;
+    const totalStarCount = context.totalStarCount ?? 0;
+    this.scoreSystem.setTotalScore(totalScore);
+    this.scoreSystem.setTotalStarCount(totalStarCount);
 
     // Reset scene
     this.threeScene = new THREE.Scene();

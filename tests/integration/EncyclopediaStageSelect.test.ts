@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TitleScene } from '../../src/game/scenes/TitleScene';
+import { StageScene } from '../../src/game/scenes/StageScene';
 import { SceneManager } from '../../src/game/SceneManager';
 import { LoadingOverlay } from '../../src/ui/LoadingOverlay';
 import { EncyclopediaOverlay } from '../../src/ui/EncyclopediaOverlay';
 import type { Scene, SceneContext, SceneType } from '../../src/types';
 import type { SaveManager } from '../../src/game/storage/SaveManager';
 import type { AudioManager } from '../../src/game/audio/AudioManager';
+import type { InputSystem } from '../../src/game/systems/InputSystem';
 import * as THREE from 'three';
 
 function createTrackingScene(
@@ -173,5 +175,60 @@ describe('Encyclopedia Stage Selection Integration', () => {
     expect(loadEncyclopediaOverlay).toHaveBeenCalledTimes(1);
     expect(document.querySelector('[data-loading-overlay]')).toBeNull();
     expect(uiOverlay.querySelector('[data-card][data-stage="2"]')).not.toBeNull();
+  });
+
+  it('restarts from zero totals after returning to title and pressing "あそぶ" again', async () => {
+    const manager = new SceneManager();
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager();
+    const inputSystem = {
+      setBoostPressed: vi.fn(),
+      getState: vi.fn(() => ({ moveDirection: 0, boostPressed: false })),
+    } as unknown as InputSystem;
+    const titleScene = new TitleScene(manager, saveManager, audioManager);
+    const stageScene = new StageScene(manager, inputSystem, audioManager, saveManager);
+    const stageInternal = stageScene as unknown as {
+      scoreSystem: {
+        setTotalScore(score: number): void;
+        setTotalStarCount(count: number): void;
+        getTotalScore(): number;
+        getTotalStarCount(): number;
+      };
+      countdownOverlay: { dispose(): void } | null;
+      isStarting: boolean;
+    };
+
+    manager.registerScene('title', titleScene);
+    manager.registerScene('stage', stageScene);
+
+    await manager.transitionTo('title');
+
+    const playButton = Array.from(uiOverlay.querySelectorAll('button')).find(
+      (button) => button.textContent === 'あそぶ',
+    ) as HTMLButtonElement;
+    playButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+
+    stageInternal.countdownOverlay?.dispose();
+    stageInternal.countdownOverlay = null;
+    stageInternal.isStarting = false;
+    stageInternal.scoreSystem.setTotalScore(1200);
+    stageInternal.scoreSystem.setTotalStarCount(12);
+
+    manager.requestTransition('title');
+    await flushPromises();
+
+    const replayButton = Array.from(uiOverlay.querySelectorAll('button')).find(
+      (button) => button.textContent === 'あそぶ',
+    ) as HTMLButtonElement;
+    replayButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+
+    stageInternal.countdownOverlay?.dispose();
+    stageInternal.countdownOverlay = null;
+    stageInternal.isStarting = false;
+
+    expect(stageInternal.scoreSystem.getTotalScore()).toBe(0);
+    expect(stageInternal.scoreSystem.getTotalStarCount()).toBe(0);
   });
 });

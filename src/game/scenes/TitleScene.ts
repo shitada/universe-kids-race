@@ -309,7 +309,11 @@ export class TitleScene implements Scene {
       this.ensureTitleAudioInitialized(false);
       const saveData = this.saveManager.load();
       const startStage = Math.min(saveData.clearedStage + 1, TOTAL_STAGES);
-      this.sceneManager.requestTransition('stage', { stageNumber: startStage });
+      this.sceneManager.requestTransition('stage', {
+        stageNumber: startStage,
+        totalScore: 0,
+        totalStarCount: 0,
+      });
     });
 
     // Tutorial button
