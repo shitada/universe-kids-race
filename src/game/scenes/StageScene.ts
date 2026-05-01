@@ -1074,6 +1074,7 @@ export class StageScene implements Scene {
     this.clearOverlay.appendChild(msg);
 
     if (isBestUpdated) {
+      this.injectBestStageStarsAnimation();
       const bestMsg = document.createElement('div');
       bestMsg.textContent = `✨ じこベストこうしん！ ⭐ ${starCount} こ`;
       bestMsg.style.cssText = `
@@ -1122,6 +1123,21 @@ export class StageScene implements Scene {
     }
 
     uiOverlay.appendChild(this.clearOverlay);
+  }
+
+  private injectBestStageStarsAnimation(): void {
+    if (document.getElementById('best-stage-stars-animation')) return;
+
+    const style = document.createElement('style');
+    style.id = 'best-stage-stars-animation';
+    style.textContent = `
+      @keyframes bestStageStarsPop {
+        0%   { transform: scale(0.6); opacity: 0; }
+        60%  { transform: scale(1.2); opacity: 1; }
+        100% { transform: scale(1.0); opacity: 1; }
+      }
+    `;
+    document.head.appendChild(style);
   }
 
   private handleStageComplete(): void {

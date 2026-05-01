@@ -437,4 +437,37 @@ describe('StageScene best-stage-stars-update feedback on clear', () => {
     expect(bestIdx).toBeGreaterThan(yattaneIdx);
     expect(scoreIdx).toBeGreaterThan(bestIdx);
   });
+
+  it('injects @keyframes bestStageStarsPop into document.head when best is updated', () => {
+    document.getElementById('best-stage-stars-animation')?.remove();
+
+    const { scene } = setupClearScene({
+      stageNumber: 2,
+      earnedStars: 3,
+      previousBest: 1,
+      alreadyUnlocked: true,
+    });
+
+    (scene as unknown as { onStageClear(): void }).onStageClear();
+
+    const styleEl = document.getElementById('best-stage-stars-animation');
+    expect(styleEl).not.toBeNull();
+    expect(styleEl?.tagName).toBe('STYLE');
+    expect(styleEl?.textContent).toContain('@keyframes bestStageStarsPop');
+  });
+
+  it('does NOT inject the keyframes style when best is not updated', () => {
+    document.getElementById('best-stage-stars-animation')?.remove();
+
+    const { scene } = setupClearScene({
+      stageNumber: 3,
+      earnedStars: 2,
+      previousBest: 4,
+      alreadyUnlocked: true,
+    });
+
+    (scene as unknown as { onStageClear(): void }).onStageClear();
+
+    expect(document.getElementById('best-stage-stars-animation')).toBeNull();
+  });
 });
