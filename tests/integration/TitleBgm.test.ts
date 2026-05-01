@@ -126,7 +126,7 @@ describe('Title → Stage BGM transition (bugfix: BGM_0 plays during title)', ()
 
     expect(sceneManager.requestTransition).toHaveBeenCalledWith(
       'stage',
-      expect.objectContaining({ stageNumber: 1 }),
+      expect.objectContaining({ stageNumber: 1, totalScore: 0, totalStarCount: 0 }),
     );
     // 「あそぶ」押下では playBGM は追加で呼ばれない（StageScene が呼ぶ）
     expect(calls).toEqual([{ kind: 'play', arg: 0 }]);
@@ -214,7 +214,7 @@ describe('Title → Stage BGM transition (bugfix: BGM_0 plays during title)', ()
 
     expect(sceneManager.requestTransition).toHaveBeenCalledWith(
       'stage',
-      expect.objectContaining({ stageNumber: 1 }),
+      expect.objectContaining({ stageNumber: 1, totalScore: 0, totalStarCount: 0 }),
     );
     expect(calls).toEqual([]);
 

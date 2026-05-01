@@ -146,7 +146,11 @@ describe('TitleScene (T009)', () => {
     expect(audioManager.playBGM).toHaveBeenCalledTimes(1);
     expect(sceneManager.requestTransition).toHaveBeenCalledWith(
       'stage',
-      expect.objectContaining({ stageNumber: expect.any(Number) }),
+      expect.objectContaining({
+        stageNumber: expect.any(Number),
+        totalScore: 0,
+        totalStarCount: 0,
+      }),
     );
 
     scene.exit();
@@ -169,7 +173,11 @@ describe('TitleScene (T009)', () => {
     expect(audioManager.playBGM).not.toHaveBeenCalled();
     expect(sceneManager.requestTransition).toHaveBeenCalledWith(
       'stage',
-      expect.objectContaining({ stageNumber: expect.any(Number) }),
+      expect.objectContaining({
+        stageNumber: expect.any(Number),
+        totalScore: 0,
+        totalStarCount: 0,
+      }),
     );
 
     scene.exit();

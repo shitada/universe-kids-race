@@ -499,3 +499,101 @@ describe('StageScene best-stage-stars-update feedback on clear', () => {
     expect(document.getElementById('best-stage-stars-animation')).toBeNull();
   });
 });
+
+describe('StageScene cumulative totals on re-entry', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '<div id="hud"></div><div id="ui-overlay"></div>';
+  });
+
+  function createEnterableStageScene(): {
+    scene: StageScene;
+    sceneManager: { requestTransition: ReturnType<typeof vi.fn> };
+  } {
+    const sceneManager = { requestTransition: vi.fn() };
+    const inputSystem = {
+      setBoostPressed: vi.fn(),
+      getState: vi.fn(() => ({ moveDirection: 0, boostPressed: false })),
+    } as unknown as InputSystem;
+    const audioManager = {
+      playBGM: vi.fn(),
+      stopBGM: vi.fn(),
+      playSFX: vi.fn(),
+      stopBoostSFX: vi.fn(),
+      startBoostSFX: vi.fn(),
+      isMuted: vi.fn(() => false),
+      toggleMute: vi.fn(() => false),
+    } as unknown as AudioManager;
+    const saveManager = {
+      load: vi.fn(() => ({ clearedStage: 0, unlockedPlanets: [], tutorialShown: true })),
+      save: vi.fn(),
+      clear: vi.fn(),
+      markStageCleared: vi.fn(() => false),
+      updateBestStageStars: vi.fn(),
+    } as unknown as SaveManager;
+
+    return {
+      scene: new StageScene(
+        sceneManager as unknown as SceneManager,
+        inputSystem,
+        audioManager,
+        saveManager,
+      ),
+      sceneManager,
+    };
+  }
+
+  function skipCountdown(scene: StageScene): void {
+    const internal = scene as unknown as {
+      countdownOverlay: { dispose(): void } | null;
+      isStarting: boolean;
+    };
+    internal.countdownOverlay?.dispose();
+    internal.countdownOverlay = null;
+    internal.isStarting = false;
+  }
+
+  it('resets cached cumulative totals to zero when re-entered without totals context', () => {
+    const { scene } = createEnterableStageScene();
+    const internal = scene as unknown as {
+      scoreSystem: { getTotalScore(): number; getTotalStarCount(): number };
+    };
+
+    scene.enter({ stageNumber: 1, totalScore: 900, totalStarCount: 9 });
+    skipCountdown(scene);
+    expect(internal.scoreSystem.getTotalScore()).toBe(900);
+    expect(internal.scoreSystem.getTotalStarCount()).toBe(9);
+
+    scene.exit();
+    scene.enter({ stageNumber: 1 });
+    skipCountdown(scene);
+
+    expect(internal.scoreSystem.getTotalScore()).toBe(0);
+    expect(internal.scoreSystem.getTotalStarCount()).toBe(0);
+  });
+
+  it('keeps cumulative totals when clearing into the next stage', () => {
+    const { scene, sceneManager } = createEnterableStageScene();
+    const internal = scene as unknown as {
+      scoreSystem: {
+        addStarScore(starType: 'NORMAL' | 'RAINBOW'): void;
+        getTotalScore(): number;
+        getTotalStarCount(): number;
+      };
+      handleStageComplete(): void;
+    };
+
+    scene.enter({ stageNumber: 1, totalScore: 500, totalStarCount: 5 });
+    skipCountdown(scene);
+    internal.scoreSystem.addStarScore('NORMAL');
+
+    internal.handleStageComplete();
+
+    expect(internal.scoreSystem.getTotalScore()).toBe(600);
+    expect(internal.scoreSystem.getTotalStarCount()).toBe(6);
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith('stage', {
+      stageNumber: 2,
+      totalScore: 600,
+      totalStarCount: 6,
+    });
+  });
+});
