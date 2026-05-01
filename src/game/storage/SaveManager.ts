@@ -126,16 +126,25 @@ export class SaveManager {
     }
   }
 
-  // Resets progress data (clearedStage, unlockedPlanets) but preserves the
-  // user's mute preference. Used on Safari new-session detection so that
-  // parents' silent-environment setting survives swipe-to-close.
+  // Resets session progress data (clearedStage, unlockedPlanets,
+  // bestStageStars) but preserves stable per-device / per-player preferences.
+  // Used on Safari new-session detection so that mute preference, adaptive
+  // pixel-ratio hint, and dismissed first-run tutorial state survive
+  // swipe-to-close while gameplay progress is cleared.
   resetSessionDataPreservingMuted(): void {
     try {
       const prev = this.load();
       const muted = prev.muted === true;
       const lastStablePixelTier = prev.lastStablePixelTier;
+      const tutorialShown = prev.tutorialShown === true;
       this.clear();
-      const next: SaveData = { clearedStage: 0, unlockedPlanets: [], muted, bestStageStars: {} };
+      const next: SaveData = {
+        clearedStage: 0,
+        unlockedPlanets: [],
+        muted,
+        bestStageStars: {},
+        tutorialShown,
+      };
       if (typeof lastStablePixelTier === 'number') {
         next.lastStablePixelTier = lastStablePixelTier;
       }

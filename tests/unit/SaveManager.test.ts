@@ -383,6 +383,48 @@ describe('SaveManager', () => {
       expect(data.muted).toBe(false);
     });
 
+    it('preserves tutorialShown=true while resetting only session progress data', () => {
+      const manager = new SaveManager();
+      manager.save({
+        clearedStage: 7,
+        unlockedPlanets: [1, 2, 3, 4],
+        muted: true,
+        tutorialShown: true,
+        bestStageStars: { 1: 3, 2: 5 },
+      });
+
+      manager.resetSessionDataPreservingMuted();
+
+      expect(manager.load()).toEqual({
+        clearedStage: 0,
+        unlockedPlanets: [],
+        muted: true,
+        tutorialShown: true,
+        bestStageStars: {},
+      });
+    });
+
+    it('keeps tutorialShown=false when resetting a first-run save', () => {
+      const manager = new SaveManager();
+      manager.save({
+        clearedStage: 2,
+        unlockedPlanets: [1, 2],
+        muted: false,
+        tutorialShown: false,
+        bestStageStars: { 1: 2 },
+      });
+
+      manager.resetSessionDataPreservingMuted();
+
+      expect(manager.load()).toEqual({
+        clearedStage: 0,
+        unlockedPlanets: [],
+        muted: false,
+        tutorialShown: false,
+        bestStageStars: {},
+      });
+    });
+
     it('does not throw and stores muted=false when no save exists', () => {
       const manager = new SaveManager();
       expect(() => manager.resetSessionDataPreservingMuted()).not.toThrow();
