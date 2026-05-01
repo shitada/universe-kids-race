@@ -178,6 +178,29 @@ export class SaveManager {
     }
   }
 
+  markStageCleared(stageNumber: number): boolean {
+    if (!Number.isInteger(stageNumber) || stageNumber < 1 || stageNumber > TOTAL_STAGES) {
+      return false;
+    }
+    try {
+      const data = this.load();
+      const wasUnlocked = data.unlockedPlanets.includes(stageNumber);
+      const nextClearedStage = Math.max(data.clearedStage, stageNumber);
+      if (data.clearedStage === nextClearedStage && wasUnlocked) {
+        return false;
+      }
+      data.clearedStage = nextClearedStage;
+      if (!wasUnlocked) {
+        data.unlockedPlanets.push(stageNumber);
+      }
+      this.save(data);
+      return !wasUnlocked;
+    } catch (e) {
+      console.warn('SaveManager.markStageCleared failed:', e);
+      return false;
+    }
+  }
+
   // Marks the first-run tutorial overlay as shown so subsequent TitleScene
   // entries don't auto-display it. Idempotent: calling it after the flag is
   // already true short-circuits to avoid an unnecessary localStorage write.
