@@ -375,6 +375,34 @@ describe('TitleScene first-run onboarding (auto tutorial)', () => {
     scene.exit();
   });
 
+  it('does NOT auto-show TutorialOverlay for fresh-session save data when tutorialShown is true', () => {
+    const saveManager = {
+      load: vi.fn(() => ({
+        clearedStage: 0,
+        unlockedPlanets: [],
+        bestStageStars: {},
+        tutorialShown: true,
+        muted: false,
+      })),
+      save: vi.fn(),
+      clear: vi.fn(),
+      markTutorialShown: vi.fn(),
+    } as unknown as SaveManager;
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      saveManager,
+      createMockAudioManager(true),
+    );
+
+    scene.enter({});
+
+    expect(document.querySelector('[data-tutorial-overlay]')).toBeNull();
+    expect(saveManager.load).toHaveBeenCalled();
+    expect(saveManager.markTutorialShown).not.toHaveBeenCalled();
+
+    scene.exit();
+  });
+
   it('persists tutorialShown=true and removes overlay when child taps "とじる"', () => {
     const saveManager = createOnboardingMockSaveManager(false);
     const scene = new TitleScene(
