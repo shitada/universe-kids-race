@@ -217,7 +217,7 @@ const schedulePrefetch = (cb: () => void): void => {
   window.setTimeout(cb, 800);
 };
 schedulePrefetch(() => {
-  void sceneManager.prefetchSceneModule('stage').catch(() => {});
+  void sceneManager.prefetchScene('stage').catch(() => {});
   void sceneManager.prefetchScene('ending').catch(() => {});
 });
 

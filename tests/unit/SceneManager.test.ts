@@ -274,6 +274,36 @@ describe('SceneManager', () => {
     expect(stageScene.enter).toHaveBeenCalledWith({ stageNumber: 1 });
   });
 
+  it('falls back to lazy transition after a failed prefetch', async () => {
+    const manager = new SceneManager();
+    const titleScene = createMockScene();
+    const stageScene = createMockScene();
+    const prefetchError = new Error('prefetch failed');
+    const factory = vi
+      .fn<() => Promise<Scene>>()
+      .mockRejectedValueOnce(prefetchError)
+      .mockResolvedValueOnce(stageScene);
+    const loadStateHandler = vi.fn();
+    const transitionErrorHandler = vi.fn();
+
+    manager.registerScene('title', titleScene);
+    manager.registerSceneFactory('stage', factory);
+    manager.setLoadStateHandler(loadStateHandler);
+    manager.setTransitionErrorHandler(transitionErrorHandler);
+
+    await expect(manager.prefetchScene('stage')).rejects.toThrow('prefetch failed');
+    await manager.transitionTo('title');
+    await manager.requestTransition('stage', { stageNumber: 1 });
+
+    expect(factory).toHaveBeenCalledTimes(2);
+    expect(loadStateHandler.mock.calls).toEqual([
+      [true, 'stage'],
+      [false, 'stage'],
+    ]);
+    expect(transitionErrorHandler).not.toHaveBeenCalled();
+    expect(stageScene.enter).toHaveBeenCalledWith({ stageNumber: 1 });
+  });
+
   it('prefetches a scene module without creating the scene until transition', async () => {
     const manager = new SceneManager();
     const stageScene = createMockScene();

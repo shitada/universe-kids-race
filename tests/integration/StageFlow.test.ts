@@ -257,6 +257,86 @@ describe('Stage Flow Integration', () => {
     expect(firstSceneRef.children.filter((child) => child.type === 'DirectionalLight')).toHaveLength(1);
   });
 
+  it('uses a prefetched StageScene cache from title without showing loading UI or visible side effects', async () => {
+    const manager = new SceneManager();
+    let stageScene: StageScene | null = null;
+    const inputSystem = {
+      setBoostPressed: vi.fn(),
+      getState: vi.fn(() => ({ moveDirection: 0, boostPressed: false })),
+    } as unknown as InputSystem;
+    const audioManager = {
+      playBGM: vi.fn(),
+      stopBGM: vi.fn(),
+      playSFX: vi.fn(),
+      stopBoostSFX: vi.fn(),
+      startBoostSFX: vi.fn(),
+      isMuted: vi.fn(() => false),
+      toggleMute: vi.fn(() => false),
+      setMuted: vi.fn(),
+      initFromInteraction: vi.fn(),
+    } as unknown as AudioManager;
+    const saveManager = {
+      load: vi.fn(() => ({
+        clearedStage: 0,
+        unlockedPlanets: [1, 2],
+        muted: false,
+        tutorialShown: true,
+        bestStageStars: {},
+      })),
+      save: vi.fn(),
+      clear: vi.fn(),
+      markStageCleared: vi.fn(() => false),
+      updateBestStageStars: vi.fn(),
+    } as unknown as SaveManager;
+    const loadingOverlay = {
+      show: vi.fn(),
+      hide: vi.fn(),
+    };
+    const stageFactory = vi.fn(async () => {
+      stageScene = new StageScene(manager, inputSystem, audioManager, saveManager);
+      return stageScene;
+    });
+
+    manager.registerScene('title', createTrackingScene([], 'title'));
+    manager.registerSceneFactory('stage', stageFactory);
+    manager.setLoadStateHandler((isLoading, sceneType) => {
+      if (isLoading) {
+        loadingOverlay.show(
+          sceneType === 'ending'
+            ? 'さいごの じゅんび ちゅう...'
+            : 'たびの じゅんび ちゅう...',
+        );
+        return;
+      }
+      loadingOverlay.hide();
+    });
+
+    await manager.transitionTo('title');
+    await manager.prefetchScene('stage');
+
+    expect(stageFactory).toHaveBeenCalledTimes(1);
+    expect(audioManager.playBGM).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-loading-overlay]')).toBeNull();
+    expect(document.querySelector('[data-stage-clear-overlay]')).toBeNull();
+    expect(document.querySelector('[aria-label="ホームへ もどる"]')).toBeNull();
+    expect(manager.getCurrentType()).toBe('title');
+
+    await manager.transitionTo('stage', { stageNumber: 1 });
+
+    expect(stageFactory).toHaveBeenCalledTimes(1);
+    expect(loadingOverlay.show).not.toHaveBeenCalled();
+    expect(manager.getCurrentType()).toBe('stage');
+    expect(audioManager.playBGM).toHaveBeenCalledWith(1);
+
+    const stageInternal = stageScene as unknown as {
+      countdownOverlay: { dispose(): void } | null;
+      isStarting: boolean;
+    };
+    stageInternal.countdownOverlay?.dispose();
+    stageInternal.countdownOverlay = null;
+    stageInternal.isStarting = false;
+  });
+
   it('waits for the clear CTA before moving to the next stage', async () => {
     const manager = new SceneManager();
     const inputSystem = {
