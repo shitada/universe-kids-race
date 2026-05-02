@@ -89,6 +89,10 @@ function getContinueButton(): HTMLButtonElement {
   return button!;
 }
 
+function getCardButton(): HTMLButtonElement | null {
+  return document.querySelector<HTMLButtonElement>('[data-stage-clear-card]');
+}
+
 function mockCanvasContext(): void {
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => {
     return {
@@ -196,5 +200,68 @@ describe('StageScene clear CTA', () => {
     const button = getContinueButton();
     expect(button.textContent).toBe('つぎへ');
     expect(button.disabled).toBe(false);
+    expect(getCardButton()?.textContent).toBe('カードをみる');
+  });
+
+  it('新規アンロック時だけカードをみるボタンを表示する', () => {
+    const unlockedScene = createScene({
+      stageNumber: 2,
+      isNewPlanetUnlock: true,
+    }).scene as unknown as StageSceneInternals;
+    unlockedScene.onStageClear();
+    expect(getCardButton()).not.toBeNull();
+
+    document.body.innerHTML = '<div id="hud"></div><div id="ui-overlay"></div>';
+    mockCanvasContext();
+
+    const replayScene = createScene({
+      stageNumber: 2,
+      isNewPlanetUnlock: false,
+    }).scene as unknown as StageSceneInternals;
+    replayScene.onStageClear();
+    expect(getCardButton()).toBeNull();
+  });
+
+  it('カード詳細を閉じるとクリア画面へ戻り、その後つぎへできる', () => {
+    const { scene, sceneManager } = createScene({
+      stageNumber: 2,
+      earnedStars: 5,
+      isNewPlanetUnlock: true,
+      finalizeStageResult: { totalScore: 2000, totalStarCount: 9 },
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const cardButton = getCardButton();
+    expect(cardButton).not.toBeNull();
+    cardButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    const detailOverlay = document.querySelector('[data-encyclopedia-detail-overlay]') as HTMLElement | null;
+    expect(detailOverlay).not.toBeNull();
+    expect(detailOverlay?.textContent).toContain('水星');
+    expect(detailOverlay?.textContent).toContain('⚫');
+    expect(detailOverlay?.textContent).toContain('すいせいは たいように いちばん ちかい わくせいだよ');
+    expect(sceneManager.requestTransition).not.toHaveBeenCalled();
+
+    const continueButton = getContinueButton();
+    continueButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(sceneManager.requestTransition).not.toHaveBeenCalled();
+
+    const backButton = document.querySelector('[data-detail-back]') as HTMLElement | null;
+    expect(backButton?.textContent).toBe('クリアへ もどる');
+    backButton?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(document.querySelector('[data-encyclopedia-detail-overlay]')).toBeNull();
+    expect(document.querySelector('[data-stage-clear-overlay]')).not.toBeNull();
+
+    continueButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith('stage', {
+      stageNumber: 3,
+      totalScore: 2000,
+      totalStarCount: 9,
+    });
   });
 });

@@ -19,10 +19,11 @@ import { AirShield } from '../effects/AirShield';
 import { BoostLinesEffect } from '../effects/BoostLinesEffect';
 import { BoostFlameEffect } from '../effects/BoostFlameEffect';
 import { CompanionManager } from '../entities/CompanionManager';
-import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
 import { followCameraZ } from '../utils/followCameraZ';
 import { getViewportSize } from '../utils/getViewportSize';
 import { ScorePopupManager } from '../../ui/ScorePopupManager';
+import { EncyclopediaOverlay } from '../../ui/EncyclopediaOverlay';
+import { getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 
 const BG_STAR_PARALLAX = 1.0;
 
@@ -251,8 +252,11 @@ export class StageScene implements Scene {
   private clearTimer = 0;
   private clearOverlay: HTMLDivElement | null = null;
   private clearContinueButton: HTMLButtonElement | null = null;
+  private clearRewardButton: HTMLButtonElement | null = null;
   private isClearContinueEnabled = false;
   private hasHandledClearContinue = false;
+  private isClearRewardOpen = false;
+  private clearRewardOverlay = new EncyclopediaOverlay();
   private static readonly CLEAR_CONTINUE_DELAY = 0.6;
 
   // Damage animation
@@ -339,6 +343,7 @@ export class StageScene implements Scene {
     this.clearTimer = 0;
     this.isClearContinueEnabled = false;
     this.hasHandledClearContinue = false;
+    this.isClearRewardOpen = false;
     this.damageTimer = 0;
     this.elapsedTime = 0;
     this.destinationPlanetSpinTarget = null;
@@ -710,13 +715,16 @@ export class StageScene implements Scene {
   }
 
   private resetStageObjects(): void {
+    this.clearRewardOverlay.hide();
     if (this.clearOverlay) {
       this.clearOverlay.remove();
       this.clearOverlay = null;
     }
     this.clearContinueButton = null;
+    this.clearRewardButton = null;
     this.isClearContinueEnabled = false;
     this.hasHandledClearContinue = false;
+    this.isClearRewardOpen = false;
     this.removeDestinationPlanet();
     this.particleBurstManager.clear(this.threeScene);
     this.spawnSystem.recycleAll();
@@ -1186,7 +1194,7 @@ export class StageScene implements Scene {
 
     // Card acquisition notification for newly unlocked planets
     if (isNewPlanetUnlock) {
-      const entry = PLANET_ENCYCLOPEDIA.find((e) => e.stageNumber === this.stageNumber);
+      const entry = getPlanetEncyclopediaEntry(this.stageNumber);
       if (entry) {
         const cardMsg = document.createElement('div');
         cardMsg.textContent = `${entry.emoji} ${entry.name}の ずかんカード ゲット！`;
@@ -1211,6 +1219,63 @@ export class StageScene implements Scene {
           text-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
         `;
         this.clearOverlay.appendChild(companionMsg);
+
+        const rewardButton = document.createElement('button');
+        rewardButton.setAttribute('data-stage-clear-card', '');
+        rewardButton.textContent = 'カードをみる';
+        rewardButton.style.cssText = `
+          margin-top: 1rem;
+          min-width: min(72vw, 280px);
+          min-height: 72px;
+          padding: 0.9rem 1.6rem;
+          border: none;
+          border-radius: 999px;
+          font-family: 'Zen Maru Gothic', sans-serif;
+          font-size: clamp(1.3rem, 4.4vmin, 1.7rem);
+          font-weight: 900;
+          color: #fff;
+          background: rgba(255, 255, 255, 0.18);
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+          cursor: pointer;
+          touch-action: manipulation;
+          transform: scale(1);
+          transition: transform 0.08s ease-out, opacity 0.18s ease-out;
+        `;
+
+        const releaseRewardButton = (): void => {
+          if (this.clearRewardButton) {
+            this.clearRewardButton.style.transform = 'scale(1)';
+          }
+        };
+        rewardButton.addEventListener('pointerdown', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (this.isClearRewardOpen) return;
+          rewardButton.style.transform = 'scale(0.96)';
+          rewardButton.style.pointerEvents = 'none';
+          const didOpen = this.clearRewardOverlay.showStageDetail(this.stageNumber, () => {
+            this.isClearRewardOpen = false;
+            if (this.clearRewardButton) {
+              this.clearRewardButton.style.pointerEvents = 'auto';
+              this.clearRewardButton.style.transform = 'scale(1)';
+            }
+          }, {
+            bestStageStars: { [this.stageNumber]: starCount },
+            backLabel: 'クリアへ もどる',
+            zIndex: 50,
+          });
+          if (!didOpen) {
+            rewardButton.style.pointerEvents = 'auto';
+            rewardButton.style.transform = 'scale(1)';
+            return;
+          }
+          this.isClearRewardOpen = true;
+        });
+        rewardButton.addEventListener('pointerup', releaseRewardButton);
+        rewardButton.addEventListener('pointercancel', releaseRewardButton);
+        rewardButton.addEventListener('pointerleave', releaseRewardButton);
+        this.clearRewardButton = rewardButton;
+        this.clearOverlay.appendChild(rewardButton);
       }
     }
 
@@ -1244,6 +1309,7 @@ export class StageScene implements Scene {
     const activate = (event: Event): void => {
       event.preventDefault();
       event.stopPropagation();
+      if (this.isClearRewardOpen) return;
       if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
       this.hasHandledClearContinue = true;
       continueButton.disabled = true;
@@ -1257,6 +1323,7 @@ export class StageScene implements Scene {
       }
     };
     continueButton.addEventListener('pointerdown', (event) => {
+      if (this.isClearRewardOpen) return;
       if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
       continueButton.style.transform = 'scale(0.96)';
       activate(event);
@@ -1313,6 +1380,9 @@ export class StageScene implements Scene {
   }
 
   exit(): void {
+    this.clearRewardOverlay.hide();
+    this.clearRewardButton = null;
+    this.isClearRewardOpen = false;
     this.hud.hide();
     this.scorePopupManager.dispose();
     this.audioManager.stopBGM();

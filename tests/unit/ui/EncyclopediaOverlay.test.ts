@@ -74,6 +74,33 @@ describe('EncyclopediaOverlay', () => {
     expect(detail).toBeNull();
   });
 
+  it('showStageDetail opens a read-only detail overlay and closes back to the caller', () => {
+    let closed = false;
+    const shown = overlay.showStageDetail(2, () => {
+      closed = true;
+    }, {
+      bestStageStars: { 2: 5 },
+      backLabel: 'クリアへ もどる',
+      zIndex: 50,
+    });
+
+    expect(shown).toBe(true);
+    const detailOverlay = uiOverlay.querySelector('[data-encyclopedia-detail-overlay]') as HTMLElement | null;
+    expect(detailOverlay).not.toBeNull();
+    expect(detailOverlay?.style.zIndex).toBe('50');
+    expect(detailOverlay?.textContent).toContain('水星');
+    expect(detailOverlay?.textContent).toContain('すいせいは たいように いちばん ちかい わくせいだよ');
+    expect(detailOverlay?.textContent).toContain('⭐ ベスト 5');
+    expect(detailOverlay?.querySelector('[data-detail-play]')).toBeNull();
+
+    const backBtn = uiOverlay.querySelector('[data-detail-back]') as HTMLElement;
+    expect(backBtn.textContent).toBe('クリアへ もどる');
+    backBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(closed).toBe(true);
+    expect(uiOverlay.querySelector('[data-encyclopedia-detail-overlay]')).toBeNull();
+  });
+
   it('hide removes DOM', () => {
     overlay.show([], () => {});
     expect(uiOverlay.children.length).toBe(1);
