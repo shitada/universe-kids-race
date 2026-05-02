@@ -161,15 +161,12 @@ function getLoadFailureTitle(sceneType: SceneType): string {
 
 let hasScheduledStagePrefetch = false;
 
-const schedulePrefetch = (cb: () => void): void => {
-  const requestIdle = (window as Window & {
-    requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
-  }).requestIdleCallback;
-  if (typeof requestIdle === 'function') {
-    requestIdle(cb, { timeout: 1500 });
+const scheduleSoonTask = (cb: () => void): void => {
+  if (typeof queueMicrotask === 'function') {
+    queueMicrotask(cb);
     return;
   }
-  window.setTimeout(cb, 800);
+  Promise.resolve().then(cb);
 };
 
 function scheduleStagePrefetchAfterTitleReady(): void {
@@ -178,7 +175,10 @@ function scheduleStagePrefetchAfterTitleReady(): void {
   }
 
   hasScheduledStagePrefetch = true;
-  schedulePrefetch(() => {
+  scheduleSoonTask(() => {
+    if (sceneManager.getCurrentType() !== 'title') {
+      return;
+    }
     void sceneManager.prefetchSceneModule('stage').catch(() => {});
   });
 }

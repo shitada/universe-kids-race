@@ -849,7 +849,7 @@ describe('Stage Flow Integration', () => {
     expect(manager.getCurrentType()).toBe('ending');
   });
 
-  it('starts ending module prefetch only after reaching the final stage', async () => {
+  it('starts ending module prefetch from the penultimate stage and reuses it on the final stage', async () => {
     const manager = new SceneManager();
     const inputSystem = {
       setBoostPressed: vi.fn(),
@@ -887,8 +887,12 @@ describe('Stage Flow Integration', () => {
     manager.registerSceneModulePrefetch('ending', endingModulePrefetcher);
     manager.registerSceneFactory('ending', endingFactory);
 
-    await manager.transitionTo('stage', { stageNumber: TOTAL_STAGES - 1 });
+    await manager.transitionTo('stage', { stageNumber: TOTAL_STAGES - 2 });
     expect(endingModulePrefetcher).not.toHaveBeenCalled();
+    expect(endingFactory).not.toHaveBeenCalled();
+
+    await manager.transitionTo('stage', { stageNumber: TOTAL_STAGES - 1 });
+    expect(endingModulePrefetcher).toHaveBeenCalledTimes(1);
     expect(endingFactory).not.toHaveBeenCalled();
 
     await manager.transitionTo('stage', { stageNumber: TOTAL_STAGES });

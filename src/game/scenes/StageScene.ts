@@ -368,7 +368,7 @@ export class StageScene implements Scene {
   }
 
   private prefetchEndingSceneModuleIfNeeded(): void {
-    if (this.stageNumber < TOTAL_STAGES) {
+    if (this.stageNumber < TOTAL_STAGES - 1) {
       return;
     }
 

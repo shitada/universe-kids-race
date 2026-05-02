@@ -317,7 +317,7 @@ describe('Main lazy title bootstrap', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('does not prefetch stage before title transition finishes', async () => {
+  it('starts stage prefetch right after title transition finishes', async () => {
     const titleReady = createDeferred();
 
     const { loaderCalls } = await bootMain([() => titleReady.promise]);
@@ -330,9 +330,6 @@ describe('Main lazy title bootstrap', () => {
     await flushPromises();
 
     expect(document.querySelector('[data-next-adventure-card]')).not.toBeNull();
-    expect(loaderCalls.stage).toBe(0);
-
-    await vi.advanceTimersByTimeAsync(800);
     expect(loaderCalls.stage).toBe(1);
   });
 
