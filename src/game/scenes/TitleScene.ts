@@ -12,6 +12,7 @@ import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
 import { getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { formatEncyclopediaLabel } from '../../ui/formatEncyclopediaLabel';
 import { getViewportSize } from '../utils/getViewportSize';
+import { prewarmStageVisualAssets } from './StageScene';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // SHARED background-star resources for TitleScene
@@ -230,6 +231,7 @@ export class TitleScene implements Scene {
     this.createOverlay();
     this.createMuteButton();
     this.prefetchEncyclopediaOnIdle();
+    this.prewarmNextAdventureOnIdle(getNextAdventurePreview(saveData).startStage);
 
     // タイトル BGM (BGM_0) を再生する。
     // - AudioContext が既に初期化済み（エンディング後・🏠 ボタン経由でタイトル
@@ -353,6 +355,19 @@ export class TitleScene implements Scene {
         return;
       }
       void this.getEncyclopediaOverlay().catch(() => {});
+    });
+  }
+
+  private prewarmNextAdventureOnIdle(startStage: number): void {
+    if (startStage > TOTAL_STAGES) {
+      return;
+    }
+    const requestToken = this.encyclopediaRequestToken;
+    this.scheduleIdleTask(() => {
+      if (!this.isCurrentEncyclopediaRequest(requestToken)) {
+        return;
+      }
+      prewarmStageVisualAssets(startStage);
     });
   }
 

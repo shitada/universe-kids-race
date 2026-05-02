@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as THREE from 'three';
 import { TitleScene } from '../../../src/game/scenes/TitleScene';
+import * as StageSceneModule from '../../../src/game/scenes/StageScene';
 import type { SceneManager } from '../../../src/game/SceneManager';
 import type { SaveManager } from '../../../src/game/storage/SaveManager';
 import type { AudioManager } from '../../../src/game/audio/AudioManager';
@@ -350,20 +351,20 @@ describe('TitleScene (T009)', () => {
 
     scene.enter({});
     expect(loadEncyclopediaOverlay).not.toHaveBeenCalled();
-    expect(idleCallbacks).toHaveLength(1);
-    const firstIdleCallback = idleCallbacks[0];
+    expect(idleCallbacks).toHaveLength(2);
+    const firstIdleCallbacks = [...idleCallbacks];
 
     scene.exit();
     scene.enter({});
-    expect(idleCallbacks).toHaveLength(2);
-    const secondIdleCallback = idleCallbacks[1];
+    expect(idleCallbacks).toHaveLength(4);
+    const secondIdleCallbacks = idleCallbacks.slice(2);
 
-    firstIdleCallback();
+    firstIdleCallbacks.forEach((callback) => callback());
     await flushPromises();
     expect(loadEncyclopediaOverlay).not.toHaveBeenCalled();
 
-    secondIdleCallback();
-    secondIdleCallback();
+    secondIdleCallbacks.forEach((callback) => callback());
+    secondIdleCallbacks.forEach((callback) => callback());
     await flushPromises();
     await flushPromises();
 
@@ -398,7 +399,7 @@ describe('TitleScene (T009)', () => {
     });
 
     scene.enter({});
-    idleCallbacks[0]?.();
+    idleCallbacks.forEach((callback) => callback());
     await flushPromises();
     await flushPromises();
 
@@ -419,6 +420,39 @@ describe('TitleScene (T009)', () => {
     expect(loadFailureOverlay.show).not.toHaveBeenCalled();
     expect(document.querySelector('[data-card]')).toBeTruthy();
 
+    scene.exit();
+  });
+
+  it('idle callbackが次のぼうけんステージをprewarmし、exit後の古いcallbackは無視する', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager({ clearedStage: 2, unlockedPlanets: [1, 2] });
+    const audioManager = createMockAudioManager(true);
+    const idleCallbacks: Array<() => void> = [];
+    const prewarmSpy = vi
+      .spyOn(StageSceneModule, 'prewarmStageVisualAssets')
+      .mockImplementation(() => {});
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager, {
+      loadEncyclopediaOverlay: vi.fn(async () => ({ EncyclopediaOverlay })),
+      scheduleIdleTask: (callback) => idleCallbacks.push(callback),
+    });
+
+    scene.enter({});
+    const firstIdleCallbacks = [...idleCallbacks];
+    expect(firstIdleCallbacks).toHaveLength(2);
+
+    scene.exit();
+    firstIdleCallbacks.forEach((callback) => callback());
+    expect(prewarmSpy).not.toHaveBeenCalled();
+
+    scene.enter({});
+    const secondIdleCallbacks = idleCallbacks.slice(firstIdleCallbacks.length);
+    secondIdleCallbacks.forEach((callback) => callback());
+
+    expect(prewarmSpy).toHaveBeenCalledTimes(1);
+    expect(prewarmSpy).toHaveBeenCalledWith(3);
+
+    prewarmSpy.mockRestore();
     scene.exit();
   });
 

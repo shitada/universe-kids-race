@@ -5,6 +5,7 @@ import {
   StageScene,
   __resetStageSceneSharedAssetCachesForTest,
   __stageSceneSharedAssetCachesForTest,
+  prewarmStageVisualAssets,
 } from '../../../src/game/scenes/StageScene';
 import { getStageConfig } from '../../../src/game/config/StageConfig';
 import { disposeObject3D } from '../../../src/game/utils/disposeObject3D';
@@ -217,5 +218,25 @@ describe('StageScene shared asset cache', () => {
     // モジュールキャッシュにも一致する参照が入っている
     expect(__stageSceneSharedAssetCachesForTest.getBgStarsGeometry()).toBe(bg1.geometry);
     expect(__stageSceneSharedAssetCachesForTest.getBgStarsMaterial()).toBe(bg1.material);
+  });
+
+  it('prewarmStageVisualAssets does not grow shared caches when called repeatedly for the same stage', () => {
+    prewarmStageVisualAssets(11);
+
+    const firstCounts = {
+      textures: __stageSceneSharedAssetCachesForTest.planetTextureCache.size,
+      geometries: __stageSceneSharedAssetCachesForTest.planetGeometryCache.size,
+      materials: __stageSceneSharedAssetCachesForTest.planetMaterialCache.size,
+      bgGeometry: __stageSceneSharedAssetCachesForTest.getBgStarsGeometry(),
+      bgMaterial: __stageSceneSharedAssetCachesForTest.getBgStarsMaterial(),
+    };
+
+    prewarmStageVisualAssets(11);
+
+    expect(__stageSceneSharedAssetCachesForTest.planetTextureCache.size).toBe(firstCounts.textures);
+    expect(__stageSceneSharedAssetCachesForTest.planetGeometryCache.size).toBe(firstCounts.geometries);
+    expect(__stageSceneSharedAssetCachesForTest.planetMaterialCache.size).toBe(firstCounts.materials);
+    expect(__stageSceneSharedAssetCachesForTest.getBgStarsGeometry()).toBe(firstCounts.bgGeometry);
+    expect(__stageSceneSharedAssetCachesForTest.getBgStarsMaterial()).toBe(firstCounts.bgMaterial);
   });
 });

@@ -27,6 +27,7 @@ import { getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { TouchGuideOverlay, type TouchGuideMode } from '../../ui/TouchGuideOverlay';
 
 const BG_STAR_PARALLAX = 1.0;
+const BG_STAR_COUNT = 2000;
 
 // ──────────────────────────────────────────────────────────────────────────────
 // SHARED destination-planet / background-star resources
@@ -52,6 +53,17 @@ const planetMaterialCache = new Map<string, THREE.Material>();
 
 let SHARED_BG_STARS_GEOMETRY: THREE.BufferGeometry | null = null;
 let SHARED_BG_STARS_MATERIAL: THREE.PointsMaterial | null = null;
+
+function scheduleIdleTask(callback: () => void): void {
+  const requestIdle = (window as Window & {
+    requestIdleCallback?: (cb: () => void, options?: { timeout: number }) => number;
+  }).requestIdleCallback;
+  if (typeof requestIdle === 'function') {
+    requestIdle(callback, { timeout: 1500 });
+    return;
+  }
+  window.setTimeout(callback, 800);
+}
 
 function getPlanetTexture(key: string, factory: () => THREE.CanvasTexture): THREE.CanvasTexture {
   let tex = planetTextureCache.get(key);
@@ -93,6 +105,27 @@ function makeSharedMesh(geometry: THREE.BufferGeometry, material: THREE.Material
   const mesh = new THREE.Mesh(geometry, material);
   mesh.userData.sharedAssets = true;
   return mesh;
+}
+
+function prewarmBackgroundAssets(): void {
+  if (!SHARED_BG_STARS_GEOMETRY) {
+    const geo = new THREE.BufferGeometry();
+    const positions = new Float32Array(BG_STAR_COUNT * 3);
+    for (let i = 0; i < BG_STAR_COUNT * 3; i += 3) {
+      positions[i] = (Math.random() - 0.5) * 200;
+      positions[i + 1] = (Math.random() - 0.5) * 200;
+      positions[i + 2] = (Math.random() - 0.5) * 400;
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    SHARED_BG_STARS_GEOMETRY = geo;
+  }
+  if (!SHARED_BG_STARS_MATERIAL) {
+    SHARED_BG_STARS_MATERIAL = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 0.2,
+      sizeAttenuation: true,
+    });
+  }
 }
 
 function buildMercuryTexture(): THREE.CanvasTexture {
@@ -223,9 +256,156 @@ export const __stageSceneSharedAssetCachesForTest = {
   getBgStarsMaterial: (): THREE.PointsMaterial | null => SHARED_BG_STARS_MATERIAL,
 };
 
+interface DestinationPlanetBuildResult {
+  planet: THREE.Group;
+  spinTarget: THREE.Object3D | null;
+}
+
+function buildDestinationPlanet(
+  stageNumber: number,
+  stageConfig: StageConfig,
+  goalZ: number,
+): DestinationPlanetBuildResult {
+  const destinationPlanet = new THREE.Group();
+  let spinTarget: THREE.Object3D | null = null;
+
+  switch (stageNumber) {
+    case 2: {
+      const tex = getPlanetTexture('mercury', buildMercuryTexture);
+      const geo = getPlanetGeometry('mercury:sphere', () => new THREE.SphereGeometry(10, 24, 24));
+      const mat = getPlanetMaterial('mercury:mat', () => new THREE.MeshToonMaterial({ map: tex }));
+      const mesh = makeSharedMesh(geo, mat);
+      destinationPlanet.add(mesh);
+      spinTarget = mesh;
+      break;
+    }
+    case 3: {
+      const tex = getPlanetTexture('venus', buildVenusTexture);
+      const geo = getPlanetGeometry('venus:sphere', () => new THREE.SphereGeometry(14, 24, 24));
+      const mat = getPlanetMaterial('venus:mat', () => new THREE.MeshToonMaterial({ map: tex }));
+      const mesh = makeSharedMesh(geo, mat);
+      destinationPlanet.add(mesh);
+      spinTarget = mesh;
+      break;
+    }
+    case 5: {
+      const tex = getPlanetTexture('jupiter', buildJupiterTexture);
+      const geo = getPlanetGeometry('jupiter:sphere', () => new THREE.SphereGeometry(20, 24, 24));
+      const mat = getPlanetMaterial('jupiter:mat', () => new THREE.MeshToonMaterial({ map: tex }));
+      const mesh = makeSharedMesh(geo, mat);
+      destinationPlanet.add(mesh);
+      spinTarget = mesh;
+      break;
+    }
+    case 6: {
+      const sphereGeo = getPlanetGeometry('saturn:sphere', () => new THREE.SphereGeometry(15, 24, 24));
+      const sphereColor = stageConfig.planetColor;
+      const sphereMat = getPlanetMaterial(
+        `saturn:mat:${sphereColor}`,
+        () => new THREE.MeshToonMaterial({ color: sphereColor }),
+      );
+      const sphere = makeSharedMesh(sphereGeo, sphereMat);
+      destinationPlanet.add(sphere);
+      const ringGeo = getPlanetGeometry('saturn:ring', () => new THREE.RingGeometry(20, 30, 48));
+      const ringMat = getPlanetMaterial(
+        'saturn:ringMat',
+        () => new THREE.MeshToonMaterial({ color: 0xeebb66, side: THREE.DoubleSide }),
+      );
+      const ring = makeSharedMesh(ringGeo, ringMat);
+      ring.rotation.x = Math.PI / 3;
+      destinationPlanet.add(ring);
+      spinTarget = sphere;
+      break;
+    }
+    case 7: {
+      const sphereGeo = getPlanetGeometry('uranus:sphere', () => new THREE.SphereGeometry(16, 24, 24));
+      const sphereMat = getPlanetMaterial(
+        'uranus:mat',
+        () => new THREE.MeshToonMaterial({ color: 0x66ccdd }),
+      );
+      const sphere = makeSharedMesh(sphereGeo, sphereMat);
+      destinationPlanet.add(sphere);
+      const ringGeo = getPlanetGeometry('uranus:ring', () => new THREE.RingGeometry(21, 28, 48));
+      const ringMat = getPlanetMaterial(
+        'uranus:ringMat',
+        () => new THREE.MeshToonMaterial({ color: 0x99ddee, side: THREE.DoubleSide }),
+      );
+      const ring = makeSharedMesh(ringGeo, ringMat);
+      ring.rotation.z = Math.PI / 2;
+      destinationPlanet.add(ring);
+      spinTarget = sphere;
+      break;
+    }
+    case 9: {
+      const geo = getPlanetGeometry('pluto:sphere', () => new THREE.SphereGeometry(8, 24, 24));
+      const mat = getPlanetMaterial('pluto:mat', () => new THREE.MeshToonMaterial({ color: 0xbbaaaa }));
+      const mesh = makeSharedMesh(geo, mat);
+      destinationPlanet.add(mesh);
+      spinTarget = mesh;
+      break;
+    }
+    case 10: {
+      const geo = getPlanetGeometry('sun:sphere', () => new THREE.SphereGeometry(25, 24, 24));
+      const mat = getPlanetMaterial(
+        'sun:mat',
+        () => new THREE.MeshToonMaterial({ color: 0xffcc00, emissive: 0xffaa00, emissiveIntensity: 0.5 }),
+      );
+      const mesh = makeSharedMesh(geo, mat);
+      destinationPlanet.add(mesh);
+      destinationPlanet.add(new THREE.PointLight(0xffcc00, 2, 200));
+      spinTarget = mesh;
+      break;
+    }
+    case 11: {
+      const tex = getPlanetTexture('earth', buildEarthTexture);
+      const geo = getPlanetGeometry('earth:sphere', () => new THREE.SphereGeometry(15, 32, 32));
+      const mat = getPlanetMaterial('earth:mat', () => new THREE.MeshToonMaterial({ map: tex }));
+      const cloudTex = getPlanetTexture('earth:cloud', buildEarthCloudTexture);
+      const cloudGeo = getPlanetGeometry('earth:cloudSphere', () => new THREE.SphereGeometry(15.5, 32, 32));
+      const cloudMat = getPlanetMaterial(
+        'earth:cloudMat',
+        () => new THREE.MeshToonMaterial({ map: cloudTex, transparent: true, opacity: 0.3 }),
+      );
+      const earthSpin = new THREE.Group();
+      earthSpin.add(makeSharedMesh(geo, mat));
+      earthSpin.add(makeSharedMesh(cloudGeo, cloudMat));
+      destinationPlanet.add(earthSpin);
+      spinTarget = earthSpin;
+      break;
+    }
+    default: {
+      const sphereGeo = getPlanetGeometry('default:sphere', () => new THREE.SphereGeometry(15, 24, 24));
+      const color = stageConfig.planetColor;
+      const sphereMat = getPlanetMaterial(
+        `default:mat:${color}`,
+        () => new THREE.MeshToonMaterial({ color }),
+      );
+      const mesh = makeSharedMesh(sphereGeo, sphereMat);
+      destinationPlanet.add(mesh);
+      spinTarget = mesh;
+      break;
+    }
+  }
+
+  destinationPlanet.position.set(0, 0, goalZ);
+  return { planet: destinationPlanet, spinTarget };
+}
+
+export function prewarmStageVisualAssets(stageNumber: number): void {
+  if (!Number.isInteger(stageNumber) || stageNumber < 1 || stageNumber > TOTAL_STAGES) {
+    return;
+  }
+  prewarmBackgroundAssets();
+  buildDestinationPlanet(stageNumber, getStageConfig(stageNumber), 0);
+}
+
+interface StageSceneOptions {
+  scheduleIdleTask?: (callback: () => void) => void;
+}
+
 export class StageScene implements Scene {
   private static readonly VISUAL_QUALITY_SCALE_BY_TIER = [0.45, 0.7, 1];
-  private static readonly BG_STAR_COUNT = 2000;
+  private static readonly BG_STAR_COUNT = BG_STAR_COUNT;
   private static readonly ASSIST_TRIGGER_HIT_WINDOW = 6;
   private static readonly ASSIST_TRIGGER_HIT_COUNT = 2;
   private static readonly ASSIST_DURATION = 5;
@@ -337,14 +517,24 @@ export class StageScene implements Scene {
   private touchGuideMode: TouchGuideMode = 'intro';
   private touchGuideIdleTimer = 0;
   private hasSeenMoveInput = false;
+  private isActive = false;
+  private prewarmRequestToken = 0;
   private static readonly TOUCH_GUIDE_IDLE_DELAY = 3;
   private visualQualityTier = StageScene.VISUAL_QUALITY_SCALE_BY_TIER.length - 1;
+  private readonly scheduleIdleTask: (callback: () => void) => void;
 
-  constructor(sceneManager: SceneManager, inputSystem: InputSystem, audioManager: AudioManager, saveManager: SaveManager) {
+  constructor(
+    sceneManager: SceneManager,
+    inputSystem: InputSystem,
+    audioManager: AudioManager,
+    saveManager: SaveManager,
+    options: StageSceneOptions = {},
+  ) {
     this.sceneManager = sceneManager;
     this.inputSystem = inputSystem;
     this.audioManager = audioManager;
     this.saveManager = saveManager;
+    this.scheduleIdleTask = options.scheduleIdleTask ?? scheduleIdleTask;
     this.threeScene = new THREE.Scene();
     this.threeScene.background = new THREE.Color(0x000020);
     const { width: vw, height: vh } = getViewportSize();
@@ -394,6 +584,8 @@ export class StageScene implements Scene {
 
   enter(context: SceneContext): void {
     this.ensureInitialized();
+    this.isActive = true;
+    this.prewarmRequestToken += 1;
     this.lastAspect = 0;
     this.stageNumber = context.stageNumber ?? 1;
     this.stageConfig = getStageConfig(this.stageNumber);
@@ -443,6 +635,7 @@ export class StageScene implements Scene {
 
     // Destination planet
     this.createDestinationPlanet();
+    this.scheduleNextStageVisualPrewarm();
 
     // Clear systems
     this.stars.length = 0;
@@ -625,177 +818,37 @@ export class StageScene implements Scene {
     // レベルで 1 度だけ生成し、再入場時は同じ参照を使い回す。Points (mesh) のみ
     // per-instance だが、`userData.sharedAssets = true` を付与して dispose 経路で
     // geometry/material を破棄しないようにする。
-    if (!SHARED_BG_STARS_GEOMETRY) {
-      const geo = new THREE.BufferGeometry();
-      const positions = new Float32Array(StageScene.BG_STAR_COUNT * 3);
-      for (let i = 0; i < StageScene.BG_STAR_COUNT * 3; i += 3) {
-        positions[i] = (Math.random() - 0.5) * 200;
-        positions[i + 1] = (Math.random() - 0.5) * 200;
-        positions[i + 2] = (Math.random() - 0.5) * 400;
-      }
-      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      SHARED_BG_STARS_GEOMETRY = geo;
-    }
-    if (!SHARED_BG_STARS_MATERIAL) {
-      SHARED_BG_STARS_MATERIAL = new THREE.PointsMaterial({
-        color: 0xffffff,
-        size: 0.2,
-        sizeAttenuation: true,
-      });
-    }
-    this.bgStars = new THREE.Points(SHARED_BG_STARS_GEOMETRY, SHARED_BG_STARS_MATERIAL);
-    this.bgStars.userData.sharedAssets = true;
-    this.bgStars.geometry.setDrawRange(0, this.getBackgroundStarDrawCount());
-    this.threeScene.add(this.bgStars);
+    prewarmBackgroundAssets();
+    const geometry = SHARED_BG_STARS_GEOMETRY as THREE.BufferGeometry;
+    const material = SHARED_BG_STARS_MATERIAL as THREE.PointsMaterial;
+    const bgStars = new THREE.Points(geometry, material);
+    bgStars.userData.sharedAssets = true;
+    bgStars.geometry.setDrawRange(0, this.getBackgroundStarDrawCount());
+    this.bgStars = bgStars;
+    this.threeScene.add(bgStars);
   }
 
   private createDestinationPlanet(): void {
     this.removeDestinationPlanet();
-    this.destinationPlanet = new THREE.Group();
     const goalZ = -(this.stageConfig.stageLength + 50);
-
-    switch (this.stageNumber) {
-      case 2: {
-        // Mercury — small gray sphere with crater canvas texture
-        const tex = getPlanetTexture('mercury', buildMercuryTexture);
-        const geo = getPlanetGeometry('mercury:sphere', () => new THREE.SphereGeometry(10, 24, 24));
-        const mat = getPlanetMaterial('mercury:mat', () => new THREE.MeshToonMaterial({ map: tex }));
-        const mesh = makeSharedMesh(geo, mat);
-        this.destinationPlanet.add(mesh);
-        this.destinationPlanetSpinTarget = mesh;
-        break;
-      }
-      case 3: {
-        // Venus — yellow-orange sphere with swirl canvas texture
-        const tex = getPlanetTexture('venus', buildVenusTexture);
-        const geo = getPlanetGeometry('venus:sphere', () => new THREE.SphereGeometry(14, 24, 24));
-        const mat = getPlanetMaterial('venus:mat', () => new THREE.MeshToonMaterial({ map: tex }));
-        const mesh = makeSharedMesh(geo, mat);
-        this.destinationPlanet.add(mesh);
-        this.destinationPlanetSpinTarget = mesh;
-        break;
-      }
-      case 5: {
-        // Jupiter — large sphere with horizontal stripe bands canvas texture
-        const tex = getPlanetTexture('jupiter', buildJupiterTexture);
-        const geo = getPlanetGeometry('jupiter:sphere', () => new THREE.SphereGeometry(20, 24, 24));
-        const mat = getPlanetMaterial('jupiter:mat', () => new THREE.MeshToonMaterial({ map: tex }));
-        const mesh = makeSharedMesh(geo, mat);
-        this.destinationPlanet.add(mesh);
-        this.destinationPlanetSpinTarget = mesh;
-        break;
-      }
-      case 6: {
-        // Saturn — sphere with tilted ring
-        const sphereGeo = getPlanetGeometry('saturn:sphere', () => new THREE.SphereGeometry(15, 24, 24));
-        const sphereColor = this.stageConfig.planetColor;
-        const sphereMat = getPlanetMaterial(
-          `saturn:mat:${sphereColor}`,
-          () => new THREE.MeshToonMaterial({ color: sphereColor }),
-        );
-        const sphere = makeSharedMesh(sphereGeo, sphereMat);
-        this.destinationPlanet.add(sphere);
-        const ringGeo = getPlanetGeometry('saturn:ring', () => new THREE.RingGeometry(20, 30, 48));
-        const ringMat = getPlanetMaterial(
-          'saturn:ringMat',
-          () => new THREE.MeshToonMaterial({ color: 0xeebb66, side: THREE.DoubleSide }),
-        );
-        const ring = makeSharedMesh(ringGeo, ringMat);
-        ring.rotation.x = Math.PI / 3;
-        this.destinationPlanet.add(ring);
-        // Spin only the sphere body so the ring keeps its tilt.
-        this.destinationPlanetSpinTarget = sphere;
-        break;
-      }
-      case 7: {
-        // Uranus — cyan sphere with sideways ring (rotation.z = PI/2)
-        const sphereGeo = getPlanetGeometry('uranus:sphere', () => new THREE.SphereGeometry(16, 24, 24));
-        const sphereMat = getPlanetMaterial(
-          'uranus:mat',
-          () => new THREE.MeshToonMaterial({ color: 0x66ccdd }),
-        );
-        const sphere = makeSharedMesh(sphereGeo, sphereMat);
-        this.destinationPlanet.add(sphere);
-        const ringGeo = getPlanetGeometry('uranus:ring', () => new THREE.RingGeometry(21, 28, 48));
-        const ringMat = getPlanetMaterial(
-          'uranus:ringMat',
-          () => new THREE.MeshToonMaterial({ color: 0x99ddee, side: THREE.DoubleSide }),
-        );
-        const ring = makeSharedMesh(ringGeo, ringMat);
-        ring.rotation.z = Math.PI / 2;
-        this.destinationPlanet.add(ring);
-        // Spin only the sphere body so the sideways ring stays sideways.
-        this.destinationPlanetSpinTarget = sphere;
-        break;
-      }
-      case 9: {
-        // Pluto — small sphere
-        const geo = getPlanetGeometry('pluto:sphere', () => new THREE.SphereGeometry(8, 24, 24));
-        const mat = getPlanetMaterial('pluto:mat', () => new THREE.MeshToonMaterial({ color: 0xbbaaaa }));
-        const mesh = makeSharedMesh(geo, mat);
-        this.destinationPlanet.add(mesh);
-        this.destinationPlanetSpinTarget = mesh;
-        break;
-      }
-      case 10: {
-        // Sun — gold sphere with emissive, PointLight, pulse animation in update()
-        const geo = getPlanetGeometry('sun:sphere', () => new THREE.SphereGeometry(25, 24, 24));
-        const mat = getPlanetMaterial(
-          'sun:mat',
-          () => new THREE.MeshToonMaterial({ color: 0xffcc00, emissive: 0xffaa00, emissiveIntensity: 0.5 }),
-        );
-        const mesh = makeSharedMesh(geo, mat);
-        this.destinationPlanet.add(mesh);
-        // PointLight は per-instance (light は dispose 不要、GC で解放)
-        const sunLight = new THREE.PointLight(0xffcc00, 2, 200);
-        this.destinationPlanet.add(sunLight);
-        // Spin the sphere; pulse continues to scale the parent group.
-        this.destinationPlanetSpinTarget = mesh;
-        break;
-      }
-      case 11: {
-        // Earth — stage ID 11 (happens to equal TOTAL_STAGES). This is a per-stage
-        // visual branch keyed by stage number, not a "last stage" check.
-        // blue ocean + brown continents canvas texture + cloud layer
-        const tex = getPlanetTexture('earth', buildEarthTexture);
-        const geo = getPlanetGeometry('earth:sphere', () => new THREE.SphereGeometry(15, 32, 32));
-        const mat = getPlanetMaterial('earth:mat', () => new THREE.MeshToonMaterial({ map: tex }));
-
-        // Cloud layer
-        const cloudTex = getPlanetTexture('earth:cloud', buildEarthCloudTexture);
-        const cloudGeo = getPlanetGeometry('earth:cloudSphere', () => new THREE.SphereGeometry(15.5, 32, 32));
-        const cloudMat = getPlanetMaterial(
-          'earth:cloudMat',
-          () => new THREE.MeshToonMaterial({ map: cloudTex, transparent: true, opacity: 0.3 }),
-        );
-
-        // Wrap sphere + clouds in a sub-group so they spin together.
-        const earthSpin = new THREE.Group();
-        earthSpin.add(makeSharedMesh(geo, mat));
-        earthSpin.add(makeSharedMesh(cloudGeo, cloudMat));
-        this.destinationPlanet.add(earthSpin);
-        this.destinationPlanetSpinTarget = earthSpin;
-        break;
-      }
-      default: {
-        // Moon(1), Mars(4), Neptune(8), and any other — simple colored sphere.
-        // 同一 (radius, segments) のジオメトリは全 default ステージで共有。
-        // material のみ planetColor をキーに分離する。
-        const sphereGeo = getPlanetGeometry('default:sphere', () => new THREE.SphereGeometry(15, 24, 24));
-        const color = this.stageConfig.planetColor;
-        const sphereMat = getPlanetMaterial(
-          `default:mat:${color}`,
-          () => new THREE.MeshToonMaterial({ color }),
-        );
-        const mesh = makeSharedMesh(sphereGeo, sphereMat);
-        this.destinationPlanet.add(mesh);
-        this.destinationPlanetSpinTarget = mesh;
-        break;
-      }
-    }
-
-    this.destinationPlanet.position.set(0, 0, goalZ);
+    const { planet, spinTarget } = buildDestinationPlanet(this.stageNumber, this.stageConfig, goalZ);
+    this.destinationPlanet = planet;
+    this.destinationPlanetSpinTarget = spinTarget;
     this.threeScene.add(this.destinationPlanet);
+  }
+
+  private scheduleNextStageVisualPrewarm(): void {
+    const nextStageNumber = this.stageNumber + 1;
+    if (nextStageNumber > TOTAL_STAGES) {
+      return;
+    }
+    const requestToken = this.prewarmRequestToken;
+    this.scheduleIdleTask(() => {
+      if (!this.isActive || this.prewarmRequestToken !== requestToken) {
+        return;
+      }
+      prewarmStageVisualAssets(nextStageNumber);
+    });
   }
 
   private removeDestinationPlanet(): void {
@@ -1656,6 +1709,8 @@ export class StageScene implements Scene {
     if (!this.initialized) {
       return;
     }
+    this.isActive = false;
+    this.prewarmRequestToken += 1;
     this.clearRewardOverlay.hide();
     this.clearRewardButton = null;
     this.isClearRewardOpen = false;
