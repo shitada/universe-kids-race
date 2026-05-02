@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StageScene } from '../../../src/game/scenes/StageScene';
 import { Meteorite } from '../../../src/game/entities/Meteorite';
 import type { SceneManager } from '../../../src/game/SceneManager';
@@ -7,7 +7,7 @@ import type { InputSystem } from '../../../src/game/systems/InputSystem';
 import type { AudioManager } from '../../../src/game/audio/AudioManager';
 import type { SaveManager } from '../../../src/game/storage/SaveManager';
 
-function createScene() {
+function createScene(stageNumber = 1) {
   const sceneManager = { requestTransition: vi.fn() } as unknown as SceneManager;
   const inputState = { moveDirection: 0, boostPressed: false };
   const inputSystem = {
@@ -34,7 +34,7 @@ function createScene() {
   } as unknown as SaveManager;
 
   const scene = new StageScene(sceneManager, inputSystem, audioManager, saveManager);
-  scene.enter({ stageNumber: 1 });
+  scene.enter({ stageNumber });
   // Bypass the start countdown so update() proceeds into the gameplay path.
   (scene as unknown as { countdownOverlay: { dispose(): void } | null }).countdownOverlay?.dispose();
   (scene as unknown as { isStarting: boolean }).isStarting = false;
@@ -43,6 +43,10 @@ function createScene() {
 }
 
 describe('StageScene meteorite hit feedback', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '<div id="hud"></div><div id="ui-overlay"></div>';
+  });
+
   it('hides the hit meteorite mesh and emits exactly one particle burst at the hit position', () => {
     const { scene } = createScene();
     const internal = scene as unknown as {
@@ -180,5 +184,97 @@ describe('StageScene meteorite hit feedback', () => {
     // recycle()/reset() restored visibility and the active flag.
     expect(reused.mesh.visible).toBe(true);
     expect(reused.isActive).toBe(true);
+  });
+
+  it('activates assist mode after two meteorite hits within 6 seconds and returns to normal after it ends', () => {
+    const { scene } = createScene(9);
+    const internal = scene as unknown as {
+      collisionSystem: { check: (...args: unknown[]) => unknown };
+      spawnSystem: {
+        getMeteoriteIntervalMultiplier: () => number;
+      };
+      hud: {
+        showAssistMessage: () => void;
+      };
+      update: (dt: number) => void;
+    };
+    const showAssistMessageSpy = vi.spyOn(internal.hud, 'showAssistMessage');
+    const firstHit = new Meteorite(0, 0, -30);
+    const secondHit = new Meteorite(1, 0, -35);
+    let checks = 0;
+
+    internal.collisionSystem = {
+      check: () => {
+        checks += 1;
+        if (checks === 1) {
+          return { starCollisions: [], meteoriteCollision: true, meteoriteHit: firstHit };
+        }
+        if (checks === 2) {
+          return { starCollisions: [], meteoriteCollision: true, meteoriteHit: secondHit };
+        }
+        return { starCollisions: [], meteoriteCollision: false, meteoriteHit: null };
+      },
+    };
+
+    internal.update(0.016);
+    expect(internal.spawnSystem.getMeteoriteIntervalMultiplier()).toBe(1);
+    expect((document.querySelector('[data-hud-assist-message]') as HTMLElement | null)?.style.display).toBe('none');
+
+    internal.update(5.0);
+    expect(internal.spawnSystem.getMeteoriteIntervalMultiplier()).toBeGreaterThan(1);
+    expect(showAssistMessageSpy).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[data-hud-assist-message]')?.textContent).toBe('だいじょうぶ！ ゆっくりいこう ✨');
+
+    internal.update(6.1);
+    expect(internal.spawnSystem.getMeteoriteIntervalMultiplier()).toBe(1);
+    expect((document.querySelector('[data-hud-assist-message]') as HTMLElement | null)?.style.display).toBe('none');
+  });
+
+  it('does not trigger assist mode for spaced hits and does not re-fire while already active', () => {
+    const { scene } = createScene(9);
+    const internal = scene as unknown as {
+      collisionSystem: { check: (...args: unknown[]) => unknown };
+      spawnSystem: {
+        getMeteoriteIntervalMultiplier: () => number;
+      };
+      hud: {
+        showAssistMessage: () => void;
+      };
+      update: (dt: number) => void;
+    };
+    const showAssistMessageSpy = vi.spyOn(internal.hud, 'showAssistMessage');
+    const hits = [
+      new Meteorite(0, 0, -30),
+      new Meteorite(1, 0, -35),
+      new Meteorite(2, 0, -40),
+      new Meteorite(3, 0, -45),
+      new Meteorite(4, 0, -50),
+    ];
+    let checks = 0;
+
+    internal.collisionSystem = {
+      check: () => {
+        const hit = hits[checks] ?? null;
+        checks += 1;
+        return {
+          starCollisions: [],
+          meteoriteCollision: hit !== null,
+          meteoriteHit: hit,
+        };
+      },
+    };
+
+    internal.update(0.016);
+    internal.update(6.2);
+    expect(internal.spawnSystem.getMeteoriteIntervalMultiplier()).toBe(1);
+    expect(showAssistMessageSpy).not.toHaveBeenCalled();
+
+    internal.update(0.016);
+    internal.update(2.0);
+    expect(internal.spawnSystem.getMeteoriteIntervalMultiplier()).toBeGreaterThan(1);
+    expect(showAssistMessageSpy).toHaveBeenCalledTimes(1);
+
+    internal.update(1.0);
+    expect(showAssistMessageSpy).toHaveBeenCalledTimes(1);
   });
 });

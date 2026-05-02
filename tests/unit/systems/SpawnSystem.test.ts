@@ -42,6 +42,41 @@ describe('SpawnSystem', () => {
     }
   });
 
+  it('reduces only meteorite spawn frequency while the assist multiplier is active', () => {
+    const config: StageConfig = {
+      ...testConfig,
+      meteoriteInterval: 1.0,
+      starDensity: 6,
+      emoji: '🌙',
+      displayName: '月をめざせ！',
+      planetColor: 0xcccccc,
+    };
+    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.1);
+    try {
+      const normalSystem = new SpawnSystem();
+      const assistSystem = new SpawnSystem();
+
+      const normal = normalSystem.update(1.0, -10, config);
+      expect(normal.newStars.length).toBeGreaterThan(0);
+      expect(normal.newMeteorites.length).toBeGreaterThan(0);
+
+      assistSystem.setMeteoriteIntervalMultiplier(2);
+      expect(assistSystem.getMeteoriteIntervalMultiplier()).toBe(2);
+
+      const assistFirst = assistSystem.update(1.0, -10, config);
+      expect(assistFirst.newStars.length).toBeGreaterThan(0);
+      expect(assistFirst.newMeteorites).toHaveLength(0);
+
+      const assistSecond = assistSystem.update(1.0, -30, config);
+      expect(assistSecond.newMeteorites.length).toBeGreaterThan(0);
+
+      assistSystem.setMeteoriteIntervalMultiplier(1);
+      expect(assistSystem.getMeteoriteIntervalMultiplier()).toBe(1);
+    } finally {
+      randSpy.mockRestore();
+    }
+  });
+
   it('stars include roughly 10% rainbow type', () => {
     const system = new SpawnSystem();
     // Generate many stars across multiple frames (per-frame spawn count is

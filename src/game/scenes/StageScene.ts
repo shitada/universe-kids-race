@@ -224,6 +224,13 @@ export const __stageSceneSharedAssetCachesForTest = {
 };
 
 export class StageScene implements Scene {
+  private static readonly ASSIST_TRIGGER_HIT_WINDOW = 6;
+  private static readonly ASSIST_TRIGGER_HIT_COUNT = 2;
+  private static readonly ASSIST_DURATION = 5;
+  private static readonly ASSIST_MESSAGE_DURATION = 3;
+  private static readonly ASSIST_METEORITE_INTERVAL_MULTIPLIER = 1.7;
+  private static readonly ASSIST_MESSAGE = 'だいじょうぶ！ ゆっくりいこう ✨';
+
   private threeScene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private lastAspect = 0;
@@ -260,6 +267,10 @@ export class StageScene implements Scene {
   private isClearRewardOpen = false;
   private clearRewardOverlay = new EncyclopediaOverlay();
   private static readonly CLEAR_CONTINUE_DELAY = 0.6;
+  private playTime = 0;
+  private meteoriteHitTimes: number[] = [];
+  private assistTimer = 0;
+  private assistMessageTimer = 0;
 
   // Damage animation
   private damageTimer = 0;
@@ -383,6 +394,10 @@ export class StageScene implements Scene {
     this.touchGuideIdleTimer = 0;
     this.hasSeenMoveInput = false;
     this.touchGuideMode = 'intro';
+    this.playTime = 0;
+    this.meteoriteHitTimes.length = 0;
+    this.assistTimer = 0;
+    this.assistMessageTimer = 0;
 
     const totalScore = context.totalScore ?? 0;
     const totalStarCount = context.totalStarCount ?? 0;
@@ -413,6 +428,7 @@ export class StageScene implements Scene {
     this.stars.length = 0;
     this.meteorites.length = 0;
     this.spawnSystem.reset();
+    this.spawnSystem.setMeteoriteIntervalMultiplier(1);
     this.boostSystem.reset();
     this.scoreSystem.resetStage();
 
@@ -455,6 +471,7 @@ export class StageScene implements Scene {
       this.saveManager.save(data);
     });
     this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
+    this.hud.hideAssistMessage();
     this.touchGuide.show('intro');
 
     // Companions
@@ -782,8 +799,10 @@ export class StageScene implements Scene {
     this.resetCameraShake();
     this.particleBurstManager.clear(this.threeScene);
     this.spawnSystem.recycleAll();
+    this.spawnSystem.setMeteoriteIntervalMultiplier(1);
     this.stars.length = 0;
     this.meteorites.length = 0;
+    this.hud?.hideAssistMessage();
   }
 
 
@@ -832,6 +851,8 @@ export class StageScene implements Scene {
     }
 
     const input = this.inputSystem.getState();
+    this.playTime += deltaTime;
+    this.updateAssistTimers(deltaTime);
     this.updateTouchGuide(input.moveDirection, deltaTime);
 
     // Capture boost state before changes
@@ -979,6 +1000,7 @@ export class StageScene implements Scene {
         );
       }
       this.spaceship.onMeteoriteHit();
+      this.recordMeteoriteHit();
       this.boostSystem.cancel();
       this.damageTimer = StageScene.DAMAGE_FLASH_DURATION;
       this.startCameraShake();
@@ -1095,6 +1117,50 @@ export class StageScene implements Scene {
     if (this.touchGuideMode === mode) return;
     this.touchGuideMode = mode;
     this.touchGuide.setMode(mode);
+  }
+
+  private updateAssistTimers(deltaTime: number): void {
+    if (this.assistTimer > 0) {
+      this.assistTimer = Math.max(0, this.assistTimer - deltaTime);
+      if (this.assistTimer === 0) {
+        this.spawnSystem.setMeteoriteIntervalMultiplier(1);
+      }
+    }
+
+    if (this.assistMessageTimer > 0) {
+      this.assistMessageTimer = Math.max(0, this.assistMessageTimer - deltaTime);
+      if (this.assistMessageTimer === 0) {
+        this.hud.hideAssistMessage();
+      }
+    }
+  }
+
+  private recordMeteoriteHit(): void {
+    const now = this.playTime;
+    this.meteoriteHitTimes.push(now);
+    while (
+      this.meteoriteHitTimes.length > 0 &&
+      now - this.meteoriteHitTimes[0] > StageScene.ASSIST_TRIGGER_HIT_WINDOW
+    ) {
+      this.meteoriteHitTimes.shift();
+    }
+
+    if (this.assistTimer > 0) {
+      return;
+    }
+    if (this.meteoriteHitTimes.length < StageScene.ASSIST_TRIGGER_HIT_COUNT) {
+      return;
+    }
+
+    this.activateAssistMode();
+  }
+
+  private activateAssistMode(): void {
+    this.assistTimer = StageScene.ASSIST_DURATION;
+    this.assistMessageTimer = StageScene.ASSIST_MESSAGE_DURATION;
+    this.spawnSystem.setMeteoriteIntervalMultiplier(StageScene.ASSIST_METEORITE_INTERVAL_MULTIPLIER);
+    this.hud.showAssistMessage(StageScene.ASSIST_MESSAGE);
+    this.meteoriteHitTimes.length = 0;
   }
 
   private updateDamageEffect(deltaTime: number): void {

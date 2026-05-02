@@ -716,4 +716,87 @@ describe('Stage Flow Integration', () => {
 
     consoleErrorSpy.mockRestore();
   });
+
+  it('keeps normal play unchanged and enables assist only after consecutive meteorite hits', () => {
+    const manager = new SceneManager();
+    const inputState = { moveDirection: 0, boostPressed: false };
+    const inputSystem = {
+      getState: vi.fn(() => inputState),
+      setBoostPressed: vi.fn((value: boolean) => {
+        inputState.boostPressed = value;
+      }),
+    } as unknown as InputSystem;
+    const audioManager = {
+      playBGM: vi.fn(),
+      stopBGM: vi.fn(),
+      playSFX: vi.fn(),
+      stopBoostSFX: vi.fn(),
+      startBoostSFX: vi.fn(),
+      isMuted: vi.fn(() => false),
+      toggleMute: vi.fn(() => false),
+      setMuted: vi.fn(),
+      initFromInteraction: vi.fn(),
+    } as unknown as AudioManager;
+    const saveManager = {
+      load: vi.fn(() => ({
+        clearedStage: 0,
+        unlockedPlanets: [],
+        muted: false,
+        tutorialShown: true,
+        bestStageStars: {},
+      })),
+      save: vi.fn(),
+      clear: vi.fn(),
+      markStageCleared: vi.fn(() => false),
+      updateBestStageStars: vi.fn(),
+    } as unknown as SaveManager;
+    const scene = new StageScene(manager, inputSystem, audioManager, saveManager);
+
+    scene.enter({ stageNumber: 9 });
+
+    const internal = scene as unknown as {
+      countdownOverlay: { dispose(): void } | null;
+      isStarting: boolean;
+      collisionSystem: { check: (...args: unknown[]) => unknown };
+      spawnSystem: { getMeteoriteIntervalMultiplier: () => number };
+      update: (dt: number) => void;
+    };
+    internal.countdownOverlay?.dispose();
+    internal.countdownOverlay = null;
+    internal.isStarting = false;
+
+    let checks = 0;
+    internal.collisionSystem = {
+      check: () => {
+        checks += 1;
+        if (checks === 2) {
+          return {
+            starCollisions: [],
+            meteoriteCollision: true,
+            meteoriteHit: { isActive: true, mesh: { visible: true }, position: { x: 0, y: 0, z: -30 } },
+          };
+        }
+        if (checks === 3) {
+          return {
+            starCollisions: [],
+            meteoriteCollision: true,
+            meteoriteHit: { isActive: true, mesh: { visible: true }, position: { x: 1, y: 0, z: -35 } },
+          };
+        }
+        return { starCollisions: [], meteoriteCollision: false, meteoriteHit: null };
+      },
+    };
+
+    internal.update(0.5);
+    expect(internal.spawnSystem.getMeteoriteIntervalMultiplier()).toBe(1);
+    expect((document.querySelector('[data-hud-assist-message]') as HTMLElement | null)?.style.display).toBe('none');
+
+    internal.update(0.016);
+    expect(internal.spawnSystem.getMeteoriteIntervalMultiplier()).toBe(1);
+    expect((document.querySelector('[data-hud-assist-message]') as HTMLElement | null)?.style.display).toBe('none');
+
+    internal.update(5.0);
+    expect(internal.spawnSystem.getMeteoriteIntervalMultiplier()).toBeGreaterThan(1);
+    expect(document.querySelector('[data-hud-assist-message]')?.textContent).toBe('だいじょうぶ！ ゆっくりいこう ✨');
+  });
 });
