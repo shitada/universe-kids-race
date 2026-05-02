@@ -24,6 +24,7 @@ interface StageSceneInternals {
 
 function createScene(options?: {
   stageNumber?: number;
+  launchSource?: 'campaign' | 'encyclopedia';
   saveData?: Partial<SaveData>;
   isNewPlanetUnlock?: boolean;
   earnedStars?: number;
@@ -72,7 +73,7 @@ function createScene(options?: {
     audioManager,
     saveManager,
   );
-  scene.enter({ stageNumber });
+  scene.enter({ stageNumber, launchSource: options?.launchSource });
 
   const internal = scene as unknown as StageSceneInternals;
   internal.scoreSystem = {
@@ -177,6 +178,45 @@ describe('StageScene clear CTA', () => {
       totalScore: 9000,
       totalStarCount: 72,
     });
+  });
+
+  it('図鑑から始めた通常ステージではCTAタップでタイトルへ戻る', () => {
+    const { scene, sceneManager } = createScene({
+      stageNumber: 4,
+      launchSource: 'encyclopedia',
+      finalizeStageResult: { totalScore: 2400, totalStarCount: 14 },
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const button = getContinueButton();
+    expect(button.textContent).toBe('タイトルへ');
+
+    button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith('title');
+  });
+
+  it('図鑑から始めた最終ステージでもCTAタップでタイトルへ戻る', () => {
+    const { scene, sceneManager } = createScene({
+      stageNumber: TOTAL_STAGES,
+      launchSource: 'encyclopedia',
+      finalizeStageResult: { totalScore: 9000, totalStarCount: 72 },
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const button = getContinueButton();
+    expect(button.textContent).toBe('タイトルへ');
+    button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith('title');
   });
 
   it('じこベスト・ずかん・なかま表示とCTAが共存する', () => {

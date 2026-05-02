@@ -140,12 +140,17 @@ describe('Encyclopedia Stage Selection Integration', () => {
     playButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     await flushPromises();
 
-    expect(manager.getCurrentType()).toBe('stage');
-    expect(log).toContainEqual({
-      type: 'stage',
-      context: { stageNumber: 2, totalScore: 0, totalStarCount: 0 },
-    });
-  });
+     expect(manager.getCurrentType()).toBe('stage');
+     expect(log).toContainEqual({
+       type: 'stage',
+       context: {
+         stageNumber: 2,
+         totalScore: 0,
+         totalStarCount: 0,
+         launchSource: 'encyclopedia',
+       },
+     });
+   });
 
   it('reuses the loaded encyclopedia module on the second open', async () => {
     const manager = new SceneManager();

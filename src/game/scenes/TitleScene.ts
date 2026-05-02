@@ -346,6 +346,7 @@ export class TitleScene implements Scene {
           stageNumber,
           totalScore: 0,
           totalStarCount: 0,
+          launchSource: 'encyclopedia',
         });
       },
       saveData.bestStageStars ?? {},
@@ -556,6 +557,7 @@ export class TitleScene implements Scene {
         stageNumber: startStage,
         totalScore: 0,
         totalStarCount: 0,
+        launchSource: 'campaign',
       });
     });
 
