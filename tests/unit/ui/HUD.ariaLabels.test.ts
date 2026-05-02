@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HUD } from '../../../src/ui/HUD';
 
 describe('HUD aria-labels (VoiceOver support)', () => {
@@ -85,5 +85,45 @@ describe('HUD aria-labels (VoiceOver support)', () => {
     expect(btn.getAttribute('aria-disabled')).toBe('true');
     hud.updateCooldown(1.0);
     expect(btn.getAttribute('aria-disabled')).toBe('false');
+  });
+
+  it('setBoostLocked(true) sets aria-disabled="true" and unlock restores ready state', () => {
+    hud.show('🌙');
+    const btn = getBoostButton()!;
+    hud.updateCooldown(1.0);
+    hud.setBoostLocked(true);
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    hud.setBoostLocked(false);
+    expect(btn.getAttribute('aria-disabled')).toBe('false');
+  });
+
+  it('setBoostLocked(true) keeps aria-disabled="true" even when cooldown is ready', () => {
+    hud.show('🌙');
+    const btn = getBoostButton()!;
+    hud.updateCooldown(0.5);
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    hud.setBoostLocked(true);
+    hud.updateCooldown(1.0);
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    hud.setBoostLocked(false);
+    expect(btn.getAttribute('aria-disabled')).toBe('false');
+  });
+
+  it('setBoostLocked(true) prevents boost callback until unlocked', () => {
+    hud.show('🌙');
+    const btn = getBoostButton()!;
+    const onBoost = vi.fn();
+    const onBoostDenied = vi.fn();
+    hud.setBoostCallback(onBoost);
+    hud.setBoostDeniedCallback(onBoostDenied);
+
+    hud.setBoostLocked(true);
+    btn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(onBoost).not.toHaveBeenCalled();
+    expect(onBoostDenied).not.toHaveBeenCalled();
+
+    hud.setBoostLocked(false);
+    btn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(onBoost).toHaveBeenCalledTimes(1);
   });
 });

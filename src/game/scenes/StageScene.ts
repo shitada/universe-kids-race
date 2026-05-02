@@ -384,11 +384,13 @@ export class StageScene implements Scene {
     this.hud.setHomeCallback(() => {
       this.isHomeConfirmOpen = false;
       this.shouldResumeAfterHomeConfirm = false;
+      this.syncBoostInputLock();
       this.sceneManager.requestTransition('title');
     });
     this.hud.setHomeConfirmOpenCallback(() => {
       this.shouldResumeAfterHomeConfirm = this.isPlaying();
       this.isHomeConfirmOpen = true;
+      this.syncBoostInputLock();
     });
     this.hud.setHomeConfirmCancelCallback(() => {
       const shouldResume = this.shouldResumeAfterHomeConfirm;
@@ -396,7 +398,9 @@ export class StageScene implements Scene {
       this.shouldResumeAfterHomeConfirm = false;
       if (shouldResume) {
         this.requestResumeCountdown();
+        return;
       }
+      this.syncBoostInputLock();
     });
     this.hud.setMuteState(this.audioManager.isMuted());
     this.hud.setMuteCallback(() => {
@@ -431,9 +435,11 @@ export class StageScene implements Scene {
 
   private startCountdown(): void {
     this.isStarting = true;
+    this.syncBoostInputLock();
     if (this.shouldSkipCountdown()) {
       this.isStarting = false;
       this.countdownOverlay = null;
+      this.syncBoostInputLock();
       return;
     }
     this.countdownOverlay = new CountdownOverlay({
@@ -447,7 +453,16 @@ export class StageScene implements Scene {
     this.countdownOverlay.show(() => {
       this.isStarting = false;
       this.countdownOverlay = null;
+      this.syncBoostInputLock();
     });
+  }
+
+  private syncBoostInputLock(): void {
+    const locked = this.isStarting || this.awaitingResume || this.isHomeConfirmOpen;
+    this.hud.setBoostLocked(locked);
+    if (locked) {
+      this.inputSystem.setBoostPressed?.(false);
+    }
   }
 
   private shouldSkipCountdown(): boolean {
@@ -493,6 +508,7 @@ export class StageScene implements Scene {
     if (this.shouldSkipCountdown()) return;
 
     this.awaitingResume = true;
+    this.syncBoostInputLock();
     this.resumeCountdownOverlay = new CountdownOverlay({
       onTick: () => {
         this.audioManager.playSFX('countdownTick');
@@ -504,6 +520,7 @@ export class StageScene implements Scene {
     this.resumeCountdownOverlay.show(() => {
       this.awaitingResume = false;
       this.resumeCountdownOverlay = null;
+      this.syncBoostInputLock();
     });
   }
 
@@ -727,6 +744,7 @@ export class StageScene implements Scene {
     // Only the destination planet's gentle spin and background-star centering
     // keep moving so the scene feels alive (Constitution I/IV).
     if (this.isStarting || this.awaitingResume || this.isHomeConfirmOpen) {
+      this.inputSystem.setBoostPressed?.(false);
       if (!this.isHomeConfirmOpen) {
         this.countdownOverlay?.tick(deltaTime);
         this.resumeCountdownOverlay?.tick(deltaTime);

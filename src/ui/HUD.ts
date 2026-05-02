@@ -25,6 +25,7 @@ export class HUD {
   private onHomeConfirmCancelCallback: (() => void) | null = null;
   private onMuteCallback: (() => void) | null = null;
   private muted = false;
+  private boostLocked = false;
   private lastCooldownProgress = 1.0;
   // Differential write caches for updateCooldown.
   // NOTE: If a future code path mutates cooldownBar / boostButton styles
@@ -299,6 +300,7 @@ export class HUD {
     this.boostButton.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
       if (!this.boostButton) return;
+      if (this.boostLocked) return;
 
       if (this.lastCooldownProgress < 1.0) {
         if (this.boostButton.hasAttribute('data-boost-shake')) return;
@@ -350,6 +352,7 @@ export class HUD {
 
     this.cooldownContainer.appendChild(this.cooldownBar);
     uiOverlay.appendChild(this.cooldownContainer);
+    this.applyBoostButtonState();
   }
 
   private injectBoostAnimations(): void {
@@ -409,6 +412,11 @@ export class HUD {
 
   setBoostDeniedCallback(callback: () => void): void {
     this.onBoostDeniedCallback = callback;
+  }
+
+  setBoostLocked(locked: boolean): void {
+    this.boostLocked = locked;
+    this.applyBoostButtonState();
   }
 
   setHomeCallback(callback: () => void): void {
@@ -525,28 +533,13 @@ export class HUD {
       this.lastCooldownPct = pct;
     }
 
-    const ready = progress >= 1.0;
-    if (ready !== this.lastReadyState) {
-      if (ready) {
-        this.cooldownBar.style.boxShadow = '0 0 10px #00ff88';
-        this.boostButton.style.opacity = '1';
-        this.boostButton.style.filter = 'none';
-        this.boostButton.style.animation = 'boostBtnPulse 2s ease-in-out infinite';
-        this.boostButton.setAttribute('aria-disabled', 'false');
-      } else {
-        this.cooldownBar.style.boxShadow = 'none';
-        this.boostButton.style.opacity = '0.5';
-        this.boostButton.style.filter = 'grayscale(0.8)';
-        this.boostButton.style.animation = 'none';
-        this.boostButton.setAttribute('aria-disabled', 'true');
-        // Clear ready-flash attribute if cooldown restarts mid-flash so the
-        // pulse doesn't linger on a disabled button.
-        this.clearBoostReadyFlash();
-      }
-      this.lastReadyState = ready;
-    }
+    this.lastCooldownProgress = clamped;
 
-    this.lastCooldownProgress = progress;
+    const ready = clamped >= 1.0;
+    if (ready !== this.lastReadyState) {
+      this.lastReadyState = ready;
+      this.applyBoostButtonState();
+    }
   }
 
   /**
@@ -641,6 +634,23 @@ export class HUD {
     }
   }
 
+  private applyBoostButtonState(): void {
+    if (!this.cooldownBar || !this.boostButton) return;
+
+    const ready = this.lastCooldownProgress >= 1.0;
+    const enabled = ready && !this.boostLocked;
+
+    this.cooldownBar.style.boxShadow = enabled ? '0 0 10px #00ff88' : 'none';
+    this.boostButton.style.opacity = enabled ? '1' : '0.5';
+    this.boostButton.style.filter = enabled ? 'none' : 'grayscale(0.8)';
+    this.boostButton.style.animation = enabled ? 'boostBtnPulse 2s ease-in-out infinite' : 'none';
+    this.boostButton.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+
+    if (!enabled) {
+      this.clearBoostReadyFlash();
+    }
+  }
+
   hide(): void {
     this.homeConfirmOverlay.hide();
     if (this.homeButton) {
@@ -675,6 +685,7 @@ export class HUD {
       this.cooldownContainer = null;
     }
     this.cooldownBar = null;
+    this.boostLocked = false;
     this.lastCooldownProgress = 1.0;
     this.lastCooldownPct = -1;
     this.lastReadyState = null;

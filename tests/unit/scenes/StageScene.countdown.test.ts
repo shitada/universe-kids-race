@@ -119,9 +119,26 @@ describe('StageScene start countdown', () => {
     inputState.boostPressed = true;
     inputState.moveDirection = 1;
     internal.update(0.1);
-    // Boost pressed flag must remain (input was ignored).
-    expect(inputState.boostPressed).toBe(true);
+    // Queued boost input is discarded during countdown.
+    expect(inputState.boostPressed).toBe(false);
     // No boost SFX fired during countdown.
+    const sfxNames = audio.playSFX.mock.calls.map((c) => c[0]);
+    expect(sfxNames).not.toContain('boost');
+    expect(sfxNames).not.toContain('boostDenied');
+  });
+
+  it('does not auto-activate boost right after the start countdown ends', () => {
+    const { scene, inputState, audio } = createScene();
+    scene.enter({ stageNumber: 1 });
+    const internal = scene as unknown as { update(dt: number): void };
+    inputState.boostPressed = true;
+    internal.update(0.1);
+    expect(inputState.boostPressed).toBe(false);
+
+    audio.playSFX.mockClear();
+    for (let i = 0; i < 4; i++) internal.update(1.0);
+    internal.update(0.1);
+
     const sfxNames = audio.playSFX.mock.calls.map((c) => c[0]);
     expect(sfxNames).not.toContain('boost');
     expect(sfxNames).not.toContain('boostDenied');
