@@ -8,7 +8,7 @@ import { LoadingOverlay } from '../../ui/LoadingOverlay';
 import { LoadFailureOverlay } from '../../ui/LoadFailureOverlay';
 import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButton';
 import { TOTAL_STAGES } from '../config/StageConfig';
-import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
+import { PLANET_ENCYCLOPEDIA, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { formatEncyclopediaLabel } from '../../ui/formatEncyclopediaLabel';
 import { getViewportSize } from '../utils/getViewportSize';
 
@@ -74,11 +74,14 @@ export const __titleSceneSharedAssetsForTest = {
 type EncyclopediaOverlayModule = typeof import('../../ui/EncyclopediaOverlay');
 type EncyclopediaOverlayCtor = EncyclopediaOverlayModule['EncyclopediaOverlay'];
 type EncyclopediaOverlayInstance = InstanceType<EncyclopediaOverlayCtor>;
+type TitleCompanionFactoryModule = typeof import('../entities/CompanionMeshFactory');
+type TitleCompanionFactory = Pick<TitleCompanionFactoryModule, 'createCompanionMesh'>;
 
 interface TitleSceneOptions {
   loadingOverlay?: Pick<LoadingOverlay, 'show' | 'hide'>;
   loadFailureOverlay?: Pick<LoadFailureOverlay, 'show' | 'hide'>;
   loadEncyclopediaOverlay?: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
+  loadTitleCompanionFactory?: () => Promise<TitleCompanionFactory>;
   scheduleIdleTask?: (callback: () => void) => void;
 }
 
@@ -104,12 +107,16 @@ export class TitleScene implements Scene {
   private saveManager: SaveManager;
   private audioManager: AudioManager;
   private stars: THREE.Points | null = null;
+  private companionParade: THREE.Group | null = null;
   private overlay: HTMLDivElement | null = null;
   private muteHandle: MuteButtonHandle | null = null;
   private tutorialOverlay = new TutorialOverlay();
   private encyclopediaOverlay: EncyclopediaOverlayInstance | null = null;
   private encyclopediaOverlayPromise: Promise<EncyclopediaOverlayInstance> | null = null;
+  private companionFactory: TitleCompanionFactory | null = null;
+  private companionFactoryPromise: Promise<TitleCompanionFactory> | null = null;
   private readonly loadEncyclopediaOverlay: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
+  private readonly loadTitleCompanionFactory: () => Promise<TitleCompanionFactory>;
   private readonly loadingOverlay: Pick<LoadingOverlay, 'show' | 'hide'>;
   private readonly loadFailureOverlay: Pick<LoadFailureOverlay, 'show' | 'hide'>;
   private readonly scheduleIdleTask: (callback: () => void) => void;
@@ -139,6 +146,9 @@ export class TitleScene implements Scene {
     this.loadEncyclopediaOverlay =
       options.loadEncyclopediaOverlay ??
       (() => import('../../ui/EncyclopediaOverlay'));
+    this.loadTitleCompanionFactory =
+      options.loadTitleCompanionFactory ??
+      (() => import('../entities/CompanionMeshFactory'));
     this.threeScene = new THREE.Scene();
     this.threeScene.background = new THREE.Color(0x000020);
     const { width: vw, height: vh } = getViewportSize();
@@ -167,6 +177,9 @@ export class TitleScene implements Scene {
       this.threeScene.add(this.ambientLight);
     }
 
+    const saveData = this.saveManager.load();
+    void this.createCompanionParade(saveData.unlockedPlanets);
+
     this.createOverlay();
     this.createMuteButton();
     this.prefetchEncyclopediaOnIdle();
@@ -193,7 +206,6 @@ export class TitleScene implements Scene {
     // overlay's pointerdown for AudioContext init ({once: true}) is attached
     // by createOverlay() above, so the close-tap on the tutorial does not
     // consume it (the tutorial overlay is a separate DOM subtree).
-    const saveData = this.saveManager.load();
     if (!saveData.tutorialShown) {
       this.tutorialOverlay.show(() => {
         this.ensureTitleAudioInitialized(true);
@@ -239,6 +251,26 @@ export class TitleScene implements Scene {
       });
 
     return this.encyclopediaOverlayPromise;
+  }
+
+  private getTitleCompanionFactory(): Promise<TitleCompanionFactory> {
+    if (this.companionFactory) {
+      return Promise.resolve(this.companionFactory);
+    }
+    if (this.companionFactoryPromise) {
+      return this.companionFactoryPromise;
+    }
+
+    this.companionFactoryPromise = this.loadTitleCompanionFactory()
+      .then((factory) => {
+        this.companionFactory = factory;
+        return factory;
+      })
+      .finally(() => {
+        this.companionFactoryPromise = null;
+      });
+
+    return this.companionFactoryPromise;
   }
 
   private showEncyclopedia(): void {
@@ -473,10 +505,70 @@ export class TitleScene implements Scene {
     );
   }
 
+  private async createCompanionParade(unlockedPlanets: number[]): Promise<void> {
+    this.clearCompanionParade();
+
+    const unlockedEntries = [...new Set(unlockedPlanets)].reduce<Array<NonNullable<ReturnType<typeof getPlanetEncyclopediaEntry>>>>(
+      (entries, stageNumber) => {
+        const entry = getPlanetEncyclopediaEntry(stageNumber);
+        if (entry) {
+          entries.push(entry);
+        }
+        return entries;
+      },
+      [],
+    );
+
+    if (unlockedEntries.length === 0) {
+      return;
+    }
+
+    const requestToken = this.encyclopediaRequestToken;
+    const { createCompanionMesh } = await this.getTitleCompanionFactory();
+    if (!this.isActive || this.encyclopediaRequestToken !== requestToken) {
+      return;
+    }
+
+    const group = new THREE.Group();
+    group.name = 'title-companion-parade';
+    group.position.set(0, 1.35, -1.2);
+    group.rotation.x = -0.12;
+
+    const radius = Math.min(2.1, 1.1 + unlockedEntries.length * 0.18);
+    const verticalAmplitude = Math.min(0.45, 0.18 + unlockedEntries.length * 0.02);
+
+    unlockedEntries.forEach((entry, index) => {
+      const mesh = createCompanionMesh(entry);
+      const angle = (index / unlockedEntries.length) * Math.PI * 2;
+      mesh.position.set(
+        Math.cos(angle) * radius,
+        Math.sin(angle) * verticalAmplitude,
+        Math.sin(angle) * radius * 0.45,
+      );
+      mesh.rotation.y = Math.PI * 0.15 - angle;
+      mesh.scale.setScalar(0.6);
+      group.add(mesh);
+    });
+
+    this.companionParade = group;
+    this.threeScene.add(group);
+  }
+
+  private clearCompanionParade(): void {
+    if (!this.companionParade) {
+      return;
+    }
+    this.companionParade.parent?.remove(this.companionParade);
+    this.companionParade = null;
+  }
+
   update(deltaTime: number): void {
     // Rotate starfield slowly
     if (this.stars) {
       this.stars.rotation.y += deltaTime * 0.05;
+    }
+    if (this.companionParade) {
+      this.companionParade.rotation.y += deltaTime * 0.35;
     }
   }
 
@@ -494,6 +586,7 @@ export class TitleScene implements Scene {
     // 「タイトル BGM がステージ突入後にうっすら残る」可能性を断つ。
     this.audioManager.stopBGM();
     this.bgmPending = false;
+    this.clearCompanionParade();
     if (this.stars) {
       // SHARED: geometry / material はモジュールキャッシュで使い回すため dispose しない。
       this.stars.parent?.remove(this.stars);
