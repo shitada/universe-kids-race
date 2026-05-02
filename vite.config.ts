@@ -11,5 +11,15 @@ export default defineConfig({
   build: {
     target: 'es2022',
     outDir: 'dist',
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('/node_modules/three/')) {
+            return 'three-vendor';
+          }
+          return undefined;
+        },
+      },
+    },
   },
 });

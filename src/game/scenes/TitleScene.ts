@@ -1,4 +1,15 @@
-import * as THREE from 'three';
+import {
+  AmbientLight,
+  BufferAttribute,
+  BufferGeometry,
+  Camera,
+  Color,
+  Group,
+  PerspectiveCamera,
+  Points,
+  PointsMaterial,
+  Scene as ThreeScene,
+} from 'three';
 import type { Scene, SceneContext } from '../../types';
 import type { SceneManager } from '../SceneManager';
 import type { SaveManager } from '../storage/SaveManager';
@@ -27,25 +38,25 @@ import { getViewportSize } from '../utils/getViewportSize';
 // クリーンされた場合の安全網とする。
 // ──────────────────────────────────────────────────────────────────────────────
 
-let SHARED_TITLE_BG_STARS_GEOMETRY: THREE.BufferGeometry | null = null;
-let SHARED_TITLE_BG_STARS_MATERIAL: THREE.PointsMaterial | null = null;
+let SHARED_TITLE_BG_STARS_GEOMETRY: BufferGeometry | null = null;
+let SHARED_TITLE_BG_STARS_MATERIAL: PointsMaterial | null = null;
 
-function getTitleBgStarsGeometry(): THREE.BufferGeometry {
+function getTitleBgStarsGeometry(): BufferGeometry {
   if (!SHARED_TITLE_BG_STARS_GEOMETRY) {
-    const geo = new THREE.BufferGeometry();
+    const geo = new BufferGeometry();
     const positions = new Float32Array(3000);
     for (let i = 0; i < 3000; i++) {
       positions[i] = (Math.random() - 0.5) * 200;
     }
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('position', new BufferAttribute(positions, 3));
     SHARED_TITLE_BG_STARS_GEOMETRY = geo;
   }
   return SHARED_TITLE_BG_STARS_GEOMETRY;
 }
 
-function getTitleBgStarsMaterial(): THREE.PointsMaterial {
+function getTitleBgStarsMaterial(): PointsMaterial {
   if (!SHARED_TITLE_BG_STARS_MATERIAL) {
-    SHARED_TITLE_BG_STARS_MATERIAL = new THREE.PointsMaterial({
+    SHARED_TITLE_BG_STARS_MATERIAL = new PointsMaterial({
       color: 0xffffff,
       size: 0.3,
       sizeAttenuation: true,
@@ -67,8 +78,8 @@ export function __resetTitleSceneSharedAssetsForTest(): void {
  * テスト用フック: 内部キャッシュへ直接アクセスする。
  */
 export const __titleSceneSharedAssetsForTest = {
-  getBgStarsGeometry: (): THREE.BufferGeometry | null => SHARED_TITLE_BG_STARS_GEOMETRY,
-  getBgStarsMaterial: (): THREE.PointsMaterial | null => SHARED_TITLE_BG_STARS_MATERIAL,
+  getBgStarsGeometry: (): BufferGeometry | null => SHARED_TITLE_BG_STARS_GEOMETRY,
+  getBgStarsMaterial: (): PointsMaterial | null => SHARED_TITLE_BG_STARS_MATERIAL,
 };
 
 type EncyclopediaOverlayModule = typeof import('../../ui/EncyclopediaOverlay');
@@ -99,15 +110,15 @@ function scheduleIdleTask(callback: () => void): void {
 export class TitleScene implements Scene {
   // Scene / AmbientLight はインスタンスで再利用し、🏠 ボタンによる再入場ごとの
   // per-entry GPU/JS アロケーションを抑える。
-  private readonly threeScene: THREE.Scene;
-  private readonly ambientLight: THREE.AmbientLight = new THREE.AmbientLight(0xffffff, 1);
-  private camera: THREE.PerspectiveCamera;
+  private readonly threeScene: ThreeScene;
+  private readonly ambientLight: AmbientLight = new AmbientLight(0xffffff, 1);
+  private camera: PerspectiveCamera;
   private lastAspect = 0;
   private sceneManager: SceneManager;
   private saveManager: SaveManager;
   private audioManager: AudioManager;
-  private stars: THREE.Points | null = null;
-  private companionParade: THREE.Group | null = null;
+  private stars: Points | null = null;
+  private companionParade: Group | null = null;
   private overlay: HTMLDivElement | null = null;
   private muteHandle: MuteButtonHandle | null = null;
   private tutorialOverlay = new TutorialOverlay();
@@ -150,10 +161,10 @@ export class TitleScene implements Scene {
     this.loadTitleCompanionFactory =
       options.loadTitleCompanionFactory ??
       (() => import('../entities/CompanionMeshFactory'));
-    this.threeScene = new THREE.Scene();
-    this.threeScene.background = new THREE.Color(0x000020);
+    this.threeScene = new ThreeScene();
+    this.threeScene.background = new Color(0x000020);
     const { width: vw, height: vh } = getViewportSize();
-    this.camera = new THREE.PerspectiveCamera(
+    this.camera = new PerspectiveCamera(
       60,
       vw / vh,
       0.1,
@@ -169,7 +180,7 @@ export class TitleScene implements Scene {
     this.lastAspect = 0;
 
     // Starfield background (SHARED: 共有 geometry / material は dispose しない)
-    this.stars = new THREE.Points(getTitleBgStarsGeometry(), getTitleBgStarsMaterial());
+    this.stars = new Points(getTitleBgStarsGeometry(), getTitleBgStarsMaterial());
     this.stars.userData.sharedAssets = true;
     this.stars.rotation.set(0, 0, 0);
     this.threeScene.add(this.stars);
@@ -550,7 +561,7 @@ export class TitleScene implements Scene {
     }
 
     this.clearCompanionParade();
-    const group = new THREE.Group();
+    const group = new Group();
     group.name = 'title-companion-parade';
     group.position.set(0, 1.35, -1.2);
     group.rotation.x = -0.12;
@@ -625,11 +636,11 @@ export class TitleScene implements Scene {
     }
   }
 
-  getThreeScene(): THREE.Scene {
+  getThreeScene(): ThreeScene {
     return this.threeScene;
   }
 
-  getCamera(): THREE.Camera {
+  getCamera(): Camera {
     const { width, height } = getViewportSize();
     const aspect = width / height;
     if (aspect !== this.lastAspect && Number.isFinite(aspect) && aspect > 0) {
