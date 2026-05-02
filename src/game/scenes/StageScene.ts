@@ -250,6 +250,7 @@ export class StageScene implements Scene {
 
   private stageConfig!: StageConfig;
   private stageNumber = 1;
+  private launchSource: 'campaign' | 'encyclopedia' = 'campaign';
   private isCleared = false;
   private clearTimer = 0;
   private clearOverlay: HTMLDivElement | null = null;
@@ -361,6 +362,7 @@ export class StageScene implements Scene {
     this.ensureInitialized();
     this.lastAspect = 0;
     this.stageNumber = context.stageNumber ?? 1;
+    this.launchSource = context.launchSource ?? 'campaign';
     this.stageConfig = getStageConfig(this.stageNumber);
     this.prefetchEndingSceneModuleIfNeeded();
     this.isCleared = false;
@@ -1359,7 +1361,11 @@ export class StageScene implements Scene {
     }
 
     const continueButton = document.createElement('button');
-    const continueLabel = this.stageNumber >= TOTAL_STAGES ? 'おいわいへ' : 'つぎへ';
+    const continueLabel = this.launchSource === 'encyclopedia'
+      ? 'タイトルへ'
+      : this.stageNumber >= TOTAL_STAGES
+        ? 'おいわいへ'
+        : 'つぎへ';
     continueButton.setAttribute('data-stage-clear-continue', '');
     continueButton.setAttribute('aria-label', continueLabel);
     continueButton.textContent = continueLabel;
@@ -1446,6 +1452,11 @@ export class StageScene implements Scene {
 
   private handleStageComplete(): void {
     const { totalScore, totalStarCount } = this.scoreSystem.finalizeStage();
+
+    if (this.launchSource === 'encyclopedia') {
+      this.sceneManager.requestTransition('title');
+      return;
+    }
 
     if (this.stageNumber >= TOTAL_STAGES) {
       this.sceneManager.requestTransition('ending', { totalScore, totalStarCount });
