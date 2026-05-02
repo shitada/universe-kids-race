@@ -21,6 +21,7 @@ import { OrientationHintOverlay } from './ui/OrientationHintOverlay';
 import { LoadingOverlay } from './ui/LoadingOverlay';
 import { LoadFailureOverlay } from './ui/LoadFailureOverlay';
 import { createOrientationHintHandler } from './game/utils/createOrientationHintHandler';
+import { createRetryableModuleLoader } from './game/utils/createRetryableModuleLoader';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 
@@ -132,18 +133,8 @@ let stageScene: StageScene | null = null;
 audioManager.setMuted(saveManager.load().muted === true);
 
 const titleScene = new TitleScene(sceneManager, saveManager, audioManager);
-let stageSceneModulePromise: Promise<typeof import('./game/scenes/StageScene')> | null = null;
-let endingSceneModulePromise: Promise<typeof import('./game/scenes/EndingScene')> | null = null;
-
-const loadStageSceneModule = (): Promise<typeof import('./game/scenes/StageScene')> => {
-  stageSceneModulePromise ??= import('./game/scenes/StageScene');
-  return stageSceneModulePromise;
-};
-
-const loadEndingSceneModule = (): Promise<typeof import('./game/scenes/EndingScene')> => {
-  endingSceneModulePromise ??= import('./game/scenes/EndingScene');
-  return endingSceneModulePromise;
-};
+const loadStageSceneModule = createRetryableModuleLoader(() => import('./game/scenes/StageScene'));
+const loadEndingSceneModule = createRetryableModuleLoader(() => import('./game/scenes/EndingScene'));
 
 sceneManager.registerScene('title', titleScene);
 sceneManager.registerSceneModulePrefetch('stage', loadStageSceneModule);
