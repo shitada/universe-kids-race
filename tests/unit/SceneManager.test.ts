@@ -47,6 +47,77 @@ describe('SceneManager', () => {
     expect(stageScene.enter).toHaveBeenCalledWith({ stageNumber: 1 });
   });
 
+  it('no-ops when transitioning to the current title scene with the same context', async () => {
+    const manager = new SceneManager();
+    const titleScene = createMockScene();
+    const loadStateHandler = vi.fn();
+    const transitionErrorHandler = vi.fn();
+
+    manager.registerScene('title', titleScene);
+    manager.setLoadStateHandler(loadStateHandler);
+    manager.setTransitionErrorHandler(transitionErrorHandler);
+
+    await manager.transitionTo('title');
+    await manager.transitionTo('title');
+
+    expect(titleScene.enter).toHaveBeenCalledTimes(1);
+    expect(titleScene.exit).not.toHaveBeenCalled();
+    expect(loadStateHandler).not.toHaveBeenCalled();
+    expect(transitionErrorHandler).not.toHaveBeenCalled();
+  });
+
+  it('no-ops when transitioning to the current stage scene with the same stage number', async () => {
+    const manager = new SceneManager();
+    const titleScene = createMockScene();
+    const stageScene = createMockScene();
+    const loadStateHandler = vi.fn();
+    const transitionErrorHandler = vi.fn();
+    const factory = vi.fn(async () => stageScene);
+
+    manager.registerScene('title', titleScene);
+    manager.registerSceneFactory('stage', factory);
+    manager.setLoadStateHandler(loadStateHandler);
+    manager.setTransitionErrorHandler(transitionErrorHandler);
+
+    await manager.transitionTo('title');
+    await manager.transitionTo('stage', { stageNumber: 1 });
+
+    expect(loadStateHandler.mock.calls).toEqual([
+      [true, 'stage'],
+      [false, 'stage'],
+    ]);
+
+    await manager.requestTransition('stage', { stageNumber: 1 });
+
+    expect(factory).toHaveBeenCalledTimes(1);
+    expect(titleScene.exit).toHaveBeenCalledTimes(1);
+    expect(stageScene.enter).toHaveBeenCalledTimes(1);
+    expect(stageScene.exit).not.toHaveBeenCalled();
+    expect(loadStateHandler.mock.calls).toEqual([
+      [true, 'stage'],
+      [false, 'stage'],
+    ]);
+    expect(transitionErrorHandler).not.toHaveBeenCalled();
+  });
+
+  it('re-enters the current stage scene when the stage number changes', async () => {
+    const manager = new SceneManager();
+    const titleScene = createMockScene();
+    const stageScene = createMockScene();
+
+    manager.registerScene('title', titleScene);
+    manager.registerScene('stage', stageScene);
+
+    await manager.transitionTo('title');
+    await manager.transitionTo('stage', { stageNumber: 1 });
+    await manager.transitionTo('stage', { stageNumber: 2 });
+
+    expect(titleScene.exit).toHaveBeenCalledTimes(1);
+    expect(stageScene.exit).toHaveBeenCalledTimes(1);
+    expect(stageScene.enter).toHaveBeenNthCalledWith(1, { stageNumber: 1 });
+    expect(stageScene.enter).toHaveBeenNthCalledWith(2, { stageNumber: 2 });
+  });
+
   it('passes context through transitions title → stage → ending', async () => {
     const manager = new SceneManager();
     const titleScene = createMockScene();
