@@ -124,6 +124,7 @@ export class TitleScene implements Scene {
   private isOpeningEncyclopedia = false;
   private isActive = false;
   private encyclopediaRequestToken = 0;
+  private companionParadeRequestToken = 0;
   // タイトル滞在中、初回 user gesture（AudioContext 初期化）を待つフラグ。
   // iPad Safari の AudioContext は user gesture 必須のため、enter() 直後の
   // 即時 playBGM(0) は AudioManager が既に初期化済みのとき（再訪問時）のみ
@@ -164,6 +165,7 @@ export class TitleScene implements Scene {
   enter(_context: SceneContext): void {
     this.isActive = true;
     this.encyclopediaRequestToken += 1;
+    this.companionParadeRequestToken += 1;
     this.lastAspect = 0;
 
     // Starfield background (SHARED: 共有 geometry / material は dispose しない)
@@ -178,7 +180,7 @@ export class TitleScene implements Scene {
     }
 
     const saveData = this.saveManager.load();
-    void this.createCompanionParade(saveData.unlockedPlanets);
+    this.scheduleCompanionParadeOnIdle(saveData.unlockedPlanets);
 
     this.createOverlay();
     this.createMuteButton();
@@ -306,6 +308,24 @@ export class TitleScene implements Scene {
         return;
       }
       void this.getEncyclopediaOverlay().catch(() => {});
+    });
+  }
+
+  private isCurrentCompanionParadeRequest(requestToken: number): boolean {
+    return this.isActive && this.companionParadeRequestToken === requestToken;
+  }
+
+  private scheduleCompanionParadeOnIdle(unlockedPlanets: number[]): void {
+    if (unlockedPlanets.length === 0) {
+      return;
+    }
+
+    const requestToken = this.companionParadeRequestToken;
+    this.scheduleIdleTask(() => {
+      if (!this.isCurrentCompanionParadeRequest(requestToken) || this.companionParade) {
+        return;
+      }
+      void this.createCompanionParade(unlockedPlanets, requestToken);
     });
   }
 
@@ -505,9 +525,10 @@ export class TitleScene implements Scene {
     );
   }
 
-  private async createCompanionParade(unlockedPlanets: number[]): Promise<void> {
-    this.clearCompanionParade();
-
+  private async createCompanionParade(
+    unlockedPlanets: number[],
+    requestToken: number,
+  ): Promise<void> {
     const unlockedEntries = [...new Set(unlockedPlanets)].reduce<Array<NonNullable<ReturnType<typeof getPlanetEncyclopediaEntry>>>>(
       (entries, stageNumber) => {
         const entry = getPlanetEncyclopediaEntry(stageNumber);
@@ -523,12 +544,12 @@ export class TitleScene implements Scene {
       return;
     }
 
-    const requestToken = this.encyclopediaRequestToken;
     const { createCompanionMesh } = await this.getTitleCompanionFactory();
-    if (!this.isActive || this.encyclopediaRequestToken !== requestToken) {
+    if (!this.isCurrentCompanionParadeRequest(requestToken)) {
       return;
     }
 
+    this.clearCompanionParade();
     const group = new THREE.Group();
     group.name = 'title-companion-parade';
     group.position.set(0, 1.35, -1.2);
@@ -575,6 +596,7 @@ export class TitleScene implements Scene {
   exit(): void {
     this.isActive = false;
     this.encyclopediaRequestToken += 1;
+    this.companionParadeRequestToken += 1;
     this.isOpeningEncyclopedia = false;
     this.tutorialOverlay.hide();
     this.encyclopediaOverlay?.hide();

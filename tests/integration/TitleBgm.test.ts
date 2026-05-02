@@ -204,8 +204,15 @@ describe('Title → Stage BGM transition (bugfix: BGM_0 plays during title)', ()
     const sceneManager = createMockSceneManager();
     const saveManager = createMockSaveManager();
     const { audioManager, calls } = createTrackingAudioManager(false);
+    const idleCallbacks: Array<() => void> = [];
+    const loadTitleCompanionFactory = vi.fn(async () => ({
+      createCompanionMesh: vi.fn(),
+    }));
 
-    const scene = new TitleScene(sceneManager, saveManager, audioManager);
+    const scene = new TitleScene(sceneManager, saveManager, audioManager, {
+      scheduleIdleTask: (callback) => idleCallbacks.push(callback),
+      loadTitleCompanionFactory,
+    });
     scene.enter({});
 
     const playButton = Array.from(document.querySelectorAll('button'))
@@ -217,14 +224,17 @@ describe('Title → Stage BGM transition (bugfix: BGM_0 plays during title)', ()
       expect.objectContaining({ stageNumber: 1, totalScore: 0, totalStarCount: 0 }),
     );
     expect(calls).toEqual([]);
+    expect(loadTitleCompanionFactory).not.toHaveBeenCalled();
 
     scene.exit();
+    idleCallbacks[0]?.();
     audioManager.playBGM(1);
 
     expect(calls).toEqual([
       { kind: 'stop' },
       { kind: 'play', arg: 1 },
     ]);
+    expect(loadTitleCompanionFactory).not.toHaveBeenCalled();
   });
 
   it('stage selection from encyclopedia detail play does not add a duplicate title BGM start', async () => {
