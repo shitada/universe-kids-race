@@ -7,6 +7,7 @@ import type { SaveManager } from '../../../src/game/storage/SaveManager';
 import type { AudioManager } from '../../../src/game/audio/AudioManager';
 import { EncyclopediaOverlay } from '../../../src/ui/EncyclopediaOverlay';
 import type { LoadFailureOverlayOptions } from '../../../src/ui/LoadFailureOverlay';
+import { TOTAL_STAGES } from '../../../src/game/config/StageConfig';
 
 function createMockSceneManager(): SceneManager {
   return {
@@ -81,6 +82,10 @@ function findCompanionParade(scene: TitleScene): THREE.Group | undefined {
   return scene.getThreeScene().children.find(
     (child) => child instanceof THREE.Group && child.name === 'title-companion-parade',
   ) as THREE.Group | undefined;
+}
+
+function findNextAdventureCard(): HTMLDivElement | null {
+  return document.querySelector('[data-next-adventure-card]');
 }
 
 describe('TitleScene (T009)', () => {
@@ -409,6 +414,90 @@ describe('TitleScene (T009)', () => {
     expect(audioManager.playBGM).toHaveBeenCalledTimes(1);
     expect(audioManager.playBGM).toHaveBeenCalledWith(0);
     expect(audioManager.toggleMute).toHaveBeenCalledTimes(1);
+
+    scene.exit();
+  });
+
+  it('shows stage 1 as the next adventure on a fresh save', () => {
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager({ clearedStage: 0, unlockedPlanets: [] }),
+      createMockAudioManager(true),
+    );
+
+    scene.enter({});
+
+    const card = findNextAdventureCard();
+    expect(card).toBeTruthy();
+    expect(card?.getAttribute('data-next-stage-number')).toBe('1');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('月');
+    expect(card?.textContent).toContain('つぎの ぼうけん');
+    expect(card?.textContent).toContain('🌙');
+    expect(card?.textContent).toContain('ステージ 1');
+    expect(card?.textContent).toContain('月');
+    expect(document.querySelector('[data-play-button-hint]')?.textContent).toContain('ステージ 1');
+
+    scene.exit();
+  });
+
+  it('shows stage 5 as the next adventure after clearing stage 4', () => {
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager({ clearedStage: 4, unlockedPlanets: [1, 2, 3, 4] }),
+      createMockAudioManager(true),
+    );
+
+    scene.enter({});
+
+    const card = findNextAdventureCard();
+    expect(card?.getAttribute('data-next-stage-number')).toBe('5');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('木星');
+    expect(card?.textContent).toContain('🟠');
+    expect(card?.textContent).toContain('ステージ 5');
+    expect(card?.textContent).toContain('木星');
+    expect(document.querySelector('[data-play-button-hint]')?.textContent).toContain('ステージ 5');
+
+    scene.exit();
+  });
+
+  it('shows a dedicated all-clear message after every stage is unlocked', () => {
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager({
+        clearedStage: TOTAL_STAGES,
+        unlockedPlanets: Array.from({ length: TOTAL_STAGES }, (_, index) => index + 1),
+      }),
+      createMockAudioManager(true),
+    );
+
+    scene.enter({});
+
+    const card = findNextAdventureCard();
+    expect(card?.getAttribute('data-next-stage-number')).toBe(String(TOTAL_STAGES));
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('地球');
+    expect(card?.textContent).toContain('ぜんぶ クリア');
+    expect(card?.textContent).toContain('🌍');
+    expect(document.querySelector('[data-play-button-hint]')?.textContent).toContain('もういちど');
+
+    scene.exit();
+  });
+
+  it('does not show the all-clear message when clearedStage is max but unlocked planets are incomplete', () => {
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager({
+        clearedStage: TOTAL_STAGES,
+        unlockedPlanets: [1, 2, 3],
+      }),
+      createMockAudioManager(true),
+    );
+
+    scene.enter({});
+
+    const card = findNextAdventureCard();
+    expect(card?.textContent).not.toContain('ぜんぶ クリア');
+    expect(card?.getAttribute('data-next-stage-number')).toBe(String(TOTAL_STAGES));
+    expect(document.querySelector('[data-play-button-hint]')?.textContent).not.toContain('もういちど');
 
     scene.exit();
   });
