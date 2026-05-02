@@ -11,11 +11,14 @@ import type { SaveData } from '../../../src/types';
 interface CreatedScene {
   scene: StageScene;
   sceneManager: { requestTransition: ReturnType<typeof vi.fn> };
+  finalizeStageMock: ReturnType<typeof vi.fn>;
 }
 
 interface StageSceneInternals {
   scoreSystem: {
     getStarCount(): number;
+    getTotalScore(): number;
+    getTotalStarCount(): number;
     finalizeStage(): { totalScore: number; totalStarCount: number };
   };
   onStageClear(): void;
@@ -24,12 +27,16 @@ interface StageSceneInternals {
 
 function createScene(options?: {
   stageNumber?: number;
+  totalScore?: number;
+  totalStarCount?: number;
   saveData?: Partial<SaveData>;
   isNewPlanetUnlock?: boolean;
   earnedStars?: number;
   finalizeStageResult?: { totalScore: number; totalStarCount: number };
 }): CreatedScene {
   const stageNumber = options?.stageNumber ?? 1;
+  const totalScore = options?.totalScore ?? 0;
+  const totalStarCount = options?.totalStarCount ?? 0;
   const earnedStars = options?.earnedStars ?? 3;
   const finalizeStageResult = options?.finalizeStageResult ?? { totalScore: 1234, totalStarCount: 8 };
   const sceneManager = { requestTransition: vi.fn() };
@@ -72,19 +79,28 @@ function createScene(options?: {
     audioManager,
     saveManager,
   );
-  scene.enter({ stageNumber });
+  scene.enter({ stageNumber, totalScore, totalStarCount });
 
   const internal = scene as unknown as StageSceneInternals;
+  const finalizeStageMock = vi.fn(() => finalizeStageResult);
   internal.scoreSystem = {
     getStarCount: () => earnedStars,
-    finalizeStage: () => finalizeStageResult,
+    getTotalScore: () => totalScore,
+    getTotalStarCount: () => totalStarCount,
+    finalizeStage: finalizeStageMock,
   };
 
-  return { scene, sceneManager };
+  return { scene, sceneManager, finalizeStageMock };
 }
 
 function getContinueButton(): HTMLButtonElement {
   const button = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
+  expect(button).not.toBeNull();
+  return button!;
+}
+
+function getRetryButton(): HTMLButtonElement {
+  const button = document.querySelector<HTMLButtonElement>('[data-stage-clear-retry]');
   expect(button).not.toBeNull();
   return button!;
 }
@@ -124,14 +140,17 @@ describe('StageScene clear CTA', () => {
 
     internal.onStageClear();
 
-    const button = getContinueButton();
-    expect(button.disabled).toBe(true);
+    const retryButton = getRetryButton();
+    const continueButton = getContinueButton();
+    expect(retryButton.disabled).toBe(true);
+    expect(continueButton.disabled).toBe(true);
 
-    button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     internal.update(30);
 
     expect(sceneManager.requestTransition).not.toHaveBeenCalled();
-    expect(button.disabled).toBe(false);
+    expect(retryButton.disabled).toBe(false);
+    expect(continueButton.disabled).toBe(false);
   });
 
   it('通常ステージではCTAタップで次ステージへ1回だけ進む', () => {
@@ -198,9 +217,39 @@ describe('StageScene clear CTA', () => {
     expect(overlay?.textContent).toContain('なかまに なったよ');
 
     const button = getContinueButton();
+    const retryButton = getRetryButton();
+    expect(retryButton.textContent).toBe('もういちど');
+    expect(retryButton.disabled).toBe(false);
+    expect(retryButton.style.minHeight).toBe('88px');
     expect(button.textContent).toBe('つぎへ');
     expect(button.disabled).toBe(false);
+    expect(button.style.minHeight).toBe('88px');
     expect(getCardButton()?.textContent).toBe('カードをみる');
+  });
+
+  it('もういちどで同じステージへ再入場し、累計値を二重加算しない', () => {
+    const { scene, sceneManager, finalizeStageMock } = createScene({
+      stageNumber: 4,
+      totalScore: 1800,
+      totalStarCount: 11,
+      finalizeStageResult: { totalScore: 2400, totalStarCount: 14 },
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const retryButton = getRetryButton();
+    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(finalizeStageMock).not.toHaveBeenCalled();
+    expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith('stage', {
+      stageNumber: 4,
+      totalScore: 1800,
+      totalStarCount: 11,
+      replayToken: expect.any(Number),
+    });
   });
 
   it('新規アンロック時だけカードをみるボタンを表示する', () => {
@@ -225,6 +274,8 @@ describe('StageScene clear CTA', () => {
   it('カード詳細を閉じるとクリア画面へ戻り、その後つぎへできる', () => {
     const { scene, sceneManager } = createScene({
       stageNumber: 2,
+      totalScore: 1500,
+      totalStarCount: 7,
       earnedStars: 5,
       isNewPlanetUnlock: true,
       finalizeStageResult: { totalScore: 2000, totalStarCount: 9 },
@@ -247,6 +298,9 @@ describe('StageScene clear CTA', () => {
 
     const continueButton = getContinueButton();
     continueButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(sceneManager.requestTransition).not.toHaveBeenCalled();
+    const retryButton = getRetryButton();
+    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     expect(sceneManager.requestTransition).not.toHaveBeenCalled();
 
     const backButton = document.querySelector('[data-detail-back]') as HTMLElement | null;

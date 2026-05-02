@@ -254,6 +254,7 @@ export class StageScene implements Scene {
   private clearTimer = 0;
   private clearOverlay: HTMLDivElement | null = null;
   private clearContinueButton: HTMLButtonElement | null = null;
+  private clearRetryButton: HTMLButtonElement | null = null;
   private clearRewardButton: HTMLButtonElement | null = null;
   private isClearContinueEnabled = false;
   private hasHandledClearContinue = false;
@@ -767,6 +768,7 @@ export class StageScene implements Scene {
       this.clearOverlay = null;
     }
     this.clearContinueButton = null;
+    this.clearRetryButton = null;
     this.clearRewardButton = null;
     this.isClearContinueEnabled = false;
     this.hasHandledClearContinue = false;
@@ -1358,14 +1360,17 @@ export class StageScene implements Scene {
       }
     }
 
-    const continueButton = document.createElement('button');
-    const continueLabel = this.stageNumber >= TOTAL_STAGES ? 'おいわいへ' : 'つぎへ';
-    continueButton.setAttribute('data-stage-clear-continue', '');
-    continueButton.setAttribute('aria-label', continueLabel);
-    continueButton.textContent = continueLabel;
-    continueButton.disabled = true;
-    continueButton.style.cssText = `
+    const actionButtons = document.createElement('div');
+    actionButtons.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.9rem;
+      width: 100%;
       margin-top: 1.4rem;
+    `;
+
+    const clearActionButtonStyle = `
       min-width: min(78vw, 320px);
       min-height: 88px;
       padding: 1rem 1.8rem;
@@ -1374,8 +1379,6 @@ export class StageScene implements Scene {
       font-family: 'Zen Maru Gothic', sans-serif;
       font-size: clamp(1.5rem, 5vmin, 2.1rem);
       font-weight: 900;
-      color: #00163a;
-      background: linear-gradient(135deg, #ffe66d, #ffb347);
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
       opacity: 0;
       visibility: hidden;
@@ -1385,15 +1388,74 @@ export class StageScene implements Scene {
       transition: opacity 0.18s ease-out, transform 0.08s ease-out;
     `;
 
+    const retryButton = document.createElement('button');
+    retryButton.setAttribute('data-stage-clear-retry', '');
+    retryButton.setAttribute('aria-label', 'もういちど');
+    retryButton.textContent = 'もういちど';
+    retryButton.disabled = true;
+    retryButton.style.cssText = `
+      ${clearActionButtonStyle}
+      color: #ffffff;
+      background: linear-gradient(135deg, #5fd3ff, #4b7bff);
+    `;
+
+    const continueButton = document.createElement('button');
+    const continueLabel = this.stageNumber >= TOTAL_STAGES ? 'おいわいへ' : 'つぎへ';
+    continueButton.setAttribute('data-stage-clear-continue', '');
+    continueButton.setAttribute('aria-label', continueLabel);
+    continueButton.textContent = continueLabel;
+    continueButton.disabled = true;
+    continueButton.style.cssText = `
+      ${clearActionButtonStyle}
+      color: #00163a;
+      background: linear-gradient(135deg, #ffe66d, #ffb347);
+    `;
+
+    const disableClearActionButtons = (): void => {
+      if (this.clearRetryButton) {
+        this.clearRetryButton.disabled = true;
+        this.clearRetryButton.style.pointerEvents = 'none';
+        this.clearRetryButton.style.transform = 'scale(1)';
+      }
+      if (this.clearContinueButton) {
+        this.clearContinueButton.disabled = true;
+        this.clearContinueButton.style.pointerEvents = 'none';
+        this.clearContinueButton.style.transform = 'scale(1)';
+      }
+    };
+
+    const activateRetry = (event: Event): void => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (this.isClearRewardOpen) return;
+      if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
+      this.hasHandledClearContinue = true;
+      disableClearActionButtons();
+      this.handleStageReplay();
+    };
+    const releaseRetry = (): void => {
+      if (this.clearRetryButton) {
+        this.clearRetryButton.style.transform = 'scale(1)';
+      }
+    };
+    retryButton.addEventListener('pointerdown', (event) => {
+      if (this.isClearRewardOpen) return;
+      if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
+      retryButton.style.transform = 'scale(0.96)';
+      activateRetry(event);
+    });
+    retryButton.addEventListener('click', activateRetry);
+    retryButton.addEventListener('pointerup', releaseRetry);
+    retryButton.addEventListener('pointercancel', releaseRetry);
+    retryButton.addEventListener('pointerleave', releaseRetry);
+
     const activate = (event: Event): void => {
       event.preventDefault();
       event.stopPropagation();
       if (this.isClearRewardOpen) return;
       if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
       this.hasHandledClearContinue = true;
-      continueButton.disabled = true;
-      continueButton.style.pointerEvents = 'none';
-      continueButton.style.transform = 'scale(1)';
+      disableClearActionButtons();
       this.handleStageComplete();
     };
     const release = (): void => {
@@ -1411,8 +1473,11 @@ export class StageScene implements Scene {
     continueButton.addEventListener('pointerup', release);
     continueButton.addEventListener('pointercancel', release);
     continueButton.addEventListener('pointerleave', release);
+    this.clearRetryButton = retryButton;
     this.clearContinueButton = continueButton;
-    this.clearOverlay.appendChild(continueButton);
+    actionButtons.appendChild(retryButton);
+    actionButtons.appendChild(continueButton);
+    this.clearOverlay.appendChild(actionButtons);
 
     uiOverlay.appendChild(this.clearOverlay);
   }
@@ -1423,6 +1488,12 @@ export class StageScene implements Scene {
     if (!this.clearContinueButton) return;
 
     this.isClearContinueEnabled = true;
+    if (this.clearRetryButton) {
+      this.clearRetryButton.disabled = false;
+      this.clearRetryButton.style.opacity = '1';
+      this.clearRetryButton.style.visibility = 'visible';
+      this.clearRetryButton.style.pointerEvents = 'auto';
+    }
     this.clearContinueButton.disabled = false;
     this.clearContinueButton.style.opacity = '1';
     this.clearContinueButton.style.visibility = 'visible';
@@ -1458,11 +1529,22 @@ export class StageScene implements Scene {
     }
   }
 
+  private handleStageReplay(): void {
+    this.sceneManager.requestTransition('stage', {
+      stageNumber: this.stageNumber,
+      totalScore: this.scoreSystem.getTotalScore(),
+      totalStarCount: this.scoreSystem.getTotalStarCount(),
+      replayToken: Date.now() + Math.random(),
+    });
+  }
+
   exit(): void {
     if (!this.initialized) {
       return;
     }
     this.clearRewardOverlay.hide();
+    this.clearContinueButton = null;
+    this.clearRetryButton = null;
     this.clearRewardButton = null;
     this.isClearRewardOpen = false;
     this.touchGuide.hide();
