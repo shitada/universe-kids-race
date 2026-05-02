@@ -10,7 +10,6 @@ import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButt
 import { TOTAL_STAGES } from '../config/StageConfig';
 import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
 import { getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
-import { CompanionManager } from '../entities/CompanionManager';
 import { formatEncyclopediaLabel } from '../../ui/formatEncyclopediaLabel';
 import { getViewportSize } from '../utils/getViewportSize';
 
@@ -76,11 +75,14 @@ export const __titleSceneSharedAssetsForTest = {
 type EncyclopediaOverlayModule = typeof import('../../ui/EncyclopediaOverlay');
 type EncyclopediaOverlayCtor = EncyclopediaOverlayModule['EncyclopediaOverlay'];
 type EncyclopediaOverlayInstance = InstanceType<EncyclopediaOverlayCtor>;
+type TitleCompanionFactoryModule = typeof import('../entities/CompanionMeshFactory');
+type TitleCompanionFactory = Pick<TitleCompanionFactoryModule, 'createCompanionMesh'>;
 
 interface TitleSceneOptions {
   loadingOverlay?: Pick<LoadingOverlay, 'show' | 'hide'>;
   loadFailureOverlay?: Pick<LoadFailureOverlay, 'show' | 'hide'>;
   loadEncyclopediaOverlay?: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
+  loadTitleCompanionFactory?: () => Promise<TitleCompanionFactory>;
   scheduleIdleTask?: (callback: () => void) => void;
 }
 
@@ -112,7 +114,10 @@ export class TitleScene implements Scene {
   private tutorialOverlay = new TutorialOverlay();
   private encyclopediaOverlay: EncyclopediaOverlayInstance | null = null;
   private encyclopediaOverlayPromise: Promise<EncyclopediaOverlayInstance> | null = null;
+  private companionFactory: TitleCompanionFactory | null = null;
+  private companionFactoryPromise: Promise<TitleCompanionFactory> | null = null;
   private readonly loadEncyclopediaOverlay: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
+  private readonly loadTitleCompanionFactory: () => Promise<TitleCompanionFactory>;
   private readonly loadingOverlay: Pick<LoadingOverlay, 'show' | 'hide'>;
   private readonly loadFailureOverlay: Pick<LoadFailureOverlay, 'show' | 'hide'>;
   private readonly scheduleIdleTask: (callback: () => void) => void;
@@ -142,6 +147,9 @@ export class TitleScene implements Scene {
     this.loadEncyclopediaOverlay =
       options.loadEncyclopediaOverlay ??
       (() => import('../../ui/EncyclopediaOverlay'));
+    this.loadTitleCompanionFactory =
+      options.loadTitleCompanionFactory ??
+      (() => import('../entities/CompanionMeshFactory'));
     this.threeScene = new THREE.Scene();
     this.threeScene.background = new THREE.Color(0x000020);
     const { width: vw, height: vh } = getViewportSize();
@@ -171,7 +179,7 @@ export class TitleScene implements Scene {
     }
 
     const saveData = this.saveManager.load();
-    this.createCompanionParade(saveData.unlockedPlanets);
+    void this.createCompanionParade(saveData.unlockedPlanets);
 
     this.createOverlay();
     this.createMuteButton();
@@ -244,6 +252,26 @@ export class TitleScene implements Scene {
       });
 
     return this.encyclopediaOverlayPromise;
+  }
+
+  private getTitleCompanionFactory(): Promise<TitleCompanionFactory> {
+    if (this.companionFactory) {
+      return Promise.resolve(this.companionFactory);
+    }
+    if (this.companionFactoryPromise) {
+      return this.companionFactoryPromise;
+    }
+
+    this.companionFactoryPromise = this.loadTitleCompanionFactory()
+      .then((factory) => {
+        this.companionFactory = factory;
+        return factory;
+      })
+      .finally(() => {
+        this.companionFactoryPromise = null;
+      });
+
+    return this.companionFactoryPromise;
   }
 
   private showEncyclopedia(): void {
@@ -478,7 +506,7 @@ export class TitleScene implements Scene {
     );
   }
 
-  private createCompanionParade(unlockedPlanets: number[]): void {
+  private async createCompanionParade(unlockedPlanets: number[]): Promise<void> {
     this.clearCompanionParade();
 
     const unlockedEntries = [...new Set(unlockedPlanets)].reduce<Array<NonNullable<ReturnType<typeof getPlanetEncyclopediaEntry>>>>(
@@ -496,6 +524,12 @@ export class TitleScene implements Scene {
       return;
     }
 
+    const requestToken = this.encyclopediaRequestToken;
+    const { createCompanionMesh } = await this.getTitleCompanionFactory();
+    if (!this.isActive || this.encyclopediaRequestToken !== requestToken) {
+      return;
+    }
+
     const group = new THREE.Group();
     group.name = 'title-companion-parade';
     group.position.set(0, 1.35, -1.2);
@@ -505,7 +539,7 @@ export class TitleScene implements Scene {
     const verticalAmplitude = Math.min(0.45, 0.18 + unlockedEntries.length * 0.02);
 
     unlockedEntries.forEach((entry, index) => {
-      const mesh = CompanionManager.createCompanionMesh(entry);
+      const mesh = createCompanionMesh(entry);
       const angle = (index / unlockedEntries.length) * Math.PI * 2;
       mesh.position.set(
         Math.cos(angle) * radius,

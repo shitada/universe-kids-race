@@ -87,13 +87,28 @@ function createTitleScene(saveManager: SaveManager) {
     dispose: vi.fn(),
   } as unknown as AudioManager;
 
-  return new TitleScene(sceneManager as unknown as SceneManager, saveManager, audioManager);
+  return new TitleScene(
+    sceneManager as unknown as SceneManager,
+    saveManager,
+    audioManager,
+    {
+      loadTitleCompanionFactory: async () => ({
+        createCompanionMesh: () => new THREE.Group(),
+      }),
+    },
+  );
 }
 
 function findCompanionParade(scene: TitleScene): THREE.Group | undefined {
   return scene.getThreeScene().children.find(
     (child) => child instanceof THREE.Group && child.name === 'title-companion-parade',
   ) as THREE.Group | undefined;
+}
+
+function flushPromises(): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, 0);
+  });
 }
 
 describe('Stage clear persistence integration', () => {
@@ -142,7 +157,7 @@ describe('Stage clear persistence integration', () => {
     expect(state.unlockedPlanets).toEqual([1, 2, 5, 3]);
   });
 
-  it('shows the newly unlocked companion when returning to the title scene after clearing a stage', () => {
+  it('shows the newly unlocked companion when returning to the title scene after clearing a stage', async () => {
     const { state, api: saveManager } = createStatefulSaveManager({
       clearedStage: 1,
       unlockedPlanets: [1],
@@ -156,6 +171,7 @@ describe('Stage clear persistence integration', () => {
 
     const titleBeforeClear = createTitleScene(saveManager);
     titleBeforeClear.enter({});
+    await flushPromises();
     expect(findCompanionParade(titleBeforeClear)?.children).toHaveLength(1);
     titleBeforeClear.exit();
 
@@ -165,6 +181,7 @@ describe('Stage clear persistence integration', () => {
 
     const titleAfterClear = createTitleScene(saveManager);
     titleAfterClear.enter({});
+    await flushPromises();
 
     const parade = findCompanionParade(titleAfterClear);
     expect(parade).toBeTruthy();
