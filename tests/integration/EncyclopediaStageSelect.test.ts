@@ -186,6 +186,43 @@ describe('Encyclopedia Stage Selection Integration', () => {
     expect(uiOverlay.querySelector('[data-card][data-stage="2"]')).not.toBeNull();
   });
 
+  it('opens the encyclopedia without loading UI after idle prefetch completes', async () => {
+    const manager = new SceneManager();
+    const loadingOverlay = new LoadingOverlay();
+    const idleCallbacks: Array<() => void> = [];
+    const loadEncyclopediaOverlay = vi.fn(async () => ({ EncyclopediaOverlay }));
+    const titleScene = new TitleScene(
+      manager,
+      createMockSaveManager(),
+      createMockAudioManager(),
+      {
+        loadingOverlay,
+        loadEncyclopediaOverlay,
+        scheduleIdleTask: (callback) => idleCallbacks.push(callback),
+      },
+    );
+
+    manager.registerScene('title', titleScene);
+    manager.registerScene('stage', createTrackingScene([], 'stage'));
+
+    await manager.transitionTo('title');
+
+    expect(loadEncyclopediaOverlay).not.toHaveBeenCalled();
+    idleCallbacks[0]?.();
+    await flushPromises();
+    await flushPromises();
+
+    const encyclopediaBtn = Array.from(uiOverlay.querySelectorAll('button')).find(
+      (button) => button.textContent?.includes('ずかん'),
+    ) as HTMLButtonElement;
+    encyclopediaBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+
+    expect(loadEncyclopediaOverlay).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[data-loading-overlay]')).toBeNull();
+    expect(uiOverlay.querySelector('[data-card][data-stage="2"]')).not.toBeNull();
+  });
+
   it('shows retry UI when encyclopedia lazy-load fails and opens after retry', async () => {
     const manager = new SceneManager();
     const loadingOverlay = new LoadingOverlay();

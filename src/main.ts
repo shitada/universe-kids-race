@@ -218,6 +218,7 @@ const schedulePrefetch = (cb: () => void): void => {
 };
 schedulePrefetch(() => {
   void sceneManager.prefetchSceneModule('stage').catch(() => {});
+  void sceneManager.prefetchScene('ending').catch(() => {});
 });
 
 gameLoop.start(

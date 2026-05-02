@@ -386,6 +386,87 @@ describe('Stage Flow Integration', () => {
     expect(manager.getCurrentType()).toBe('ending');
   });
 
+  it('uses the prefetched ending scene cache after the last stage clear without showing loading UI', async () => {
+    const manager = new SceneManager();
+    const inputSystem = {
+      setBoostPressed: vi.fn(),
+      getState: vi.fn(() => ({ moveDirection: 0, boostPressed: false })),
+    } as unknown as InputSystem;
+    const audioManager = {
+      playBGM: vi.fn(),
+      stopBGM: vi.fn(),
+      playSFX: vi.fn(),
+      stopBoostSFX: vi.fn(),
+      startBoostSFX: vi.fn(),
+      isMuted: vi.fn(() => false),
+      toggleMute: vi.fn(() => false),
+      setMuted: vi.fn(),
+      initFromInteraction: vi.fn(),
+    } as unknown as AudioManager;
+    const saveManager = {
+      load: vi.fn(() => ({
+        clearedStage: 0,
+        unlockedPlanets: [],
+        muted: false,
+        tutorialShown: true,
+        bestStageStars: {},
+      })),
+      save: vi.fn(),
+      clear: vi.fn(),
+      markStageCleared: vi.fn(() => false),
+      updateBestStageStars: vi.fn(),
+    } as unknown as SaveManager;
+    const loadingOverlay = {
+      show: vi.fn(),
+      hide: vi.fn(),
+    };
+    const stageScene = new StageScene(manager, inputSystem, audioManager, saveManager);
+    const endingFactory = vi.fn(async () => createTrackingScene([], 'ending'));
+
+    manager.registerScene('stage', stageScene);
+    manager.registerSceneFactory('ending', endingFactory);
+    manager.setLoadStateHandler((isLoading, sceneType) => {
+      if (isLoading) {
+        loadingOverlay.show(
+          sceneType === 'ending'
+            ? 'さいごの じゅんび ちゅう...'
+            : 'たびの じゅんび ちゅう...',
+        );
+        return;
+      }
+      loadingOverlay.hide();
+    });
+
+    await manager.prefetchScene('ending');
+    expect(endingFactory).toHaveBeenCalledTimes(1);
+
+    await manager.transitionTo('stage', { stageNumber: TOTAL_STAGES });
+
+    const internal = stageScene as unknown as {
+      scoreSystem: {
+        getStarCount(): number;
+        finalizeStage(): { totalScore: number; totalStarCount: number };
+      };
+      onStageClear(): void;
+      update(deltaTime: number): void;
+    };
+    internal.scoreSystem.getStarCount = () => 6;
+    internal.scoreSystem.finalizeStage = () => ({ totalScore: 9000, totalStarCount: 72 });
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const button = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
+    expect(button?.textContent).toBe('おいわいへ');
+    button!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(manager.getCurrentType()).toBe('ending');
+    expect(endingFactory).toHaveBeenCalledTimes(1);
+    expect(loadingOverlay.show).not.toHaveBeenCalled();
+  });
+
   it('shows retry UI after stage lazy-load failure and can return to title', async () => {
     const log: { type: SceneType; context: SceneContext }[] = [];
     const manager = new SceneManager();

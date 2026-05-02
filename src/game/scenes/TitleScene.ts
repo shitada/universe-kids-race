@@ -79,6 +79,18 @@ interface TitleSceneOptions {
   loadingOverlay?: Pick<LoadingOverlay, 'show' | 'hide'>;
   loadFailureOverlay?: Pick<LoadFailureOverlay, 'show' | 'hide'>;
   loadEncyclopediaOverlay?: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
+  scheduleIdleTask?: (callback: () => void) => void;
+}
+
+function scheduleIdleTask(callback: () => void): void {
+  const requestIdle = (window as Window & {
+    requestIdleCallback?: (cb: () => void, options?: { timeout: number }) => number;
+  }).requestIdleCallback;
+  if (typeof requestIdle === 'function') {
+    requestIdle(callback, { timeout: 1500 });
+    return;
+  }
+  window.setTimeout(callback, 800);
 }
 
 export class TitleScene implements Scene {
@@ -100,6 +112,7 @@ export class TitleScene implements Scene {
   private readonly loadEncyclopediaOverlay: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
   private readonly loadingOverlay: Pick<LoadingOverlay, 'show' | 'hide'>;
   private readonly loadFailureOverlay: Pick<LoadFailureOverlay, 'show' | 'hide'>;
+  private readonly scheduleIdleTask: (callback: () => void) => void;
   private encyclopediaBtn: HTMLButtonElement | null = null;
   private isOpeningEncyclopedia = false;
   private isActive = false;
@@ -122,6 +135,7 @@ export class TitleScene implements Scene {
     this.audioManager = audioManager;
     this.loadingOverlay = options.loadingOverlay ?? new LoadingOverlay();
     this.loadFailureOverlay = options.loadFailureOverlay ?? new LoadFailureOverlay();
+    this.scheduleIdleTask = options.scheduleIdleTask ?? scheduleIdleTask;
     this.loadEncyclopediaOverlay =
       options.loadEncyclopediaOverlay ??
       (() => import('../../ui/EncyclopediaOverlay'));
@@ -155,6 +169,7 @@ export class TitleScene implements Scene {
 
     this.createOverlay();
     this.createMuteButton();
+    this.prefetchEncyclopediaOnIdle();
 
     // タイトル BGM (BGM_0) を再生する。
     // - AudioContext が既に初期化済み（エンディング後・🏠 ボタン経由でタイトル
@@ -246,6 +261,20 @@ export class TitleScene implements Scene {
 
   private isCurrentEncyclopediaRequest(requestToken: number): boolean {
     return this.isActive && this.encyclopediaRequestToken === requestToken;
+  }
+
+  private prefetchEncyclopediaOnIdle(): void {
+    const requestToken = this.encyclopediaRequestToken;
+    this.scheduleIdleTask(() => {
+      if (
+        !this.isCurrentEncyclopediaRequest(requestToken) ||
+        this.encyclopediaOverlay ||
+        this.encyclopediaOverlayPromise
+      ) {
+        return;
+      }
+      void this.getEncyclopediaOverlay().catch(() => {});
+    });
   }
 
   private async openEncyclopedia(): Promise<void> {

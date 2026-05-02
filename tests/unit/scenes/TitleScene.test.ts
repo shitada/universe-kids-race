@@ -292,6 +292,92 @@ describe('TitleScene (T009)', () => {
     scene.exit();
   });
 
+  it('starts encyclopedia prefetch only after idle and ignores stale callbacks across re-entry', async () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager(true);
+    const idleCallbacks: Array<() => void> = [];
+    const loadEncyclopediaOverlay = vi.fn(async () => ({ EncyclopediaOverlay }));
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager, {
+      loadEncyclopediaOverlay,
+      scheduleIdleTask: (callback) => idleCallbacks.push(callback),
+    });
+
+    scene.enter({});
+    expect(loadEncyclopediaOverlay).not.toHaveBeenCalled();
+    expect(idleCallbacks).toHaveLength(1);
+    const firstIdleCallback = idleCallbacks[0];
+
+    scene.exit();
+    scene.enter({});
+    expect(idleCallbacks).toHaveLength(2);
+    const secondIdleCallback = idleCallbacks[1];
+
+    firstIdleCallback();
+    await flushPromises();
+    expect(loadEncyclopediaOverlay).not.toHaveBeenCalled();
+
+    secondIdleCallback();
+    secondIdleCallback();
+    await flushPromises();
+    await flushPromises();
+
+    expect(loadEncyclopediaOverlay).toHaveBeenCalledTimes(1);
+
+    scene.exit();
+  });
+
+  it('swallows encyclopedia prefetch failures and still opens on demand later', async () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager(true);
+    const idleCallbacks: Array<() => void> = [];
+    const loadingOverlay = {
+      show: vi.fn(),
+      hide: vi.fn(),
+    };
+    const loadFailureOverlay = {
+      show: vi.fn(),
+      hide: vi.fn(),
+    };
+    const loadEncyclopediaOverlay = vi
+      .fn<() => Promise<{ EncyclopediaOverlay: typeof EncyclopediaOverlay }>>()
+      .mockRejectedValueOnce(new Error('prefetch failed'))
+      .mockResolvedValueOnce({ EncyclopediaOverlay });
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager, {
+      loadingOverlay,
+      loadFailureOverlay,
+      loadEncyclopediaOverlay,
+      scheduleIdleTask: (callback) => idleCallbacks.push(callback),
+    });
+
+    scene.enter({});
+    idleCallbacks[0]?.();
+    await flushPromises();
+    await flushPromises();
+
+    expect(loadEncyclopediaOverlay).toHaveBeenCalledTimes(1);
+    expect(loadFailureOverlay.show).not.toHaveBeenCalled();
+
+    const encyclopediaButton = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent?.startsWith('ずかん'),
+    ) as HTMLButtonElement | undefined;
+    expect(encyclopediaButton).toBeTruthy();
+
+    encyclopediaButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+    await flushPromises();
+
+    expect(loadEncyclopediaOverlay).toHaveBeenCalledTimes(2);
+    expect(loadingOverlay.show).toHaveBeenCalledWith('ずかんを よんでるよ...');
+    expect(loadFailureOverlay.show).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-card]')).toBeTruthy();
+
+    scene.exit();
+  });
+
   it('first mute interaction initializes audio and starts BGM_0 once', () => {
     const sceneManager = createMockSceneManager();
     const saveManager = createMockSaveManager();
