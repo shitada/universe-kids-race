@@ -58,6 +58,28 @@ describe('TouchGuideOverlay', () => {
     expect(document.querySelectorAll('[data-touch-guide-overlay]')).toHaveLength(1);
   });
 
+  it('highlights only the recommended side in assist modes', () => {
+    overlay.show();
+
+    const root = document.querySelector<HTMLElement>('[data-touch-guide-overlay]')!;
+    const leftGuide = document.querySelector<HTMLElement>('[data-touch-guide="left"]')!;
+    const rightGuide = document.querySelector<HTMLElement>('[data-touch-guide="right"]')!;
+
+    overlay.setMode('assist-left');
+    expect(root.getAttribute('data-touch-guide-state')).toBe('assist-left');
+    expect(root.getAttribute('data-touch-guide-active-side')).toBe('left');
+    expect(root.getAttribute('aria-hidden')).toBe('false');
+    expect(root.style.visibility).toBe('visible');
+    expect(leftGuide.getAttribute('data-touch-guide-emphasis')).toBe('primary');
+    expect(rightGuide.getAttribute('data-touch-guide-emphasis')).toBe('secondary');
+
+    overlay.setMode('assist-right');
+    expect(root.getAttribute('data-touch-guide-state')).toBe('assist-right');
+    expect(root.getAttribute('data-touch-guide-active-side')).toBe('right');
+    expect(leftGuide.getAttribute('data-touch-guide-emphasis')).toBe('secondary');
+    expect(rightGuide.getAttribute('data-touch-guide-emphasis')).toBe('primary');
+  });
+
   it('removes the overlay on hide()', () => {
     overlay.show();
     overlay.hide();

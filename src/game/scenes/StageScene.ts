@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Scene, SceneContext, StageConfig } from '../../types';
+import type { AssistDirection, Scene, SceneContext, StageConfig } from '../../types';
 import type { SceneManager } from '../SceneManager';
 import type { InputSystem } from '../systems/InputSystem';
 import type { AudioManager } from '../audio/AudioManager';
@@ -232,6 +232,12 @@ export class StageScene implements Scene {
   private static readonly ASSIST_MESSAGE_DURATION = 3;
   private static readonly ASSIST_METEORITE_INTERVAL_MULTIPLIER = 1.7;
   private static readonly ASSIST_MESSAGE = 'だいじょうぶ！ ゆっくりいこう ✨';
+  private static readonly ASSIST_DIRECTION_REFRESH_INTERVAL = 0.35;
+  private static readonly ASSIST_DIRECTION_LOOKAHEAD = 42;
+  private static readonly ASSIST_DIRECTION_SIDE_TARGET_X = 4.5;
+  private static readonly ASSIST_DIRECTION_SIDE_RANGE = 7.5;
+  private static readonly ASSIST_DIRECTION_DIFF_THRESHOLD = 1.1;
+  private static readonly ASSIST_DIRECTION_DIFF_RATIO = 0.28;
 
   private threeScene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
@@ -273,6 +279,8 @@ export class StageScene implements Scene {
   private meteoriteHitTimes: number[] = [];
   private assistTimer = 0;
   private assistMessageTimer = 0;
+  private assistDirection: AssistDirection | null = null;
+  private assistDirectionRefreshTimer = 0;
 
   // Damage animation
   private damageTimer = 0;
@@ -407,6 +415,8 @@ export class StageScene implements Scene {
     this.meteoriteHitTimes.length = 0;
     this.assistTimer = 0;
     this.assistMessageTimer = 0;
+    this.assistDirection = null;
+    this.assistDirectionRefreshTimer = 0;
 
     const totalScore = context.totalScore ?? 0;
     const totalStarCount = context.totalStarCount ?? 0;
@@ -1103,6 +1113,11 @@ export class StageScene implements Scene {
   }
 
   private updateTouchGuide(moveDirection: number, deltaTime: number): void {
+    if (this.assistTimer > 0) {
+      this.setTouchGuideMode(this.getAssistTouchGuideMode());
+      return;
+    }
+
     if (moveDirection !== 0) {
       this.touchGuideIdleTimer = 0;
       this.hasSeenMoveInput = true;
@@ -1132,9 +1147,15 @@ export class StageScene implements Scene {
 
   private updateAssistTimers(deltaTime: number): void {
     if (this.assistTimer > 0) {
+      this.assistDirectionRefreshTimer = Math.max(0, this.assistDirectionRefreshTimer - deltaTime);
+      if (this.assistDirectionRefreshTimer === 0) {
+        this.refreshAssistDirection();
+      }
       this.assistTimer = Math.max(0, this.assistTimer - deltaTime);
       if (this.assistTimer === 0) {
         this.spawnSystem.setMeteoriteIntervalMultiplier(1);
+        this.assistDirection = null;
+        this.assistDirectionRefreshTimer = 0;
       }
     }
 
@@ -1169,9 +1190,57 @@ export class StageScene implements Scene {
   private activateAssistMode(): void {
     this.assistTimer = StageScene.ASSIST_DURATION;
     this.assistMessageTimer = StageScene.ASSIST_MESSAGE_DURATION;
+    this.assistDirectionRefreshTimer = 0;
+    this.refreshAssistDirection();
     this.spawnSystem.setMeteoriteIntervalMultiplier(StageScene.ASSIST_METEORITE_INTERVAL_MULTIPLIER);
     this.hud.showAssistMessage(StageScene.ASSIST_MESSAGE);
     this.meteoriteHitTimes.length = 0;
+  }
+
+  private refreshAssistDirection(): void {
+    this.assistDirection = this.getSaferAssistDirection();
+    this.assistDirectionRefreshTimer = StageScene.ASSIST_DIRECTION_REFRESH_INTERVAL;
+  }
+
+  private getAssistTouchGuideMode(): TouchGuideMode {
+    if (this.assistDirection === 'left') return 'assist-left';
+    if (this.assistDirection === 'right') return 'assist-right';
+    return 'hidden';
+  }
+
+  private getSaferAssistDirection(): AssistDirection | null {
+    const shipX = this.spaceship.position.x;
+    const shipZ = this.spaceship.position.z;
+    const leftTargetX = Math.min(shipX - 2.5, -StageScene.ASSIST_DIRECTION_SIDE_TARGET_X);
+    const rightTargetX = Math.max(shipX + 2.5, StageScene.ASSIST_DIRECTION_SIDE_TARGET_X);
+    let leftDanger = 0;
+    let rightDanger = 0;
+
+    for (const meteorite of this.meteorites) {
+      if (!meteorite.isActive) continue;
+      const aheadDistance = shipZ - meteorite.position.z;
+      if (aheadDistance < 0 || aheadDistance > StageScene.ASSIST_DIRECTION_LOOKAHEAD) continue;
+
+      const proximityWeight = 1 + (StageScene.ASSIST_DIRECTION_LOOKAHEAD - aheadDistance) / 7;
+      const leftDistance = Math.abs(meteorite.position.x - leftTargetX);
+      const rightDistance = Math.abs(meteorite.position.x - rightTargetX);
+      const leftWeight = Math.max(0, 1 - leftDistance / StageScene.ASSIST_DIRECTION_SIDE_RANGE);
+      const rightWeight = Math.max(0, 1 - rightDistance / StageScene.ASSIST_DIRECTION_SIDE_RANGE);
+
+      leftDanger += proximityWeight * leftWeight;
+      rightDanger += proximityWeight * rightWeight;
+    }
+
+    const diff = Math.abs(leftDanger - rightDanger);
+    const maxDanger = Math.max(leftDanger, rightDanger);
+    if (diff < StageScene.ASSIST_DIRECTION_DIFF_THRESHOLD) {
+      return null;
+    }
+    if (maxDanger > 0 && diff < maxDanger * StageScene.ASSIST_DIRECTION_DIFF_RATIO) {
+      return null;
+    }
+
+    return leftDanger < rightDanger ? 'left' : 'right';
   }
 
   private updateDamageEffect(deltaTime: number): void {

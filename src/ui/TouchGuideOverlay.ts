@@ -1,7 +1,9 @@
-export type TouchGuideMode = 'intro' | 'idle' | 'hidden';
+export type TouchGuideMode = 'intro' | 'idle' | 'hidden' | 'assist-left' | 'assist-right';
 
 export class TouchGuideOverlay {
   private overlayEl: HTMLDivElement | null = null;
+  private leftGuideEl: HTMLDivElement | null = null;
+  private rightGuideEl: HTMLDivElement | null = null;
   private currentMode: TouchGuideMode | null = null;
 
   show(initialMode: TouchGuideMode = 'intro'): void {
@@ -24,8 +26,10 @@ export class TouchGuideOverlay {
       z-index: 12;
     `;
 
-    this.overlayEl.appendChild(this.createGuide('left', '⬅️ ひだり'));
-    this.overlayEl.appendChild(this.createGuide('right', 'みぎ ➡️'));
+    this.leftGuideEl = this.createGuide('left', '⬅️ ひだり');
+    this.rightGuideEl = this.createGuide('right', 'みぎ ➡️');
+    this.overlayEl.appendChild(this.leftGuideEl);
+    this.overlayEl.appendChild(this.rightGuideEl);
     uiOverlay.appendChild(this.overlayEl);
     this.setMode(initialMode);
   }
@@ -34,14 +38,19 @@ export class TouchGuideOverlay {
     if (!this.overlayEl || this.currentMode === mode) return;
     this.currentMode = mode;
     this.overlayEl.setAttribute('data-touch-guide-state', mode);
+    this.overlayEl.setAttribute('data-touch-guide-active-side', this.getActiveSide(mode));
     this.overlayEl.setAttribute('aria-hidden', mode === 'hidden' ? 'true' : 'false');
     this.overlayEl.style.visibility = mode === 'hidden' ? 'hidden' : 'visible';
+    this.leftGuideEl?.setAttribute('data-touch-guide-emphasis', this.getGuideEmphasis('left', mode));
+    this.rightGuideEl?.setAttribute('data-touch-guide-emphasis', this.getGuideEmphasis('right', mode));
   }
 
   hide(): void {
     if (!this.overlayEl) return;
     this.overlayEl.remove();
     this.overlayEl = null;
+    this.leftGuideEl = null;
+    this.rightGuideEl = null;
     this.currentMode = null;
   }
 
@@ -89,6 +98,17 @@ export class TouchGuideOverlay {
         50% { opacity: 0.95; }
       }
 
+      @keyframes touchGuideAssistPulse {
+        0%, 100% {
+          transform: translateY(-50%) scale(1);
+          box-shadow: 0 0 0 rgba(109, 214, 255, 0);
+        }
+        50% {
+          transform: translateY(-50%) scale(1.08);
+          box-shadow: 0 0 28px rgba(109, 214, 255, 0.48);
+        }
+      }
+
       [data-touch-guide-overlay][data-touch-guide-state="intro"] [data-touch-guide] {
         opacity: 0.82;
         animation: touchGuideBlink 1.8s ease-in-out infinite;
@@ -105,7 +125,39 @@ export class TouchGuideOverlay {
         animation: none;
         transform: translateY(calc(-50% + 8px));
       }
+
+      [data-touch-guide-overlay][data-touch-guide-state^="assist-"] [data-touch-guide] {
+        animation: none;
+      }
+
+      [data-touch-guide-overlay][data-touch-guide-state^="assist-"] [data-touch-guide][data-touch-guide-emphasis="primary"] {
+        opacity: 1;
+        background: rgba(38, 94, 182, 0.72);
+        border-color: rgba(255, 255, 255, 0.72);
+        transform: translateY(-50%) scale(1.04);
+        box-shadow: 0 0 26px rgba(109, 214, 255, 0.45);
+        animation: touchGuideAssistPulse 0.92s ease-in-out infinite;
+      }
+
+      [data-touch-guide-overlay][data-touch-guide-state^="assist-"] [data-touch-guide][data-touch-guide-emphasis="secondary"] {
+        opacity: 0.2;
+        transform: translateY(-50%) scale(0.96);
+      }
     `;
     document.head.appendChild(style);
+  }
+
+  private getActiveSide(mode: TouchGuideMode): 'left' | 'right' | 'both' | 'none' {
+    if (mode === 'assist-left') return 'left';
+    if (mode === 'assist-right') return 'right';
+    if (mode === 'hidden') return 'none';
+    return 'both';
+  }
+
+  private getGuideEmphasis(side: 'left' | 'right', mode: TouchGuideMode): 'primary' | 'secondary' | 'balanced' | 'hidden' {
+    if (mode === 'assist-left') return side === 'left' ? 'primary' : 'secondary';
+    if (mode === 'assist-right') return side === 'right' ? 'primary' : 'secondary';
+    if (mode === 'hidden') return 'hidden';
+    return 'balanced';
   }
 }
