@@ -12,6 +12,7 @@ export class SceneManager {
   private sceneModulePrefetchPromises = new Map<SceneType, Promise<unknown>>();
   private currentScene: Scene | null = null;
   private currentType: SceneType | null = null;
+  private currentContext: SceneContext | null = null;
   private transitionRequestId = 0;
   private activeLoadStateRequestId: number | null = null;
   private activeLoadStateSceneType: SceneType | null = null;
@@ -96,6 +97,16 @@ export class SceneManager {
       this.hasSameContext(this.inFlightTransition.context, context)
     ) {
       return this.inFlightTransition.promise;
+    }
+
+    if (
+      !this.inFlightTransition &&
+      this.currentScene &&
+      this.currentType === sceneType &&
+      this.currentContext &&
+      this.hasSameContext(this.currentContext, context)
+    ) {
+      return Promise.resolve();
     }
 
     const requestId = ++this.transitionRequestId;
@@ -205,6 +216,7 @@ export class SceneManager {
 
         this.currentScene = nextScene;
         this.currentType = sceneType;
+        this.currentContext = context;
         this.currentScene.enter(context);
       })
       .finally(() => {
