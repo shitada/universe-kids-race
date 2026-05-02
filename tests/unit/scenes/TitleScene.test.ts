@@ -424,6 +424,27 @@ describe('TitleScene (T009)', () => {
     scene.exit();
   });
 
+  it('positions title bottom buttons with overlay-local spacing only', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager(true);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager);
+    scene.enter({});
+
+    const tutorialButton = findButtonByText('あそびかた');
+    const encyclopediaButton = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent?.startsWith('ずかん'),
+    ) as HTMLButtonElement | undefined;
+
+    expect(tutorialButton?.getAttribute('style')).toContain('bottom: 2rem;');
+    expect(tutorialButton?.getAttribute('style')).toContain('right: 2rem;');
+    expect(encyclopediaButton?.getAttribute('style')).toContain('bottom: 2rem;');
+    expect(encyclopediaButton?.getAttribute('style')).toContain('left: 2rem;');
+
+    scene.exit();
+  });
+
   it('reuses the same THREE.Scene instance across enter/exit cycles', () => {
     const scene = new TitleScene(
       createMockSceneManager(),

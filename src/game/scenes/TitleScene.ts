@@ -458,9 +458,11 @@ export class TitleScene implements Scene {
       cursor: pointer;
       touch-action: manipulation;
       position: absolute;
-      bottom: max(2rem, calc(env(safe-area-inset-bottom, 0px) + 1rem));
-      right: max(2rem, calc(env(safe-area-inset-right, 0px) + 1rem));
+      bottom: 2rem;
+      right: 2rem;
     `;
+    tutorialBtn.style.bottom = '2rem';
+    tutorialBtn.style.right = '2rem';
     tutorialBtn.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
       this.ensureTitleAudioInitialized(true);
@@ -490,9 +492,11 @@ export class TitleScene implements Scene {
       touch-action: manipulation;
       white-space: nowrap;
       position: absolute;
-      bottom: max(2rem, calc(env(safe-area-inset-bottom, 0px) + 1rem));
-      left: max(2rem, calc(env(safe-area-inset-left, 0px) + 1rem));
+      bottom: 2rem;
+      left: 2rem;
     `;
+    encyclopediaBtn.style.bottom = '2rem';
+    encyclopediaBtn.style.left = '2rem';
     this.encyclopediaBtn = encyclopediaBtn;
     encyclopediaBtn.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
