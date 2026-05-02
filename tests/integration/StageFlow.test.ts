@@ -419,6 +419,92 @@ describe('Stage Flow Integration', () => {
     expect(internal.stageNumber).toBe(2);
   });
 
+  it('retries the same stage without double-counting cumulative totals and still continues afterward', async () => {
+    const manager = new SceneManager();
+    const inputSystem = {
+      setBoostPressed: vi.fn(),
+      getState: vi.fn(() => ({ moveDirection: 0, boostPressed: false })),
+    } as unknown as InputSystem;
+    const audioManager = {
+      playBGM: vi.fn(),
+      stopBGM: vi.fn(),
+      playSFX: vi.fn(),
+      stopBoostSFX: vi.fn(),
+      startBoostSFX: vi.fn(),
+      isMuted: vi.fn(() => false),
+      toggleMute: vi.fn(() => false),
+      setMuted: vi.fn(),
+      initFromInteraction: vi.fn(),
+    } as unknown as AudioManager;
+    const saveManager = {
+      load: vi.fn(() => ({
+        clearedStage: 0,
+        unlockedPlanets: [],
+        muted: false,
+        tutorialShown: true,
+        bestStageStars: {},
+      })),
+      save: vi.fn(),
+      clear: vi.fn(),
+      markStageCleared: vi.fn(() => false),
+      updateBestStageStars: vi.fn(),
+    } as unknown as SaveManager;
+    let stageScene: StageScene | null = null;
+
+    manager.registerSceneFactory('stage', async () => {
+      stageScene = new StageScene(manager, inputSystem, audioManager, saveManager);
+      return stageScene;
+    });
+    manager.registerScene('ending', createTrackingScene([], 'ending'));
+
+    await manager.transitionTo('stage', { stageNumber: 3, totalScore: 1000, totalStarCount: 10 });
+
+    const internal = stageScene as unknown as {
+      stageNumber: number;
+      scoreSystem: {
+        getStarCount(): number;
+        getTotalScore(): number;
+        getTotalStarCount(): number;
+        finalizeStage(): { stageScore: number; totalScore: number; totalStarCount: number };
+      };
+      onStageClear(): void;
+      update(deltaTime: number): void;
+    };
+    internal.scoreSystem.getStarCount = () => 5;
+    internal.scoreSystem.finalizeStage = () => ({ stageScore: 500, totalScore: 1500, totalStarCount: 15 });
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const retryButton = document.querySelector<HTMLButtonElement>('[data-stage-clear-retry]');
+    expect(retryButton?.textContent).toBe('もういちど');
+    retryButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+    await flushPromises();
+
+    expect(manager.getCurrentType()).toBe('stage');
+    expect(internal.stageNumber).toBe(3);
+    expect(internal.scoreSystem.getTotalScore()).toBe(1000);
+    expect(internal.scoreSystem.getTotalStarCount()).toBe(10);
+
+    internal.scoreSystem.getStarCount = () => 4;
+    internal.scoreSystem.finalizeStage = () => ({ stageScore: 400, totalScore: 1400, totalStarCount: 14 });
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const continueButton = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
+    expect(continueButton?.textContent).toBe('つぎへ');
+    continueButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+    await flushPromises();
+
+    expect(manager.getCurrentType()).toBe('stage');
+    expect(internal.stageNumber).toBe(4);
+    expect(internal.scoreSystem.getTotalScore()).toBe(1400);
+    expect(internal.scoreSystem.getTotalStarCount()).toBe(14);
+  });
+
   it('uses the clear CTA to move from the last stage to ending', async () => {
     const manager = new SceneManager();
     const inputSystem = {

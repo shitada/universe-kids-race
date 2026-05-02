@@ -254,12 +254,15 @@ export class StageScene implements Scene {
   private clearTimer = 0;
   private clearOverlay: HTMLDivElement | null = null;
   private clearContinueButton: HTMLButtonElement | null = null;
+  private clearRetryButton: HTMLButtonElement | null = null;
   private clearRewardButton: HTMLButtonElement | null = null;
   private isClearContinueEnabled = false;
   private hasHandledClearContinue = false;
   private isClearRewardOpen = false;
   private clearRewardOverlay = new EncyclopediaOverlay();
   private static readonly CLEAR_CONTINUE_DELAY = 0.6;
+  private stageEntryTotalScore = 0;
+  private stageEntryTotalStarCount = 0;
 
   // Damage animation
   private damageTimer = 0;
@@ -379,6 +382,8 @@ export class StageScene implements Scene {
 
     const totalScore = context.totalScore ?? 0;
     const totalStarCount = context.totalStarCount ?? 0;
+    this.stageEntryTotalScore = totalScore;
+    this.stageEntryTotalStarCount = totalStarCount;
     this.scoreSystem.setTotalScore(totalScore);
     this.scoreSystem.setTotalStarCount(totalStarCount);
 
@@ -767,6 +772,7 @@ export class StageScene implements Scene {
       this.clearOverlay = null;
     }
     this.clearContinueButton = null;
+    this.clearRetryButton = null;
     this.clearRewardButton = null;
     this.isClearContinueEnabled = false;
     this.hasHandledClearContinue = false;
@@ -1358,61 +1364,126 @@ export class StageScene implements Scene {
       }
     }
 
-    const continueButton = document.createElement('button');
-    const continueLabel = this.stageNumber >= TOTAL_STAGES ? 'おいわいへ' : 'つぎへ';
-    continueButton.setAttribute('data-stage-clear-continue', '');
-    continueButton.setAttribute('aria-label', continueLabel);
-    continueButton.textContent = continueLabel;
-    continueButton.disabled = true;
-    continueButton.style.cssText = `
+    const actionRow = document.createElement('div');
+    actionRow.style.cssText = `
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.8rem;
+      width: min(92vw, 680px);
       margin-top: 1.4rem;
-      min-width: min(78vw, 320px);
-      min-height: 88px;
-      padding: 1rem 1.8rem;
-      border: none;
-      border-radius: 999px;
-      font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: clamp(1.5rem, 5vmin, 2.1rem);
-      font-weight: 900;
-      color: #00163a;
-      background: linear-gradient(135deg, #ffe66d, #ffb347);
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-      opacity: 0;
-      visibility: hidden;
-      pointer-events: none;
-      touch-action: manipulation;
-      transform: scale(1);
-      transition: opacity 0.18s ease-out, transform 0.08s ease-out;
     `;
 
-    const activate = (event: Event): void => {
+    const activate = (
+      event: Event,
+      button: HTMLButtonElement,
+      onActivate: () => void,
+    ): void => {
       event.preventDefault();
       event.stopPropagation();
       if (this.isClearRewardOpen) return;
       if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
       this.hasHandledClearContinue = true;
-      continueButton.disabled = true;
-      continueButton.style.pointerEvents = 'none';
-      continueButton.style.transform = 'scale(1)';
-      this.handleStageComplete();
-    };
-    const release = (): void => {
       if (this.clearContinueButton) {
+        this.clearContinueButton.disabled = true;
+        this.clearContinueButton.style.pointerEvents = 'none';
         this.clearContinueButton.style.transform = 'scale(1)';
       }
+      if (this.clearRetryButton) {
+        this.clearRetryButton.disabled = true;
+        this.clearRetryButton.style.pointerEvents = 'none';
+        this.clearRetryButton.style.transform = 'scale(1)';
+      }
+      button.style.transform = 'scale(1)';
+      onActivate();
     };
-    continueButton.addEventListener('pointerdown', (event) => {
-      if (this.isClearRewardOpen) return;
-      if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
-      continueButton.style.transform = 'scale(0.96)';
-      activate(event);
-    });
-    continueButton.addEventListener('click', activate);
-    continueButton.addEventListener('pointerup', release);
-    continueButton.addEventListener('pointercancel', release);
-    continueButton.addEventListener('pointerleave', release);
+
+    const createClearActionButton = (
+      dataAttribute: string,
+      label: string,
+      style: string,
+      onActivate: () => void,
+    ): HTMLButtonElement => {
+      const button = document.createElement('button');
+      button.setAttribute(dataAttribute, '');
+      button.setAttribute('aria-label', label);
+      button.textContent = label;
+      button.disabled = true;
+      button.style.cssText = style;
+
+      const release = (): void => {
+        button.style.transform = 'scale(1)';
+      };
+
+      button.addEventListener('pointerdown', (event) => {
+        if (this.isClearRewardOpen) return;
+        if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
+        button.style.transform = 'scale(0.96)';
+        activate(event, button, onActivate);
+      });
+      button.addEventListener('click', (event) => activate(event, button, onActivate));
+      button.addEventListener('pointerup', release);
+      button.addEventListener('pointercancel', release);
+      button.addEventListener('pointerleave', release);
+
+      return button;
+    };
+
+    const retryButton = createClearActionButton(
+      'data-stage-clear-retry',
+      'もういちど',
+      `
+        min-width: min(72vw, 220px);
+        min-height: 80px;
+        padding: 0.9rem 1.6rem;
+        border: 3px solid rgba(255, 255, 255, 0.28);
+        border-radius: 999px;
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: clamp(1.3rem, 4.4vmin, 1.8rem);
+        font-weight: 900;
+        color: #fff;
+        background: rgba(255, 255, 255, 0.14);
+        box-shadow: 0 10px 26px rgba(0, 0, 0, 0.22);
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        touch-action: manipulation;
+        transform: scale(1);
+        transition: opacity 0.18s ease-out, transform 0.08s ease-out;
+      `,
+      () => this.handleStageRetry(),
+    );
+    this.clearRetryButton = retryButton;
+    actionRow.appendChild(retryButton);
+
+    const continueLabel = this.stageNumber >= TOTAL_STAGES ? 'おいわいへ' : 'つぎへ';
+    const continueButton = createClearActionButton(
+      'data-stage-clear-continue',
+      continueLabel,
+      `
+        min-width: min(78vw, 320px);
+        min-height: 88px;
+        padding: 1rem 1.8rem;
+        border: none;
+        border-radius: 999px;
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: clamp(1.5rem, 5vmin, 2.1rem);
+        font-weight: 900;
+        color: #00163a;
+        background: linear-gradient(135deg, #ffe66d, #ffb347);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        touch-action: manipulation;
+        transform: scale(1);
+        transition: opacity 0.18s ease-out, transform 0.08s ease-out;
+      `,
+      () => this.handleStageComplete(),
+    );
     this.clearContinueButton = continueButton;
-    this.clearOverlay.appendChild(continueButton);
+    actionRow.appendChild(continueButton);
+    this.clearOverlay.appendChild(actionRow);
 
     uiOverlay.appendChild(this.clearOverlay);
   }
@@ -1420,13 +1491,17 @@ export class StageScene implements Scene {
   private revealClearContinueButtonIfReady(): void {
     if (this.isClearContinueEnabled) return;
     if (this.clearTimer < StageScene.CLEAR_CONTINUE_DELAY) return;
-    if (!this.clearContinueButton) return;
+    if (!this.clearContinueButton || !this.clearRetryButton) return;
 
     this.isClearContinueEnabled = true;
     this.clearContinueButton.disabled = false;
     this.clearContinueButton.style.opacity = '1';
     this.clearContinueButton.style.visibility = 'visible';
     this.clearContinueButton.style.pointerEvents = 'auto';
+    this.clearRetryButton.disabled = false;
+    this.clearRetryButton.style.opacity = '1';
+    this.clearRetryButton.style.visibility = 'visible';
+    this.clearRetryButton.style.pointerEvents = 'auto';
   }
 
   private injectBestStageStarsAnimation(): void {
@@ -1458,12 +1533,21 @@ export class StageScene implements Scene {
     }
   }
 
+  private handleStageRetry(): void {
+    this.sceneManager.requestTransition('stage', {
+      stageNumber: this.stageNumber,
+      totalScore: this.stageEntryTotalScore,
+      totalStarCount: this.stageEntryTotalStarCount,
+    });
+  }
+
   exit(): void {
     if (!this.initialized) {
       return;
     }
     this.clearRewardOverlay.hide();
     this.clearRewardButton = null;
+    this.clearRetryButton = null;
     this.isClearRewardOpen = false;
     this.touchGuide.hide();
     this.hud.hide();
