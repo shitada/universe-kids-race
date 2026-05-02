@@ -23,6 +23,7 @@ import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
 import { followCameraZ } from '../utils/followCameraZ';
 import { getViewportSize } from '../utils/getViewportSize';
 import { ScorePopupManager } from '../../ui/ScorePopupManager';
+import { TouchGuideOverlay, type TouchGuideMode } from '../../ui/TouchGuideOverlay';
 
 const BG_STAR_PARALLAX = 1.0;
 
@@ -299,6 +300,11 @@ export class StageScene implements Scene {
   private resumeCountdownOverlay: CountdownOverlay | null = null;
   private isHomeConfirmOpen = false;
   private shouldResumeAfterHomeConfirm = false;
+  private touchGuide = new TouchGuideOverlay();
+  private touchGuideMode: TouchGuideMode = 'intro';
+  private touchGuideIdleTimer = 0;
+  private hasSeenMoveInput = false;
+  private static readonly TOUCH_GUIDE_IDLE_DELAY = 3;
 
   constructor(sceneManager: SceneManager, inputSystem: InputSystem, audioManager: AudioManager, saveManager: SaveManager) {
     this.sceneManager = sceneManager;
@@ -344,6 +350,9 @@ export class StageScene implements Scene {
     this.destinationPlanetSpinTarget = null;
     this.isHomeConfirmOpen = false;
     this.shouldResumeAfterHomeConfirm = false;
+    this.touchGuideIdleTimer = 0;
+    this.hasSeenMoveInput = false;
+    this.touchGuideMode = 'intro';
 
     const totalScore = context.totalScore ?? 0;
     const totalStarCount = context.totalStarCount ?? 0;
@@ -411,6 +420,7 @@ export class StageScene implements Scene {
       this.saveManager.save(data);
     });
     this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
+    this.touchGuide.show('intro');
 
     // Companions
     const saveData = this.saveManager.load();
@@ -767,6 +777,7 @@ export class StageScene implements Scene {
     }
 
     const input = this.inputSystem.getState();
+    this.updateTouchGuide(input.moveDirection, deltaTime);
 
     // Capture boost state before changes
     const wasActive = this.boostSystem.isActive();
@@ -1011,6 +1022,34 @@ export class StageScene implements Scene {
     }
   }
 
+  private updateTouchGuide(moveDirection: number, deltaTime: number): void {
+    if (moveDirection !== 0) {
+      this.touchGuideIdleTimer = 0;
+      this.hasSeenMoveInput = true;
+      this.setTouchGuideMode('hidden');
+      return;
+    }
+
+    if (!this.hasSeenMoveInput) {
+      this.setTouchGuideMode('intro');
+      return;
+    }
+
+    this.touchGuideIdleTimer += deltaTime;
+    if (this.touchGuideIdleTimer >= StageScene.TOUCH_GUIDE_IDLE_DELAY) {
+      this.setTouchGuideMode('idle');
+      return;
+    }
+
+    this.setTouchGuideMode('hidden');
+  }
+
+  private setTouchGuideMode(mode: TouchGuideMode): void {
+    if (this.touchGuideMode === mode) return;
+    this.touchGuideMode = mode;
+    this.touchGuide.setMode(mode);
+  }
+
   private updateDamageEffect(deltaTime: number): void {
     if (this.damageTimer > 0) {
       this.damageTimer -= deltaTime;
@@ -1091,6 +1130,7 @@ export class StageScene implements Scene {
     this.clearTimer = 0;
     this.isClearContinueEnabled = false;
     this.hasHandledClearContinue = false;
+    this.touchGuide.hide();
     const isNewPlanetUnlock = this.saveManager.markStageCleared(this.stageNumber);
     this.audioManager.playSFX('stageClear');
     this.audioManager.stopBoostSFX();
@@ -1313,6 +1353,7 @@ export class StageScene implements Scene {
   }
 
   exit(): void {
+    this.touchGuide.hide();
     this.hud.hide();
     this.scorePopupManager.dispose();
     this.audioManager.stopBGM();
