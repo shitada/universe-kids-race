@@ -22,7 +22,10 @@ async function flushPromises(): Promise<void> {
 
 type LoaderBehavior = () => Promise<void>;
 
-async function bootMain(titleBehaviors: LoaderBehavior[]) {
+async function bootMain(
+  titleBehaviors: LoaderBehavior[],
+  options: { initialPixelTier?: number } = {},
+) {
   vi.resetModules();
   document.body.innerHTML = '<canvas id="game-canvas"></canvas><div id="hud"></div><div id="ui-overlay"></div>';
 
@@ -32,6 +35,17 @@ async function bootMain(titleBehaviors: LoaderBehavior[]) {
     ending: 0,
   };
   let loaderIndex = 0;
+  const initialPixelTier = options.initialPixelTier ?? 0;
+  const adaptiveState: {
+    onTierChange: ((tier: number) => void) | null;
+    resetToTier: ReturnType<typeof vi.fn> | null;
+  } = {
+    onTierChange: null,
+    resetToTier: null,
+  };
+  const contextLossState: {
+    callbacks: { onLost: () => void; onRestored: () => void } | null;
+  } = { callbacks: null };
 
   class MockScene {
     protected readonly scene = new THREE.Scene();
@@ -99,6 +113,12 @@ async function bootMain(titleBehaviors: LoaderBehavior[]) {
 
   vi.doMock('../../src/game/utils/AdaptivePixelRatioController', () => ({
     AdaptivePixelRatioController: class {
+      resetToTier = vi.fn();
+
+      constructor(_maxTier: number, onTierChange: (tier: number) => void) {
+        adaptiveState.onTierChange = onTierChange;
+        adaptiveState.resetToTier = this.resetToTier;
+      }
       sample = vi.fn();
       notifyResume = vi.fn();
       reset = vi.fn();
@@ -120,7 +140,11 @@ async function bootMain(titleBehaviors: LoaderBehavior[]) {
   }));
 
   vi.doMock('../../src/game/utils/createWebGLContextLossHandler', () => ({
-    createWebGLContextLossHandler: vi.fn(),
+    createWebGLContextLossHandler: vi.fn(
+      (_canvas: HTMLCanvasElement, callbacks: { onLost: () => void; onRestored: () => void }) => {
+        contextLossState.callbacks = callbacks;
+      },
+    ),
   }));
 
   vi.doMock('../../src/game/utils/createVisibilityPauseHandler', () => ({
@@ -142,7 +166,7 @@ async function bootMain(titleBehaviors: LoaderBehavior[]) {
   }));
 
   vi.doMock('../../src/game/utils/resolveInitialPixelTier', () => ({
-    resolveInitialPixelTier: () => 0,
+    resolveInitialPixelTier: () => initialPixelTier,
   }));
 
   vi.doMock('../../src/game/utils/createOrientationHintHandler', () => ({
@@ -233,7 +257,7 @@ async function bootMain(titleBehaviors: LoaderBehavior[]) {
   await import('../../src/main');
   await flushPromises();
 
-  return { loaderCalls };
+  return { loaderCalls, adaptiveState, contextLossState };
 }
 
 describe('Main lazy title bootstrap', () => {
@@ -310,5 +334,18 @@ describe('Main lazy title bootstrap', () => {
 
     await vi.advanceTimersByTimeAsync(800);
     expect(loaderCalls.stage).toBe(1);
+  });
+
+  it('wires WebGL restore to the current stable pixel tier instead of MAX_TIER', async () => {
+    const { adaptiveState, contextLossState } = await bootMain([async () => {}], {
+      initialPixelTier: 2,
+    });
+
+    expect(contextLossState.callbacks).not.toBeNull();
+
+    adaptiveState.onTierChange?.(1);
+    contextLossState.callbacks?.onRestored();
+
+    expect(adaptiveState.resetToTier).toHaveBeenCalledWith(1);
   });
 });

@@ -400,7 +400,8 @@ orientationHintHandler.evaluate();
 // WebGL context loss recovery (iPad Safari background/memory pressure).
 // Without this, the canvas freezes black with no path back. We pause the
 // loop, show a kid-friendly reload overlay, and if the browser does fire
-// `webglcontextrestored` we re-apply pixel ratio and resume cleanly.
+// `webglcontextrestored` we resume at the last stable learned tier instead of
+// blindly reallocating the MAX_TIER framebuffer again.
 const contextLossOverlay = new ContextLossOverlay();
 createWebGLContextLossHandler(canvas, {
   onLost: () => {
@@ -411,11 +412,12 @@ createWebGLContextLossHandler(canvas, {
     });
   },
   onRestored: () => {
+    const restoreTier = currentVisualTier.value ?? initialPixelTier;
     contextLossOverlay.hide();
-    pixelRatioController.reset();
-    applyPixelRatioTier(MAX_TIER);
-    currentVisualTier.value = MAX_TIER;
-    stageScene?.setVisualQualityTier(MAX_TIER);
+    pixelRatioController.resetToTier(restoreTier);
+    applyPixelRatioTier(restoreTier);
+    currentVisualTier.value = restoreTier;
+    stageScene?.setVisualQualityTier(restoreTier);
     handleVisibilityRestore();
   },
 });

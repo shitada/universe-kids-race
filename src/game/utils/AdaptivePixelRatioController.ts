@@ -49,7 +49,7 @@ export class AdaptivePixelRatioController {
     // onTierChange is intentionally NOT fired here: the caller is expected to
     // apply the initial pixel ratio explicitly to avoid a redundant setSize.
     if (typeof initialTier === 'number' && Number.isFinite(initialTier)) {
-      this.currentTier = Math.max(0, Math.min(maxTier, Math.floor(initialTier)));
+      this.currentTier = this.clampTier(initialTier);
     } else {
       this.currentTier = maxTier;
     }
@@ -102,7 +102,11 @@ export class AdaptivePixelRatioController {
   }
 
   reset(): void {
-    this.currentTier = this.maxTier;
+    this.resetToTier(this.maxTier);
+  }
+
+  resetToTier(tier: number): void {
+    this.currentTier = this.clampTier(tier);
     this.lowFpsSince = null;
     this.highFpsSince = null;
     this.lastTierChangeAt = 0;
@@ -110,9 +114,13 @@ export class AdaptivePixelRatioController {
   }
 
   private changeTier(newTier: number, now: number): void {
-    const clamped = Math.max(0, Math.min(this.maxTier, newTier));
+    const clamped = this.clampTier(newTier);
     this.currentTier = clamped;
     this.lastTierChangeAt = now;
     this.onTierChange(clamped);
+  }
+
+  private clampTier(tier: number): number {
+    return Math.max(0, Math.min(this.maxTier, Math.floor(tier)));
   }
 }

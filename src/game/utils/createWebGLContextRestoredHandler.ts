@@ -6,9 +6,11 @@ import type { AdaptivePixelRatioController } from './AdaptivePixelRatioControlle
  * with stubs in jsdom.
  */
 export interface WebGLContextRestoredHandlerDeps {
-  pixelRatioController: Pick<AdaptivePixelRatioController, 'reset' | 'notifyResume'>;
+  pixelRatioController: Pick<AdaptivePixelRatioController, 'resetToTier' | 'notifyResume'>;
   applyPixelRatioTier: (tier: number) => void;
   maxTier: number;
+  getRestoreTier: () => number;
+  syncVisualQualityTier: (tier: number) => void;
   getViewportSize: () => { width: number; height: number };
   scheduleResize: (width: number, height: number) => void;
   flushResize: () => void;
@@ -22,21 +24,20 @@ export interface WebGLContextRestoredHandlerDeps {
  * Build the callback used as `onRestored` for createWebGLContextLossHandler.
  *
  * Why a dedicated helper (mirrors createSceneTransitionHandler):
- * - When the renderer's pixel ratio is forced back to MAX_TIER on context
- *   restore, the AdaptivePixelRatioController's `currentTier` must also be
- *   reset. Otherwise the controller still believes it is on the
- *   pre-context-loss downscaled tier (e.g. 0), which causes:
- *     (a) spurious onTierChange spam back up to MAX_TIER once FPS recovers, or
- *     (b) attempted single-step downscale from `currentTier - 1`, collapsing
- *         straight to the lowest quality instead of MAX_TIER -> MAX_TIER - 1.
- *   `pixelRatioController.reset()` MUST be called before
- *   `applyPixelRatioTier(maxTier)` and before `notifyResume(now())` to keep
- *   the controller and renderer in sync (Constitution IV: 60fps adaptive
+ * - WebGL context restore must re-apply the renderer framebuffer, StageScene
+ *   visual tier, and AdaptivePixelRatioController's internal tier to the same
+ *   already-learned stable tier instead of always jumping back to MAX_TIER.
+ *   Otherwise slower iPads can hit another memory / FPS spike immediately
+ *   after recovering from a blackout.
+ * - `pixelRatioController.resetToTier(restoreTier)` MUST be called before
+ *   `applyPixelRatioTier(restoreTier)` and before `notifyResume(now())` to
+ *   keep the controller and renderer in sync (Constitution IV: 60fps adaptive
  *   pixel-ratio control).
  *
  * Order of operations (matches createSceneTransitionHandler's title path):
- *   hideOverlay -> pixelRatioController.reset
- *               -> applyPixelRatioTier(maxTier)
+ *   hideOverlay -> pixelRatioController.resetToTier(restoreTier)
+ *               -> applyPixelRatioTier(restoreTier)
+ *               -> syncVisualQualityTier(restoreTier)
  *               -> scheduleResize(viewport) + flushResize
  *               -> gameLoopResume
  *               -> audioEnsureResumed
@@ -49,6 +50,8 @@ export function createWebGLContextRestoredHandler(
     pixelRatioController,
     applyPixelRatioTier,
     maxTier,
+    getRestoreTier,
+    syncVisualQualityTier,
     getViewportSize,
     scheduleResize,
     flushResize,
@@ -59,9 +62,14 @@ export function createWebGLContextRestoredHandler(
   } = deps;
 
   return () => {
+    const restoreTierRaw = getRestoreTier();
+    const restoreTier = Number.isFinite(restoreTierRaw)
+      ? Math.max(0, Math.min(maxTier, Math.floor(restoreTierRaw)))
+      : maxTier;
     hideOverlay();
-    pixelRatioController.reset();
-    applyPixelRatioTier(maxTier);
+    pixelRatioController.resetToTier(restoreTier);
+    applyPixelRatioTier(restoreTier);
+    syncVisualQualityTier(restoreTier);
     const { width, height } = getViewportSize();
     scheduleResize(width, height);
     flushResize();

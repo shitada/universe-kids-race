@@ -229,6 +229,31 @@ describe('AdaptivePixelRatioController', () => {
     expect(onTierChange).toHaveBeenLastCalledWith(1);
   });
 
+  it('resetToTier restores internal state to the supplied stable tier', () => {
+    const { controller, onTierChange } = makeController(2);
+    let now = 10_000;
+    controller.sample(40, now);
+    now += T.downscaleSustainMs;
+    controller.sample(40, now);
+    expect(controller.getCurrentTier()).toBe(1);
+
+    controller.resetToTier(0);
+    expect(controller.getCurrentTier()).toBe(0);
+    expect(onTierChange).toHaveBeenCalledTimes(1);
+
+    controller.sample(60, now + 100);
+    expect(controller.getCurrentTier()).toBe(0);
+  });
+
+  it('resetToTier clamps out-of-range tiers', () => {
+    const { controller } = makeController(2);
+    controller.resetToTier(99);
+    expect(controller.getCurrentTier()).toBe(2);
+
+    controller.resetToTier(-5);
+    expect(controller.getCurrentTier()).toBe(0);
+  });
+
   describe('initialTier option', () => {
     it('starts at the supplied initialTier when within range', () => {
       const onTierChange = vi.fn();
