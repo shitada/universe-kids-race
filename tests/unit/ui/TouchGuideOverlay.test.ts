@@ -20,12 +20,18 @@ describe('TouchGuideOverlay', () => {
 
     const root = document.querySelector<HTMLElement>('[data-touch-guide-overlay]');
     const guides = document.querySelectorAll<HTMLElement>('[data-touch-guide]');
+    const leftGuide = document.querySelector<HTMLElement>('[data-touch-guide="left"]');
+    const rightGuide = document.querySelector<HTMLElement>('[data-touch-guide="right"]');
 
     expect(root).not.toBeNull();
     expect(root?.style.pointerEvents).toBe('none');
     expect(guides).toHaveLength(2);
-    expect(document.querySelector('[data-touch-guide="left"]')?.textContent).toBe('⬅️ ひだり');
-    expect(document.querySelector('[data-touch-guide="right"]')?.textContent).toBe('みぎ ➡️');
+    expect(leftGuide?.textContent).toBe('⬅️ ひだり');
+    expect(rightGuide?.textContent).toBe('みぎ ➡️');
+    expect(leftGuide?.style.left).toBe('0.8rem');
+    expect(rightGuide?.style.right).toBe('0.8rem');
+    expect(leftGuide?.style.cssText).not.toContain('env(');
+    expect(rightGuide?.style.cssText).not.toContain('env(');
   });
 
   it('starts in intro mode by default', () => {

@@ -48,6 +48,14 @@ describe('HUD', () => {
       expect(stageNameEl.style.cssText).toContain('text-shadow');
     });
 
+    it('uses fixed padding for the stage name without reapplying safe-area', () => {
+      hud.show('🌙 つきを めざせ！');
+      const hudRoot = document.getElementById('hud')!;
+      const stageNameEl = hudRoot.children[1] as HTMLElement;
+      expect(stageNameEl.style.padding).toBe('0.5rem');
+      expect(stageNameEl.style.cssText).not.toContain('env(');
+    });
+
     it('sets z-index on hud root for visibility', () => {
       hud.show('🌙 つきを めざせ！');
       const hudRoot = document.getElementById('hud')!;
@@ -64,12 +72,14 @@ describe('HUD', () => {
       expect(homeBtn!.textContent).toBe('🏠');
     });
 
-    it('positions home button at top-left with safe area inset', () => {
+    it('positions home button at top-left with fixed margins', () => {
       hud.show('🌙 つきを めざせ！');
       const hudRoot = document.getElementById('hud')!;
       const homeBtn = hudRoot.querySelector('button') as HTMLButtonElement;
       expect(homeBtn.style.position).toBe('absolute');
       expect(homeBtn.style.top).toBe('0.8rem');
+      expect(homeBtn.style.left).toBe('1rem');
+      expect(homeBtn.style.cssText).not.toContain('env(');
     });
 
     it('sets pointer-events auto on home button', () => {
@@ -169,10 +179,13 @@ describe('HUD', () => {
     it('creates cooldown indicator elements on show()', () => {
       hud.show('Test');
       const uiOverlay = document.getElementById('ui-overlay')!;
-      const container = uiOverlay.querySelector('[data-cooldown-container]');
+      const container = uiOverlay.querySelector('[data-cooldown-container]') as HTMLElement | null;
       const bar = uiOverlay.querySelector('[data-cooldown-bar]');
       expect(container).not.toBeNull();
       expect(bar).not.toBeNull();
+      expect(container?.style.bottom).toBe('1rem');
+      expect(container?.style.right).toBe('2rem');
+      expect(container?.style.cssText).not.toContain('env(');
     });
 
     it('updateCooldown sets bar width percentage', () => {
@@ -256,6 +269,15 @@ describe('HUD', () => {
       const uiOverlay = document.getElementById('ui-overlay')!;
       const boostBtn = uiOverlay.querySelector('button') as HTMLButtonElement;
       expect(boostBtn.style.borderRadius).toBe('2rem');
+    });
+
+    it('anchors the boost button with fixed bottom-right margins', () => {
+      hud.show('Test');
+      const uiOverlay = document.getElementById('ui-overlay')!;
+      const boostBtn = uiOverlay.querySelector('button') as HTMLButtonElement;
+      expect(boostBtn.style.bottom).toBe('2rem');
+      expect(boostBtn.style.right).toBe('2rem');
+      expect(boostBtn.style.cssText).not.toContain('env(');
     });
 
     it('applies press animation class on pointerdown', () => {

@@ -229,6 +229,31 @@ describe('TitleScene (T009)', () => {
     scene.exit();
   });
 
+  it('anchors the lower title buttons with fixed margins inside #ui-overlay', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager(true);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager);
+    scene.enter({});
+
+    const tutorialButton = findButtonByText('あそびかた');
+    const encyclopediaButton = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent?.startsWith('ずかん'),
+    ) as HTMLButtonElement | undefined;
+
+    expect(tutorialButton).toBeTruthy();
+    expect(encyclopediaButton).toBeTruthy();
+    expect(tutorialButton?.style.bottom).toBe('2rem');
+    expect(tutorialButton?.style.right).toBe('2rem');
+    expect(tutorialButton?.style.cssText).not.toContain('env(');
+    expect(encyclopediaButton?.style.bottom).toBe('2rem');
+    expect(encyclopediaButton?.style.left).toBe('2rem');
+    expect(encyclopediaButton?.style.cssText).not.toContain('env(');
+
+    scene.exit();
+  });
+
   it('first encyclopedia interaction initializes audio and starts BGM_0 once', async () => {
     const sceneManager = createMockSceneManager();
     const saveManager = createMockSaveManager();

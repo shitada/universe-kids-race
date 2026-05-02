@@ -37,11 +37,13 @@ describe('createMuteButton', () => {
     const btn = handle.element;
     expect(btn.style.position).toBe('absolute');
     expect(btn.style.top).toBe('0.8rem');
+    expect(btn.style.right).toBe('1rem');
     expect(btn.style.width).toBe('3rem');
     expect(btn.style.height).toBe('3rem');
     expect(btn.style.borderRadius).toBe('50%');
     expect(btn.style.pointerEvents).toBe('auto');
     expect(btn.style.touchAction).toBe('manipulation');
+    expect(btn.style.cssText).not.toContain('env(');
   });
 
   it('honours the topRem option', () => {
