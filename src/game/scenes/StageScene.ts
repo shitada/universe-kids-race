@@ -227,14 +227,15 @@ export class StageScene implements Scene {
   private threeScene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private lastAspect = 0;
+  private initialized = false;
   private sceneManager: SceneManager;
   private inputSystem: InputSystem;
   private audioManager: AudioManager;
   private saveManager: SaveManager;
 
-  private ambientLight: THREE.AmbientLight;
-  private directionalLight: THREE.DirectionalLight;
-  private spaceship: Spaceship;
+  private ambientLight!: THREE.AmbientLight;
+  private directionalLight!: THREE.DirectionalLight;
+  private spaceship!: Spaceship;
   private stars: Star[] = [];
   private meteorites: Meteorite[] = [];
 
@@ -242,7 +243,7 @@ export class StageScene implements Scene {
   private scoreSystem = new ScoreSystem();
   private spawnSystem = new SpawnSystem();
   private boostSystem = new BoostSystem();
-  private hud: HUD;
+  private hud!: HUD;
   private scorePopupManager = new ScorePopupManager();
   private particleBurstManager = new ParticleBurstManager();
   private airShield!: AirShield;
@@ -277,7 +278,7 @@ export class StageScene implements Scene {
   private bgStars: THREE.Points | null = null;
 
   // Boost effects (retained: single instance reused per frame; do not dispose per instance)
-  private boostLinesEffect = new BoostLinesEffect();
+  private boostLinesEffect!: BoostLinesEffect;
 
   // Companion manager
   private companionManager: CompanionManager | null = null;
@@ -286,7 +287,7 @@ export class StageScene implements Scene {
   private elapsedTime = 0;
 
   // Boost flame particles
-  private boostFlameEffect = new BoostFlameEffect();
+  private boostFlameEffect!: BoostFlameEffect;
 
   // Stage start countdown ("3 → 2 → 1 → スタート！")
   // While `isStarting` is true, input/spawn/ship-forward are skipped so the
@@ -324,24 +325,40 @@ export class StageScene implements Scene {
       0.1,
       2000,
     );
+  }
+
+  private ensureInitialized(): void {
+    if (this.initialized) {
+      return;
+    }
+
     this.ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     this.directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     this.directionalLight.position.set(5, 10, 5);
     this.threeScene.add(this.ambientLight);
     this.threeScene.add(this.directionalLight);
-    this.createBackground();
+
     this.spaceship = new Spaceship();
     this.threeScene.add(this.spaceship.mesh);
+
     this.airShield = new AirShield();
     this.threeScene.add(this.airShield.getMesh());
+
     this.companionManager = new CompanionManager([]);
     this.threeScene.add(this.companionManager.getGroup());
+
+    this.boostLinesEffect = new BoostLinesEffect();
     this.boostLinesEffect.init(this.threeScene);
+
+    this.boostFlameEffect = new BoostFlameEffect();
     this.boostFlameEffect.init(this.threeScene);
+
     this.hud = new HUD();
+    this.initialized = true;
   }
 
   enter(context: SceneContext): void {
+    this.ensureInitialized();
     this.lastAspect = 0;
     this.stageNumber = context.stageNumber ?? 1;
     this.stageConfig = getStageConfig(this.stageNumber);
@@ -744,6 +761,9 @@ export class StageScene implements Scene {
 
 
   update(deltaTime: number): void {
+    if (!this.initialized) {
+      return;
+    }
     if (this.isCleared) {
       this.clearTimer += deltaTime;
       // Keep companion entrance animation progressing during clear screen
@@ -1420,6 +1440,9 @@ export class StageScene implements Scene {
   }
 
   exit(): void {
+    if (!this.initialized) {
+      return;
+    }
     this.clearRewardOverlay.hide();
     this.clearRewardButton = null;
     this.isClearRewardOpen = false;

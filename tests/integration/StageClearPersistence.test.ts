@@ -44,6 +44,7 @@ function createScene(saveManager: SaveManager) {
     stopBoostSFX: vi.fn(),
   } as unknown as AudioManager;
   const scene = new StageScene(sceneManager as unknown as SceneManager, inputSystem, audioManager, saveManager);
+  (scene as unknown as { ensureInitialized(): void }).ensureInitialized();
   const internal = scene as unknown as {
     stageNumber: number;
     scoreSystem: { getStarCount(): number };

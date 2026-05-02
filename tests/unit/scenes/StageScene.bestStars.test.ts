@@ -41,6 +41,7 @@ function createScene(saveData: Partial<SaveData>): CreatedScene {
     updateBestStageStars: vi.fn(),
   } as unknown as SaveManager;
   const scene = new StageScene(sceneManager, inputSystem, audioManager, saveManager);
+  (scene as unknown as { ensureInitialized(): void }).ensureInitialized();
   // Spy on hud.setBestStarCount by replacing the method on the actual HUD
   // instance after construction. The real HUD still mounts its DOM and is
   // cleaned up by exit() / hide().

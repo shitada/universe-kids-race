@@ -332,6 +332,7 @@ describe('StageScene best-stage-stars-update feedback on clear', () => {
     } as unknown as SaveManager;
 
     const scene = new StageScene(sceneManager as unknown as SceneManager, inputSystem, audioManager, saveManager);
+    (scene as unknown as { ensureInitialized(): void }).ensureInitialized();
     const internal = scene as unknown as {
       stageNumber: number;
       scoreSystem: { getStarCount(): number };
