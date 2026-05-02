@@ -264,6 +264,13 @@ export class StageScene implements Scene {
   // Damage animation
   private damageTimer = 0;
   private static readonly DAMAGE_FLASH_DURATION = 0.5;
+  private cameraShakeTimer = 0;
+  private cameraShakeElapsed = 0;
+  private readonly cameraShakeOffset = new THREE.Vector3();
+  private static readonly CAMERA_SHAKE_DURATION = 0.28;
+  private static readonly CAMERA_SHAKE_AMPLITUDE_X = 0.18;
+  private static readonly CAMERA_SHAKE_AMPLITUDE_Y = 0.12;
+  private static readonly CAMERA_SHAKE_FREQUENCY = 42;
 
   // Destination planet
   private destinationPlanet: THREE.Group | null = null;
@@ -772,6 +779,7 @@ export class StageScene implements Scene {
     this.hasHandledClearContinue = false;
     this.isClearRewardOpen = false;
     this.removeDestinationPlanet();
+    this.resetCameraShake();
     this.particleBurstManager.clear(this.threeScene);
     this.spawnSystem.recycleAll();
     this.stars.length = 0;
@@ -973,6 +981,7 @@ export class StageScene implements Scene {
       this.spaceship.onMeteoriteHit();
       this.boostSystem.cancel();
       this.damageTimer = StageScene.DAMAGE_FLASH_DURATION;
+      this.startCameraShake();
       this.audioManager.playSFX('meteoriteHit');
       this.audioManager.stopBoostSFX();
       this.boostFlameEffect.remove();
@@ -985,16 +994,7 @@ export class StageScene implements Scene {
     this.cleanupPassedObjects(deltaTime);
 
     // Camera follow
-    this.camera.position.set(
-      this.spaceship.position.x * 0.3,
-      5,
-      this.spaceship.position.z + 12,
-    );
-    this.camera.lookAt(
-      this.spaceship.position.x * 0.5,
-      0,
-      this.spaceship.position.z - 20,
-    );
+    this.updateCameraFollow(deltaTime);
 
     for (const star of collisionResult.starCollisions) {
       this.scorePopupManager.show(star.scoreValue, star.position, this.camera);
@@ -1120,6 +1120,54 @@ export class StageScene implements Scene {
       // Bank rotations are managed by Spaceship.update(); only ensure visibility.
       this.spaceship.mesh.visible = true;
     }
+  }
+
+  private resetCameraShake(): void {
+    this.cameraShakeTimer = 0;
+    this.cameraShakeElapsed = 0;
+    this.cameraShakeOffset.set(0, 0, 0);
+  }
+
+  private startCameraShake(): void {
+    this.cameraShakeTimer = StageScene.CAMERA_SHAKE_DURATION;
+    this.cameraShakeElapsed = 0;
+  }
+
+  private updateCameraShake(deltaTime: number): void {
+    if (this.cameraShakeTimer <= 0) {
+      this.cameraShakeOffset.set(0, 0, 0);
+      return;
+    }
+
+    this.cameraShakeElapsed += deltaTime;
+    this.cameraShakeTimer = Math.max(0, this.cameraShakeTimer - deltaTime);
+
+    if (this.cameraShakeTimer === 0) {
+      this.cameraShakeOffset.set(0, 0, 0);
+      return;
+    }
+
+    const decay = this.cameraShakeTimer / StageScene.CAMERA_SHAKE_DURATION;
+    const phase = this.cameraShakeElapsed * StageScene.CAMERA_SHAKE_FREQUENCY;
+    this.cameraShakeOffset.set(
+      Math.sin(phase) * StageScene.CAMERA_SHAKE_AMPLITUDE_X * decay,
+      Math.cos(phase * 0.8) * StageScene.CAMERA_SHAKE_AMPLITUDE_Y * decay,
+      0,
+    );
+  }
+
+  private updateCameraFollow(deltaTime: number): void {
+    this.updateCameraShake(deltaTime);
+    this.camera.position.set(
+      this.spaceship.position.x * 0.3 + this.cameraShakeOffset.x,
+      5 + this.cameraShakeOffset.y,
+      this.spaceship.position.z + 12,
+    );
+    this.camera.lookAt(
+      this.spaceship.position.x * 0.5,
+      0,
+      this.spaceship.position.z - 20,
+    );
   }
 
   private cleanupPassedObjects(deltaTime: number): void {
