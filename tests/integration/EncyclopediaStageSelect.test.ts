@@ -5,6 +5,7 @@ import { StageScene } from '../../src/game/scenes/StageScene';
 import { SceneManager } from '../../src/game/SceneManager';
 import { LoadingOverlay } from '../../src/ui/LoadingOverlay';
 import { EncyclopediaOverlay } from '../../src/ui/EncyclopediaOverlay';
+import { LoadFailureOverlay } from '../../src/ui/LoadFailureOverlay';
 import type { Scene, SceneContext, SceneType } from '../../src/types';
 import type { SaveManager } from '../../src/game/storage/SaveManager';
 import type { AudioManager } from '../../src/game/audio/AudioManager';
@@ -183,6 +184,61 @@ describe('Encyclopedia Stage Selection Integration', () => {
     expect(loadEncyclopediaOverlay).toHaveBeenCalledTimes(1);
     expect(document.querySelector('[data-loading-overlay]')).toBeNull();
     expect(uiOverlay.querySelector('[data-card][data-stage="2"]')).not.toBeNull();
+  });
+
+  it('shows retry UI when encyclopedia lazy-load fails and opens after retry', async () => {
+    const manager = new SceneManager();
+    const loadingOverlay = new LoadingOverlay();
+    const loadFailureOverlay = new LoadFailureOverlay();
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let attempt = 0;
+    const loadEncyclopediaOverlay = vi.fn(async () => {
+      attempt += 1;
+      if (attempt === 1) {
+        throw new Error('encyclopedia chunk failed');
+      }
+      return { EncyclopediaOverlay };
+    });
+    const titleScene = new TitleScene(
+      manager,
+      createMockSaveManager(),
+      createMockAudioManager(),
+      {
+        loadingOverlay,
+        loadFailureOverlay,
+        loadEncyclopediaOverlay,
+      },
+    );
+
+    manager.registerScene('title', titleScene);
+    manager.registerScene('stage', createTrackingScene([], 'stage'));
+
+    await manager.transitionTo('title');
+
+    const encyclopediaBtn = Array.from(uiOverlay.querySelectorAll('button')).find(
+      (button) => button.textContent?.includes('ずかん'),
+    ) as HTMLButtonElement;
+    encyclopediaBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+    await flushPromises();
+
+    expect(loadEncyclopediaOverlay).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[data-loading-overlay]')).toBeNull();
+    expect(document.querySelector('[data-load-failure-overlay]')).not.toBeNull();
+
+    const retryButton = document.querySelector('[data-load-failure-primary]') as HTMLButtonElement;
+    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+    await flushPromises();
+    await flushPromises();
+
+    expect(loadEncyclopediaOverlay).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('[data-load-failure-overlay]')).toBeNull();
+    expect(document.querySelector('[data-loading-overlay]')).toBeNull();
+    expect(uiOverlay.querySelector('[data-card][data-stage="2"]')).not.toBeNull();
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to load encyclopedia overlay', expect.any(Error));
+
+    consoleErrorSpy.mockRestore();
   });
 
   it('restarts from zero totals after returning to title and pressing "あそぶ" again', async () => {

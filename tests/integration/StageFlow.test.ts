@@ -8,6 +8,9 @@ import { TOTAL_STAGES } from '../../src/game/config/StageConfig';
 import type { InputSystem } from '../../src/game/systems/InputSystem';
 import type { AudioManager } from '../../src/game/audio/AudioManager';
 import type { SaveManager } from '../../src/game/storage/SaveManager';
+import { LoadingOverlay } from '../../src/ui/LoadingOverlay';
+import { LoadFailureOverlay } from '../../src/ui/LoadFailureOverlay';
+import { createSceneTransitionHandler } from '../../src/game/utils/createSceneTransitionHandler';
 
 function createTrackingScene(transitionLog: { type: SceneType; context: SceneContext }[], sceneType: SceneType): Scene {
   const threeScene = new THREE.Scene();
@@ -36,6 +39,12 @@ function mockCanvasContext(): void {
       lineTo: () => {},
       ellipse: () => {},
     } as unknown as CanvasRenderingContext2D;
+  });
+}
+
+function flushPromises(): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, 0);
   });
 }
 
@@ -375,5 +384,79 @@ describe('Stage Flow Integration', () => {
     await Promise.resolve();
 
     expect(manager.getCurrentType()).toBe('ending');
+  });
+
+  it('shows retry UI after stage lazy-load failure and can return to title', async () => {
+    const log: { type: SceneType; context: SceneContext }[] = [];
+    const manager = new SceneManager();
+    const loadingOverlay = new LoadingOverlay();
+    const loadFailureOverlay = new LoadFailureOverlay();
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const pixelRatioController = {
+      reset: vi.fn(),
+      notifyResume: vi.fn(),
+    };
+    const applyPixelRatioTier = vi.fn();
+
+    manager.registerScene('title', createTrackingScene(log, 'title'));
+    manager.registerSceneFactory('stage', async () => {
+      throw new Error('stage chunk failed');
+    });
+    manager.setLoadStateHandler((isLoading, sceneType) => {
+      if (isLoading) {
+        loadingOverlay.show(
+          sceneType === 'ending'
+            ? 'さいごの じゅんび ちゅう...'
+            : 'たびの じゅんび ちゅう...',
+        );
+        return;
+      }
+      loadingOverlay.hide();
+    });
+    manager.setTransitionErrorHandler((error, sceneType, context) => {
+      console.error(`Failed to transition to ${sceneType}`, error);
+      loadingOverlay.hide();
+      if (sceneType !== 'stage' && sceneType !== 'ending') {
+        return;
+      }
+      loadFailureOverlay.show({
+        primaryAction: {
+          label: 'もういちど',
+          onSelect: () => manager.requestTransition(sceneType, context),
+        },
+        secondaryAction: {
+          label: 'タイトルへ',
+          onSelect: () => manager.requestTransition('title'),
+        },
+      });
+    });
+    manager.setTransitionHandler(
+      createSceneTransitionHandler({
+        sceneManager: manager,
+        pixelRatioController,
+        applyPixelRatioTier,
+        maxTier: 2,
+        now: () => 0,
+      }),
+    );
+
+    await manager.requestTransition('title');
+    await manager.requestTransition('stage', { stageNumber: 1, totalScore: 0, totalStarCount: 0 });
+    await flushPromises();
+    await flushPromises();
+
+    expect(document.querySelector('[data-loading-overlay]')).toBeNull();
+    expect(document.querySelector('[data-load-failure-overlay]')).not.toBeNull();
+
+    const titleButton = document.querySelector('[data-load-failure-secondary]') as HTMLButtonElement;
+    titleButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+
+    expect(document.querySelector('[data-load-failure-overlay]')).toBeNull();
+    expect(log.filter((entry) => entry.type === 'title')).toHaveLength(2);
+    expect(manager.getCurrentType()).toBe('title');
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to transition to stage', expect.any(Error));
+
+    consoleErrorSpy.mockRestore();
   });
 });

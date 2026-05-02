@@ -6,6 +6,7 @@ import type { SceneManager } from '../../../src/game/SceneManager';
 import type { SaveManager } from '../../../src/game/storage/SaveManager';
 import type { AudioManager } from '../../../src/game/audio/AudioManager';
 import { EncyclopediaOverlay } from '../../../src/ui/EncyclopediaOverlay';
+import type { LoadFailureOverlayOptions } from '../../../src/ui/LoadFailureOverlay';
 
 function createMockSceneManager(): SceneManager {
   return {
@@ -233,6 +234,61 @@ describe('TitleScene (T009)', () => {
     expect(audioManager.playBGM).toHaveBeenCalledWith(0);
     expect(document.querySelector('[data-card]')).toBeTruthy();
 
+    scene.exit();
+  });
+
+  it('shows retry UI and re-runs encyclopedia loading after a lazy-load failure', async () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager(true);
+    const loadingOverlay = {
+      show: vi.fn(),
+      hide: vi.fn(),
+    };
+    let failureOptions: LoadFailureOverlayOptions | null = null;
+    const loadFailureOverlay = {
+      show: vi.fn((options: LoadFailureOverlayOptions) => {
+        failureOptions = options;
+      }),
+      hide: vi.fn(),
+    };
+    const loadEncyclopediaOverlay = vi
+      .fn<() => Promise<{ EncyclopediaOverlay: typeof EncyclopediaOverlay }>>()
+      .mockRejectedValueOnce(new Error('chunk load failed'))
+      .mockResolvedValueOnce({ EncyclopediaOverlay });
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager, {
+      loadingOverlay,
+      loadFailureOverlay,
+      loadEncyclopediaOverlay,
+    });
+    scene.enter({});
+
+    const encyclopediaButton = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent?.startsWith('ずかん'),
+    ) as HTMLButtonElement | undefined;
+    expect(encyclopediaButton).toBeTruthy();
+
+    encyclopediaButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+    await flushPromises();
+
+    expect(loadingOverlay.show).toHaveBeenCalledWith('ずかんを よんでるよ...');
+    expect(loadingOverlay.hide).toHaveBeenCalledTimes(1);
+    expect(loadFailureOverlay.show).toHaveBeenCalledTimes(1);
+    expect(failureOptions?.primaryAction.label).toBe('もういちど よむ');
+
+    await failureOptions?.primaryAction.onSelect();
+    await flushPromises();
+    await flushPromises();
+
+    expect(loadFailureOverlay.hide).toHaveBeenCalled();
+    expect(loadEncyclopediaOverlay).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('[data-card]')).toBeTruthy();
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to load encyclopedia overlay', expect.any(Error));
+
+    consoleErrorSpy.mockRestore();
     scene.exit();
   });
 
