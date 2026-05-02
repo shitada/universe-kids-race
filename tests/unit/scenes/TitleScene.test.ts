@@ -375,13 +375,13 @@ describe('TitleScene first-run onboarding (auto tutorial)', () => {
     scene.exit();
   });
 
-  it('does NOT auto-show TutorialOverlay for fresh-session save data when tutorialShown is true', () => {
+  it('auto-shows TutorialOverlay for fresh-session save data when tutorialShown was reset to false', () => {
     const saveManager = {
       load: vi.fn(() => ({
         clearedStage: 0,
         unlockedPlanets: [],
         bestStageStars: {},
-        tutorialShown: true,
+        tutorialShown: false,
         muted: false,
       })),
       save: vi.fn(),
@@ -396,7 +396,7 @@ describe('TitleScene first-run onboarding (auto tutorial)', () => {
 
     scene.enter({});
 
-    expect(document.querySelector('[data-tutorial-overlay]')).toBeNull();
+    expect(document.querySelector('[data-tutorial-overlay]')).toBeTruthy();
     expect(saveManager.load).toHaveBeenCalled();
     expect(saveManager.markTutorialShown).not.toHaveBeenCalled();
 

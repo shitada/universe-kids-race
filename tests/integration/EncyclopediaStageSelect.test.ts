@@ -84,7 +84,7 @@ describe('Encyclopedia Stage Selection Integration', () => {
     hud.remove();
   });
 
-  it('lazy-loads the encyclopedia on first open, then transitions to the selected stage', async () => {
+  it('lazy-loads the encyclopedia on first open, then transitions from detail play CTA', async () => {
     const log: { type: SceneType; context: SceneContext }[] = [];
     const manager = new SceneManager();
     const loadingOverlay = new LoadingOverlay();
@@ -129,6 +129,14 @@ describe('Encyclopedia Stage Selection Integration', () => {
     expect(card).not.toBeNull();
 
     card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+
+    expect(uiOverlay.querySelector('[data-detail]')).not.toBeNull();
+    expect(manager.getCurrentType()).toBe('title');
+
+    const playButton = uiOverlay.querySelector('[data-detail-play]') as HTMLElement;
+    expect(playButton).not.toBeNull();
+    playButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     await flushPromises();
 
     expect(manager.getCurrentType()).toBe('stage');

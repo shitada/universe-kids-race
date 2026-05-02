@@ -203,6 +203,44 @@ describe('SceneManager', () => {
     expect(stageScene.enter).toHaveBeenCalledWith({ stageNumber: 1 });
   });
 
+  it('prefetches a scene module without creating the scene until transition', async () => {
+    const manager = new SceneManager();
+    const stageScene = createMockScene();
+    const prefetcher = vi.fn(async () => ({ StageScene: class {} }));
+    const factory = vi.fn(async () => stageScene);
+
+    manager.registerSceneModulePrefetch('stage', prefetcher);
+    manager.registerSceneFactory('stage', factory);
+
+    await manager.prefetchSceneModule('stage');
+
+    expect(prefetcher).toHaveBeenCalledTimes(1);
+    expect(factory).not.toHaveBeenCalled();
+
+    await manager.transitionTo('stage', { stageNumber: 1 });
+
+    expect(factory).toHaveBeenCalledTimes(1);
+    expect(stageScene.enter).toHaveBeenCalledWith({ stageNumber: 1 });
+  });
+
+  it('coalesces repeated scene module prefetches', async () => {
+    const manager = new SceneManager();
+    const moduleDeferred = createDeferred<Record<string, unknown>>();
+    const prefetcher = vi.fn(() => moduleDeferred.promise);
+
+    manager.registerSceneModulePrefetch('stage', prefetcher);
+
+    const first = manager.prefetchSceneModule('stage');
+    const second = manager.prefetchSceneModule('stage');
+
+    expect(prefetcher).toHaveBeenCalledTimes(1);
+
+    moduleDeferred.resolve({ StageScene: class {} });
+    await Promise.all([first, second]);
+
+    expect(prefetcher).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the latest title transition when an older lazy ending resolves later', async () => {
     const manager = new SceneManager();
     const titleScene = createMockScene();

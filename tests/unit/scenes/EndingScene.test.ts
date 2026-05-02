@@ -240,7 +240,7 @@ describe('EndingScene', () => {
       }
     });
 
-    it('cleans up companion group and disposes meshes on exit()', () => {
+    it('cleans up companion group without disposing shared companion assets on exit()', () => {
       const threeScene = scene.getThreeScene();
 
       // Verify companions exist before exit
@@ -252,6 +252,17 @@ describe('EndingScene', () => {
       });
       expect(companionGroupBefore).not.toBeNull();
 
+      let representativeMesh: THREE.Mesh | null = null;
+      companionGroupBefore!.traverse((child) => {
+        if (!representativeMesh && child instanceof THREE.Mesh) {
+          representativeMesh = child;
+        }
+      });
+      expect(representativeMesh).not.toBeNull();
+
+      const geometryDisposeSpy = vi.spyOn(representativeMesh!.geometry, 'dispose');
+      const materialDisposeSpy = vi.spyOn(representativeMesh!.material, 'dispose');
+
       scene.exit();
 
       // After exit, companion group should be removed from scene
@@ -262,6 +273,24 @@ describe('EndingScene', () => {
         }
       });
       expect(companionGroupAfter).toBeNull();
+      expect(geometryDisposeSpy).not.toHaveBeenCalled();
+      expect(materialDisposeSpy).not.toHaveBeenCalled();
+    });
+
+    it('recreates ending companions on re-enter after exit()', () => {
+      scene.exit();
+      scene.enter({ totalScore: 1200, totalStarCount: 77 });
+
+      const threeScene = scene.getThreeScene();
+      let companionGroup: THREE.Group | null = null;
+      threeScene.traverse((child) => {
+        if (child instanceof THREE.Group && child !== threeScene && child.children.length === PLANET_ENCYCLOPEDIA.length) {
+          companionGroup = child as THREE.Group;
+        }
+      });
+
+      expect(companionGroup).not.toBeNull();
+      expect(companionGroup!.children.length).toBe(PLANET_ENCYCLOPEDIA.length);
     });
   });
 
