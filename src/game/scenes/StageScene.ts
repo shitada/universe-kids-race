@@ -103,12 +103,15 @@ export class StageScene implements Scene {
   private clearTimer = 0;
   private clearOverlay: HTMLDivElement | null = null;
   private clearContinueButton: HTMLButtonElement | null = null;
+  private clearRetryButton: HTMLButtonElement | null = null;
   private clearRewardButton: HTMLButtonElement | null = null;
   private isClearContinueEnabled = false;
   private hasHandledClearContinue = false;
   private isClearRewardOpen = false;
   private clearRewardOverlay = new EncyclopediaOverlay();
   private static readonly CLEAR_CONTINUE_DELAY = 0.6;
+  private stageEntryTotalScore = 0;
+  private stageEntryTotalStarCount = 0;
   private playTime = 0;
   private meteoriteHitTimes: number[] = [];
   private assistTimer = 0;
@@ -266,6 +269,8 @@ export class StageScene implements Scene {
 
     const totalScore = context.totalScore ?? 0;
     const totalStarCount = context.totalStarCount ?? 0;
+    this.stageEntryTotalScore = totalScore;
+    this.stageEntryTotalStarCount = totalStarCount;
     this.scoreSystem.setTotalScore(totalScore);
     this.scoreSystem.setTotalStarCount(totalStarCount);
 
@@ -513,6 +518,7 @@ export class StageScene implements Scene {
       this.clearOverlay = null;
     }
     this.clearContinueButton = null;
+    this.clearRetryButton = null;
     this.clearRewardButton = null;
     this.isClearContinueEnabled = false;
     this.hasHandledClearContinue = false;
@@ -541,7 +547,7 @@ export class StageScene implements Scene {
         this.spaceship.position.y,
         this.spaceship.position.z,
       );
-      this.revealClearContinueButtonIfReady();
+      this.revealClearActionButtonsIfReady();
       return;
     }
 
@@ -1253,6 +1259,41 @@ export class StageScene implements Scene {
       }
     }
 
+    const actionButtons = document.createElement('div');
+    actionButtons.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.9rem;
+      width: 100%;
+      margin-top: 1.4rem;
+    `;
+
+    const retryButton = document.createElement('button');
+    retryButton.setAttribute('data-stage-clear-retry', '');
+    retryButton.setAttribute('aria-label', 'もういちど');
+    retryButton.textContent = 'もういちど';
+    retryButton.disabled = true;
+    retryButton.style.cssText = `
+      min-width: min(72vw, 300px);
+      min-height: 80px;
+      padding: 0.95rem 1.7rem;
+      border: none;
+      border-radius: 999px;
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: clamp(1.35rem, 4.6vmin, 1.9rem);
+      font-weight: 900;
+      color: #fff;
+      background: rgba(255, 255, 255, 0.2);
+      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.26);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      touch-action: manipulation;
+      transform: scale(1);
+      transition: opacity 0.18s ease-out, transform 0.08s ease-out;
+    `;
+
     const continueButton = document.createElement('button');
     const continueLabel = this.stageNumber >= TOTAL_STAGES ? 'おいわいへ' : 'つぎへ';
     continueButton.setAttribute('data-stage-clear-continue', '');
@@ -1260,7 +1301,6 @@ export class StageScene implements Scene {
     continueButton.textContent = continueLabel;
     continueButton.disabled = true;
     continueButton.style.cssText = `
-      margin-top: 1.4rem;
       min-width: min(78vw, 320px);
       min-height: 88px;
       padding: 1rem 1.8rem;
@@ -1280,48 +1320,83 @@ export class StageScene implements Scene {
       transition: opacity 0.18s ease-out, transform 0.08s ease-out;
     `;
 
-    const activate = (event: Event): void => {
+    const activate = (
+      event: Event,
+      button: HTMLButtonElement,
+      onActivate: () => void,
+    ): void => {
       event.preventDefault();
       event.stopPropagation();
       if (this.isClearRewardOpen) return;
       if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
       this.hasHandledClearContinue = true;
-      continueButton.disabled = true;
-      continueButton.style.pointerEvents = 'none';
-      continueButton.style.transform = 'scale(1)';
-      this.handleStageComplete();
+      for (const actionButton of [this.clearRetryButton, this.clearContinueButton]) {
+        if (!actionButton) continue;
+        actionButton.disabled = true;
+        actionButton.style.pointerEvents = 'none';
+        actionButton.style.transform = 'scale(1)';
+      }
+      button.style.transform = 'scale(1)';
+      onActivate();
     };
-    const release = (): void => {
-      if (this.clearContinueButton) {
-        this.clearContinueButton.style.transform = 'scale(1)';
+    const release = (button: HTMLButtonElement | null): void => {
+      if (button) {
+        button.style.transform = 'scale(1)';
       }
     };
+    retryButton.addEventListener('pointerdown', (event) => {
+      if (this.isClearRewardOpen) return;
+      if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
+      retryButton.style.transform = 'scale(0.96)';
+      activate(event, retryButton, () => {
+        this.handleStageRetry();
+      });
+    });
+    retryButton.addEventListener('click', (event) => {
+      activate(event, retryButton, () => {
+        this.handleStageRetry();
+      });
+    });
+    retryButton.addEventListener('pointerup', () => release(this.clearRetryButton));
+    retryButton.addEventListener('pointercancel', () => release(this.clearRetryButton));
+    retryButton.addEventListener('pointerleave', () => release(this.clearRetryButton));
     continueButton.addEventListener('pointerdown', (event) => {
       if (this.isClearRewardOpen) return;
       if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
       continueButton.style.transform = 'scale(0.96)';
-      activate(event);
+      activate(event, continueButton, () => {
+        this.handleStageComplete();
+      });
     });
-    continueButton.addEventListener('click', activate);
-    continueButton.addEventListener('pointerup', release);
-    continueButton.addEventListener('pointercancel', release);
-    continueButton.addEventListener('pointerleave', release);
+    continueButton.addEventListener('click', (event) => {
+      activate(event, continueButton, () => {
+        this.handleStageComplete();
+      });
+    });
+    continueButton.addEventListener('pointerup', () => release(this.clearContinueButton));
+    continueButton.addEventListener('pointercancel', () => release(this.clearContinueButton));
+    continueButton.addEventListener('pointerleave', () => release(this.clearContinueButton));
+    this.clearRetryButton = retryButton;
     this.clearContinueButton = continueButton;
-    this.clearOverlay.appendChild(continueButton);
+    actionButtons.appendChild(retryButton);
+    actionButtons.appendChild(continueButton);
+    this.clearOverlay.appendChild(actionButtons);
 
     uiOverlay.appendChild(this.clearOverlay);
   }
 
-  private revealClearContinueButtonIfReady(): void {
+  private revealClearActionButtonsIfReady(): void {
     if (this.isClearContinueEnabled) return;
     if (this.clearTimer < StageScene.CLEAR_CONTINUE_DELAY) return;
-    if (!this.clearContinueButton) return;
+    if (!this.clearContinueButton || !this.clearRetryButton) return;
 
     this.isClearContinueEnabled = true;
-    this.clearContinueButton.disabled = false;
-    this.clearContinueButton.style.opacity = '1';
-    this.clearContinueButton.style.visibility = 'visible';
-    this.clearContinueButton.style.pointerEvents = 'auto';
+    for (const button of [this.clearRetryButton, this.clearContinueButton]) {
+      button.disabled = false;
+      button.style.opacity = '1';
+      button.style.visibility = 'visible';
+      button.style.pointerEvents = 'auto';
+    }
   }
 
   private injectBestStageStarsAnimation(): void {
@@ -1351,6 +1426,14 @@ export class StageScene implements Scene {
         totalStarCount,
       });
     }
+  }
+
+  private handleStageRetry(): void {
+    this.sceneManager.requestTransition('stage', {
+      stageNumber: this.stageNumber,
+      totalScore: this.stageEntryTotalScore,
+      totalStarCount: this.stageEntryTotalStarCount,
+    });
   }
 
   exit(): void {

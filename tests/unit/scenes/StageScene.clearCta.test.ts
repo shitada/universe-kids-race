@@ -24,6 +24,8 @@ interface StageSceneInternals {
 
 function createScene(options?: {
   stageNumber?: number;
+  totalScore?: number;
+  totalStarCount?: number;
   saveData?: Partial<SaveData>;
   isNewPlanetUnlock?: boolean;
   earnedStars?: number;
@@ -72,7 +74,11 @@ function createScene(options?: {
     audioManager,
     saveManager,
   );
-  scene.enter({ stageNumber });
+  scene.enter({
+    stageNumber,
+    totalScore: options?.totalScore,
+    totalStarCount: options?.totalStarCount,
+  });
 
   const internal = scene as unknown as StageSceneInternals;
   internal.scoreSystem = {
@@ -91,6 +97,12 @@ function getContinueButton(): HTMLButtonElement {
 
 function getCardButton(): HTMLButtonElement | null {
   return document.querySelector<HTMLButtonElement>('[data-stage-clear-card]');
+}
+
+function getRetryButton(): HTMLButtonElement {
+  const button = document.querySelector<HTMLButtonElement>('[data-stage-clear-retry]');
+  expect(button).not.toBeNull();
+  return button!;
 }
 
 function mockCanvasContext(): void {
@@ -179,6 +191,55 @@ describe('StageScene clear CTA', () => {
     });
   });
 
+  it('クリア画面にもういちどを表示し、同じステージへ開始時点の累計値で戻る', () => {
+    const { scene, sceneManager } = createScene({
+      stageNumber: 4,
+      totalScore: 1200,
+      totalStarCount: 7,
+      finalizeStageResult: { totalScore: 2400, totalStarCount: 14 },
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const retryButton = getRetryButton();
+    expect(retryButton.textContent).toBe('もういちど');
+
+    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    retryButton.dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith('stage', {
+      stageNumber: 4,
+      totalScore: 1200,
+      totalStarCount: 7,
+    });
+  });
+
+  it('最終ステージでももういちどはendingではなく同じステージへ戻る', () => {
+    const { scene, sceneManager } = createScene({
+      stageNumber: TOTAL_STAGES,
+      totalScore: 8800,
+      totalStarCount: 70,
+      finalizeStageResult: { totalScore: 9000, totalStarCount: 72 },
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const retryButton = getRetryButton();
+    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith('stage', {
+      stageNumber: TOTAL_STAGES,
+      totalScore: 8800,
+      totalStarCount: 70,
+    });
+  });
+
   it('じこベスト・ずかん・なかま表示とCTAが共存する', () => {
     const { scene } = createScene({
       stageNumber: 2,
@@ -262,6 +323,43 @@ describe('StageScene clear CTA', () => {
       stageNumber: 3,
       totalScore: 2000,
       totalStarCount: 9,
+    });
+  });
+
+  it('カード詳細表示中や連打時にもういちど遷移が重複しない', () => {
+    const { scene, sceneManager } = createScene({
+      stageNumber: 2,
+      totalScore: 500,
+      totalStarCount: 4,
+      earnedStars: 5,
+      isNewPlanetUnlock: true,
+      finalizeStageResult: { totalScore: 2000, totalStarCount: 9 },
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const retryButton = getRetryButton();
+    const cardButton = getCardButton();
+    expect(cardButton).not.toBeNull();
+
+    cardButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(sceneManager.requestTransition).not.toHaveBeenCalled();
+
+    const backButton = document.querySelector('[data-detail-back]') as HTMLElement | null;
+    backButton?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    retryButton.dispatchEvent(new Event('click', { bubbles: true }));
+    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith('stage', {
+      stageNumber: 2,
+      totalScore: 500,
+      totalStarCount: 4,
     });
   });
 });

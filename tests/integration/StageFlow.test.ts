@@ -147,6 +147,166 @@ describe('Stage Flow Integration', () => {
     expect(manager.getCurrentType()).toBe('stage');
   });
 
+  it('retrying a cleared stage keeps cumulative totals at the stage-entry baseline until the replay is cleared', async () => {
+    const manager = new SceneManager();
+    const transitionLog: { type: SceneType; context: SceneContext }[] = [];
+    manager.setTransitionHandler((sceneType, context = {}) => {
+      transitionLog.push({ type: sceneType, context });
+      return manager.transitionTo(sceneType, context);
+    });
+
+    const inputSystem = {
+      setBoostPressed: vi.fn(),
+      getState: vi.fn(() => ({ moveDirection: 0, boostPressed: false })),
+      resetPointers: vi.fn(),
+    } as unknown as InputSystem;
+    const audioManager = {
+      playBGM: vi.fn(),
+      stopBGM: vi.fn(),
+      playSFX: vi.fn(),
+      stopBoostSFX: vi.fn(),
+      startBoostSFX: vi.fn(),
+      isMuted: vi.fn(() => false),
+      toggleMute: vi.fn(() => false),
+      setMuted: vi.fn(),
+      initFromInteraction: vi.fn(),
+    } as unknown as AudioManager;
+    const saveState = {
+      clearedStage: 0,
+      unlockedPlanets: [] as number[],
+      muted: false,
+      tutorialShown: true,
+      bestStageStars: {} as Record<number, number>,
+    };
+    const saveManager = {
+      load: vi.fn(() => ({
+        ...saveState,
+        unlockedPlanets: [...saveState.unlockedPlanets],
+        bestStageStars: { ...saveState.bestStageStars },
+      })),
+      save: vi.fn((nextData: SaveData) => {
+        saveState.clearedStage = nextData.clearedStage;
+        saveState.unlockedPlanets = [...nextData.unlockedPlanets];
+        saveState.muted = nextData.muted ?? false;
+        saveState.tutorialShown = nextData.tutorialShown ?? false;
+        saveState.bestStageStars = { ...(nextData.bestStageStars ?? {}) };
+      }),
+      clear: vi.fn(),
+      markStageCleared: vi.fn((stageNumber: number) => {
+        const wasUnlocked = saveState.unlockedPlanets.includes(stageNumber);
+        saveState.clearedStage = Math.max(saveState.clearedStage, stageNumber);
+        if (!wasUnlocked) {
+          saveState.unlockedPlanets = [...saveState.unlockedPlanets, stageNumber];
+          return true;
+        }
+        return false;
+      }),
+      updateBestStageStars: vi.fn((stageNumber: number, starCount: number) => {
+        const current = saveState.bestStageStars[stageNumber] ?? 0;
+        if (starCount > current) {
+          saveState.bestStageStars = {
+            ...saveState.bestStageStars,
+            [stageNumber]: starCount,
+          };
+        }
+      }),
+    } as unknown as SaveManager;
+
+    let stageScene: StageScene | null = null;
+    manager.registerSceneFactory('stage', async () => {
+      stageScene ??= new StageScene(manager, inputSystem, audioManager, saveManager);
+      return stageScene;
+    });
+
+    await manager.transitionTo('stage', { stageNumber: 3, totalScore: 1000, totalStarCount: 10 });
+
+    const internal = stageScene as unknown as {
+      countdownOverlay: { dispose(): void } | null;
+      isStarting: boolean;
+      scoreSystem: {
+        getStageScore(): number;
+        getStarCount(): number;
+        getTotalScore(): number;
+        getTotalStarCount(): number;
+        setTotalScore(score: number): void;
+        setTotalStarCount(count: number): void;
+        resetStage(): void;
+        finalizeStage(): { totalScore: number; totalStarCount: number };
+      };
+      onStageClear(): void;
+      update(deltaTime: number): void;
+    };
+    internal.countdownOverlay?.dispose();
+    internal.countdownOverlay = null;
+    internal.isStarting = false;
+
+    let stageScore = 400;
+    let starCount = 2;
+    let totalScore = 1000;
+    let totalStarCount = 10;
+    internal.scoreSystem = {
+      getStageScore: () => stageScore,
+      getStarCount: () => starCount,
+      getTotalScore: () => totalScore,
+      getTotalStarCount: () => totalStarCount,
+      setTotalScore: (score: number) => {
+        totalScore = score;
+      },
+      setTotalStarCount: (count: number) => {
+        totalStarCount = count;
+      },
+      resetStage: () => {
+        stageScore = 0;
+        starCount = 0;
+      },
+      finalizeStage: () => {
+        totalScore += stageScore;
+        totalStarCount += starCount;
+        const result = { totalScore, totalStarCount };
+        stageScore = 0;
+        starCount = 0;
+        return result;
+      },
+    };
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const retryButton = document.querySelector('[data-stage-clear-retry]') as HTMLButtonElement | null;
+    expect(retryButton).toBeTruthy();
+    retryButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+
+    expect(transitionLog.at(-1)).toEqual({
+      type: 'stage',
+      context: { stageNumber: 3, totalScore: 1000, totalStarCount: 10 },
+    });
+    expect(totalScore).toBe(1000);
+    expect(totalStarCount).toBe(10);
+    expect(saveState.bestStageStars[3]).toBe(2);
+
+    internal.countdownOverlay?.dispose();
+    internal.countdownOverlay = null;
+    internal.isStarting = false;
+    stageScore = 500;
+    starCount = 5;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const continueButton = document.querySelector('[data-stage-clear-continue]') as HTMLButtonElement | null;
+    expect(continueButton).toBeTruthy();
+    continueButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+
+    expect(transitionLog.at(-1)).toEqual({
+      type: 'stage',
+      context: { stageNumber: 4, totalScore: 1500, totalStarCount: 15 },
+    });
+    expect(saveState.bestStageStars[3]).toBe(5);
+    expect(saveState.clearedStage).toBe(3);
+  });
+
   it('matches the title next-adventure preview with the stage started by "あそぶ"', async () => {
     const log: { type: SceneType; context: SceneContext }[] = [];
     const manager = new SceneManager();
