@@ -132,6 +132,35 @@ describe('Stage Flow Integration', () => {
     expect(manager.getCurrentType()).toBe('stage');
   });
 
+  it('keeps StageScene uncreated during title while module prefetch is in flight, then transitions successfully', async () => {
+    const log: { type: SceneType; context: SceneContext }[] = [];
+    const manager = new SceneManager();
+    let stageInstance: Scene | null = null;
+    const prefetcher = vi.fn(async () => ({ StageScene }));
+    const stageFactory = vi.fn(async () => {
+      stageInstance = createTrackingScene(log, 'stage');
+      return stageInstance;
+    });
+
+    manager.registerScene('title', createTrackingScene(log, 'title'));
+    manager.registerSceneModulePrefetch('stage', prefetcher);
+    manager.registerSceneFactory('stage', stageFactory);
+
+    await manager.transitionTo('title');
+    await manager.prefetchSceneModule('stage');
+
+    expect(prefetcher).toHaveBeenCalledTimes(1);
+    expect(stageFactory).not.toHaveBeenCalled();
+    expect(stageInstance).toBeNull();
+    expect(log).toEqual([{ type: 'title', context: {} }]);
+
+    await manager.transitionTo('stage', { stageNumber: 1 });
+
+    expect(stageFactory).toHaveBeenCalledTimes(1);
+    expect(stageInstance).not.toBeNull();
+    expect(log[1]).toEqual({ type: 'stage', context: { stageNumber: 1 } });
+  });
+
   it('reuses the same StageScene instance and keeps persistent nodes singletons across title round-trips', async () => {
     const manager = new SceneManager();
     let stageScene: StageScene | null = null;

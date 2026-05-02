@@ -2,11 +2,14 @@ import type * as THREE from 'three';
 import type { Scene, SceneType, SceneContext } from '../types';
 
 type SceneFactory = () => Scene | Promise<Scene>;
+type SceneModulePrefetcher = () => Promise<unknown>;
 
 export class SceneManager {
   private scenes = new Map<SceneType, Scene>();
   private sceneFactories = new Map<SceneType, SceneFactory>();
   private sceneLoadPromises = new Map<SceneType, Promise<Scene>>();
+  private sceneModulePrefetchers = new Map<SceneType, SceneModulePrefetcher>();
+  private sceneModulePrefetchPromises = new Map<SceneType, Promise<unknown>>();
   private currentScene: Scene | null = null;
   private currentType: SceneType | null = null;
   private transitionRequestId = 0;
@@ -32,6 +35,10 @@ export class SceneManager {
     this.sceneFactories.set(type, factory);
   }
 
+  registerSceneModulePrefetch(type: SceneType, prefetcher: SceneModulePrefetcher): void {
+    this.sceneModulePrefetchers.set(type, prefetcher);
+  }
+
   setTransitionHandler(handler: (sceneType: SceneType, context?: SceneContext) => void | Promise<void>): void {
     this.onTransitionRequest = handler;
   }
@@ -50,6 +57,26 @@ export class SceneManager {
 
   prefetchScene(sceneType: SceneType): Promise<void> {
     return this.resolveScene(sceneType).then(() => undefined);
+  }
+
+  prefetchSceneModule(sceneType: SceneType): Promise<void> {
+    const existingPromise = this.sceneModulePrefetchPromises.get(sceneType);
+    if (existingPromise) {
+      return existingPromise.then(() => undefined);
+    }
+
+    const prefetcher = this.sceneModulePrefetchers.get(sceneType);
+    if (!prefetcher) {
+      return Promise.resolve();
+    }
+
+    const prefetchPromise = Promise.resolve(prefetcher()).catch((error: unknown) => {
+      this.sceneModulePrefetchPromises.delete(sceneType);
+      throw error;
+    });
+
+    this.sceneModulePrefetchPromises.set(sceneType, prefetchPromise);
+    return prefetchPromise.then(() => undefined);
   }
 
   transitionTo(sceneType: SceneType, context: SceneContext = {}): Promise<void> {

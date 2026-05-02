@@ -22,6 +22,7 @@ import { CompanionManager } from '../entities/CompanionManager';
 import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
 import { followCameraZ } from '../utils/followCameraZ';
 import { getViewportSize } from '../utils/getViewportSize';
+import { ScorePopupManager } from '../../ui/ScorePopupManager';
 
 const BG_STAR_PARALLAX = 1.0;
 
@@ -240,6 +241,7 @@ export class StageScene implements Scene {
   private spawnSystem = new SpawnSystem();
   private boostSystem = new BoostSystem();
   private hud: HUD;
+  private scorePopupManager = new ScorePopupManager();
   private particleBurstManager = new ParticleBurstManager();
   private airShield!: AirShield;
 
@@ -918,6 +920,10 @@ export class StageScene implements Scene {
       this.spaceship.position.z - 20,
     );
 
+    for (const star of collisionResult.starCollisions) {
+      this.scorePopupManager.show(star.scoreValue, star.position, this.camera);
+    }
+
     // Sun pulse animation
     if (this.stageNumber === 10 && this.destinationPlanet) {
       const s = 1.0 + Math.sin(this.elapsedTime * 2) * 0.05;
@@ -1111,6 +1117,7 @@ export class StageScene implements Scene {
       height: 100%;
       background: rgba(0, 0, 32, 0.6);
       pointer-events: auto;
+      touch-action: manipulation;
       z-index: 40;
       padding: 1.2rem;
       box-sizing: border-box;
@@ -1289,6 +1296,7 @@ export class StageScene implements Scene {
 
   exit(): void {
     this.hud.hide();
+    this.scorePopupManager.dispose();
     this.audioManager.stopBGM();
     this.audioManager.stopBoostSFX();
     if (this.countdownOverlay) {
