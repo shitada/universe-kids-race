@@ -12,7 +12,7 @@ import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
 import { getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { formatEncyclopediaLabel } from '../../ui/formatEncyclopediaLabel';
 import { getViewportSize } from '../utils/getViewportSize';
-import { prewarmStageVisualAssets } from './StageScene';
+import { prewarmStageVisualAssets } from './stageVisualAssets';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // SHARED background-star resources for TitleScene

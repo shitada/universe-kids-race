@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as THREE from 'three';
-import { StageScene, __resetStageSceneSharedAssetCachesForTest } from '../../../src/game/scenes/StageScene';
+import { StageScene } from '../../../src/game/scenes/StageScene';
+import { __resetStageSceneSharedAssetCachesForTest } from '../../../src/game/scenes/stageVisualAssets';
 import { Star } from '../../../src/game/entities/Star';
 import { Meteorite } from '../../../src/game/entities/Meteorite';
 import type { SceneManager } from '../../../src/game/SceneManager';

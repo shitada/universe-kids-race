@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as THREE from 'three';
 import { TitleScene } from '../../../src/game/scenes/TitleScene';
-import * as StageSceneModule from '../../../src/game/scenes/StageScene';
+import * as StageVisualAssetsModule from '../../../src/game/scenes/stageVisualAssets';
 import type { SceneManager } from '../../../src/game/SceneManager';
 import type { SaveManager } from '../../../src/game/storage/SaveManager';
 import type { AudioManager } from '../../../src/game/audio/AudioManager';
@@ -429,7 +429,7 @@ describe('TitleScene (T009)', () => {
     const audioManager = createMockAudioManager(true);
     const idleCallbacks: Array<() => void> = [];
     const prewarmSpy = vi
-      .spyOn(StageSceneModule, 'prewarmStageVisualAssets')
+      .spyOn(StageVisualAssetsModule, 'prewarmStageVisualAssets')
       .mockImplementation(() => {});
 
     const scene = new TitleScene(sceneManager, saveManager, audioManager, {
