@@ -22,7 +22,6 @@ import { CompanionManager } from '../entities/CompanionManager';
 import { followCameraZ } from '../utils/followCameraZ';
 import { getViewportSize } from '../utils/getViewportSize';
 import { ScorePopupManager } from '../../ui/ScorePopupManager';
-import { EncyclopediaOverlay } from '../../ui/EncyclopediaOverlay';
 import { getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { TouchGuideOverlay, type TouchGuideMode } from '../../ui/TouchGuideOverlay';
 import {
@@ -53,8 +52,13 @@ export {
   prewarmStageVisualAssets,
 };
 
+type EncyclopediaOverlayModule = typeof import('../../ui/EncyclopediaOverlay');
+type EncyclopediaOverlayCtor = EncyclopediaOverlayModule['EncyclopediaOverlay'];
+type EncyclopediaOverlayInstance = InstanceType<EncyclopediaOverlayCtor>;
+
 interface StageSceneOptions {
   scheduleIdleTask?: (callback: () => void) => void;
+  loadEncyclopediaOverlay?: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
 }
 
 export class StageScene implements Scene {
@@ -108,7 +112,9 @@ export class StageScene implements Scene {
   private isClearContinueEnabled = false;
   private hasHandledClearContinue = false;
   private isClearRewardOpen = false;
-  private clearRewardOverlay = new EncyclopediaOverlay();
+  private isOpeningClearReward = false;
+  private clearRewardOverlay: EncyclopediaOverlayInstance | null = null;
+  private clearRewardOverlayPromise: Promise<EncyclopediaOverlayInstance> | null = null;
   private static readonly CLEAR_CONTINUE_DELAY = 0.6;
   private stageEntryTotalScore = 0;
   private stageEntryTotalStarCount = 0;
@@ -179,6 +185,8 @@ export class StageScene implements Scene {
   private static readonly TOUCH_GUIDE_IDLE_DELAY = 3;
   private visualQualityTier = StageScene.VISUAL_QUALITY_SCALE_BY_TIER.length - 1;
   private readonly scheduleIdleTask: (callback: () => void) => void;
+  private readonly loadEncyclopediaOverlay: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
+  private clearRewardRequestToken = 0;
 
   constructor(
     sceneManager: SceneManager,
@@ -192,6 +200,9 @@ export class StageScene implements Scene {
     this.audioManager = audioManager;
     this.saveManager = saveManager;
     this.scheduleIdleTask = options.scheduleIdleTask ?? scheduleIdleTask;
+    this.loadEncyclopediaOverlay =
+      options.loadEncyclopediaOverlay ??
+      (() => import('../../ui/EncyclopediaOverlay'));
     this.threeScene = new THREE.Scene();
     this.threeScene.background = new THREE.Color(0x000020);
     const { width: vw, height: vh } = getViewportSize();
@@ -243,6 +254,7 @@ export class StageScene implements Scene {
     this.ensureInitialized();
     this.isActive = true;
     this.prewarmRequestToken += 1;
+    this.clearRewardRequestToken += 1;
     this.lastAspect = 0;
     this.stageNumber = context.stageNumber ?? 1;
     this.stageConfig = getStageConfig(this.stageNumber);
@@ -252,6 +264,7 @@ export class StageScene implements Scene {
     this.isClearContinueEnabled = false;
     this.hasHandledClearContinue = false;
     this.isClearRewardOpen = false;
+    this.isOpeningClearReward = false;
     this.damageTimer = 0;
     this.elapsedTime = 0;
     this.destinationPlanetSpinTarget = null;
@@ -512,7 +525,7 @@ export class StageScene implements Scene {
   }
 
   private resetStageObjects(): void {
-    this.clearRewardOverlay.hide();
+    this.clearRewardOverlay?.hide();
     if (this.clearOverlay) {
       this.clearOverlay.remove();
       this.clearOverlay = null;
@@ -523,6 +536,7 @@ export class StageScene implements Scene {
     this.isClearContinueEnabled = false;
     this.hasHandledClearContinue = false;
     this.isClearRewardOpen = false;
+    this.isOpeningClearReward = false;
     this.removeDestinationPlanet();
     this.resetCameraShake();
     this.particleBurstManager.clear(this.threeScene);
@@ -1106,6 +1120,93 @@ export class StageScene implements Scene {
     }
   }
 
+  private getClearRewardOverlay(): Promise<EncyclopediaOverlayInstance> {
+    if (this.clearRewardOverlay) {
+      return Promise.resolve(this.clearRewardOverlay);
+    }
+    if (this.clearRewardOverlayPromise) {
+      return this.clearRewardOverlayPromise;
+    }
+
+    this.clearRewardOverlayPromise = this.loadEncyclopediaOverlay()
+      .then(({ EncyclopediaOverlay: EncyclopediaOverlayClass }) => {
+        const overlay = new EncyclopediaOverlayClass();
+        this.clearRewardOverlay = overlay;
+        return overlay;
+      })
+      .finally(() => {
+        this.clearRewardOverlayPromise = null;
+      });
+
+    return this.clearRewardOverlayPromise;
+  }
+
+  private isCurrentClearRewardRequest(requestToken: number): boolean {
+    return this.isActive && this.clearRewardRequestToken === requestToken;
+  }
+
+  private restoreClearRewardButton(): void {
+    if (!this.clearRewardButton) {
+      return;
+    }
+    this.clearRewardButton.style.pointerEvents = 'auto';
+    this.clearRewardButton.style.transform = 'scale(1)';
+  }
+
+  private prefetchClearRewardOverlay(): void {
+    if (this.clearRewardOverlay || this.clearRewardOverlayPromise) {
+      return;
+    }
+    void this.getClearRewardOverlay().catch(() => {});
+  }
+
+  private async openClearRewardOverlay(starCount: number): Promise<void> {
+    if (this.isClearRewardOpen || this.isOpeningClearReward) {
+      return;
+    }
+
+    const requestToken = this.clearRewardRequestToken;
+    this.isOpeningClearReward = true;
+    if (this.clearRewardButton) {
+      this.clearRewardButton.style.pointerEvents = 'none';
+    }
+
+    try {
+      const overlay = this.clearRewardOverlay ?? await this.getClearRewardOverlay();
+      if (!this.isCurrentClearRewardRequest(requestToken)) {
+        return;
+      }
+      const didOpen = overlay.showStageDetail(this.stageNumber, () => {
+        if (!this.isCurrentClearRewardRequest(requestToken)) {
+          return;
+        }
+        this.isClearRewardOpen = false;
+        this.restoreClearRewardButton();
+      }, {
+        bestStageStars: { [this.stageNumber]: starCount },
+        backLabel: 'クリアへ もどる',
+        zIndex: 50,
+      });
+      if (!didOpen) {
+        this.restoreClearRewardButton();
+        return;
+      }
+      this.isClearRewardOpen = true;
+    } catch {
+      if (!this.isCurrentClearRewardRequest(requestToken)) {
+        return;
+      }
+      this.restoreClearRewardButton();
+    } finally {
+      if (this.clearRewardRequestToken === requestToken) {
+        this.isOpeningClearReward = false;
+        if (!this.isClearRewardOpen) {
+          this.restoreClearRewardButton();
+        }
+      }
+    }
+  }
+
   private showClearMessage(isBestUpdated = false, _earnedStars?: number, isNewPlanetUnlock = false): void {
     const uiOverlay = document.getElementById('ui-overlay');
     if (!uiOverlay) return;
@@ -1174,6 +1275,7 @@ export class StageScene implements Scene {
 
     // Card acquisition notification for newly unlocked planets
     if (isNewPlanetUnlock) {
+      this.prefetchClearRewardOverlay();
       const entry = getPlanetEncyclopediaEntry(this.stageNumber);
       if (entry) {
         const cardMsg = document.createElement('div');
@@ -1230,26 +1332,9 @@ export class StageScene implements Scene {
         rewardButton.addEventListener('pointerdown', (event) => {
           event.preventDefault();
           event.stopPropagation();
-          if (this.isClearRewardOpen) return;
+          if (this.isClearRewardOpen || this.isOpeningClearReward) return;
           rewardButton.style.transform = 'scale(0.96)';
-          rewardButton.style.pointerEvents = 'none';
-          const didOpen = this.clearRewardOverlay.showStageDetail(this.stageNumber, () => {
-            this.isClearRewardOpen = false;
-            if (this.clearRewardButton) {
-              this.clearRewardButton.style.pointerEvents = 'auto';
-              this.clearRewardButton.style.transform = 'scale(1)';
-            }
-          }, {
-            bestStageStars: { [this.stageNumber]: starCount },
-            backLabel: 'クリアへ もどる',
-            zIndex: 50,
-          });
-          if (!didOpen) {
-            rewardButton.style.pointerEvents = 'auto';
-            rewardButton.style.transform = 'scale(1)';
-            return;
-          }
-          this.isClearRewardOpen = true;
+          void this.openClearRewardOverlay(starCount);
         });
         rewardButton.addEventListener('pointerup', releaseRewardButton);
         rewardButton.addEventListener('pointercancel', releaseRewardButton);
@@ -1442,9 +1527,11 @@ export class StageScene implements Scene {
     }
     this.isActive = false;
     this.prewarmRequestToken += 1;
-    this.clearRewardOverlay.hide();
+    this.clearRewardRequestToken += 1;
+    this.clearRewardOverlay?.hide();
     this.clearRewardButton = null;
     this.isClearRewardOpen = false;
+    this.isOpeningClearReward = false;
     this.touchGuide.hide();
     this.hud.hide();
     this.scorePopupManager.dispose();

@@ -7,6 +7,7 @@ import type { InputSystem } from '../../../src/game/systems/InputSystem';
 import type { AudioManager } from '../../../src/game/audio/AudioManager';
 import type { SaveManager } from '../../../src/game/storage/SaveManager';
 import type { SaveData } from '../../../src/types';
+import { EncyclopediaOverlay } from '../../../src/ui/EncyclopediaOverlay';
 
 interface CreatedScene {
   scene: StageScene;
@@ -30,6 +31,7 @@ function createScene(options?: {
   isNewPlanetUnlock?: boolean;
   earnedStars?: number;
   finalizeStageResult?: { totalScore: number; totalStarCount: number };
+  loadEncyclopediaOverlay?: () => Promise<{ EncyclopediaOverlay: typeof EncyclopediaOverlay }>;
 }): CreatedScene {
   const stageNumber = options?.stageNumber ?? 1;
   const earnedStars = options?.earnedStars ?? 3;
@@ -73,6 +75,9 @@ function createScene(options?: {
     inputSystem,
     audioManager,
     saveManager,
+    {
+      loadEncyclopediaOverlay: options?.loadEncyclopediaOverlay ?? (async () => ({ EncyclopediaOverlay })),
+    },
   );
   scene.enter({
     stageNumber,
@@ -121,6 +126,24 @@ function mockCanvasContext(): void {
       ellipse: () => {},
     } as unknown as CanvasRenderingContext2D;
   });
+}
+
+function flushPromises(): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, 0));
+}
+
+function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason?: unknown) => void;
+} {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 }
 
 describe('StageScene clear CTA', () => {
@@ -283,7 +306,41 @@ describe('StageScene clear CTA', () => {
     expect(getCardButton()).toBeNull();
   });
 
-  it('カード詳細を閉じるとクリア画面へ戻り、その後つぎへできる', () => {
+  it('通常のステージ開始と通常クリアではカードoverlay loaderを呼ばない', () => {
+    const loadEncyclopediaOverlay = vi.fn(async () => ({ EncyclopediaOverlay }));
+    const { scene } = createScene({
+      stageNumber: 2,
+      isNewPlanetUnlock: false,
+      loadEncyclopediaOverlay,
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    expect(loadEncyclopediaOverlay).not.toHaveBeenCalled();
+
+    internal.onStageClear();
+
+    expect(loadEncyclopediaOverlay).not.toHaveBeenCalled();
+  });
+
+  it('新規アンロック時のみカードoverlay loaderを先読みする', async () => {
+    const loadEncyclopediaOverlay = vi.fn(async () => ({ EncyclopediaOverlay }));
+    const { scene } = createScene({
+      stageNumber: 2,
+      isNewPlanetUnlock: true,
+      loadEncyclopediaOverlay,
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+    expect(loadEncyclopediaOverlay).toHaveBeenCalledTimes(1);
+
+    await flushPromises();
+
+    getCardButton()?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(loadEncyclopediaOverlay).toHaveBeenCalledTimes(1);
+  });
+
+  it('カード詳細を閉じるとクリア画面へ戻り、その後つぎへできる', async () => {
     const { scene, sceneManager } = createScene({
       stageNumber: 2,
       earnedStars: 5,
@@ -298,6 +355,8 @@ describe('StageScene clear CTA', () => {
     const cardButton = getCardButton();
     expect(cardButton).not.toBeNull();
     cardButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+    await flushPromises();
 
     const detailOverlay = document.querySelector('[data-encyclopedia-detail-overlay]') as HTMLElement | null;
     expect(detailOverlay).not.toBeNull();
@@ -326,7 +385,94 @@ describe('StageScene clear CTA', () => {
     });
   });
 
-  it('カード詳細表示中や連打時にもういちど遷移が重複しない', () => {
+  it('非同期解決後にカード詳細を開く', async () => {
+    const deferred = createDeferred<{ EncyclopediaOverlay: typeof EncyclopediaOverlay }>();
+    const loadEncyclopediaOverlay = vi.fn(() => deferred.promise);
+    const { scene } = createScene({
+      stageNumber: 2,
+      earnedStars: 5,
+      isNewPlanetUnlock: true,
+      loadEncyclopediaOverlay,
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+
+    const cardButton = getCardButton();
+    expect(cardButton).not.toBeNull();
+    cardButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(document.querySelector('[data-encyclopedia-detail-overlay]')).toBeNull();
+    expect(cardButton?.style.pointerEvents).toBe('none');
+
+    deferred.resolve({ EncyclopediaOverlay });
+    await flushPromises();
+    await flushPromises();
+
+    expect(document.querySelector('[data-encyclopedia-detail-overlay]')).not.toBeNull();
+    expect(cardButton?.style.pointerEvents).toBe('none');
+  });
+
+  it('load失敗時にカードボタンが再操作可能へ戻る', async () => {
+    const loadEncyclopediaOverlay = vi
+      .fn<() => Promise<{ EncyclopediaOverlay: typeof EncyclopediaOverlay }>>()
+      .mockRejectedValueOnce(new Error('chunk load failed'))
+      .mockResolvedValueOnce({ EncyclopediaOverlay });
+    const { scene } = createScene({
+      stageNumber: 2,
+      earnedStars: 5,
+      isNewPlanetUnlock: true,
+      loadEncyclopediaOverlay,
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+
+    const cardButton = getCardButton();
+    expect(cardButton).not.toBeNull();
+    cardButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+    await flushPromises();
+
+    expect(document.querySelector('[data-encyclopedia-detail-overlay]')).toBeNull();
+    expect(cardButton?.style.pointerEvents).toBe('auto');
+    expect(cardButton?.style.transform).toBe('scale(1)');
+
+    cardButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+    await flushPromises();
+
+    expect(loadEncyclopediaOverlay).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('[data-encyclopedia-detail-overlay]')).not.toBeNull();
+  });
+
+  it('scene.exit()後にPromiseが解決してもカード詳細を開かない', async () => {
+    const deferred = createDeferred<{ EncyclopediaOverlay: typeof EncyclopediaOverlay }>();
+    const loadEncyclopediaOverlay = vi.fn(() => deferred.promise);
+    const { scene } = createScene({
+      stageNumber: 2,
+      earnedStars: 5,
+      isNewPlanetUnlock: true,
+      loadEncyclopediaOverlay,
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+
+    const cardButton = getCardButton();
+    expect(cardButton).not.toBeNull();
+    cardButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    scene.exit();
+    deferred.resolve({ EncyclopediaOverlay });
+    await flushPromises();
+    await flushPromises();
+
+    expect(document.querySelector('[data-encyclopedia-detail-overlay]')).toBeNull();
+    expect(document.querySelector('[data-stage-clear-overlay]')).toBeNull();
+  });
+
+  it('カード詳細表示中や連打時にもういちど遷移が重複しない', async () => {
     const { scene, sceneManager } = createScene({
       stageNumber: 2,
       totalScore: 500,
@@ -345,6 +491,8 @@ describe('StageScene clear CTA', () => {
     expect(cardButton).not.toBeNull();
 
     cardButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+    await flushPromises();
     retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     expect(sceneManager.requestTransition).not.toHaveBeenCalled();
 
