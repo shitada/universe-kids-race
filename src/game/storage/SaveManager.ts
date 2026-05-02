@@ -22,6 +22,8 @@ function cloneSaveData(src: SaveData): SaveData {
 }
 
 export class SaveManager {
+  private static sessionFallbackActive = false;
+
   // In-memory cache of the validated SaveData. Populated lazily on the first
   // load() call and invalidated on save()/clear()/reset paths. This avoids
   // the per-call cost of localStorage.getItem + JSON.parse + full revalidation
@@ -254,16 +256,20 @@ export class SaveManager {
   // Also marks the session as active as a side-effect.
   isFreshSession(): boolean {
     try {
-      const fresh = !sessionStorage.getItem(SESSION_KEY);
+      const fresh = !sessionStorage.getItem(SESSION_KEY) && !SaveManager.sessionFallbackActive;
       try {
         sessionStorage.setItem(SESSION_KEY, 'active');
+        SaveManager.sessionFallbackActive = false;
       } catch (e) {
+        SaveManager.sessionFallbackActive = true;
         console.warn('SaveManager.isFreshSession setItem failed:', e);
       }
       return fresh;
     } catch (e) {
+      const fresh = !SaveManager.sessionFallbackActive;
+      SaveManager.sessionFallbackActive = true;
       console.warn('SaveManager.isFreshSession getItem failed:', e);
-      return false;
+      return fresh;
     }
   }
 }

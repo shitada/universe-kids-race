@@ -33,6 +33,7 @@ describe('SaveManager', () => {
     storage.clear();
     sessionStore.clear();
     vi.clearAllMocks();
+    (SaveManager as unknown as { sessionFallbackActive: boolean }).sessionFallbackActive = false;
   });
 
   it('returns default data when no save exists', () => {
@@ -362,18 +363,32 @@ describe('SaveManager', () => {
       expect(() => {
         result = manager.isFreshSession();
       }).not.toThrow();
-      expect(result).toBe(false);
+      expect(result).toBe(true);
       expect(warnSpy).toHaveBeenCalled();
       warnSpy.mockRestore();
     });
 
-    it('isFreshSession() does not throw when sessionStorage.setItem throws', () => {
+    it('isFreshSession() returns false after the first fallback read failure in the same runtime', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      sessionStorageMock.setItem.mockImplementationOnce(() => {
+      sessionStorageMock.getItem.mockImplementation(() => {
+        throw new Error('SecurityError');
+      });
+      const manager = new SaveManager();
+      expect(manager.isFreshSession()).toBe(true);
+      expect(manager.isFreshSession()).toBe(false);
+      expect(warnSpy).toHaveBeenCalledTimes(2);
+      warnSpy.mockRestore();
+    });
+
+    it('isFreshSession() falls back to memory when sessionStorage.setItem throws', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      sessionStorageMock.setItem.mockImplementation(() => {
         throw new Error('QuotaExceededError');
       });
       const manager = new SaveManager();
-      expect(() => manager.isFreshSession()).not.toThrow();
+      expect(manager.isFreshSession()).toBe(true);
+      expect(manager.isFreshSession()).toBe(false);
+      expect(warnSpy).toHaveBeenCalledTimes(2);
       warnSpy.mockRestore();
     });
 
