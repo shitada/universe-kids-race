@@ -362,6 +362,7 @@ export class StageScene implements Scene {
     this.lastAspect = 0;
     this.stageNumber = context.stageNumber ?? 1;
     this.stageConfig = getStageConfig(this.stageNumber);
+    this.prefetchEndingSceneModuleIfNeeded();
     this.isCleared = false;
     this.clearTimer = 0;
     this.isClearContinueEnabled = false;
@@ -463,6 +464,19 @@ export class StageScene implements Scene {
     // for E2E / smoke tests so existing assertions about immediate forward
     // motion are not broken.
     this.startCountdown();
+  }
+
+  private prefetchEndingSceneModuleIfNeeded(): void {
+    if (this.stageNumber < TOTAL_STAGES) {
+      return;
+    }
+
+    const prefetchSceneModule = (this.sceneManager as SceneManager & {
+      prefetchSceneModule?: (sceneType: 'ending') => Promise<void>;
+    }).prefetchSceneModule;
+
+    const prefetchPromise = prefetchSceneModule?.call(this.sceneManager, 'ending');
+    void prefetchPromise?.catch(() => {});
   }
 
   private startCountdown(): void {

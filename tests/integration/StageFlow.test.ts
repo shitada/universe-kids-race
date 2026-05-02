@@ -475,13 +475,12 @@ describe('Stage Flow Integration', () => {
     const button = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
     expect(button?.textContent).toBe('おいわいへ');
     button!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushPromises();
 
     expect(manager.getCurrentType()).toBe('ending');
   });
 
-  it('uses the prefetched ending scene cache after the last stage clear without showing loading UI', async () => {
+  it('starts ending module prefetch only after reaching the final stage', async () => {
     const manager = new SceneManager();
     const inputSystem = {
       setBoostPressed: vi.fn(),
@@ -511,31 +510,21 @@ describe('Stage Flow Integration', () => {
       markStageCleared: vi.fn(() => false),
       updateBestStageStars: vi.fn(),
     } as unknown as SaveManager;
-    const loadingOverlay = {
-      show: vi.fn(),
-      hide: vi.fn(),
-    };
     const stageScene = new StageScene(manager, inputSystem, audioManager, saveManager);
+    const endingModulePrefetcher = vi.fn(async () => ({ EndingScene: class {} }));
     const endingFactory = vi.fn(async () => createTrackingScene([], 'ending'));
 
     manager.registerScene('stage', stageScene);
+    manager.registerSceneModulePrefetch('ending', endingModulePrefetcher);
     manager.registerSceneFactory('ending', endingFactory);
-    manager.setLoadStateHandler((isLoading, sceneType) => {
-      if (isLoading) {
-        loadingOverlay.show(
-          sceneType === 'ending'
-            ? 'さいごの じゅんび ちゅう...'
-            : 'たびの じゅんび ちゅう...',
-        );
-        return;
-      }
-      loadingOverlay.hide();
-    });
 
-    await manager.prefetchScene('ending');
-    expect(endingFactory).toHaveBeenCalledTimes(1);
+    await manager.transitionTo('stage', { stageNumber: TOTAL_STAGES - 1 });
+    expect(endingModulePrefetcher).not.toHaveBeenCalled();
+    expect(endingFactory).not.toHaveBeenCalled();
 
     await manager.transitionTo('stage', { stageNumber: TOTAL_STAGES });
+    expect(endingModulePrefetcher).toHaveBeenCalledTimes(1);
+    expect(endingFactory).not.toHaveBeenCalled();
 
     const internal = stageScene as unknown as {
       scoreSystem: {
@@ -554,12 +543,11 @@ describe('Stage Flow Integration', () => {
     const button = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
     expect(button?.textContent).toBe('おいわいへ');
     button!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushPromises();
 
     expect(manager.getCurrentType()).toBe('ending');
     expect(endingFactory).toHaveBeenCalledTimes(1);
-    expect(loadingOverlay.show).not.toHaveBeenCalled();
+    expect(endingModulePrefetcher).toHaveBeenCalledTimes(1);
   });
 
   it('shows retry UI after stage lazy-load failure and can return to title', async () => {
