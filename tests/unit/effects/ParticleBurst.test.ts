@@ -523,6 +523,28 @@ describe('ParticleBurstManager activeCount cache', () => {
     expect(manager.getActiveCount()).toBe(0);
   });
 
+  it('setQualityTier clamps burst particle counts for star, rainbow, and meteorite effects', () => {
+    const manager = new ParticleBurstManager();
+
+    manager.setQualityTier(0);
+    manager.emit(scene, 0, 0, 0, 0xffdd00, 20, false);
+    manager.emit(scene, 1, 0, 0, 0xffdd00, 50, true);
+    manager.emit(scene, 2, 0, 0, 0xffaa44, 24, false);
+
+    const pointsObjects = scene.children.filter((child) => child instanceof THREE.Points) as THREE.Points[];
+    expect(pointsObjects).toHaveLength(3);
+    expect(pointsObjects[0].geometry.drawRange.count).toBe(9);
+    expect(pointsObjects[1].geometry.drawRange.count).toBe(23);
+    expect(pointsObjects[2].geometry.drawRange.count).toBe(11);
+
+    manager.clear(scene);
+    manager.setQualityTier(1);
+    manager.emit(scene, 3, 0, 0, 0xffdd00, 20, false);
+
+    const mediumTierBurst = scene.children.find((child) => child instanceof THREE.Points) as THREE.Points;
+    expect(mediumTierBurst.geometry.drawRange.count).toBe(14);
+  });
+
   it('position and color attributes are marked as DynamicDrawUsage for GPU streaming hint', () => {
     const burst = new ParticleBurst();
     burst.reset(scene, 0, 0, 0, 0xffdd00, 20, false);

@@ -83,6 +83,27 @@ describe('BoostFlameEffect', () => {
     fx.dispose();
   });
 
+  it('setQualityTier reduces active-phase emission count by visual tier', () => {
+    const scene = new THREE.Scene();
+    const fx = new BoostFlameEffect();
+    fx.init(scene);
+    fx.start();
+
+    const geometry = fx.getObject()!.geometry as THREE.BufferGeometry;
+
+    fx.setQualityTier(1);
+    fx.emit(SHIP, 0);
+    expect(geometry.drawRange.count).toBe(6);
+
+    fx.remove();
+    fx.start();
+    fx.setQualityTier(0);
+    fx.emit(SHIP, 0);
+    expect(geometry.drawRange.count).toBe(4);
+
+    fx.dispose();
+  });
+
   it('emit during fade phase (progress>=0.83) reduces emission count and size', () => {
     const scene = new THREE.Scene();
     const fx = new BoostFlameEffect();

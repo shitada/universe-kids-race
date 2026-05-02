@@ -224,6 +224,8 @@ export const __stageSceneSharedAssetCachesForTest = {
 };
 
 export class StageScene implements Scene {
+  private static readonly VISUAL_QUALITY_SCALE_BY_TIER = [0.45, 0.7, 1];
+  private static readonly BG_STAR_COUNT = 2000;
   private static readonly ASSIST_TRIGGER_HIT_WINDOW = 6;
   private static readonly ASSIST_TRIGGER_HIT_COUNT = 2;
   private static readonly ASSIST_DURATION = 5;
@@ -328,6 +330,7 @@ export class StageScene implements Scene {
   private touchGuideIdleTimer = 0;
   private hasSeenMoveInput = false;
   private static readonly TOUCH_GUIDE_IDLE_DELAY = 3;
+  private visualQualityTier = StageScene.VISUAL_QUALITY_SCALE_BY_TIER.length - 1;
 
   constructor(sceneManager: SceneManager, inputSystem: InputSystem, audioManager: AudioManager, saveManager: SaveManager) {
     this.sceneManager = sceneManager;
@@ -373,6 +376,12 @@ export class StageScene implements Scene {
 
     this.hud = new HUD();
     this.initialized = true;
+    this.applyVisualQualityTier();
+  }
+
+  setVisualQualityTier(tier: number): void {
+    this.visualQualityTier = StageScene.clampVisualQualityTier(tier);
+    this.applyVisualQualityTier();
   }
 
   enter(context: SceneContext): void {
@@ -416,6 +425,7 @@ export class StageScene implements Scene {
     this.boostFlameEffect.remove();
     this.companionManager?.resetUnlockedPlanets([]);
     this.createBackground();
+    this.applyVisualQualityTier();
 
     // Camera behind spaceship
     this.camera.position.set(0, 5, 10);
@@ -607,8 +617,8 @@ export class StageScene implements Scene {
     // geometry/material を破棄しないようにする。
     if (!SHARED_BG_STARS_GEOMETRY) {
       const geo = new THREE.BufferGeometry();
-      const positions = new Float32Array(6000);
-      for (let i = 0; i < 6000; i += 3) {
+      const positions = new Float32Array(StageScene.BG_STAR_COUNT * 3);
+      for (let i = 0; i < StageScene.BG_STAR_COUNT * 3; i += 3) {
         positions[i] = (Math.random() - 0.5) * 200;
         positions[i + 1] = (Math.random() - 0.5) * 200;
         positions[i + 2] = (Math.random() - 0.5) * 400;
@@ -625,6 +635,7 @@ export class StageScene implements Scene {
     }
     this.bgStars = new THREE.Points(SHARED_BG_STARS_GEOMETRY, SHARED_BG_STARS_MATERIAL);
     this.bgStars.userData.sharedAssets = true;
+    this.bgStars.geometry.setDrawRange(0, this.getBackgroundStarDrawCount());
     this.threeScene.add(this.bgStars);
   }
 
@@ -1619,5 +1630,37 @@ export class StageScene implements Scene {
       this.lastAspect = aspect;
     }
     return this.camera;
+  }
+
+  private applyVisualQualityTier(): void {
+    const clampedTier = StageScene.clampVisualQualityTier(this.visualQualityTier);
+    this.particleBurstManager.setQualityTier(clampedTier);
+    if (!this.initialized) {
+      if (this.bgStars) {
+        this.bgStars.geometry.setDrawRange(0, this.getBackgroundStarDrawCount());
+      }
+      return;
+    }
+    this.boostLinesEffect.setQualityTier(clampedTier);
+    this.boostFlameEffect.setQualityTier(clampedTier);
+    if (this.bgStars) {
+      this.bgStars.geometry.setDrawRange(0, this.getBackgroundStarDrawCount());
+    }
+  }
+
+  private getBackgroundStarDrawCount(): number {
+    return Math.max(
+      1,
+      Math.round(StageScene.BG_STAR_COUNT * StageScene.getVisualQualityScale(this.visualQualityTier)),
+    );
+  }
+
+  private static clampVisualQualityTier(tier: number): number {
+    const maxTier = StageScene.VISUAL_QUALITY_SCALE_BY_TIER.length - 1;
+    return Math.max(0, Math.min(maxTier, Math.round(tier)));
+  }
+
+  private static getVisualQualityScale(tier: number): number {
+    return StageScene.VISUAL_QUALITY_SCALE_BY_TIER[StageScene.clampVisualQualityTier(tier)];
   }
 }

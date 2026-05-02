@@ -15,6 +15,7 @@ export interface ParticleBurstOptions {
 }
 
 const MAX_PARTICLES_PER_BURST = 50;
+const VISUAL_QUALITY_SCALE_BY_TIER = [0.45, 0.7, 1];
 
 export class ParticleBurst {
   private readonly geometry: THREE.BufferGeometry;
@@ -271,6 +272,7 @@ export class ParticleBurstManager {
   // `activeCount === pool.filter(b => b.isActive()).length` so update()
   // can early-return on rest frames without scanning all 10 slots at 60Hz.
   private activeCount = 0;
+  private qualityTier = VISUAL_QUALITY_SCALE_BY_TIER.length - 1;
 
   constructor() {
     this.pool = [];
@@ -316,7 +318,11 @@ export class ParticleBurstManager {
       }
     }
 
-    slot.reset(scene, x, y, z, color, particleCount, isRainbow);
+    slot.reset(scene, x, y, z, color, this.scaleParticleCount(particleCount), isRainbow);
+  }
+
+  setQualityTier(tier: number): void {
+    this.qualityTier = ParticleBurstManager.clampQualityTier(tier);
   }
 
   /**
@@ -379,5 +385,21 @@ export class ParticleBurstManager {
   /** Test/diagnostic helper: total pool size (constant). */
   getPoolSize(): number {
     return this.pool.length;
+  }
+
+  private scaleParticleCount(particleCount: number): number {
+    if (particleCount <= 0) {
+      return 0;
+    }
+    return Math.max(1, Math.round(particleCount * ParticleBurstManager.getQualityScale(this.qualityTier)));
+  }
+
+  private static clampQualityTier(tier: number): number {
+    const maxTier = VISUAL_QUALITY_SCALE_BY_TIER.length - 1;
+    return Math.max(0, Math.min(maxTier, Math.round(tier)));
+  }
+
+  private static getQualityScale(tier: number): number {
+    return VISUAL_QUALITY_SCALE_BY_TIER[ParticleBurstManager.clampQualityTier(tier)];
   }
 }

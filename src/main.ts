@@ -101,19 +101,20 @@ applyPixelRatioTier(initialPixelTier);
 // Track the last-applied tier so onTierChange can persist only on downscale.
 // Held in a closure-friendly mutable object so the controller's onTierChange
 // callback (declared in the same scope as the controller itself) can mutate it.
-const lastAppliedTier = { value: initialPixelTier };
+const currentVisualTier = { value: initialPixelTier };
 
 const pixelRatioController = new AdaptivePixelRatioController(
   MAX_TIER,
   (newTier: number) => {
     applyPixelRatioTier(newTier);
+    stageScene?.setVisualQualityTier(newTier);
     // Persist downscales immediately so the next launch starts at the lower
     // tier. Upscales are not persisted: the existing upscale heuristic will
     // rediscover them naturally on the next session if conditions allow.
-    if (newTier < lastAppliedTier.value) {
+    if (newTier < currentVisualTier.value) {
       saveManager.saveLastStablePixelTier(newTier);
     }
-    lastAppliedTier.value = newTier;
+    currentVisualTier.value = newTier;
   },
   {},
   initialPixelTier,
@@ -142,6 +143,7 @@ sceneManager.registerSceneModulePrefetch('ending', loadEndingSceneModule);
 sceneManager.registerSceneFactory('stage', async () => {
   const { StageScene } = await loadStageSceneModule();
   stageScene = new StageScene(sceneManager, inputSystem, audioManager, saveManager);
+  stageScene.setVisualQualityTier(currentVisualTier.value);
   return stageScene;
 });
 sceneManager.registerSceneFactory('ending', async () => {
@@ -375,7 +377,8 @@ createWebGLContextLossHandler(canvas, {
     contextLossOverlay.hide();
     pixelRatioController.reset();
     applyPixelRatioTier(MAX_TIER);
-    lastAppliedTier.value = MAX_TIER;
+    currentVisualTier.value = MAX_TIER;
+    stageScene?.setVisualQualityTier(MAX_TIER);
     handleVisibilityRestore();
   },
 });
