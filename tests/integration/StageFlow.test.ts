@@ -561,7 +561,6 @@ describe('Stage Flow Integration', () => {
       reset: vi.fn(),
       notifyResume: vi.fn(),
     };
-    const applyPixelRatioTier = vi.fn();
 
     const loadStageModule = createRetryableModuleLoader(
       vi.fn<() => Promise<{ StageScene: typeof StageScene }>>()
@@ -606,8 +605,6 @@ describe('Stage Flow Integration', () => {
       createSceneTransitionHandler({
         sceneManager: manager,
         pixelRatioController,
-        applyPixelRatioTier,
-        maxTier: 2,
         now: () => 0,
       }),
     );
@@ -646,7 +643,6 @@ describe('Stage Flow Integration', () => {
       reset: vi.fn(),
       notifyResume: vi.fn(),
     };
-    const applyPixelRatioTier = vi.fn();
     const loadEndingModule = createRetryableModuleLoader(
       vi.fn<() => Promise<{ EndingScene: string }>>()
         .mockRejectedValueOnce(new Error('ending chunk failed'))
@@ -691,8 +687,6 @@ describe('Stage Flow Integration', () => {
       createSceneTransitionHandler({
         sceneManager: manager,
         pixelRatioController,
-        applyPixelRatioTier,
-        maxTier: 2,
         now: () => 0,
       }),
     );

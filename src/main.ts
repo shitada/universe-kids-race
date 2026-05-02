@@ -188,8 +188,6 @@ sceneManager.setTransitionHandler(
   createSceneTransitionHandler({
     sceneManager,
     pixelRatioController,
-    applyPixelRatioTier,
-    maxTier: MAX_TIER,
     now: () => performance.now(),
   }),
 );
