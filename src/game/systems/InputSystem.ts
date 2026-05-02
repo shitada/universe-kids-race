@@ -107,6 +107,11 @@ export class InputSystem {
   };
 
   private onKeyUp = (e: KeyboardEvent): void => {
+    if (this.isBoostKey(e)) {
+      this.state.boostPressed = false;
+      return;
+    }
+
     switch (e.key) {
       case 'ArrowLeft':
       case 'ArrowRight':

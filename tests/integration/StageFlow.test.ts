@@ -7,6 +7,7 @@ import { StageScene } from '../../src/game/scenes/StageScene';
 import { TitleScene } from '../../src/game/scenes/TitleScene';
 import { TOTAL_STAGES } from '../../src/game/config/StageConfig';
 import { getStageConfig } from '../../src/game/config/StageConfig';
+import { InputSystem as RuntimeInputSystem } from '../../src/game/systems/InputSystem';
 import type { InputSystem } from '../../src/game/systems/InputSystem';
 import type { AudioManager } from '../../src/game/audio/AudioManager';
 import type { SaveManager } from '../../src/game/storage/SaveManager';
@@ -313,6 +314,78 @@ describe('Stage Flow Integration', () => {
     expect(firstSceneRef.children.filter((child) => child === firstCompanionGroupRef)).toHaveLength(1);
     expect(firstSceneRef.children.filter((child) => child.type === 'AmbientLight')).toHaveLength(1);
     expect(firstSceneRef.children.filter((child) => child.type === 'DirectionalLight')).toHaveLength(1);
+  });
+
+  it('does not carry a released keyboard boost into the title → stage transition', async () => {
+    const manager = new SceneManager();
+    const canvas = document.createElement('canvas');
+    Object.defineProperty(canvas, 'clientWidth', { value: 1024 });
+    document.body.appendChild(canvas);
+
+    const inputSystem = new RuntimeInputSystem();
+    inputSystem.setup(canvas);
+
+    const playSFX = vi.fn();
+    const audioManager = {
+      playBGM: vi.fn(),
+      stopBGM: vi.fn(),
+      playSFX,
+      stopBoostSFX: vi.fn(),
+      startBoostSFX: vi.fn(),
+      isMuted: vi.fn(() => false),
+      toggleMute: vi.fn(() => false),
+      setMuted: vi.fn(),
+      initFromInteraction: vi.fn(),
+    } as unknown as AudioManager;
+    const saveManager = {
+      load: vi.fn(() => ({
+        clearedStage: 0,
+        unlockedPlanets: [1],
+        muted: false,
+        tutorialShown: true,
+        bestStageStars: {},
+      })),
+      save: vi.fn(),
+      clear: vi.fn(),
+      markStageCleared: vi.fn(() => false),
+      updateBestStageStars: vi.fn(),
+    } as unknown as SaveManager;
+
+    manager.registerScene('title', createTrackingScene([], 'title'));
+
+    let stageScene: StageScene | null = null;
+    manager.registerSceneFactory('stage', async () => {
+      stageScene = new StageScene(manager, inputSystem, audioManager, saveManager);
+      return stageScene;
+    });
+
+    try {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+      window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+      expect(inputSystem.getState().boostPressed).toBe(false);
+
+      await manager.transitionTo('title');
+      await manager.transitionTo('stage', { stageNumber: 1 });
+      expect(inputSystem.getState().boostPressed).toBe(false);
+
+      const internal = stageScene as unknown as {
+        countdownOverlay: { dispose(): void } | null;
+        isStarting: boolean;
+        update(deltaTime: number): void;
+      };
+      internal.countdownOverlay?.dispose();
+      internal.countdownOverlay = null;
+      internal.isStarting = false;
+
+      playSFX.mockClear();
+      internal.update(0.016);
+      const sfxNames = playSFX.mock.calls.map((call) => call[0]);
+      expect(sfxNames).not.toContain('boost');
+      expect(sfxNames).not.toContain('boostDenied');
+    } finally {
+      inputSystem.dispose();
+      canvas.remove();
+    }
   });
 
   it('uses a prefetched StageScene cache from title without showing loading UI or visible side effects', async () => {
