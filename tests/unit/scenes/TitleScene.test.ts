@@ -83,6 +83,17 @@ function findCompanionParade(scene: TitleScene): THREE.Group | undefined {
   ) as THREE.Group | undefined;
 }
 
+function createIdleTaskHarness(): {
+  idleCallbacks: Array<() => void>;
+  scheduleIdleTask: (callback: () => void) => void;
+} {
+  const idleCallbacks: Array<() => void> = [];
+  return {
+    idleCallbacks,
+    scheduleIdleTask: (callback) => idleCallbacks.push(callback),
+  };
+}
+
 describe('TitleScene (T009)', () => {
   it('overlay pointerdown calls initSync() and starts BGM_0 when not initialized', () => {
     const sceneManager = createMockSceneManager();
@@ -481,6 +492,7 @@ describe('TitleScene (T009)', () => {
   });
 
   it('does not load companion factory when no planets are unlocked', async () => {
+    const { idleCallbacks, scheduleIdleTask } = createIdleTaskHarness();
     const loadTitleCompanionFactory = vi.fn(async () => ({
       createCompanionMesh: vi.fn(() => new THREE.Group()),
     }));
@@ -488,12 +500,13 @@ describe('TitleScene (T009)', () => {
       createMockSceneManager(),
       createMockSaveManager({ unlockedPlanets: [] }),
       createMockAudioManager(),
-      { loadTitleCompanionFactory },
+      { loadTitleCompanionFactory, scheduleIdleTask },
     );
 
     scene.enter({});
     await flushPromises();
 
+    expect(idleCallbacks).toHaveLength(1);
     expect(loadTitleCompanionFactory).not.toHaveBeenCalled();
     expect(findCompanionParade(scene)).toBeUndefined();
 
@@ -514,7 +527,8 @@ describe('TitleScene (T009)', () => {
     scene.exit();
   });
 
-  it('shows only unlocked companions in the title parade', async () => {
+  it('creates the companion parade only after the idle callback runs', async () => {
+    const { idleCallbacks, scheduleIdleTask } = createIdleTaskHarness();
     const loadTitleCompanionFactory = vi.fn(async () => ({
       createCompanionMesh: vi.fn(() => new THREE.Group()),
     }));
@@ -522,10 +536,16 @@ describe('TitleScene (T009)', () => {
       createMockSceneManager(),
       createMockSaveManager({ unlockedPlanets: [1, 2, 3] }),
       createMockAudioManager(),
-      { loadTitleCompanionFactory },
+      { loadTitleCompanionFactory, scheduleIdleTask },
     );
 
     scene.enter({});
+
+    expect(idleCallbacks).toHaveLength(2);
+    expect(loadTitleCompanionFactory).not.toHaveBeenCalled();
+    expect(findCompanionParade(scene)).toBeUndefined();
+
+    idleCallbacks[0]?.();
     await flushPromises();
 
     const parade = findCompanionParade(scene);
@@ -536,6 +556,7 @@ describe('TitleScene (T009)', () => {
   });
 
   it('loads companion factory once and reuses it across re-entry', async () => {
+    const { idleCallbacks, scheduleIdleTask } = createIdleTaskHarness();
     const createCompanionMesh = vi.fn(() => new THREE.Group());
     const loadTitleCompanionFactory = vi.fn(async () => ({
       createCompanionMesh,
@@ -544,16 +565,20 @@ describe('TitleScene (T009)', () => {
       createMockSceneManager(),
       createMockSaveManager({ unlockedPlanets: [1, 2] }),
       createMockAudioManager(),
-      { loadTitleCompanionFactory },
+      { loadTitleCompanionFactory, scheduleIdleTask },
     );
 
     scene.enter({});
+    expect(idleCallbacks).toHaveLength(2);
+    idleCallbacks[0]?.();
     await flushPromises();
     expect(loadTitleCompanionFactory).toHaveBeenCalledTimes(1);
     expect(findCompanionParade(scene)?.children).toHaveLength(2);
 
     scene.exit();
     scene.enter({});
+    expect(idleCallbacks).toHaveLength(4);
+    idleCallbacks[2]?.();
     await flushPromises();
 
     expect(loadTitleCompanionFactory).toHaveBeenCalledTimes(1);
@@ -563,7 +588,8 @@ describe('TitleScene (T009)', () => {
     scene.exit();
   });
 
-  it('does not duplicate the companion parade across enter/exit cycles', async () => {
+  it('does not create the companion parade after exit even if the idle callback fires', async () => {
+    const { idleCallbacks, scheduleIdleTask } = createIdleTaskHarness();
     const loadTitleCompanionFactory = vi.fn(async () => ({
       createCompanionMesh: vi.fn(() => new THREE.Group()),
     }));
@@ -571,26 +597,47 @@ describe('TitleScene (T009)', () => {
       createMockSceneManager(),
       createMockSaveManager({ unlockedPlanets: [1, 2] }),
       createMockAudioManager(),
-      { loadTitleCompanionFactory },
+      { loadTitleCompanionFactory, scheduleIdleTask },
     );
 
     scene.enter({});
-    await flushPromises();
-    expect(findCompanionParade(scene)?.children).toHaveLength(2);
+    expect(idleCallbacks).toHaveLength(2);
 
     scene.exit();
+    idleCallbacks[0]?.();
+    await flushPromises();
+
+    expect(loadTitleCompanionFactory).not.toHaveBeenCalled();
     expect(findCompanionParade(scene)).toBeUndefined();
+  });
+
+  it('does not attach the companion parade after exit when async loading resolves later', async () => {
+    const { idleCallbacks, scheduleIdleTask } = createIdleTaskHarness();
+    let resolveFactory: ((factory: { createCompanionMesh: () => THREE.Group }) => void) | null = null;
+    const loadTitleCompanionFactory = vi.fn(
+      () =>
+        new Promise<{ createCompanionMesh: () => THREE.Group }>((resolve) => {
+          resolveFactory = resolve;
+        }),
+    );
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager({ unlockedPlanets: [1, 2] }),
+      createMockAudioManager(),
+      { loadTitleCompanionFactory, scheduleIdleTask },
+    );
 
     scene.enter({});
+    idleCallbacks[0]?.();
     await flushPromises();
-
-    const parades = scene.getThreeScene().children.filter(
-      (child) => child instanceof THREE.Group && child.name === 'title-companion-parade',
-    );
-    expect(parades).toHaveLength(1);
-    expect(findCompanionParade(scene)?.children).toHaveLength(2);
+    expect(loadTitleCompanionFactory).toHaveBeenCalledTimes(1);
 
     scene.exit();
+    resolveFactory?.({ createCompanionMesh: vi.fn(() => new THREE.Group()) });
+    await flushPromises();
+    await flushPromises();
+
+    expect(findCompanionParade(scene)).toBeUndefined();
   });
 });
 
