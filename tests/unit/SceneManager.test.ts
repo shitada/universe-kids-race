@@ -304,23 +304,30 @@ describe('SceneManager', () => {
     expect(stageScene.enter).toHaveBeenCalledWith({ stageNumber: 1 });
   });
 
-  it('prefetches a scene module without creating the scene until transition', async () => {
+  it('prefetches a scene module without creating the scene or showing loading state until transition', async () => {
     const manager = new SceneManager();
     const stageScene = createMockScene();
     const prefetcher = vi.fn(async () => ({ StageScene: class {} }));
     const factory = vi.fn(async () => stageScene);
+    const loadStateHandler = vi.fn();
 
     manager.registerSceneModulePrefetch('stage', prefetcher);
     manager.registerSceneFactory('stage', factory);
+    manager.setLoadStateHandler(loadStateHandler);
 
     await manager.prefetchSceneModule('stage');
 
     expect(prefetcher).toHaveBeenCalledTimes(1);
     expect(factory).not.toHaveBeenCalled();
+    expect(loadStateHandler).not.toHaveBeenCalled();
 
     await manager.transitionTo('stage', { stageNumber: 1 });
 
     expect(factory).toHaveBeenCalledTimes(1);
+    expect(loadStateHandler.mock.calls).toEqual([
+      [true, 'stage'],
+      [false, 'stage'],
+    ]);
     expect(stageScene.enter).toHaveBeenCalledWith({ stageNumber: 1 });
   });
 
