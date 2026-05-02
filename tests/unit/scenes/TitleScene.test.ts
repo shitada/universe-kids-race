@@ -39,9 +39,17 @@ function createMockAudioManager(initialized = false): AudioManager {
   } as unknown as AudioManager;
 }
 
-function createMockSaveManager(): SaveManager {
+function createMockSaveManager(overrides: Partial<ReturnType<SaveManager['load']>> = {}): SaveManager {
+  const saveData = {
+    clearedStage: 0,
+    unlockedPlanets: [],
+    tutorialShown: true,
+    bestStageStars: {},
+    muted: false,
+    ...overrides,
+  };
   return {
-    load: vi.fn(() => ({ clearedStage: 0, unlockedPlanets: [], tutorialShown: true })),
+    load: vi.fn(() => ({ ...saveData, unlockedPlanets: [...saveData.unlockedPlanets] })),
     save: vi.fn(),
     clear: vi.fn(),
     markTutorialShown: vi.fn(),
@@ -67,6 +75,12 @@ function findButtonByText(text: string): HTMLButtonElement | undefined {
   return Array.from(document.querySelectorAll('button')).find(
     (button) => button.textContent === text,
   ) as HTMLButtonElement | undefined;
+}
+
+function findCompanionParade(scene: TitleScene): THREE.Group | undefined {
+  return scene.getThreeScene().children.find(
+    (child) => child instanceof THREE.Group && child.name === 'title-companion-parade',
+  ) as THREE.Group | undefined;
 }
 
 describe('TitleScene (T009)', () => {
@@ -462,6 +476,60 @@ describe('TitleScene (T009)', () => {
     const threeScene = scene.getThreeScene();
     const points = threeScene.children.filter((c) => c instanceof THREE.Points);
     expect(points.length).toBeGreaterThanOrEqual(1);
+
+    scene.exit();
+  });
+
+  it('does not show companion parade when no planets are unlocked', () => {
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager({ unlockedPlanets: [] }),
+      createMockAudioManager(),
+    );
+
+    scene.enter({});
+
+    expect(findCompanionParade(scene)).toBeUndefined();
+
+    scene.exit();
+  });
+
+  it('shows only unlocked companions in the title parade', () => {
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager({ unlockedPlanets: [1, 2, 3] }),
+      createMockAudioManager(),
+    );
+
+    scene.enter({});
+
+    const parade = findCompanionParade(scene);
+    expect(parade).toBeTruthy();
+    expect(parade?.children).toHaveLength(3);
+
+    scene.exit();
+  });
+
+  it('does not duplicate the companion parade across enter/exit cycles', () => {
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager({ unlockedPlanets: [1, 2] }),
+      createMockAudioManager(),
+    );
+
+    scene.enter({});
+    expect(findCompanionParade(scene)?.children).toHaveLength(2);
+
+    scene.exit();
+    expect(findCompanionParade(scene)).toBeUndefined();
+
+    scene.enter({});
+
+    const parades = scene.getThreeScene().children.filter(
+      (child) => child instanceof THREE.Group && child.name === 'title-companion-parade',
+    );
+    expect(parades).toHaveLength(1);
+    expect(findCompanionParade(scene)?.children).toHaveLength(2);
 
     scene.exit();
   });

@@ -9,6 +9,8 @@ import { LoadFailureOverlay } from '../../ui/LoadFailureOverlay';
 import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButton';
 import { TOTAL_STAGES } from '../config/StageConfig';
 import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
+import { getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
+import { CompanionManager } from '../entities/CompanionManager';
 import { formatEncyclopediaLabel } from '../../ui/formatEncyclopediaLabel';
 import { getViewportSize } from '../utils/getViewportSize';
 
@@ -104,6 +106,7 @@ export class TitleScene implements Scene {
   private saveManager: SaveManager;
   private audioManager: AudioManager;
   private stars: THREE.Points | null = null;
+  private companionParade: THREE.Group | null = null;
   private overlay: HTMLDivElement | null = null;
   private muteHandle: MuteButtonHandle | null = null;
   private tutorialOverlay = new TutorialOverlay();
@@ -167,6 +170,9 @@ export class TitleScene implements Scene {
       this.threeScene.add(this.ambientLight);
     }
 
+    const saveData = this.saveManager.load();
+    this.createCompanionParade(saveData.unlockedPlanets);
+
     this.createOverlay();
     this.createMuteButton();
     this.prefetchEncyclopediaOnIdle();
@@ -193,7 +199,6 @@ export class TitleScene implements Scene {
     // overlay's pointerdown for AudioContext init ({once: true}) is attached
     // by createOverlay() above, so the close-tap on the tutorial does not
     // consume it (the tutorial overlay is a separate DOM subtree).
-    const saveData = this.saveManager.load();
     if (!saveData.tutorialShown) {
       this.tutorialOverlay.show(() => {
         this.ensureTitleAudioInitialized(true);
@@ -473,10 +478,64 @@ export class TitleScene implements Scene {
     );
   }
 
+  private createCompanionParade(unlockedPlanets: number[]): void {
+    this.clearCompanionParade();
+
+    const unlockedEntries = [...new Set(unlockedPlanets)].reduce<Array<NonNullable<ReturnType<typeof getPlanetEncyclopediaEntry>>>>(
+      (entries, stageNumber) => {
+        const entry = getPlanetEncyclopediaEntry(stageNumber);
+        if (entry) {
+          entries.push(entry);
+        }
+        return entries;
+      },
+      [],
+    );
+
+    if (unlockedEntries.length === 0) {
+      return;
+    }
+
+    const group = new THREE.Group();
+    group.name = 'title-companion-parade';
+    group.position.set(0, 1.35, -1.2);
+    group.rotation.x = -0.12;
+
+    const radius = Math.min(2.1, 1.1 + unlockedEntries.length * 0.18);
+    const verticalAmplitude = Math.min(0.45, 0.18 + unlockedEntries.length * 0.02);
+
+    unlockedEntries.forEach((entry, index) => {
+      const mesh = CompanionManager.createCompanionMesh(entry);
+      const angle = (index / unlockedEntries.length) * Math.PI * 2;
+      mesh.position.set(
+        Math.cos(angle) * radius,
+        Math.sin(angle) * verticalAmplitude,
+        Math.sin(angle) * radius * 0.45,
+      );
+      mesh.rotation.y = Math.PI * 0.15 - angle;
+      mesh.scale.setScalar(0.6);
+      group.add(mesh);
+    });
+
+    this.companionParade = group;
+    this.threeScene.add(group);
+  }
+
+  private clearCompanionParade(): void {
+    if (!this.companionParade) {
+      return;
+    }
+    this.companionParade.parent?.remove(this.companionParade);
+    this.companionParade = null;
+  }
+
   update(deltaTime: number): void {
     // Rotate starfield slowly
     if (this.stars) {
       this.stars.rotation.y += deltaTime * 0.05;
+    }
+    if (this.companionParade) {
+      this.companionParade.rotation.y += deltaTime * 0.35;
     }
   }
 
@@ -499,6 +558,7 @@ export class TitleScene implements Scene {
       this.stars.parent?.remove(this.stars);
       this.stars = null;
     }
+    this.clearCompanionParade();
     if (this.overlay) {
       this.overlay.remove();
       this.overlay = null;
