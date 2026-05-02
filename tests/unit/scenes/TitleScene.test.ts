@@ -520,10 +520,11 @@ describe('TitleScene (T009)', () => {
   });
 
   it('shows a dedicated all-clear message after every stage is unlocked', () => {
+    const sceneManager = createMockSceneManager();
     const scene = new TitleScene(
-      createMockSceneManager(),
+      sceneManager,
       createMockSaveManager({
-        clearedStage: TOTAL_STAGES,
+        clearedStage: 0,
         unlockedPlanets: Array.from({ length: TOTAL_STAGES }, (_, index) => index + 1),
       }),
       createMockAudioManager(true),
@@ -532,11 +533,26 @@ describe('TitleScene (T009)', () => {
     scene.enter({});
 
     const card = findNextAdventureCard();
-    expect(card?.getAttribute('data-next-stage-number')).toBe(String(TOTAL_STAGES));
-    expect(card?.getAttribute('data-next-stage-destination')).toBe('地球');
+    expect(card?.getAttribute('data-next-stage-number')).toBe('1');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('月');
     expect(card?.textContent).toContain('ぜんぶ クリア');
-    expect(card?.textContent).toContain('🌍');
-    expect(document.querySelector('[data-play-button-hint]')?.textContent).toContain('もういちど');
+    expect(card?.textContent).toContain('🌙');
+    expect(document.querySelector('[data-play-button-hint]')?.textContent).toContain('ステージ 1');
+    expect(document.querySelector('[data-play-button-hint]')?.textContent).toContain('さいしょから');
+
+    const playButton = findButtonByText('あそぶ');
+    expect(playButton).toBeTruthy();
+
+    playButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith(
+      'stage',
+      expect.objectContaining({
+        stageNumber: 1,
+        totalScore: 0,
+        totalStarCount: 0,
+      }),
+    );
 
     scene.exit();
   });

@@ -4,6 +4,7 @@ import { SceneManager } from '../../src/game/SceneManager';
 import type { Scene, SceneContext, SceneType } from '../../src/types';
 import * as THREE from 'three';
 import { StageScene } from '../../src/game/scenes/StageScene';
+import { EndingScene } from '../../src/game/scenes/EndingScene';
 import { TitleScene } from '../../src/game/scenes/TitleScene';
 import { TOTAL_STAGES } from '../../src/game/config/StageConfig';
 import { getStageConfig } from '../../src/game/config/StageConfig';
@@ -11,6 +12,7 @@ import { InputSystem as RuntimeInputSystem } from '../../src/game/systems/InputS
 import type { InputSystem } from '../../src/game/systems/InputSystem';
 import type { AudioManager } from '../../src/game/audio/AudioManager';
 import type { SaveManager } from '../../src/game/storage/SaveManager';
+import type { SaveData } from '../../src/types';
 import { LoadingOverlay } from '../../src/ui/LoadingOverlay';
 import { LoadFailureOverlay } from '../../src/ui/LoadFailureOverlay';
 import { createSceneTransitionHandler } from '../../src/game/utils/createSceneTransitionHandler';
@@ -198,6 +200,82 @@ describe('Stage Flow Integration', () => {
     expect(getStageConfig(log.at(-1)?.context.stageNumber ?? 0).destination).toBe(
       card?.getAttribute('data-next-stage-destination'),
     );
+  });
+
+  it('keeps the all-clear title preview after ending resets clearedStage to 0', async () => {
+    const manager = new SceneManager();
+    const saveState = {
+      clearedStage: TOTAL_STAGES,
+      unlockedPlanets: Array.from({ length: TOTAL_STAGES }, (_, index) => index + 1),
+      muted: false,
+      tutorialShown: true,
+      bestStageStars: {} as Record<number, number>,
+    };
+    const saveManager = {
+      load: vi.fn(() => ({
+        ...saveState,
+        unlockedPlanets: [...saveState.unlockedPlanets],
+        bestStageStars: { ...saveState.bestStageStars },
+      })),
+      save: vi.fn((nextData: SaveData) => {
+        saveState.clearedStage = nextData.clearedStage;
+        saveState.unlockedPlanets = [...nextData.unlockedPlanets];
+        saveState.muted = nextData.muted ?? false;
+        saveState.tutorialShown = nextData.tutorialShown ?? false;
+        saveState.bestStageStars = { ...(nextData.bestStageStars ?? {}) };
+      }),
+      clear: vi.fn(),
+      markTutorialShown: vi.fn(() => {
+        saveState.tutorialShown = true;
+      }),
+    } as unknown as SaveManager;
+    const audioManager = {
+      initSync: vi.fn(),
+      isInitialized: vi.fn(() => true),
+      playBGM: vi.fn(),
+      stopBGM: vi.fn(),
+      playSFX: vi.fn(),
+      stopBoostSFX: vi.fn(),
+      startBoostSFX: vi.fn(),
+      isMuted: vi.fn(() => false),
+      toggleMute: vi.fn(() => false),
+      setMuted: vi.fn(),
+      ensureResumed: vi.fn(),
+      dispose: vi.fn(),
+    } as unknown as AudioManager;
+
+    manager.registerScene(
+      'title',
+      new TitleScene(manager, saveManager, audioManager, {
+        scheduleIdleTask: () => {},
+        loadTitleCompanionFactory: async () => ({
+          createCompanionMesh: () => new THREE.Group(),
+        }),
+      }),
+    );
+    manager.registerScene('ending', new EndingScene(manager, saveManager, audioManager));
+
+    await manager.transitionTo('ending', { totalScore: 9000, totalStarCount: 72 });
+
+    expect(saveState.clearedStage).toBe(0);
+
+    const backButton = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent === 'タイトルに もどる',
+    ) as HTMLButtonElement | undefined;
+    expect(backButton).toBeTruthy();
+
+    backButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+
+    expect(manager.getCurrentType()).toBe('title');
+
+    const card = document.querySelector('[data-next-adventure-card]') as HTMLDivElement | null;
+    const hint = document.querySelector('[data-play-button-hint]') as HTMLDivElement | null;
+    expect(card?.getAttribute('data-next-stage-number')).toBe('1');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('月');
+    expect(card?.textContent).toContain('ぜんぶ クリア');
+    expect(hint?.textContent).toContain('ステージ 1');
+    expect(hint?.textContent).toContain('さいしょから');
   });
 
   it('keeps StageScene uncreated during title while module prefetch is in flight, then transitions successfully', async () => {

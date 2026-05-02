@@ -116,12 +116,14 @@ function getUnlockedStageCount(unlockedPlanets: number[]): number {
   ).size;
 }
 
+function isAllStagesUnlocked(unlockedPlanets: number[]): boolean {
+  return getUnlockedStageCount(unlockedPlanets) >= TOTAL_STAGES;
+}
+
 function getNextAdventurePreview(saveData: SaveData): NextAdventurePreview {
-  const startStage = Math.min(saveData.clearedStage + 1, TOTAL_STAGES);
+  const isAllClear = isAllStagesUnlocked(saveData.unlockedPlanets);
+  const startStage = isAllClear ? 1 : Math.min(saveData.clearedStage + 1, TOTAL_STAGES);
   const stageConfig = getStageConfig(startStage);
-  const isAllClear =
-    saveData.clearedStage >= TOTAL_STAGES &&
-    getUnlockedStageCount(saveData.unlockedPlanets) >= TOTAL_STAGES;
 
   if (isAllClear) {
     return {
@@ -129,8 +131,8 @@ function getNextAdventurePreview(saveData: SaveData): NextAdventurePreview {
       destination: stageConfig.destination,
       emoji: stageConfig.emoji,
       statusLabel: 'ぜんぶ クリア！',
-      destinationLabel: `${stageConfig.destination}へ もういちど しゅっぱつ！`,
-      buttonHint: `${stageConfig.emoji} ステージ ${startStage} へ もういちど`,
+      destinationLabel: `${stageConfig.destination}へ さいしょから しゅっぱつ！`,
+      buttonHint: `${stageConfig.emoji} ステージ ${startStage} から さいしょから あそぶ`,
     };
   }
 
