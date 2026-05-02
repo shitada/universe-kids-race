@@ -77,6 +77,14 @@ function findButtonByText(text: string): HTMLButtonElement | undefined {
   ) as HTMLButtonElement | undefined;
 }
 
+function findNextAdventureCard(): HTMLDivElement | null {
+  return document.querySelector('[data-next-adventure-card]') as HTMLDivElement | null;
+}
+
+function findPlayHint(): HTMLDivElement | null {
+  return document.querySelector('[data-play-hint]') as HTMLDivElement | null;
+}
+
 function findCompanionParade(scene: TitleScene): THREE.Group | undefined {
   return scene.getThreeScene().children.find(
     (child) => child instanceof THREE.Group && child.name === 'title-companion-parade',
@@ -194,6 +202,68 @@ describe('TitleScene (T009)', () => {
         totalStarCount: 0,
       }),
     );
+
+    scene.exit();
+  });
+
+  it('shows a stage 1 next-adventure preview for a fresh save', () => {
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager({ clearedStage: 0 }),
+      createMockAudioManager(true),
+    );
+
+    scene.enter({});
+
+    const nextAdventureCard = findNextAdventureCard();
+    const playHint = findPlayHint();
+
+    expect(nextAdventureCard).toBeTruthy();
+    expect(nextAdventureCard?.dataset.stageNumber).toBe('1');
+    expect(nextAdventureCard?.textContent).toContain('つぎの ぼうけん');
+    expect(nextAdventureCard?.textContent).toContain('ステージ 1');
+    expect(nextAdventureCard?.textContent).toContain('月をめざせ！');
+    expect(playHint?.textContent).toBe('ステージ 1 ・ 月へ はじめての しゅっぱつ！');
+
+    scene.exit();
+  });
+
+  it('shows a stage 5 continue preview when clearedStage is 4', () => {
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager({ clearedStage: 4 }),
+      createMockAudioManager(true),
+    );
+
+    scene.enter({});
+
+    const nextAdventureCard = findNextAdventureCard();
+    const playHint = findPlayHint();
+
+    expect(nextAdventureCard?.dataset.stageNumber).toBe('5');
+    expect(nextAdventureCard?.textContent).toContain('ステージ 5');
+    expect(nextAdventureCard?.textContent).toContain('木星をめざせ！');
+    expect(playHint?.textContent).toBe('ステージ 5 ・ 木星へ つづきから！');
+
+    scene.exit();
+  });
+
+  it('shows a dedicated all-clear message while previewing the last stage', () => {
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager({ clearedStage: 11 }),
+      createMockAudioManager(true),
+    );
+
+    scene.enter({});
+
+    const nextAdventureCard = findNextAdventureCard();
+    const playHint = findPlayHint();
+
+    expect(nextAdventureCard?.dataset.stageNumber).toBe('11');
+    expect(nextAdventureCard?.textContent).toContain('ステージ 11');
+    expect(nextAdventureCard?.textContent).toContain('地球をめざせ！');
+    expect(playHint?.textContent).toBe('ぜんぶ クリア！ ステージ 11 ・ 地球へ もういちど！');
 
     scene.exit();
   });

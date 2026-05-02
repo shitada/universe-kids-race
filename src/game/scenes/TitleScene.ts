@@ -7,7 +7,7 @@ import { TutorialOverlay } from '../../ui/TutorialOverlay';
 import { LoadingOverlay } from '../../ui/LoadingOverlay';
 import { LoadFailureOverlay } from '../../ui/LoadFailureOverlay';
 import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButton';
-import { TOTAL_STAGES } from '../config/StageConfig';
+import { getStageConfig, TOTAL_STAGES } from '../config/StageConfig';
 import { PLANET_ENCYCLOPEDIA, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { formatEncyclopediaLabel } from '../../ui/formatEncyclopediaLabel';
 import { getViewportSize } from '../utils/getViewportSize';
@@ -358,6 +358,15 @@ export class TitleScene implements Scene {
     const uiOverlay = document.getElementById('ui-overlay');
     if (!uiOverlay) return;
 
+    const initialSaveData = this.saveManager.load();
+    const startStage = Math.min(initialSaveData.clearedStage + 1, TOTAL_STAGES);
+    const startStageConfig = getStageConfig(startStage);
+    const playHintText = initialSaveData.clearedStage >= TOTAL_STAGES
+      ? `ぜんぶ クリア！ ステージ ${startStage} ・ ${startStageConfig.destination}へ もういちど！`
+      : initialSaveData.clearedStage === 0
+        ? `ステージ ${startStage} ・ ${startStageConfig.destination}へ はじめての しゅっぱつ！`
+        : `ステージ ${startStage} ・ ${startStageConfig.destination}へ つづきから！`;
+
     this.overlay = document.createElement('div');
     this.overlay.style.cssText = `
       display: flex;
@@ -379,6 +388,53 @@ export class TitleScene implements Scene {
       text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
       margin-bottom: 2rem;
     `;
+
+    const nextAdventureCard = document.createElement('div');
+    nextAdventureCard.dataset.nextAdventureCard = 'true';
+    nextAdventureCard.dataset.stageNumber = String(startStage);
+    nextAdventureCard.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.35rem;
+      min-width: min(88vw, 22rem);
+      margin-bottom: 1rem;
+      padding: 1rem 1.5rem;
+      border-radius: 1.5rem;
+      background: rgba(10, 25, 70, 0.78);
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+      color: #fff;
+    `;
+
+    const nextAdventureLabel = document.createElement('div');
+    nextAdventureLabel.textContent = 'つぎの ぼうけん';
+    nextAdventureLabel.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #FFE66D;
+    `;
+
+    const nextAdventureStage = document.createElement('div');
+    nextAdventureStage.textContent = `ステージ ${startStage}`;
+    nextAdventureStage.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: 1.4rem;
+      font-weight: 900;
+    `;
+
+    const nextAdventureDestination = document.createElement('div');
+    nextAdventureDestination.textContent = `${startStageConfig.emoji} ${startStageConfig.displayName}`;
+    nextAdventureDestination.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+    `;
+
+    nextAdventureCard.appendChild(nextAdventureLabel);
+    nextAdventureCard.appendChild(nextAdventureStage);
+    nextAdventureCard.appendChild(nextAdventureDestination);
 
     const button = document.createElement('button');
     button.textContent = 'あそぶ';
@@ -403,14 +459,24 @@ export class TitleScene implements Scene {
       // playBGM(stageNumber) を呼び、内部の stopBGM() でタイトル BGM を即停止
       // するため、タイトル BGM は実質的に再生されない無駄な処理になっていた。
       this.ensureTitleAudioInitialized(false);
-      const saveData = this.saveManager.load();
-      const startStage = Math.min(saveData.clearedStage + 1, TOTAL_STAGES);
       this.sceneManager.requestTransition('stage', {
         stageNumber: startStage,
         totalScore: 0,
         totalStarCount: 0,
       });
     });
+
+    const playHint = document.createElement('div');
+    playHint.dataset.playHint = 'true';
+    playHint.textContent = playHintText;
+    playHint.style.cssText = `
+      margin-top: 0.75rem;
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.92);
+      text-align: center;
+    `;
 
     // Tutorial button
     const tutorialBtn = document.createElement('button');
@@ -441,7 +507,6 @@ export class TitleScene implements Scene {
 
     // Encyclopedia button
     const encyclopediaBtn = document.createElement('button');
-    const initialSaveData = this.saveManager.load();
     encyclopediaBtn.textContent = formatEncyclopediaLabel(
       initialSaveData.unlockedPlanets.length,
       PLANET_ENCYCLOPEDIA.length,
@@ -470,7 +535,9 @@ export class TitleScene implements Scene {
     });
 
     this.overlay.appendChild(title);
+    this.overlay.appendChild(nextAdventureCard);
     this.overlay.appendChild(button);
+    this.overlay.appendChild(playHint);
     this.overlay.appendChild(tutorialBtn);
     this.overlay.appendChild(encyclopediaBtn);
     uiOverlay.appendChild(this.overlay);
