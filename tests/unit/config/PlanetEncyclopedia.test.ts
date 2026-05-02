@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PLANET_ENCYCLOPEDIA } from '../../../src/game/config/PlanetEncyclopedia';
+import { getPlanetEncyclopediaEntry, PLANET_ENCYCLOPEDIA } from '../../../src/game/config/PlanetEncyclopedia';
 
 describe('PlanetEncyclopedia', () => {
   it('has exactly 11 entries', () => {
@@ -43,5 +43,10 @@ describe('PlanetEncyclopedia', () => {
     for (const entry of PLANET_ENCYCLOPEDIA) {
       expect(typeof entry.planetColor).toBe('number');
     }
+  });
+
+  it('can look up an entry by stage number', () => {
+    expect(getPlanetEncyclopediaEntry(2)?.name).toBe('水星');
+    expect(getPlanetEncyclopediaEntry(99)).toBeUndefined();
   });
 });

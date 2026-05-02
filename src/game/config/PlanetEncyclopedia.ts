@@ -90,3 +90,11 @@ export const PLANET_ENCYCLOPEDIA: PlanetEncyclopediaEntry[] = [
     companionShape: 'basic',
   },
 ];
+
+const PLANET_ENCYCLOPEDIA_BY_STAGE = new Map(
+  PLANET_ENCYCLOPEDIA.map((entry) => [entry.stageNumber, entry] as const),
+);
+
+export function getPlanetEncyclopediaEntry(stageNumber: number): PlanetEncyclopediaEntry | undefined {
+  return PLANET_ENCYCLOPEDIA_BY_STAGE.get(stageNumber);
+}

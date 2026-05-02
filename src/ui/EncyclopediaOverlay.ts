@@ -1,5 +1,11 @@
 import type { PlanetEncyclopediaEntry } from '../types';
-import { PLANET_ENCYCLOPEDIA } from '../game/config/PlanetEncyclopedia';
+import { getPlanetEncyclopediaEntry, PLANET_ENCYCLOPEDIA } from '../game/config/PlanetEncyclopedia';
+
+interface DetailOverlayOptions {
+  bestStageStars?: Record<number, number>;
+  backLabel?: string;
+  zIndex?: number;
+}
 
 export class EncyclopediaOverlay {
   private overlayEl: HTMLDivElement | null = null;
@@ -7,6 +13,7 @@ export class EncyclopediaOverlay {
   private isShowingDetail = false;
   private onSelectStage: ((stageNumber: number) => void) | null = null;
   private bestStageStars: Record<number, number> = {};
+  private detailBackLabel = 'もどる';
 
   show(
     unlockedPlanets: number[],
@@ -17,23 +24,14 @@ export class EncyclopediaOverlay {
     if (this.overlayEl) return;
     this.onSelectStage = onSelectStage ?? null;
     this.bestStageStars = bestStageStars ?? {};
+    this.detailBackLabel = 'もどる';
 
     const uiOverlay = document.getElementById('ui-overlay');
     if (!uiOverlay) return;
 
     this.overlayEl = document.createElement('div');
-    this.overlayEl.style.cssText = `
-      position: absolute;
-      inset: 0;
-      background: rgba(0, 0, 32, 0.95);
-      pointer-events: auto;
-      z-index: 30;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-    `;
-
+    this.applyOverlayStyle(this.overlayEl, 30);
+ 
     // Title
     const title = document.createElement('div');
     title.textContent = 'わくせいずかん';
@@ -92,6 +90,40 @@ export class EncyclopediaOverlay {
     uiOverlay.appendChild(this.overlayEl);
   }
 
+  showStageDetail(stageNumber: number, onClose: () => void, options: DetailOverlayOptions = {}): boolean {
+    if (this.overlayEl) return false;
+    const entry = getPlanetEncyclopediaEntry(stageNumber);
+    if (!entry) return false;
+
+    this.onSelectStage = null;
+    this.bestStageStars = options.bestStageStars ?? {};
+    this.detailBackLabel = options.backLabel ?? 'もどる';
+
+    const uiOverlay = document.getElementById('ui-overlay');
+    if (!uiOverlay) return false;
+
+    this.overlayEl = document.createElement('div');
+    this.overlayEl.setAttribute('data-encyclopedia-detail-overlay', '');
+    this.applyOverlayStyle(this.overlayEl, options.zIndex ?? 30);
+    uiOverlay.appendChild(this.overlayEl);
+    this.showDetail(entry, onClose);
+    return true;
+  }
+
+  private applyOverlayStyle(element: HTMLDivElement, zIndex: number): void {
+    element.style.cssText = `
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 32, 0.95);
+      pointer-events: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    `;
+    element.style.zIndex = String(zIndex);
+  }
+
   hide(): void {
     if (this.detailEl) {
       this.detailEl.remove();
@@ -104,6 +136,7 @@ export class EncyclopediaOverlay {
     this.isShowingDetail = false;
     this.onSelectStage = null;
     this.bestStageStars = {};
+    this.detailBackLabel = 'もどる';
   }
 
   private createCard(entry: PlanetEncyclopediaEntry, isUnlocked: boolean): HTMLDivElement {
@@ -189,7 +222,7 @@ export class EncyclopediaOverlay {
     return card;
   }
 
-  private showDetail(entry: PlanetEncyclopediaEntry): void {
+  private showDetail(entry: PlanetEncyclopediaEntry, onBack?: () => void): void {
     if (this.isShowingDetail) return;
     if (!this.overlayEl) return;
     this.isShowingDetail = true;
@@ -297,7 +330,7 @@ export class EncyclopediaOverlay {
     // Back button
     const backBtn = document.createElement('button');
     backBtn.setAttribute('data-detail-back', '');
-    backBtn.textContent = 'もどる';
+    backBtn.textContent = this.detailBackLabel;
     backBtn.style.cssText = `
       margin-top: 1.5rem;
       font-family: 'Zen Maru Gothic', sans-serif;
@@ -313,6 +346,11 @@ export class EncyclopediaOverlay {
     `;
     backBtn.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
+      if (onBack) {
+        this.hide();
+        onBack();
+        return;
+      }
       this.hideDetail();
     });
     this.detailEl.appendChild(backBtn);
