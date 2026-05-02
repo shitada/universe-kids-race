@@ -44,6 +44,13 @@ export class InputSystem {
   private onPointerDown = (e: PointerEvent): void => {
     e.preventDefault();
     if (!this.canvas) return;
+    // Capture the pointer so that pointerup always fires on the canvas even
+    // when a DOM overlay (stage-clear, home-confirm, etc.) appears on top
+    // while the finger is still down. Without this, the pointerup fires on
+    // the overlay and this.activePointers retains a ghost entry that causes
+    // permanent directional drift. Guarded because jsdom (tests) does not
+    // implement setPointerCapture.
+    this.canvas.setPointerCapture?.(e.pointerId);
     const side = this.sideOf(e.clientX) ?? (e.clientX < this.getCanvasWidth() / 2 ? 'left' : 'right');
     this.activePointers.set(e.pointerId, side);
     this.updateDirection();
@@ -69,6 +76,16 @@ export class InputSystem {
   private onPointerCancel = (e: PointerEvent): void => {
     this.activePointers.delete(e.pointerId);
     this.updateDirection();
+  };
+
+  // Fallback for older WebKit versions where setPointerCapture may be lost
+  // unexpectedly. If capture is lost while the pointer is still tracked,
+  // clean it up so the direction doesn't stay stuck.
+  private onLostPointerCapture = (e: PointerEvent): void => {
+    if (this.activePointers.has(e.pointerId)) {
+      this.activePointers.delete(e.pointerId);
+      this.updateDirection();
+    }
   };
 
   private onKeyDown = (e: KeyboardEvent): void => {
@@ -145,6 +162,7 @@ export class InputSystem {
     canvas.addEventListener('pointerup', this.onPointerUp);
     canvas.addEventListener('pointercancel', this.onPointerCancel);
     canvas.addEventListener('pointerleave', this.onPointerUp);
+    canvas.addEventListener('lostpointercapture', this.onLostPointerCapture);
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onLoseFocus);
@@ -171,6 +189,16 @@ export class InputSystem {
     }
   }
 
+  /**
+   * Clear all active pointer state without touching keyboard state.
+   * Called on stage transitions to prevent ghost pointers from surviving
+   * across stages (e.g. when a DOM overlay intercepts pointerup).
+   */
+  resetPointers(): void {
+    this.activePointers.clear();
+    this.updateDirection();
+  }
+
   dispose(): void {
     if (this.canvas) {
       this.canvas.removeEventListener('pointerdown', this.onPointerDown);
@@ -178,6 +206,7 @@ export class InputSystem {
       this.canvas.removeEventListener('pointerup', this.onPointerUp);
       this.canvas.removeEventListener('pointercancel', this.onPointerCancel);
       this.canvas.removeEventListener('pointerleave', this.onPointerUp);
+      this.canvas.removeEventListener('lostpointercapture', this.onLostPointerCapture);
       this.canvas = null;
       this.canvasWidth = 0;
     }

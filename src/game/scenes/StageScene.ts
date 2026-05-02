@@ -384,6 +384,11 @@ export class StageScene implements Scene {
 
     this.resetStageObjects();
     this.spaceship.reset();
+    // Clear any ghost pointers that may have survived a stage transition.
+    // When a DOM overlay (stage-clear, encyclopedia) appears above the canvas
+    // while the user's finger is still down, pointerup fires on the overlay
+    // and the pointer stays in activePointers, causing permanent drift.
+    this.inputSystem.resetPointers?.();
     this.airShield.reset(0, 0, 0);
     this.boostLinesEffect.update(false, 0, 0);
     this.boostFlameEffect.remove();
