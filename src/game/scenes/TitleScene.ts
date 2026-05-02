@@ -102,6 +102,8 @@ export class TitleScene implements Scene {
   private readonly loadFailureOverlay: Pick<LoadFailureOverlay, 'show' | 'hide'>;
   private encyclopediaBtn: HTMLButtonElement | null = null;
   private isOpeningEncyclopedia = false;
+  private isActive = false;
+  private encyclopediaRequestToken = 0;
   // タイトル滞在中、初回 user gesture（AudioContext 初期化）を待つフラグ。
   // iPad Safari の AudioContext は user gesture 必須のため、enter() 直後の
   // 即時 playBGM(0) は AudioManager が既に初期化済みのとき（再訪問時）のみ
@@ -136,6 +138,8 @@ export class TitleScene implements Scene {
   }
 
   enter(_context: SceneContext): void {
+    this.isActive = true;
+    this.encyclopediaRequestToken += 1;
     this.lastAspect = 0;
 
     // Starfield background (SHARED: 共有 geometry / material は dispose しない)
@@ -223,7 +227,7 @@ export class TitleScene implements Scene {
   }
 
   private showEncyclopedia(): void {
-    if (!this.encyclopediaOverlay) return;
+    if (!this.isActive || !this.encyclopediaOverlay) return;
     const saveData = this.saveManager.load();
     this.encyclopediaOverlay.show(
       saveData.unlockedPlanets,
@@ -240,7 +244,15 @@ export class TitleScene implements Scene {
     );
   }
 
+  private isCurrentEncyclopediaRequest(requestToken: number): boolean {
+    return this.isActive && this.encyclopediaRequestToken === requestToken;
+  }
+
   private async openEncyclopedia(): Promise<void> {
+    if (!this.isActive) {
+      return;
+    }
+
     this.loadFailureOverlay.hide();
     if (this.encyclopediaOverlay) {
       this.showEncyclopedia();
@@ -250,13 +262,20 @@ export class TitleScene implements Scene {
       return;
     }
 
+    const requestToken = this.encyclopediaRequestToken;
     this.isOpeningEncyclopedia = true;
     this.loadingOverlay.show('ずかんを よんでるよ...');
     try {
       await this.getEncyclopediaOverlay();
+      if (!this.isCurrentEncyclopediaRequest(requestToken)) {
+        return;
+      }
       this.loadingOverlay.hide();
       this.showEncyclopedia();
     } catch (error) {
+      if (!this.isCurrentEncyclopediaRequest(requestToken)) {
+        return;
+      }
       this.loadingOverlay.hide();
       console.error('Failed to load encyclopedia overlay', error);
       this.loadFailureOverlay.show({
@@ -268,7 +287,9 @@ export class TitleScene implements Scene {
         },
       });
     } finally {
-      this.isOpeningEncyclopedia = false;
+      if (this.encyclopediaRequestToken === requestToken) {
+        this.isOpeningEncyclopedia = false;
+      }
     }
   }
 
@@ -431,6 +452,9 @@ export class TitleScene implements Scene {
   }
 
   exit(): void {
+    this.isActive = false;
+    this.encyclopediaRequestToken += 1;
+    this.isOpeningEncyclopedia = false;
     this.tutorialOverlay.hide();
     this.encyclopediaOverlay?.hide();
     this.loadingOverlay.hide();
