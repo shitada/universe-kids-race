@@ -244,6 +244,7 @@ describe('Encyclopedia Stage Selection Integration', () => {
         loadingOverlay,
         loadFailureOverlay,
         loadEncyclopediaOverlay,
+        scheduleIdleTask: () => {},
       },
     );
 
