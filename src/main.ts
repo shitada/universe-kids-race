@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { GameLoop } from './game/GameLoop';
 import { SceneManager } from './game/SceneManager';
 import { InputSystem } from './game/systems/InputSystem';
-import { TitleScene } from './game/scenes/TitleScene';
 import type { StageScene } from './game/scenes/StageScene';
 import { SaveManager } from './game/storage/SaveManager';
 import { AudioManager } from './game/audio/AudioManager';
@@ -22,6 +21,7 @@ import { LoadingOverlay } from './ui/LoadingOverlay';
 import { LoadFailureOverlay } from './ui/LoadFailureOverlay';
 import { createOrientationHintHandler } from './game/utils/createOrientationHintHandler';
 import { createRetryableModuleLoader } from './game/utils/createRetryableModuleLoader';
+import type { SceneType } from './types';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 
@@ -133,11 +133,60 @@ let stageScene: StageScene | null = null;
 // first BGM/SFX honours it without an audible blip.
 audioManager.setMuted(saveManager.load().muted === true);
 
-const titleScene = new TitleScene(sceneManager, saveManager, audioManager);
+const loadTitleSceneModule = createRetryableModuleLoader(() => import('./game/scenes/TitleScene'));
 const loadStageSceneModule = createRetryableModuleLoader(() => import('./game/scenes/StageScene'));
 const loadEndingSceneModule = createRetryableModuleLoader(() => import('./game/scenes/EndingScene'));
 
-sceneManager.registerScene('title', titleScene);
+function getLoadingMessage(sceneType: SceneType): string {
+  switch (sceneType) {
+    case 'title':
+      return 'タイトルの じゅんび ちゅう...';
+    case 'ending':
+      return 'さいごの じゅんび ちゅう...';
+    default:
+      return 'たびの じゅんび ちゅう...';
+  }
+}
+
+function getLoadFailureTitle(sceneType: SceneType): string {
+  switch (sceneType) {
+    case 'title':
+      return 'タイトルの じゅんびが できなかったよ';
+    case 'ending':
+      return 'さいごの じゅんびが できなかったよ';
+    default:
+      return 'たびの じゅんびが できなかったよ';
+  }
+}
+
+let hasScheduledStagePrefetch = false;
+
+const schedulePrefetch = (cb: () => void): void => {
+  const requestIdle = (window as Window & {
+    requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+  }).requestIdleCallback;
+  if (typeof requestIdle === 'function') {
+    requestIdle(cb, { timeout: 1500 });
+    return;
+  }
+  window.setTimeout(cb, 800);
+};
+
+function scheduleStagePrefetchAfterTitleReady(): void {
+  if (hasScheduledStagePrefetch || sceneManager.getCurrentType() !== 'title') {
+    return;
+  }
+
+  hasScheduledStagePrefetch = true;
+  schedulePrefetch(() => {
+    void sceneManager.prefetchSceneModule('stage').catch(() => {});
+  });
+}
+
+sceneManager.registerSceneFactory('title', async () => {
+  const { TitleScene } = await loadTitleSceneModule();
+  return new TitleScene(sceneManager, saveManager, audioManager);
+});
 sceneManager.registerSceneModulePrefetch('stage', loadStageSceneModule);
 sceneManager.registerSceneModulePrefetch('ending', loadEndingSceneModule);
 sceneManager.registerSceneFactory('stage', async () => {
@@ -152,11 +201,7 @@ sceneManager.registerSceneFactory('ending', async () => {
 });
 sceneManager.setLoadStateHandler((isLoading, sceneType) => {
   if (isLoading) {
-    loadingOverlay.show(
-      sceneType === 'ending'
-        ? 'さいごの じゅんび ちゅう...'
-        : 'たびの じゅんび ちゅう...',
-    );
+    loadingOverlay.show(getLoadingMessage(sceneType));
     return;
   }
   loadingOverlay.hide();
@@ -165,24 +210,28 @@ sceneManager.setTransitionErrorHandler((error, sceneType, context) => {
   console.error(`Failed to transition to ${sceneType}`, error);
   loadingOverlay.hide();
 
-  if (sceneType !== 'stage' && sceneType !== 'ending') {
+  if (sceneType !== 'title' && sceneType !== 'stage' && sceneType !== 'ending') {
     return;
   }
 
   loadFailureOverlay.show({
-    title:
-      sceneType === 'ending'
-        ? 'さいごの じゅんびが できなかったよ'
-        : 'たびの じゅんびが できなかったよ',
+    title: getLoadFailureTitle(sceneType),
     message: 'ボタンを おして もういちど ためそう！',
     primaryAction: {
       label: 'もういちど',
-      onSelect: () => sceneManager.requestTransition(sceneType, context),
+      onSelect: () => sceneManager.requestTransition(sceneType, context).then(() => {
+        if (sceneType === 'title') {
+          scheduleStagePrefetchAfterTitleReady();
+        }
+      }),
     },
-    secondaryAction: {
-      label: 'タイトルへ',
-      onSelect: () => sceneManager.requestTransition('title'),
-    },
+    secondaryAction:
+      sceneType === 'title'
+        ? undefined
+        : {
+            label: 'タイトルへ',
+            onSelect: () => sceneManager.requestTransition('title'),
+          },
   });
 });
 
@@ -195,20 +244,8 @@ sceneManager.setTransitionHandler(
 );
 
 // Start from title
-void sceneManager.transitionTo('title');
-
-const schedulePrefetch = (cb: () => void): void => {
-  const requestIdle = (window as Window & {
-    requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
-  }).requestIdleCallback;
-  if (typeof requestIdle === 'function') {
-    requestIdle(cb, { timeout: 1500 });
-    return;
-  }
-  window.setTimeout(cb, 800);
-};
-schedulePrefetch(() => {
-  void sceneManager.prefetchSceneModule('stage').catch(() => {});
+void sceneManager.requestTransition('title').then(() => {
+  scheduleStagePrefetchAfterTitleReady();
 });
 
 gameLoop.start(
