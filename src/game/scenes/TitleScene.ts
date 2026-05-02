@@ -5,6 +5,7 @@ import type { SaveManager } from '../storage/SaveManager';
 import type { AudioManager } from '../audio/AudioManager';
 import { TutorialOverlay } from '../../ui/TutorialOverlay';
 import { LoadingOverlay } from '../../ui/LoadingOverlay';
+import { LoadFailureOverlay } from '../../ui/LoadFailureOverlay';
 import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButton';
 import { TOTAL_STAGES } from '../config/StageConfig';
 import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
@@ -76,6 +77,7 @@ type EncyclopediaOverlayInstance = InstanceType<EncyclopediaOverlayCtor>;
 
 interface TitleSceneOptions {
   loadingOverlay?: Pick<LoadingOverlay, 'show' | 'hide'>;
+  loadFailureOverlay?: Pick<LoadFailureOverlay, 'show' | 'hide'>;
   loadEncyclopediaOverlay?: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
 }
 
@@ -97,6 +99,7 @@ export class TitleScene implements Scene {
   private encyclopediaOverlayPromise: Promise<EncyclopediaOverlayInstance> | null = null;
   private readonly loadEncyclopediaOverlay: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
   private readonly loadingOverlay: Pick<LoadingOverlay, 'show' | 'hide'>;
+  private readonly loadFailureOverlay: Pick<LoadFailureOverlay, 'show' | 'hide'>;
   private encyclopediaBtn: HTMLButtonElement | null = null;
   private isOpeningEncyclopedia = false;
   // タイトル滞在中、初回 user gesture（AudioContext 初期化）を待つフラグ。
@@ -116,6 +119,7 @@ export class TitleScene implements Scene {
     this.saveManager = saveManager;
     this.audioManager = audioManager;
     this.loadingOverlay = options.loadingOverlay ?? new LoadingOverlay();
+    this.loadFailureOverlay = options.loadFailureOverlay ?? new LoadFailureOverlay();
     this.loadEncyclopediaOverlay =
       options.loadEncyclopediaOverlay ??
       (() => import('../../ui/EncyclopediaOverlay'));
@@ -237,6 +241,7 @@ export class TitleScene implements Scene {
   }
 
   private async openEncyclopedia(): Promise<void> {
+    this.loadFailureOverlay.hide();
     if (this.encyclopediaOverlay) {
       this.showEncyclopedia();
       return;
@@ -251,8 +256,17 @@ export class TitleScene implements Scene {
       await this.getEncyclopediaOverlay();
       this.loadingOverlay.hide();
       this.showEncyclopedia();
-    } catch {
+    } catch (error) {
       this.loadingOverlay.hide();
+      console.error('Failed to load encyclopedia overlay', error);
+      this.loadFailureOverlay.show({
+        title: 'ずかんの じゅんびが できなかったよ',
+        message: '「もういちど よむ」を おしてね',
+        primaryAction: {
+          label: 'もういちど よむ',
+          onSelect: () => this.openEncyclopedia(),
+        },
+      });
     } finally {
       this.isOpeningEncyclopedia = false;
     }
@@ -420,6 +434,7 @@ export class TitleScene implements Scene {
     this.tutorialOverlay.hide();
     this.encyclopediaOverlay?.hide();
     this.loadingOverlay.hide();
+    this.loadFailureOverlay.hide();
     // タイトル BGM を明示的に停止する。StageScene.enter() 内の playBGM() が
     // stopBGM() を呼ぶため二重実行になるが、stopBGM() は冪等であり
     // bgmGeneration インクリメント・配列クリアともに副作用はない。

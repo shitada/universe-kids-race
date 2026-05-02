@@ -62,6 +62,6 @@ export function createSceneTransitionHandler(deps: SceneTransitionHandlerDeps): 
       pixelRatioController.notifyResume(now());
     }
 
-    sceneManager.transitionTo(sceneType, context);
+    return sceneManager.transitionTo(sceneType, context);
   };
 }

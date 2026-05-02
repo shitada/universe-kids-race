@@ -18,6 +18,9 @@ export class SceneManager {
   private onTransitionRequest:
     | ((sceneType: SceneType, context?: SceneContext) => void | Promise<void>)
     | null = null;
+  private onTransitionError:
+    | ((error: unknown, sceneType: SceneType, context: SceneContext) => void | Promise<void>)
+    | null = null;
   private onLoadStateChange: ((isLoading: boolean, sceneType: SceneType) => void) | null = null;
   private inFlightTransition:
     | {
@@ -47,12 +50,20 @@ export class SceneManager {
     this.onLoadStateChange = handler;
   }
 
-  requestTransition(sceneType: SceneType, context?: SceneContext): void {
-    if (this.onTransitionRequest) {
-      void this.onTransitionRequest(sceneType, context);
-    } else {
-      void this.transitionTo(sceneType, context);
-    }
+  setTransitionErrorHandler(
+    handler: (error: unknown, sceneType: SceneType, context: SceneContext) => void | Promise<void>,
+  ): void {
+    this.onTransitionError = handler;
+  }
+
+  requestTransition(sceneType: SceneType, context: SceneContext = {}): Promise<void> {
+    const transitionPromise = this.onTransitionRequest
+      ? Promise.resolve(this.onTransitionRequest(sceneType, context))
+      : this.transitionTo(sceneType, context);
+
+    return transitionPromise.catch((error: unknown) => {
+      return Promise.resolve(this.onTransitionError?.(error, sceneType, context)).then(() => undefined);
+    });
   }
 
   prefetchScene(sceneType: SceneType): Promise<void> {

@@ -19,6 +19,7 @@ import { ContextLossOverlay } from './ui/ContextLossOverlay';
 import { ResumeOverlay } from './ui/ResumeOverlay';
 import { OrientationHintOverlay } from './ui/OrientationHintOverlay';
 import { LoadingOverlay } from './ui/LoadingOverlay';
+import { LoadFailureOverlay } from './ui/LoadFailureOverlay';
 import { createOrientationHintHandler } from './game/utils/createOrientationHintHandler';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
@@ -123,6 +124,7 @@ inputSystem.setup(canvas);
 const gameLoop = new GameLoop();
 const audioManager = new AudioManager();
 const loadingOverlay = new LoadingOverlay();
+const loadFailureOverlay = new LoadFailureOverlay();
 let stageScene: StageScene | null = null;
 
 // Restore persisted mute state before any audio is initialised so the very
@@ -165,6 +167,30 @@ sceneManager.setLoadStateHandler((isLoading, sceneType) => {
     return;
   }
   loadingOverlay.hide();
+});
+sceneManager.setTransitionErrorHandler((error, sceneType, context) => {
+  console.error(`Failed to transition to ${sceneType}`, error);
+  loadingOverlay.hide();
+
+  if (sceneType !== 'stage' && sceneType !== 'ending') {
+    return;
+  }
+
+  loadFailureOverlay.show({
+    title:
+      sceneType === 'ending'
+        ? 'さいごの じゅんびが できなかったよ'
+        : 'たびの じゅんびが できなかったよ',
+    message: 'ボタンを おして もういちど ためそう！',
+    primaryAction: {
+      label: 'もういちど',
+      onSelect: () => sceneManager.requestTransition(sceneType, context),
+    },
+    secondaryAction: {
+      label: 'タイトルへ',
+      onSelect: () => sceneManager.requestTransition('title'),
+    },
+  });
 });
 
 sceneManager.setTransitionHandler(

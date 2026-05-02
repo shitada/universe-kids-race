@@ -319,4 +319,34 @@ describe('SceneManager', () => {
       [false, 'stage'],
     ]);
   });
+
+  it('notifies transition errors and clears loading state when a lazy transition fails', async () => {
+    const manager = new SceneManager();
+    const titleScene = createMockScene();
+    const error = new Error('stage load failed');
+    const loadStateHandler = vi.fn();
+    const transitionErrorHandler = vi.fn();
+
+    manager.registerScene('title', titleScene);
+    manager.registerSceneFactory('stage', async () => {
+      throw error;
+    });
+    manager.setLoadStateHandler(loadStateHandler);
+    manager.setTransitionErrorHandler(transitionErrorHandler);
+
+    await manager.transitionTo('title');
+    await manager.requestTransition('stage', { stageNumber: 1, totalScore: 0, totalStarCount: 0 });
+
+    expect(loadStateHandler.mock.calls).toEqual([
+      [true, 'stage'],
+      [false, 'stage'],
+    ]);
+    expect(transitionErrorHandler).toHaveBeenCalledWith(
+      error,
+      'stage',
+      { stageNumber: 1, totalScore: 0, totalStarCount: 0 },
+    );
+    expect(manager.getCurrentType()).toBe('title');
+    expect(titleScene.exit).not.toHaveBeenCalled();
+  });
 });
