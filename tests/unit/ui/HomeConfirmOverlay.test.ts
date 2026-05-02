@@ -144,6 +144,29 @@ describe('HomeConfirmOverlay', () => {
     expect(overlay.isVisible()).toBe(true);
   });
 
+  it('background cancel during press cleans up document listeners before hide', () => {
+    const removeEventListenerSpy = vi.spyOn(document, 'removeEventListener');
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    overlay.show(onConfirm, onCancel);
+    const root = document.querySelector<HTMLDivElement>('[data-home-confirm-overlay]')!;
+    const backBtn = document.querySelector<HTMLButtonElement>('[data-home-confirm-back]')!;
+
+    press(backBtn);
+    const evt = new Event('pointerdown', { bubbles: true });
+    Object.defineProperty(evt, 'target', { value: root, writable: false });
+    root.dispatchEvent(evt);
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(removeEventListenerSpy).toHaveBeenCalledWith('pointerup', expect.any(Function), true);
+    expect(removeEventListenerSpy).toHaveBeenCalledWith(
+      'pointercancel',
+      expect.any(Function),
+      true,
+    );
+    removeEventListenerSpy.mockRestore();
+  });
+
   it('both buttons meet 88x88 minimum tap target', () => {
     overlay.show(() => {}, () => {});
     const backBtn = document.querySelector<HTMLButtonElement>('[data-home-confirm-back]')!;

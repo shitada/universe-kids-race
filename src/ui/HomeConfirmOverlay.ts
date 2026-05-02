@@ -15,6 +15,7 @@
  */
 export class HomeConfirmOverlay {
   private overlayEl: HTMLDivElement | null = null;
+  private activePressCleanups = new Set<() => void>();
 
   show(onConfirm: () => void, onCancel: () => void): void {
     if (this.overlayEl) return;
@@ -126,6 +127,9 @@ export class HomeConfirmOverlay {
     const attachPress = (btn: HTMLButtonElement, onActivate: () => void): void => {
       let pointerActive = false;
       let suppressNextClick = false;
+      const cleanupActivePress = (): void => {
+        clearPointerState(true);
+      };
 
       const press = (): void => {
         btn.style.transform = 'scale(0.9)';
@@ -137,6 +141,7 @@ export class HomeConfirmOverlay {
         pointerActive = false;
         suppressNextClick = suppressClick;
         release();
+        this.activePressCleanups.delete(cleanupActivePress);
         document.removeEventListener('pointerup', handleDocumentPointerUp, true);
         document.removeEventListener('pointercancel', handleDocumentPointerCancel, true);
       };
@@ -158,6 +163,7 @@ export class HomeConfirmOverlay {
         pointerActive = true;
         suppressNextClick = false;
         press();
+        this.activePressCleanups.add(cleanupActivePress);
         document.addEventListener('pointerup', handleDocumentPointerUp, true);
         document.addEventListener('pointercancel', handleDocumentPointerCancel, true);
       });
@@ -226,6 +232,11 @@ export class HomeConfirmOverlay {
 
   hide(): void {
     if (this.overlayEl) {
+      const activePressCleanups = Array.from(this.activePressCleanups);
+      this.activePressCleanups.clear();
+      for (const cleanup of activePressCleanups) {
+        cleanup();
+      }
       this.overlayEl.remove();
       this.overlayEl = null;
     }
