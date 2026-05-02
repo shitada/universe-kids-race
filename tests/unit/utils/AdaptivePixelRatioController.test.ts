@@ -115,6 +115,29 @@ describe('AdaptivePixelRatioController', () => {
     expect(onTierChange).toHaveBeenCalledTimes(1);
   });
 
+  it('notifyResume keeps the current tier and still allows later upscale recovery', () => {
+    const { controller, onTierChange } = makeController(2);
+    let now = 10_000;
+
+    controller.sample(40, now);
+    now += T.downscaleSustainMs;
+    controller.sample(40, now);
+    expect(controller.getCurrentTier()).toBe(1);
+
+    controller.notifyResume(now);
+    expect(controller.getCurrentTier()).toBe(1);
+
+    now += Math.max(T.resumeGraceMs, T.tierChangeCooldownMs) + 1;
+    controller.sample(60, now);
+    now += T.upscaleSustainMs;
+    controller.sample(60, now);
+
+    expect(controller.getCurrentTier()).toBe(2);
+    expect(onTierChange).toHaveBeenCalledTimes(2);
+    expect(onTierChange).toHaveBeenNthCalledWith(1, 1);
+    expect(onTierChange).toHaveBeenNthCalledWith(2, 2);
+  });
+
   it('clamps tier within [0, maxTier]', () => {
     const { controller, onTierChange } = makeController(1);
     let now = T.tierChangeCooldownMs + 1;

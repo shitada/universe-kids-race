@@ -1,7 +1,18 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createSceneTransitionHandler } from '../../../src/game/utils/createSceneTransitionHandler';
 
-function makeDeps(overrides: Partial<Parameters<typeof createSceneTransitionHandler>[0]> = {}) {
+function makeDeps(
+  overrides: Partial<{
+    sceneManager: { transitionTo: ReturnType<typeof vi.fn> };
+    pixelRatioController: {
+      reset: ReturnType<typeof vi.fn>;
+      notifyResume: ReturnType<typeof vi.fn>;
+    };
+    applyPixelRatioTier: ReturnType<typeof vi.fn>;
+    now: () => number;
+    maxTier: number;
+  }> = {},
+) {
   const sceneManager = overrides.sceneManager ?? { transitionTo: vi.fn() };
   const pixelRatioController = overrides.pixelRatioController ?? { reset: vi.fn(), notifyResume: vi.fn() };
   const applyPixelRatioTier = overrides.applyPixelRatioTier ?? vi.fn();
@@ -54,28 +65,22 @@ describe('createSceneTransitionHandler', () => {
     expect(deps.pixelRatioController.notifyResume).toHaveBeenCalledWith(12345);
   });
 
-  it('resets pixel-ratio controller and re-applies max tier on title transition', () => {
-    const deps = makeDeps({ maxTier: 2, now: vi.fn(() => 9999) });
+  it('keeps the current tier on title transition and only notifies resume', () => {
+    const order: string[] = [];
+    const deps = makeDeps({ now: vi.fn(() => 9999) });
+    deps.pixelRatioController.reset.mockImplementation(() => order.push('reset'));
+    deps.applyPixelRatioTier.mockImplementation(() => order.push('apply'));
+    deps.pixelRatioController.notifyResume.mockImplementation(() => order.push('resume'));
+    deps.sceneManager.transitionTo.mockImplementation(() => order.push('transition'));
     const handler = createSceneTransitionHandler(deps);
 
     handler('title');
 
-    const order: string[] = [];
-    // Re-create with order tracking to assert call order between mocks.
-    const orderedDeps = makeDeps({ maxTier: 2, now: () => 9999 });
-    orderedDeps.pixelRatioController.reset.mockImplementation(() => order.push('reset'));
-    orderedDeps.applyPixelRatioTier.mockImplementation(() => order.push('apply'));
-    orderedDeps.pixelRatioController.notifyResume.mockImplementation(() => order.push('resume'));
-    const orderedHandler = createSceneTransitionHandler(orderedDeps);
-    orderedHandler('title');
-
-    expect(deps.pixelRatioController.reset).toHaveBeenCalledTimes(1);
-    expect(deps.applyPixelRatioTier).toHaveBeenCalledWith(2);
+    expect(deps.pixelRatioController.reset).not.toHaveBeenCalled();
+    expect(deps.applyPixelRatioTier).not.toHaveBeenCalled();
     expect(deps.pixelRatioController.notifyResume).toHaveBeenCalledWith(9999);
     expect(deps.sceneManager.transitionTo).toHaveBeenCalledWith('title', undefined);
-
-    // reset -> applyPixelRatioTier -> notifyResume in this order.
-    expect(order).toEqual(['reset', 'apply', 'resume']);
+    expect(order).toEqual(['resume', 'transition']);
   });
 
   it('does not double-call notifyResume on title transition', () => {
