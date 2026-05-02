@@ -77,9 +77,9 @@ function applyPixelRatioTier(tier: number): void {
 const saveManager = new SaveManager();
 
 // Session management: detect Safari swipe termination. Run before reading the
-// persisted pixel-ratio tier so fresh sessions restart from stage 1 and
-// re-show the title tutorial, while still keeping the stable pixel-ratio hint
-// as a per-device performance preference.
+// persisted pixel-ratio tier so fresh sessions restart from stage 1 while
+// keeping child-friendly stable preferences such as mute state, tutorial
+// read-state, and the per-device pixel-ratio hint.
 if (saveManager.isFreshSession()) {
   saveManager.resetSessionDataPreservingMuted();
 }
