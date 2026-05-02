@@ -30,6 +30,7 @@ async function bootMain(
   document.body.innerHTML = '<canvas id="game-canvas"></canvas><div id="hud"></div><div id="ui-overlay"></div>';
 
   const loaderCalls = {
+    boot: 0,
     title: 0,
     stage: 0,
     ending: 0,
@@ -125,10 +126,11 @@ async function bootMain(
     },
   }));
 
-  vi.doMock('../../src/game/utils/createResizeCoalescer', () => ({
+  vi.doMock('../../src/game/utils/ResizeCoalescer', () => ({
     createResizeCoalescer: (cb: (width: number, height: number) => void) => ({
       schedule: (width: number, height: number) => cb(width, height),
       flush: vi.fn(),
+      dispose: vi.fn(),
     }),
   }));
 
@@ -177,7 +179,7 @@ async function bootMain(
 
   vi.doMock('../../src/game/utils/createRetryableModuleLoader', () => ({
     createRetryableModuleLoader: (loadModule: () => Promise<unknown>) => {
-      const sceneType = (['title', 'stage', 'ending'] as const)[loaderIndex++] ?? 'ending';
+      const sceneType = (['boot', 'title', 'stage', 'ending'] as const)[loaderIndex++] ?? 'ending';
       let modulePromise: Promise<unknown> | null = null;
       let attempt = 0;
 
@@ -313,6 +315,47 @@ describe('Main lazy title bootstrap', () => {
     expect(loaderCalls.title).toBe(2);
     expect(document.querySelector('[data-load-failure-overlay]')).toBeNull();
     expect(document.querySelector('[data-next-adventure-card]')).not.toBeNull();
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('shows retry overlay after boot module import failure and recovers on retry', async () => {
+    vi.resetModules();
+    document.body.innerHTML = '';
+
+    const bootstrapGameMock = vi.fn(async () => {});
+    const loadBootstrapModule = vi
+      .fn<() => Promise<{ bootstrapGame: typeof bootstrapGameMock }>>()
+      .mockRejectedValueOnce(new Error('boot chunk failed'))
+      .mockResolvedValueOnce({ bootstrapGame: bootstrapGameMock });
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const mainModule = await import('../../src/main');
+
+    document.body.innerHTML = '<canvas id="game-canvas"></canvas><div id="hud"></div><div id="ui-overlay"></div>';
+    const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
+
+    void mainModule.startMainBootstrap({ canvas, loadBootstrapModule });
+    await flushPromises();
+
+    expect(loadBootstrapModule).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[data-loading-overlay]')).toBeNull();
+    expect(document.querySelector('[data-load-failure-overlay]')?.textContent).toContain(
+      'ゲームの じゅんびが できなかったよ',
+    );
+
+    (document.querySelector('[data-load-failure-primary]') as HTMLButtonElement).dispatchEvent(
+      new Event('pointerdown', { bubbles: true }),
+    );
+    await flushPromises();
+
+    expect(loadBootstrapModule).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('[data-load-failure-overlay]')).toBeNull();
+    expect(bootstrapGameMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        canvas,
+      }),
+    );
 
     consoleErrorSpy.mockRestore();
   });
