@@ -249,15 +249,11 @@ export class StageScene implements Scene {
   private stageNumber = 1;
   private isCleared = false;
   private clearTimer = 0;
-  private clearDelay = 1.5;
   private clearOverlay: HTMLDivElement | null = null;
-  private clearTapHint: HTMLDivElement | null = null;
-  private clearTapListener: ((event: Event) => void) | null = null;
-  private awaitingClearTap = false;
-  private hasRequestedStageComplete = false;
-
-  private static readonly CLEAR_MIN_DISPLAY_TIME = 1.5;
-  private static readonly CLEAR_AUTO_ADVANCE_TIME = 3.5;
+  private clearContinueButton: HTMLButtonElement | null = null;
+  private isClearContinueEnabled = false;
+  private hasHandledClearContinue = false;
+  private static readonly CLEAR_CONTINUE_DELAY = 0.6;
 
   // Damage animation
   private damageTimer = 0;
@@ -341,10 +337,8 @@ export class StageScene implements Scene {
     this.stageConfig = getStageConfig(this.stageNumber);
     this.isCleared = false;
     this.clearTimer = 0;
-    this.awaitingClearTap = false;
-    this.hasRequestedStageComplete = false;
-    this.clearTapHint = null;
-    this.clearTapListener = null;
+    this.isClearContinueEnabled = false;
+    this.hasHandledClearContinue = false;
     this.damageTimer = 0;
     this.elapsedTime = 0;
     this.destinationPlanetSpinTarget = null;
@@ -703,6 +697,9 @@ export class StageScene implements Scene {
       this.clearOverlay.remove();
       this.clearOverlay = null;
     }
+    this.clearContinueButton = null;
+    this.isClearContinueEnabled = false;
+    this.hasHandledClearContinue = false;
     this.removeDestinationPlanet();
     this.particleBurstManager.clear(this.threeScene);
     this.spawnSystem.recycleAll();
@@ -721,13 +718,7 @@ export class StageScene implements Scene {
         this.spaceship.position.y,
         this.spaceship.position.z,
       );
-      if (this.shouldAutoAdvanceStageClear()) {
-        if (this.clearTimer >= StageScene.CLEAR_AUTO_ADVANCE_TIME) {
-          this.handleStageComplete();
-        }
-      } else if (this.clearTimer >= this.clearDelay) {
-        this.enableClearTapAdvance();
-      }
+      this.revealClearContinueButtonIfReady();
       return;
     }
 
@@ -1080,6 +1071,8 @@ export class StageScene implements Scene {
   private onStageClear(): void {
     this.isCleared = true;
     this.clearTimer = 0;
+    this.isClearContinueEnabled = false;
+    this.hasHandledClearContinue = false;
     const isNewPlanetUnlock = this.saveManager.markStageCleared(this.stageNumber);
     this.audioManager.playSFX('stageClear');
     this.audioManager.stopBoostSFX();
@@ -1126,6 +1119,9 @@ export class StageScene implements Scene {
       pointer-events: auto;
       touch-action: manipulation;
       z-index: 40;
+      padding: 1.2rem;
+      box-sizing: border-box;
+      text-align: center;
     `;
 
     const msg = document.createElement('div');
@@ -1200,46 +1196,73 @@ export class StageScene implements Scene {
       }
     }
 
+    const continueButton = document.createElement('button');
+    const continueLabel = this.stageNumber >= TOTAL_STAGES ? 'おいわいへ' : 'つぎへ';
+    continueButton.setAttribute('data-stage-clear-continue', '');
+    continueButton.setAttribute('aria-label', continueLabel);
+    continueButton.textContent = continueLabel;
+    continueButton.disabled = true;
+    continueButton.style.cssText = `
+      margin-top: 1.4rem;
+      min-width: min(78vw, 320px);
+      min-height: 88px;
+      padding: 1rem 1.8rem;
+      border: none;
+      border-radius: 999px;
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: clamp(1.5rem, 5vmin, 2.1rem);
+      font-weight: 900;
+      color: #00163a;
+      background: linear-gradient(135deg, #ffe66d, #ffb347);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      touch-action: manipulation;
+      transform: scale(1);
+      transition: opacity 0.18s ease-out, transform 0.08s ease-out;
+    `;
+
+    const activate = (event: Event): void => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
+      this.hasHandledClearContinue = true;
+      continueButton.disabled = true;
+      continueButton.style.pointerEvents = 'none';
+      continueButton.style.transform = 'scale(1)';
+      this.handleStageComplete();
+    };
+    const release = (): void => {
+      if (this.clearContinueButton) {
+        this.clearContinueButton.style.transform = 'scale(1)';
+      }
+    };
+    continueButton.addEventListener('pointerdown', (event) => {
+      if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
+      continueButton.style.transform = 'scale(0.96)';
+      activate(event);
+    });
+    continueButton.addEventListener('click', activate);
+    continueButton.addEventListener('pointerup', release);
+    continueButton.addEventListener('pointercancel', release);
+    continueButton.addEventListener('pointerleave', release);
+    this.clearContinueButton = continueButton;
+    this.clearOverlay.appendChild(continueButton);
+
     uiOverlay.appendChild(this.clearOverlay);
   }
 
-  private shouldAutoAdvanceStageClear(): boolean {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      return params.get('notap') === '1';
-    } catch {
-      return false;
-    }
-  }
+  private revealClearContinueButtonIfReady(): void {
+    if (this.isClearContinueEnabled) return;
+    if (this.clearTimer < StageScene.CLEAR_CONTINUE_DELAY) return;
+    if (!this.clearContinueButton) return;
 
-  private enableClearTapAdvance(): void {
-    if (this.awaitingClearTap || this.shouldAutoAdvanceStageClear() || !this.clearOverlay) return;
-
-    this.awaitingClearTap = true;
-    this.injectClearTapHintAnimation();
-
-    this.clearTapHint = document.createElement('div');
-    this.clearTapHint.setAttribute('data-stage-clear-hint', '');
-    this.clearTapHint.textContent = 'タップして すすもう！';
-    this.clearTapHint.style.cssText = `
-      font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: clamp(1.2rem, 3vw, 1.6rem);
-      font-weight: 900;
-      color: #ffffff;
-      margin-top: 1.4rem;
-      padding: 0.8rem 1.6rem;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.14);
-      box-shadow: 0 0 20px rgba(255, 255, 255, 0.18);
-      animation: stageClearTapHintPulse 1.2s ease-in-out infinite;
-    `;
-    this.clearOverlay.appendChild(this.clearTapHint);
-
-    this.clearTapListener = (event: Event): void => {
-      event.preventDefault();
-      this.handleStageComplete();
-    };
-    this.clearOverlay.addEventListener('pointerup', this.clearTapListener, { once: true });
+    this.isClearContinueEnabled = true;
+    this.clearContinueButton.disabled = false;
+    this.clearContinueButton.style.opacity = '1';
+    this.clearContinueButton.style.visibility = 'visible';
+    this.clearContinueButton.style.pointerEvents = 'auto';
   }
 
   private injectBestStageStarsAnimation(): void {
@@ -1257,30 +1280,7 @@ export class StageScene implements Scene {
     document.head.appendChild(style);
   }
 
-  private injectClearTapHintAnimation(): void {
-    if (document.getElementById('stage-clear-tap-hint-animation')) return;
-
-    const style = document.createElement('style');
-    style.id = 'stage-clear-tap-hint-animation';
-    style.textContent = `
-      @keyframes stageClearTapHintPulse {
-        0%, 100% { transform: scale(1); opacity: 0.82; }
-        50% { transform: scale(1.05); opacity: 1; }
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
   private handleStageComplete(): void {
-    if (this.hasRequestedStageComplete) return;
-    this.hasRequestedStageComplete = true;
-    if (this.clearOverlay && this.clearTapListener) {
-      this.clearOverlay.removeEventListener('pointerup', this.clearTapListener);
-    }
-    this.clearTapListener = null;
-    this.clearTapHint = null;
-    this.awaitingClearTap = false;
-
     const { totalScore, totalStarCount } = this.scoreSystem.finalizeStage();
 
     if (this.stageNumber >= TOTAL_STAGES) {
@@ -1311,13 +1311,6 @@ export class StageScene implements Scene {
     this.awaitingResume = false;
     this.isHomeConfirmOpen = false;
     this.shouldResumeAfterHomeConfirm = false;
-    this.awaitingClearTap = false;
-    this.hasRequestedStageComplete = false;
-    if (this.clearOverlay && this.clearTapListener) {
-      this.clearOverlay.removeEventListener('pointerup', this.clearTapListener);
-      this.clearTapListener = null;
-    }
-    this.clearTapHint = null;
     this.boostFlameEffect.remove();
     this.boostLinesEffect.update(false, this.spaceship.position.x, this.spaceship.position.z);
     this.airShield.reset(this.spaceship.position.x, this.spaceship.position.y, this.spaceship.position.z);
