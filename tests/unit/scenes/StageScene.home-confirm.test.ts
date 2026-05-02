@@ -9,6 +9,7 @@ import type { SaveManager } from '../../../src/game/storage/SaveManager';
 interface CreatedScene {
   scene: StageScene;
   sceneManager: { requestTransition: ReturnType<typeof vi.fn> };
+  inputState: { moveDirection: -1 | 0 | 1; boostPressed: boolean };
 }
 
 function createScene(): CreatedScene {
@@ -48,6 +49,7 @@ function createScene(): CreatedScene {
       saveManager,
     ),
     sceneManager,
+    inputState,
   };
 }
 
@@ -59,6 +61,10 @@ function finishStartCountdown(scene: StageScene): void {
 function tapHomeButton(): void {
   const homeButton = document.getElementById('hud')!.querySelector('button') as HTMLButtonElement;
   homeButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+}
+
+function getBoostButton(): HTMLButtonElement {
+  return document.querySelector('#ui-overlay button[aria-label="ブースト"]') as HTMLButtonElement;
 }
 
 describe('StageScene home confirm pause', () => {
@@ -128,5 +134,30 @@ describe('StageScene home confirm pause', () => {
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
     expect(sceneManager.requestTransition).toHaveBeenCalledWith('title');
     expect(document.querySelector('[data-home-confirm-overlay]')).toBeNull();
+  });
+
+  it('ホーム確認表示中はブーストボタンが無効で queued boost も破棄される', () => {
+    const { scene, inputState } = createScene();
+    scene.enter({ stageNumber: 1 });
+    finishStartCountdown(scene);
+    inputState.boostPressed = true;
+
+    tapHomeButton();
+
+    const boostButton = getBoostButton();
+    expect(boostButton.getAttribute('aria-disabled')).toBe('true');
+
+    const internal = scene as unknown as { update(dt: number): void };
+    internal.update(0.1);
+    expect(inputState.boostPressed).toBe(false);
+
+    const continueButton = document.querySelector<HTMLButtonElement>(
+      '[data-home-confirm-continue]',
+    )!;
+    continueButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(boostButton.getAttribute('aria-disabled')).toBe('true');
+
+    for (let i = 0; i < 4; i++) internal.update(1.0);
+    expect(boostButton.getAttribute('aria-disabled')).toBe('false');
   });
 });

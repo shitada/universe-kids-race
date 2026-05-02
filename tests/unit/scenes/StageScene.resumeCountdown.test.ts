@@ -164,7 +164,26 @@ describe('StageScene background-resume countdown', () => {
     const x0 = internal.spaceship.position.x;
     internal.update(0.1);
     expect(internal.spaceship.position.x).toBe(x0);
-    expect(inputState.boostPressed).toBe(true);
+    expect(inputState.boostPressed).toBe(false);
+    const sfxNames = audio.playSFX.mock.calls.map((c) => c[0]);
+    expect(sfxNames).not.toContain('boost');
+    expect(sfxNames).not.toContain('boostDenied');
+  });
+
+  it('does not auto-activate boost right after the resume countdown ends', () => {
+    const { scene, inputState, audio } = createScene();
+    scene.enter({ stageNumber: 1 });
+    finishStartCountdown(scene);
+    scene.requestResumeCountdown();
+    inputState.boostPressed = true;
+    const internal = scene as unknown as { update(dt: number): void };
+    internal.update(0.1);
+    expect(inputState.boostPressed).toBe(false);
+
+    audio.playSFX.mockClear();
+    for (let i = 0; i < 4; i++) internal.update(1.0);
+    internal.update(0.1);
+
     const sfxNames = audio.playSFX.mock.calls.map((c) => c[0]);
     expect(sfxNames).not.toContain('boost');
     expect(sfxNames).not.toContain('boostDenied');
