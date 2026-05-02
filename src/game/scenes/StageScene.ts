@@ -310,6 +310,18 @@ export class StageScene implements Scene {
   private touchGuideIdleTimer = 0;
   private hasSeenMoveInput = false;
   private static readonly TOUCH_GUIDE_IDLE_DELAY = 3;
+  private assistElapsedTime = 0;
+  private recentMeteoriteHitTimes: number[] = [];
+  private assistNavigationUntil = 0;
+  private assistRecommendationMode: 'assist-left' | 'assist-right' | null = null;
+  private assistReevaluateTimer = 0;
+  private static readonly ASSIST_HIT_WINDOW = 8;
+  private static readonly ASSIST_NAV_DURATION = 4;
+  private static readonly ASSIST_REEVALUATE_INTERVAL = 0.4;
+  private static readonly ASSIST_LOOKAHEAD_DISTANCE = 28;
+  private static readonly ASSIST_TARGET_OFFSET = 4;
+  private static readonly ASSIST_LATERAL_RANGE = 7;
+  private static readonly ASSIST_SCORE_MARGIN = 0.2;
 
   constructor(sceneManager: SceneManager, inputSystem: InputSystem, audioManager: AudioManager, saveManager: SaveManager) {
     this.sceneManager = sceneManager;
@@ -376,6 +388,7 @@ export class StageScene implements Scene {
     this.touchGuideIdleTimer = 0;
     this.hasSeenMoveInput = false;
     this.touchGuideMode = 'intro';
+    this.resetAssistNavigation();
 
     const totalScore = context.totalScore ?? 0;
     const totalStarCount = context.totalStarCount ?? 0;
@@ -824,6 +837,8 @@ export class StageScene implements Scene {
     }
 
     const input = this.inputSystem.getState();
+    this.assistElapsedTime += deltaTime;
+    this.updateAssistNavigation(deltaTime);
     this.updateTouchGuide(input.moveDirection, deltaTime);
 
     // Capture boost state before changes
@@ -971,6 +986,7 @@ export class StageScene implements Scene {
         );
       }
       this.spaceship.onMeteoriteHit();
+      this.registerMeteoriteHitForAssist();
       this.boostSystem.cancel();
       this.damageTimer = StageScene.DAMAGE_FLASH_DURATION;
       this.audioManager.playSFX('meteoriteHit');
@@ -1070,6 +1086,11 @@ export class StageScene implements Scene {
   }
 
   private updateTouchGuide(moveDirection: number, deltaTime: number): void {
+    if (this.isAssistNavigationActive() && this.assistRecommendationMode) {
+      this.setTouchGuideMode(this.assistRecommendationMode);
+      return;
+    }
+
     if (moveDirection !== 0) {
       this.touchGuideIdleTimer = 0;
       this.hasSeenMoveInput = true;
@@ -1095,6 +1116,90 @@ export class StageScene implements Scene {
     if (this.touchGuideMode === mode) return;
     this.touchGuideMode = mode;
     this.touchGuide.setMode(mode);
+  }
+
+  private resetAssistNavigation(): void {
+    this.assistElapsedTime = 0;
+    this.recentMeteoriteHitTimes.length = 0;
+    this.assistNavigationUntil = 0;
+    this.assistRecommendationMode = null;
+    this.assistReevaluateTimer = 0;
+  }
+
+  private isAssistNavigationActive(): boolean {
+    return this.assistNavigationUntil > this.assistElapsedTime;
+  }
+
+  private updateAssistNavigation(deltaTime: number): void {
+    if (!this.isAssistNavigationActive()) {
+      this.assistRecommendationMode = null;
+      this.assistReevaluateTimer = 0;
+      return;
+    }
+
+    this.assistReevaluateTimer -= deltaTime;
+    if (this.assistReevaluateTimer <= 0) {
+      this.refreshAssistRecommendation();
+    }
+  }
+
+  private registerMeteoriteHitForAssist(): void {
+    const now = this.assistElapsedTime;
+    this.recentMeteoriteHitTimes.push(now);
+    this.recentMeteoriteHitTimes = this.recentMeteoriteHitTimes.filter((time) => now - time <= StageScene.ASSIST_HIT_WINDOW);
+    if (this.recentMeteoriteHitTimes.length < 2) {
+      return;
+    }
+
+    this.assistNavigationUntil = now + StageScene.ASSIST_NAV_DURATION;
+    this.refreshAssistRecommendation();
+    if (this.assistRecommendationMode) {
+      this.setTouchGuideMode(this.assistRecommendationMode);
+    }
+  }
+
+  private refreshAssistRecommendation(): void {
+    this.assistRecommendationMode = this.determineAssistTouchGuideMode();
+    this.assistReevaluateTimer = StageScene.ASSIST_REEVALUATE_INTERVAL;
+  }
+
+  private determineAssistTouchGuideMode(): 'assist-left' | 'assist-right' | null {
+    const leftDanger = this.getAssistDangerScore(-1);
+    const rightDanger = this.getAssistDangerScore(1);
+    const dangerGap = Math.abs(leftDanger - rightDanger);
+    if (dangerGap < StageScene.ASSIST_SCORE_MARGIN) {
+      return null;
+    }
+    return leftDanger < rightDanger ? 'assist-left' : 'assist-right';
+  }
+
+  private getAssistDangerScore(direction: -1 | 1): number {
+    const targetX = THREE.MathUtils.clamp(
+      this.spaceship.position.x + direction * StageScene.ASSIST_TARGET_OFFSET,
+      this.spaceship.boundaryMin,
+      this.spaceship.boundaryMax,
+    );
+    let score = 0;
+
+    for (const meteorite of this.meteorites) {
+      if (!meteorite.isActive) continue;
+
+      const forwardDistance = this.spaceship.position.z - meteorite.position.z;
+      if (forwardDistance <= 0 || forwardDistance > StageScene.ASSIST_LOOKAHEAD_DISTANCE) {
+        continue;
+      }
+
+      const lateralDistance = Math.abs(meteorite.position.x - targetX);
+      if (lateralDistance >= StageScene.ASSIST_LATERAL_RANGE) {
+        continue;
+      }
+
+      const forwardWeight = 0.35 + (1 - (forwardDistance / StageScene.ASSIST_LOOKAHEAD_DISTANCE)) * 0.65;
+      const lateralWeight = 1 - (lateralDistance / StageScene.ASSIST_LATERAL_RANGE);
+      score += forwardWeight * lateralWeight * lateralWeight;
+    }
+
+    return score;
   }
 
   private updateDamageEffect(deltaTime: number): void {
@@ -1177,6 +1282,7 @@ export class StageScene implements Scene {
     this.clearTimer = 0;
     this.isClearContinueEnabled = false;
     this.hasHandledClearContinue = false;
+    this.resetAssistNavigation();
     this.touchGuide.hide();
     const isNewPlanetUnlock = this.saveManager.markStageCleared(this.stageNumber);
     this.audioManager.playSFX('stageClear');
@@ -1465,6 +1571,7 @@ export class StageScene implements Scene {
     this.clearRewardOverlay.hide();
     this.clearRewardButton = null;
     this.isClearRewardOpen = false;
+    this.resetAssistNavigation();
     this.touchGuide.hide();
     this.hud.hide();
     this.scorePopupManager.dispose();
