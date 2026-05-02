@@ -124,17 +124,64 @@ export class HomeConfirmOverlay {
     `;
 
     const attachPress = (btn: HTMLButtonElement, onActivate: () => void): void => {
+      let pointerActive = false;
+      let suppressNextClick = false;
+
+      const press = (): void => {
+        btn.style.transform = 'scale(0.9)';
+      };
       const release = (): void => {
         btn.style.transform = 'scale(1)';
       };
+      const clearPointerState = (suppressClick = false): void => {
+        pointerActive = false;
+        suppressNextClick = suppressClick;
+        release();
+        document.removeEventListener('pointerup', handleDocumentPointerUp, true);
+        document.removeEventListener('pointercancel', handleDocumentPointerCancel, true);
+      };
+      const handleDocumentPointerUp = (event: Event): void => {
+        const releasedOnButton =
+          event.target === btn || (event.target instanceof Node && btn.contains(event.target));
+        const shouldActivate = pointerActive && releasedOnButton;
+        clearPointerState(!releasedOnButton);
+        if (shouldActivate) {
+          onActivate();
+        }
+      };
+      const handleDocumentPointerCancel = (): void => {
+        clearPointerState(true);
+      };
+
       btn.addEventListener('pointerdown', (e) => {
         e.stopPropagation();
-        btn.style.transform = 'scale(0.9)';
-        onActivate();
+        pointerActive = true;
+        suppressNextClick = false;
+        press();
+        document.addEventListener('pointerup', handleDocumentPointerUp, true);
+        document.addEventListener('pointercancel', handleDocumentPointerCancel, true);
       });
-      btn.addEventListener('pointerup', release);
-      btn.addEventListener('pointercancel', release);
-      btn.addEventListener('pointerleave', release);
+      btn.addEventListener('pointerenter', () => {
+        if (pointerActive) {
+          press();
+        }
+      });
+      btn.addEventListener('pointerleave', () => {
+        if (pointerActive) {
+          release();
+        }
+      });
+      btn.addEventListener('pointercancel', () => clearPointerState(true));
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (suppressNextClick) {
+          suppressNextClick = false;
+          return;
+        }
+        if (!pointerActive) {
+          onActivate();
+        }
+      });
     };
 
     // Back button (left, weaker color to discourage misclick).

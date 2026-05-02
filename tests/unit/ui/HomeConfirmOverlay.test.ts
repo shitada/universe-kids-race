@@ -5,6 +5,14 @@ import { HomeConfirmOverlay } from '../../../src/ui/HomeConfirmOverlay';
 describe('HomeConfirmOverlay', () => {
   let overlay: HomeConfirmOverlay;
 
+  const press = (btn: HTMLButtonElement): void => {
+    btn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+  };
+
+  const releaseOnButton = (btn: HTMLButtonElement): void => {
+    btn.dispatchEvent(new Event('pointerup', { bubbles: true }));
+  };
+
   beforeEach(() => {
     const uiOverlay = document.createElement('div');
     uiOverlay.id = 'ui-overlay';
@@ -32,19 +40,33 @@ describe('HomeConfirmOverlay', () => {
     expect(document.querySelectorAll('[data-home-confirm-overlay]').length).toBe(1);
   });
 
-  it('🏠 button fires onConfirm and hides the overlay', () => {
+  it('🏠 button does not fire onConfirm on pointerdown alone', () => {
     const onConfirm = vi.fn();
     const onCancel = vi.fn();
     overlay.show(onConfirm, onCancel);
     const backBtn = document.querySelector<HTMLButtonElement>('[data-home-confirm-back]')!;
     expect(backBtn).not.toBeNull();
-    backBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    press(backBtn);
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(backBtn.style.transform).toBe('scale(0.9)');
+    expect(overlay.isVisible()).toBe(true);
+  });
+
+  it('🏠 button fires onConfirm on pointerup and hides the overlay', () => {
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    overlay.show(onConfirm, onCancel);
+    const backBtn = document.querySelector<HTMLButtonElement>('[data-home-confirm-back]')!;
+    expect(backBtn).not.toBeNull();
+    press(backBtn);
+    releaseOnButton(backBtn);
     expect(onConfirm).toHaveBeenCalledTimes(1);
     expect(onCancel).not.toHaveBeenCalled();
     expect(overlay.isVisible()).toBe(false);
   });
 
-  it('✋ つづける button fires onCancel and hides the overlay', () => {
+  it('✋ つづける button fires onCancel on click and hides the overlay', () => {
     const onConfirm = vi.fn();
     const onCancel = vi.fn();
     overlay.show(onConfirm, onCancel);
@@ -52,7 +74,7 @@ describe('HomeConfirmOverlay', () => {
       '[data-home-confirm-continue]',
     )!;
     expect(continueBtn).not.toBeNull();
-    continueBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    continueBtn.dispatchEvent(new Event('click', { bubbles: true }));
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onConfirm).not.toHaveBeenCalled();
     expect(overlay.isVisible()).toBe(false);
@@ -87,9 +109,39 @@ describe('HomeConfirmOverlay', () => {
     const onCancel = vi.fn();
     overlay.show(onConfirm, onCancel);
     const backBtn = document.querySelector<HTMLButtonElement>('[data-home-confirm-back]')!;
-    backBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-    backBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    press(backBtn);
+    releaseOnButton(backBtn);
+    backBtn.dispatchEvent(new Event('click', { bubbles: true }));
     expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('pointerleave then release outside does not invoke callbacks', () => {
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    overlay.show(onConfirm, onCancel);
+    const root = document.querySelector<HTMLDivElement>('[data-home-confirm-overlay]')!;
+    const backBtn = document.querySelector<HTMLButtonElement>('[data-home-confirm-back]')!;
+    press(backBtn);
+    backBtn.dispatchEvent(new Event('pointerleave', { bubbles: true }));
+    root.dispatchEvent(new Event('pointerup', { bubbles: true }));
+    expect(backBtn.style.transform).toBe('scale(1)');
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(overlay.isVisible()).toBe(true);
+  });
+
+  it('pointercancel clears press state and does not invoke callbacks', () => {
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    overlay.show(onConfirm, onCancel);
+    const backBtn = document.querySelector<HTMLButtonElement>('[data-home-confirm-back]')!;
+    press(backBtn);
+    backBtn.dispatchEvent(new Event('pointercancel', { bubbles: true }));
+    backBtn.dispatchEvent(new Event('click', { bubbles: true }));
+    expect(backBtn.style.transform).toBe('scale(1)');
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(overlay.isVisible()).toBe(true);
   });
 
   it('both buttons meet 88x88 minimum tap target', () => {

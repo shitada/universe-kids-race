@@ -93,6 +93,7 @@ describe('HUD', () => {
       )!;
       expect(backBtn).not.toBeNull();
       backBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      backBtn.dispatchEvent(new Event('pointerup', { bubbles: true }));
       expect(called).toBe(true);
     });
 
@@ -158,6 +159,7 @@ describe('HUD', () => {
           '[data-home-confirm-back]',
         )!;
         backBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+        backBtn.dispatchEvent(new Event('pointerup', { bubbles: true }));
         expect(called).toBe(1);
       });
     });
