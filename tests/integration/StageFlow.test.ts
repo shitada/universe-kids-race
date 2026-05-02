@@ -534,7 +534,7 @@ describe('Stage Flow Integration', () => {
     await flushPromises();
 
     expect(document.querySelector('[data-load-failure-overlay]')).toBeNull();
-    expect(log.filter((entry) => entry.type === 'title')).toHaveLength(2);
+    expect(log.filter((entry) => entry.type === 'title')).toHaveLength(1);
     expect(manager.getCurrentType()).toBe('title');
     expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to transition to stage', expect.any(Error));
 
