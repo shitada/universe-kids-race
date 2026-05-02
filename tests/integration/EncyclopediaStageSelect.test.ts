@@ -241,6 +241,119 @@ describe('Encyclopedia Stage Selection Integration', () => {
     consoleErrorSpy.mockRestore();
   });
 
+  it('ignores a resolved encyclopedia lazy-load after leaving title, then reopens after returning', async () => {
+    const manager = new SceneManager();
+    const loadingOverlay = new LoadingOverlay();
+    let resolveModule: ((value: { EncyclopediaOverlay: typeof EncyclopediaOverlay }) => void) | null = null;
+    const loadEncyclopediaOverlay = vi.fn(
+      () =>
+        new Promise<{ EncyclopediaOverlay: typeof EncyclopediaOverlay }>((resolve) => {
+          resolveModule = resolve;
+        }),
+    );
+    const titleScene = new TitleScene(
+      manager,
+      createMockSaveManager(),
+      createMockAudioManager(),
+      {
+        loadingOverlay,
+        loadEncyclopediaOverlay,
+      },
+    );
+
+    manager.registerScene('title', titleScene);
+    manager.registerScene('stage', createTrackingScene([], 'stage'));
+
+    await manager.transitionTo('title');
+
+    const findEncyclopediaButton = () =>
+      Array.from(uiOverlay.querySelectorAll('button')).find(
+        (button) => button.textContent?.includes('ずかん'),
+      ) as HTMLButtonElement;
+
+    findEncyclopediaButton().dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(document.querySelector('[data-loading-overlay]')).not.toBeNull();
+
+    await manager.requestTransition('stage', {
+      stageNumber: 1,
+      totalScore: 0,
+      totalStarCount: 0,
+    });
+
+    resolveModule?.({ EncyclopediaOverlay });
+    await flushPromises();
+    await flushPromises();
+    await flushPromises();
+
+    expect(manager.getCurrentType()).toBe('stage');
+    expect(document.querySelector('[data-loading-overlay]')).toBeNull();
+    expect(document.querySelector('[data-load-failure-overlay]')).toBeNull();
+    expect(uiOverlay.querySelector('[data-card]')).toBeNull();
+
+    await manager.requestTransition('title');
+
+    findEncyclopediaButton().dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+
+    expect(loadEncyclopediaOverlay).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[data-loading-overlay]')).toBeNull();
+    expect(uiOverlay.querySelector('[data-card][data-stage="2"]')).not.toBeNull();
+  });
+
+  it('ignores encyclopedia lazy-load failures after leaving title', async () => {
+    const manager = new SceneManager();
+    const loadingOverlay = new LoadingOverlay();
+    const loadFailureOverlay = new LoadFailureOverlay();
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let rejectModule: ((reason?: unknown) => void) | null = null;
+    const loadEncyclopediaOverlay = vi.fn(
+      () =>
+        new Promise<{ EncyclopediaOverlay: typeof EncyclopediaOverlay }>((_resolve, reject) => {
+          rejectModule = reject;
+        }),
+    );
+    const titleScene = new TitleScene(
+      manager,
+      createMockSaveManager(),
+      createMockAudioManager(),
+      {
+        loadingOverlay,
+        loadFailureOverlay,
+        loadEncyclopediaOverlay,
+      },
+    );
+
+    manager.registerScene('title', titleScene);
+    manager.registerScene('stage', createTrackingScene([], 'stage'));
+
+    await manager.transitionTo('title');
+
+    const encyclopediaBtn = Array.from(uiOverlay.querySelectorAll('button')).find(
+      (button) => button.textContent?.includes('ずかん'),
+    ) as HTMLButtonElement;
+    encyclopediaBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(document.querySelector('[data-loading-overlay]')).not.toBeNull();
+
+    await manager.requestTransition('stage', {
+      stageNumber: 1,
+      totalScore: 0,
+      totalStarCount: 0,
+    });
+
+    rejectModule?.(new Error('encyclopedia chunk failed after exit'));
+    await flushPromises();
+    await flushPromises();
+    await flushPromises();
+
+    expect(manager.getCurrentType()).toBe('stage');
+    expect(document.querySelector('[data-loading-overlay]')).toBeNull();
+    expect(document.querySelector('[data-load-failure-overlay]')).toBeNull();
+    expect(uiOverlay.querySelector('[data-card]')).toBeNull();
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
+  });
+
   it('restarts from zero totals after returning to title and pressing "あそぶ" again', async () => {
     const manager = new SceneManager();
     const saveManager = createMockSaveManager();
