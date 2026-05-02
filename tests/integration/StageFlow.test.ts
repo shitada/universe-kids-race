@@ -314,7 +314,16 @@ describe('Stage Flow Integration', () => {
     await manager.transitionTo('title');
     await manager.prefetchScene('stage');
 
+    const prefetchedStageInternal = stageScene as unknown as {
+      initialized: boolean;
+      threeScene: THREE.Scene;
+      bgStars: THREE.Points | null;
+    };
+
     expect(stageFactory).toHaveBeenCalledTimes(1);
+    expect(prefetchedStageInternal.initialized).toBe(false);
+    expect(prefetchedStageInternal.threeScene.children).toHaveLength(0);
+    expect(prefetchedStageInternal.bgStars).toBeNull();
     expect(audioManager.playBGM).not.toHaveBeenCalled();
     expect(document.querySelector('[data-loading-overlay]')).toBeNull();
     expect(document.querySelector('[data-stage-clear-overlay]')).toBeNull();
@@ -329,9 +338,15 @@ describe('Stage Flow Integration', () => {
     expect(audioManager.playBGM).toHaveBeenCalledWith(1);
 
     const stageInternal = stageScene as unknown as {
+      initialized: boolean;
       countdownOverlay: { dispose(): void } | null;
       isStarting: boolean;
+      threeScene: THREE.Scene;
+      bgStars: THREE.Points | null;
     };
+    expect(stageInternal.initialized).toBe(true);
+    expect(stageInternal.bgStars).not.toBeNull();
+    expect(stageInternal.threeScene.children).not.toHaveLength(0);
     stageInternal.countdownOverlay?.dispose();
     stageInternal.countdownOverlay = null;
     stageInternal.isStarting = false;
