@@ -10,7 +10,7 @@ import {
   PointsMaterial,
   Scene as ThreeScene,
 } from 'three';
-import type { Scene, SceneContext } from '../../types';
+import type { SaveData, Scene, SceneContext } from '../../types';
 import type { SceneManager } from '../SceneManager';
 import type { SaveManager } from '../storage/SaveManager';
 import type { AudioManager } from '../audio/AudioManager';
@@ -18,7 +18,7 @@ import { TutorialOverlay } from '../../ui/TutorialOverlay';
 import { LoadingOverlay } from '../../ui/LoadingOverlay';
 import { LoadFailureOverlay } from '../../ui/LoadFailureOverlay';
 import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButton';
-import { TOTAL_STAGES } from '../config/StageConfig';
+import { getStageConfig, TOTAL_STAGES } from '../config/StageConfig';
 import { PLANET_ENCYCLOPEDIA, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { formatEncyclopediaLabel } from '../../ui/formatEncyclopediaLabel';
 import { getViewportSize } from '../utils/getViewportSize';
@@ -105,6 +105,54 @@ function scheduleIdleTask(callback: () => void): void {
     return;
   }
   window.setTimeout(callback, 800);
+}
+
+interface NextAdventurePreview {
+  startStage: number;
+  destination: string;
+  emoji: string;
+  statusLabel: string;
+  destinationLabel: string;
+  buttonHint: string;
+}
+
+function getUnlockedStageCount(unlockedPlanets: number[]): number {
+  return new Set(
+    unlockedPlanets.filter(
+      (stageNumber) =>
+        Number.isInteger(stageNumber) && stageNumber >= 1 && stageNumber <= TOTAL_STAGES,
+    ),
+  ).size;
+}
+
+function isAllStagesUnlocked(unlockedPlanets: number[]): boolean {
+  return getUnlockedStageCount(unlockedPlanets) >= TOTAL_STAGES;
+}
+
+function getNextAdventurePreview(saveData: SaveData): NextAdventurePreview {
+  const isAllClear = isAllStagesUnlocked(saveData.unlockedPlanets);
+  const startStage = isAllClear ? 1 : Math.min(saveData.clearedStage + 1, TOTAL_STAGES);
+  const stageConfig = getStageConfig(startStage);
+
+  if (isAllClear) {
+    return {
+      startStage,
+      destination: stageConfig.destination,
+      emoji: stageConfig.emoji,
+      statusLabel: 'ぜんぶ クリア！',
+      destinationLabel: `${stageConfig.destination}へ さいしょから しゅっぱつ！`,
+      buttonHint: `${stageConfig.emoji} ステージ ${startStage} から さいしょから あそぶ`,
+    };
+  }
+
+  return {
+    startStage,
+    destination: stageConfig.destination,
+    emoji: stageConfig.emoji,
+    statusLabel: saveData.clearedStage > 0 ? 'つづきから しゅっぱつ！' : 'はじめての しゅっぱつ！',
+    destinationLabel: `${stageConfig.destination}へ むかおう！`,
+    buttonHint: `${stageConfig.emoji} ステージ ${startStage} から スタート`,
+  };
 }
 
 export class TitleScene implements Scene {
@@ -388,6 +436,8 @@ export class TitleScene implements Scene {
   private createOverlay(): void {
     const uiOverlay = document.getElementById('ui-overlay');
     if (!uiOverlay) return;
+    const initialSaveData = this.saveManager.load();
+    const nextAdventure = getNextAdventurePreview(initialSaveData);
 
     this.overlay = document.createElement('div');
     this.overlay.style.cssText = `
@@ -409,6 +459,72 @@ export class TitleScene implements Scene {
       color: #FFD700;
       text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
       margin-bottom: 2rem;
+    `;
+
+    const nextAdventureCard = document.createElement('div');
+    nextAdventureCard.setAttribute('data-next-adventure-card', '');
+    nextAdventureCard.setAttribute('data-next-stage-number', String(nextAdventure.startStage));
+    nextAdventureCard.setAttribute('data-next-stage-destination', nextAdventure.destination);
+    nextAdventureCard.style.cssText = `
+      width: min(70vw, 26rem);
+      padding: 1rem 1.4rem;
+      margin-bottom: 1.25rem;
+      border-radius: 1.5rem;
+      background: rgba(255, 255, 255, 0.14);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+      backdrop-filter: blur(6px);
+      text-align: center;
+      color: #fff;
+    `;
+
+    const nextAdventureHeading = document.createElement('div');
+    nextAdventureHeading.textContent = 'つぎの ぼうけん';
+    nextAdventureHeading.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #FFE66D;
+      margin-bottom: 0.35rem;
+    `;
+
+    const nextAdventureStatus = document.createElement('div');
+    nextAdventureStatus.textContent = nextAdventure.statusLabel;
+    nextAdventureStatus.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: 1.25rem;
+      font-weight: 900;
+      margin-bottom: 0.35rem;
+    `;
+
+    const nextAdventureStage = document.createElement('div');
+    nextAdventureStage.textContent = `${nextAdventure.emoji} ステージ ${nextAdventure.startStage} ・ ${nextAdventure.destination}`;
+    nextAdventureStage.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: 1.35rem;
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+    `;
+
+    const nextAdventureDestination = document.createElement('div');
+    nextAdventureDestination.textContent = nextAdventure.destinationLabel;
+    nextAdventureDestination.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.92);
+    `;
+
+    nextAdventureCard.appendChild(nextAdventureHeading);
+    nextAdventureCard.appendChild(nextAdventureStatus);
+    nextAdventureCard.appendChild(nextAdventureStage);
+    nextAdventureCard.appendChild(nextAdventureDestination);
+
+    const playArea = document.createElement('div');
+    playArea.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.65rem;
     `;
 
     const button = document.createElement('button');
@@ -435,13 +551,24 @@ export class TitleScene implements Scene {
       // するため、タイトル BGM は実質的に再生されない無駄な処理になっていた。
       this.ensureTitleAudioInitialized(false);
       const saveData = this.saveManager.load();
-      const startStage = Math.min(saveData.clearedStage + 1, TOTAL_STAGES);
+      const startStage = getNextAdventurePreview(saveData).startStage;
       this.sceneManager.requestTransition('stage', {
         stageNumber: startStage,
         totalScore: 0,
         totalStarCount: 0,
       });
     });
+
+    const playButtonHint = document.createElement('div');
+    playButtonHint.setAttribute('data-play-button-hint', '');
+    playButtonHint.textContent = nextAdventure.buttonHint;
+    playButtonHint.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.88);
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+    `;
 
     // Tutorial button
     const tutorialBtn = document.createElement('button');
@@ -474,7 +601,6 @@ export class TitleScene implements Scene {
 
     // Encyclopedia button
     const encyclopediaBtn = document.createElement('button');
-    const initialSaveData = this.saveManager.load();
     encyclopediaBtn.textContent = formatEncyclopediaLabel(
       initialSaveData.unlockedPlanets.length,
       PLANET_ENCYCLOPEDIA.length,
@@ -504,8 +630,12 @@ export class TitleScene implements Scene {
       void this.openEncyclopedia();
     });
 
+    playArea.appendChild(button);
+    playArea.appendChild(playButtonHint);
+
     this.overlay.appendChild(title);
-    this.overlay.appendChild(button);
+    this.overlay.appendChild(nextAdventureCard);
+    this.overlay.appendChild(playArea);
     this.overlay.appendChild(tutorialBtn);
     this.overlay.appendChild(encyclopediaBtn);
     uiOverlay.appendChild(this.overlay);
