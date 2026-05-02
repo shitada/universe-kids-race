@@ -94,6 +94,18 @@ describe('TitleScene mute button', () => {
     scene.exit();
   });
 
+  it('positions the mute button with HUD-local spacing only', () => {
+    const sm = createMockSceneManager();
+    const { mock: save } = createMockSaveManager();
+    const { mock: audio } = createMockAudioManager();
+    const scene = new TitleScene(sm, save, audio);
+    scene.enter({});
+    const btn = getMuteButton()!;
+    expect(btn.style.top).toBe('0.8rem');
+    expect(btn.style.right).toBe('1rem');
+    scene.exit();
+  });
+
   it('initial glyph reflects audioManager.isMuted() at enter()', () => {
     const sm = createMockSceneManager();
     const { mock: save } = createMockSaveManager(true);

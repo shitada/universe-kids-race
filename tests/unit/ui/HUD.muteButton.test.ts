@@ -53,12 +53,7 @@ describe('HUD mute button', () => {
     const btn = getMuteButton()!;
     expect(btn.style.position).toBe('absolute');
     expect(btn.style.top).toBe('0.8rem');
-    // Source is set with `max(1rem, calc(env(safe-area-inset-right, 0px) + 0.5rem))`,
-    // which JSDOM silently drops because it cannot parse `max()`. Verifying the
-    // raw assignment is therefore done by a separate source-level grep test
-    // (HUD.muteButton.source.test.ts is unnecessary; the implementation is
-    // covered by manual review). Here we only assert the cross-environment
-    // safe portion.
+    expect(btn.style.right).toBe('1rem');
   });
 
   it('uses pointer-events:auto so taps reach the button', () => {
