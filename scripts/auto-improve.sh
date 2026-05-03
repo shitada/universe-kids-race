@@ -330,9 +330,14 @@ Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>" --quiet 2>
   # コミット済み変更（coder が copilot セッション内でコミットした分を含む）を検出してプッシュ
   if [ "$(git rev-parse main 2>/dev/null)" != "$(git rev-parse HEAD 2>/dev/null)" ]; then
     info "変更をプッシュ中..."
-    git push origin "${BRANCH_NAME}" --quiet 2>/dev/null || true
-    HAS_COMMITS=true
-    ok "プッシュ完了 → プレビューが自動デプロイされます"
+    if git push origin "${BRANCH_NAME}" --quiet 2>/dev/null; then
+      HAS_COMMITS=true
+      ok "プッシュ完了 → GitHub Actions でプレビューデプロイ開始"
+      url "プレビュー: $(get_preview_url)"
+    else
+      HAS_COMMITS=true
+      warn "プッシュに失敗しました（次回リトライ）"
+    fi
   else
     info "このイテレーションでは変更なし"
   fi
