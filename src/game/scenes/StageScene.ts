@@ -1836,12 +1836,16 @@ export class StageScene implements Scene {
   }
 
   private handleStageRetry(): void {
-    this.sceneManager.requestTransition('stage', {
+    const context: SceneContext = {
       stageNumber: this.stageNumber,
       totalScore: this.stageEntryTotalScore,
       totalStarCount: this.stageEntryTotalStarCount,
       replayToken: Date.now() + Math.random(),
-    });
+    };
+    if (this.launchSource !== 'campaign') {
+      context.launchSource = this.launchSource;
+    }
+    this.sceneManager.requestTransition('stage', context);
   }
 
   exit(): void {

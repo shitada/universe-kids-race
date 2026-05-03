@@ -307,6 +307,31 @@ describe('StageScene clear CTA', () => {
     });
   });
 
+  it('ずかん起動ステージのもういちどは起動元を引き継ぐ', () => {
+    const { scene, sceneManager } = createScene({
+      stageNumber: 4,
+      launchSource: 'encyclopedia',
+      totalScore: 1200,
+      totalStarCount: 7,
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const retryButton = getRetryButton();
+    dispatchReleaseConfirm(retryButton);
+
+    expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith('stage', {
+      stageNumber: 4,
+      totalScore: 1200,
+      totalStarCount: 7,
+      launchSource: 'encyclopedia',
+      replayToken: expect.any(Number),
+    });
+  });
+
   it('最終ステージではCTAタップでendingへ進む', () => {
     const { scene, sceneManager } = createScene({
       stageNumber: TOTAL_STAGES,

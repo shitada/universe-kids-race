@@ -486,6 +486,7 @@ describe('Encyclopedia Stage Selection Integration', () => {
 
   it('ずかん起動ステージのクリア画面はタイトルへ表示で次プレビューを出さない', async () => {
     const manager = new SceneManager();
+    const requestTransitionSpy = vi.spyOn(manager, 'requestTransition');
     const saveManager = createMockSaveManager();
     const audioManager = createMockAudioManager();
     const inputSystem = {
@@ -533,7 +534,31 @@ describe('Encyclopedia Stage Selection Integration', () => {
     expect(document.querySelector('[data-stage-clear-retry]')?.textContent).toBe('もういちど');
     expect(document.querySelector('[data-stage-clear-overlay]')?.textContent).toContain('⭐');
 
-    dispatchReleaseConfirm(continueButton!);
+    const retryButton = document.querySelector('[data-stage-clear-retry]') as HTMLButtonElement | null;
+    expect(retryButton).not.toBeNull();
+    dispatchReleaseConfirm(retryButton!);
+    await flushPromises();
+
+    expect(manager.getCurrentType()).toBe('stage');
+    expect(requestTransitionSpy).toHaveBeenNthCalledWith(2, 'stage', {
+      stageNumber: 2,
+      totalScore: 0,
+      totalStarCount: 0,
+      launchSource: 'encyclopedia',
+      replayToken: expect.any(Number),
+    });
+
+    stageInternal.countdownOverlay?.dispose();
+    stageInternal.countdownOverlay = null;
+    stageInternal.isStarting = false;
+    stageInternal.onStageClear();
+    stageInternal.update(1);
+
+    const retryClearContinueButton = document.querySelector('[data-stage-clear-continue]') as HTMLButtonElement | null;
+    expect(retryClearContinueButton?.textContent).toBe('タイトルへ');
+    expect(document.querySelector('[data-stage-clear-next-preview]')).toBeNull();
+
+    dispatchReleaseConfirm(retryClearContinueButton!);
     await flushPromises();
 
     expect(manager.getCurrentType()).toBe('title');
