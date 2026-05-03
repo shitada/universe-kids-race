@@ -255,6 +255,7 @@ export class StageScene implements Scene {
   private clearTimer = 0;
   private clearOverlay: HTMLDivElement | null = null;
   private clearContinueButton: HTMLButtonElement | null = null;
+  private clearRetryButton: HTMLButtonElement | null = null;
   private clearRewardButton: HTMLButtonElement | null = null;
   private isClearContinueEnabled = false;
   private hasHandledClearContinue = false;
@@ -769,6 +770,7 @@ export class StageScene implements Scene {
       this.clearOverlay = null;
     }
     this.clearContinueButton = null;
+    this.clearRetryButton = null;
     this.clearRewardButton = null;
     this.isClearContinueEnabled = false;
     this.hasHandledClearContinue = false;
@@ -1360,6 +1362,41 @@ export class StageScene implements Scene {
       }
     }
 
+    const retryButton = document.createElement('button');
+    retryButton.setAttribute('data-stage-clear-retry', '');
+    retryButton.setAttribute('aria-label', 'このステージを もういちど');
+    retryButton.textContent = 'このステージを もういちど';
+    retryButton.disabled = true;
+    retryButton.style.cssText = `
+      margin-top: 1.1rem;
+      min-width: min(72vw, 300px);
+      min-height: 76px;
+      padding: 0.95rem 1.6rem;
+      border: none;
+      border-radius: 999px;
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: clamp(1.2rem, 4.2vmin, 1.6rem);
+      font-weight: 900;
+      color: #fff;
+      background: rgba(255, 255, 255, 0.18);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      touch-action: manipulation;
+      transform: scale(1);
+      transition: opacity 0.18s ease-out, transform 0.08s ease-out;
+    `;
+    this.bindClearActionButton(retryButton, () => {
+      this.sceneManager.requestTransition('stage', {
+        stageNumber: this.stageNumber,
+        totalScore: 0,
+        totalStarCount: 0,
+      });
+    });
+    this.clearRetryButton = retryButton;
+    this.clearOverlay.appendChild(retryButton);
+
     const continueButton = document.createElement('button');
     const continueLabel = this.launchSource === 'encyclopedia'
       ? 'タイトルへ'
@@ -1391,32 +1428,9 @@ export class StageScene implements Scene {
       transition: opacity 0.18s ease-out, transform 0.08s ease-out;
     `;
 
-    const activate = (event: Event): void => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (this.isClearRewardOpen) return;
-      if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
-      this.hasHandledClearContinue = true;
-      continueButton.disabled = true;
-      continueButton.style.pointerEvents = 'none';
-      continueButton.style.transform = 'scale(1)';
+    this.bindClearActionButton(continueButton, () => {
       this.handleStageComplete();
-    };
-    const release = (): void => {
-      if (this.clearContinueButton) {
-        this.clearContinueButton.style.transform = 'scale(1)';
-      }
-    };
-    continueButton.addEventListener('pointerdown', (event) => {
-      if (this.isClearRewardOpen) return;
-      if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
-      continueButton.style.transform = 'scale(0.96)';
-      activate(event);
     });
-    continueButton.addEventListener('click', activate);
-    continueButton.addEventListener('pointerup', release);
-    continueButton.addEventListener('pointercancel', release);
-    continueButton.addEventListener('pointerleave', release);
     this.clearContinueButton = continueButton;
     this.clearOverlay.appendChild(continueButton);
 
@@ -1426,13 +1440,55 @@ export class StageScene implements Scene {
   private revealClearContinueButtonIfReady(): void {
     if (this.isClearContinueEnabled) return;
     if (this.clearTimer < StageScene.CLEAR_CONTINUE_DELAY) return;
-    if (!this.clearContinueButton) return;
+    if (!this.clearContinueButton || !this.clearRetryButton) return;
 
     this.isClearContinueEnabled = true;
-    this.clearContinueButton.disabled = false;
-    this.clearContinueButton.style.opacity = '1';
-    this.clearContinueButton.style.visibility = 'visible';
-    this.clearContinueButton.style.pointerEvents = 'auto';
+    this.revealClearActionButton(this.clearRetryButton);
+    this.revealClearActionButton(this.clearContinueButton);
+  }
+
+  private bindClearActionButton(button: HTMLButtonElement, onActivate: () => void): void {
+    const activate = (event: Event): void => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!this.canActivateClearAction()) return;
+      this.hasHandledClearContinue = true;
+      this.lockClearActionButtons();
+      onActivate();
+    };
+    const release = (): void => {
+      button.style.transform = 'scale(1)';
+    };
+    button.addEventListener('pointerdown', (event) => {
+      if (!this.canActivateClearAction()) return;
+      button.style.transform = 'scale(0.96)';
+      activate(event);
+    });
+    button.addEventListener('click', activate);
+    button.addEventListener('pointerup', release);
+    button.addEventListener('pointercancel', release);
+    button.addEventListener('pointerleave', release);
+  }
+
+  private canActivateClearAction(): boolean {
+    return !this.isClearRewardOpen && this.isClearContinueEnabled && !this.hasHandledClearContinue;
+  }
+
+  private revealClearActionButton(button: HTMLButtonElement | null): void {
+    if (!button) return;
+    button.disabled = false;
+    button.style.opacity = '1';
+    button.style.visibility = 'visible';
+    button.style.pointerEvents = 'auto';
+  }
+
+  private lockClearActionButtons(): void {
+    for (const button of [this.clearRetryButton, this.clearContinueButton]) {
+      if (!button) continue;
+      button.disabled = true;
+      button.style.pointerEvents = 'none';
+      button.style.transform = 'scale(1)';
+    }
   }
 
   private injectBestStageStarsAnimation(): void {
@@ -1474,6 +1530,7 @@ export class StageScene implements Scene {
       return;
     }
     this.clearRewardOverlay.hide();
+    this.clearRetryButton = null;
     this.clearRewardButton = null;
     this.isClearRewardOpen = false;
     this.touchGuide.hide();

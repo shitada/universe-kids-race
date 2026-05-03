@@ -90,6 +90,12 @@ function getContinueButton(): HTMLButtonElement {
   return button!;
 }
 
+function getRetryButton(): HTMLButtonElement {
+  const button = document.querySelector<HTMLButtonElement>('[data-stage-clear-retry]');
+  expect(button).not.toBeNull();
+  return button!;
+}
+
 function getCardButton(): HTMLButtonElement | null {
   return document.querySelector<HTMLButtonElement>('[data-stage-clear-card]');
 }
@@ -156,6 +162,31 @@ describe('StageScene clear CTA', () => {
       stageNumber: 5,
       totalScore: 2400,
       totalStarCount: 14,
+    });
+  });
+
+  it('クリア画面にもういちどボタンを表示し、同じステージへ再挑戦できる', () => {
+    const { scene, sceneManager } = createScene({
+      stageNumber: 4,
+      finalizeStageResult: { totalScore: 2400, totalStarCount: 14 },
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const retryButton = getRetryButton();
+    expect(retryButton.textContent).toBe('このステージを もういちど');
+    expect(retryButton.disabled).toBe(false);
+
+    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    retryButton.dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith('stage', {
+      stageNumber: 4,
+      totalScore: 0,
+      totalStarCount: 0,
     });
   });
 
@@ -240,6 +271,9 @@ describe('StageScene clear CTA', () => {
     const button = getContinueButton();
     expect(button.textContent).toBe('つぎへ');
     expect(button.disabled).toBe(false);
+    const retryButton = getRetryButton();
+    expect(retryButton.textContent).toBe('このステージを もういちど');
+    expect(retryButton.disabled).toBe(false);
     expect(getCardButton()?.textContent).toBe('カードをみる');
   });
 
@@ -302,6 +336,37 @@ describe('StageScene clear CTA', () => {
       stageNumber: 3,
       totalScore: 2000,
       totalStarCount: 9,
+    });
+  });
+
+  it('カード詳細が開いている間はもういちどできず、閉じた後に再挑戦できる', () => {
+    const { scene, sceneManager } = createScene({
+      stageNumber: 2,
+      earnedStars: 5,
+      isNewPlanetUnlock: true,
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const cardButton = getCardButton();
+    const retryButton = getRetryButton();
+    expect(cardButton).not.toBeNull();
+
+    cardButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(sceneManager.requestTransition).not.toHaveBeenCalled();
+
+    const backButton = document.querySelector('[data-detail-back]') as HTMLElement | null;
+    backButton?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith('stage', {
+      stageNumber: 2,
+      totalScore: 0,
+      totalStarCount: 0,
     });
   });
 });
