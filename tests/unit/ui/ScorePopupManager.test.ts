@@ -17,8 +17,6 @@ describe('ScorePopupManager', () => {
     camera.position.set(0, 0, 10);
     camera.lookAt(0, 0, 0);
     camera.updateProjectionMatrix();
-    Object.defineProperty(overlay, 'clientWidth', { value: 1024, configurable: true });
-    Object.defineProperty(overlay, 'clientHeight', { value: 768, configurable: true });
   });
 
   afterEach(() => {
@@ -33,6 +31,8 @@ describe('ScorePopupManager', () => {
     const popup = document.querySelector<HTMLElement>('[data-score-popup]');
     expect(popup).not.toBeNull();
     expect(popup?.textContent).toBe('+100');
+    expect(popup?.style.left).toBe('50%');
+    expect(popup?.style.top).toBe('50%');
     expect(popup?.style.visibility).toBe('visible');
     expect(popup?.hasAttribute('data-score-popup-active')).toBe(true);
 
@@ -48,6 +48,57 @@ describe('ScorePopupManager', () => {
     }
 
     expect(document.querySelectorAll('[data-score-popup]').length).toBe(6);
+  });
+
+  it('restarts the animation when a pooled popup is reused', () => {
+    for (let i = 0; i < 6; i++) {
+      manager.show(100, { x: i * 0.05, y: 0, z: 0 }, camera);
+    }
+
+    const [popup] = Array.from(document.querySelectorAll<HTMLElement>('[data-score-popup]'));
+    expect(popup).not.toBeUndefined();
+    const firstAnimationName = popup.style.animationName;
+    vi.advanceTimersByTime(720);
+    manager.show(500, { x: 0.1, y: 0, z: 0 }, camera);
+
+    expect(document.querySelectorAll('[data-score-popup]')).toHaveLength(6);
+    expect(popup.textContent).toBe('+500');
+    expect(popup.style.visibility).toBe('visible');
+    expect(popup.style.animationName).not.toBe(firstAnimationName);
+  });
+
+  it('avoids layout reads when showing and replaying a popup', () => {
+    const overlay = document.getElementById('ui-overlay') as HTMLDivElement;
+    Object.defineProperty(overlay, 'clientWidth', {
+      configurable: true,
+      get: () => {
+        throw new Error('clientWidth should not be read');
+      },
+    });
+    Object.defineProperty(overlay, 'clientHeight', {
+      configurable: true,
+      get: () => {
+        throw new Error('clientHeight should not be read');
+      },
+    });
+
+    const originalOffsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth');
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+      configurable: true,
+      get: () => {
+        throw new Error('offsetWidth should not be read');
+      },
+    });
+
+    try {
+      expect(() => manager.show(100, { x: 0, y: 0, z: 0 }, camera)).not.toThrow();
+      vi.advanceTimersByTime(720);
+      expect(() => manager.show(100, { x: 0, y: 0, z: 0 }, camera)).not.toThrow();
+    } finally {
+      if (originalOffsetWidth) {
+        Object.defineProperty(HTMLElement.prototype, 'offsetWidth', originalOffsetWidth);
+      }
+    }
   });
 
   it('does nothing when ui-overlay is missing', () => {
