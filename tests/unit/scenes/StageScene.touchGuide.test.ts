@@ -101,6 +101,29 @@ describe('StageScene touch guide overlay', () => {
     expect(root?.getAttribute('aria-hidden')).toBe('false');
   });
 
+  it('prioritizes assist directions over the normal touch guide state machine', () => {
+    const { scene, inputState } = createScene();
+    const internal = scene as unknown as {
+      assistElapsedTime: number;
+      assistNavigationUntil: number;
+      assistRecommendationMode: 'assist-left' | 'assist-right' | null;
+      assistReevaluateTimer: number;
+      update(dt: number): void;
+    };
+    scene.enter({ stageNumber: 1 });
+    finishStartCountdown(scene);
+
+    internal.assistElapsedTime = 1;
+    internal.assistNavigationUntil = 10;
+    internal.assistRecommendationMode = 'assist-right';
+    internal.assistReevaluateTimer = 10;
+    inputState.moveDirection = -1;
+    internal.update(0.016);
+
+    const root = document.querySelector<HTMLElement>('[data-touch-guide-overlay]');
+    expect(root?.getAttribute('data-touch-guide-state')).toBe('assist-right');
+  });
+
   it('removes the touch guide on exit()', () => {
     const { scene } = createScene();
     scene.enter({ stageNumber: 1 });

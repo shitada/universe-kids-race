@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { getPlanetEncyclopediaEntry, PLANET_ENCYCLOPEDIA } from '../../../src/game/config/PlanetEncyclopedia';
+import {
+  getNextPlanetEncyclopediaEntry,
+  getPlanetEncyclopediaEntry,
+  PLANET_ENCYCLOPEDIA,
+} from '../../../src/game/config/PlanetEncyclopedia';
 
 describe('PlanetEncyclopedia', () => {
   it('has exactly 11 entries', () => {
@@ -48,5 +52,11 @@ describe('PlanetEncyclopedia', () => {
   it('can look up an entry by stage number', () => {
     expect(getPlanetEncyclopediaEntry(2)?.name).toBe('水星');
     expect(getPlanetEncyclopediaEntry(99)).toBeUndefined();
+  });
+
+  it('can look up the next stage entry from the current stage', () => {
+    expect(getNextPlanetEncyclopediaEntry(4)?.name).toBe('木星');
+    expect(getNextPlanetEncyclopediaEntry(10)?.name).toBe('地球');
+    expect(getNextPlanetEncyclopediaEntry(11)).toBeUndefined();
   });
 });
