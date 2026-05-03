@@ -1337,11 +1337,15 @@ export class StageScene implements Scene {
       padding: 1.2rem;
       box-sizing: border-box;
       text-align: center;
+      overflow: hidden;
     `;
+    this.appendClearCelebrationBurst();
 
     const msg = document.createElement('div');
     msg.textContent = 'やったね！';
     msg.style.cssText = `
+      position: relative;
+      z-index: 1;
       font-family: 'Zen Maru Gothic', sans-serif;
       font-size: 3rem;
       font-weight: 900;
@@ -1355,6 +1359,8 @@ export class StageScene implements Scene {
     const score = document.createElement('div');
     score.textContent = `⭐ ${starCount} こ あつめたよ！`;
     score.style.cssText = `
+      position: relative;
+      z-index: 1;
       font-family: 'Zen Maru Gothic', sans-serif;
       font-size: 1.5rem;
       font-weight: 700;
@@ -1368,6 +1374,8 @@ export class StageScene implements Scene {
       const bestMsg = document.createElement('div');
       bestMsg.textContent = `✨ じこベストこうしん！ ⭐ ${starCount} こ`;
       bestMsg.style.cssText = `
+        position: relative;
+        z-index: 1;
         font-family: 'Zen Maru Gothic', sans-serif;
         font-size: 1.2rem;
         font-weight: 700;
@@ -1467,6 +1475,8 @@ export class StageScene implements Scene {
         const cardMsg = document.createElement('div');
         cardMsg.textContent = `${entry.emoji} ${entry.name}の ずかんカード ゲット！`;
         cardMsg.style.cssText = `
+          position: relative;
+          z-index: 1;
           font-family: 'Zen Maru Gothic', sans-serif;
           font-size: 1.2rem;
           font-weight: 700;
@@ -1479,6 +1489,8 @@ export class StageScene implements Scene {
         const companionMsg = document.createElement('div');
         companionMsg.textContent = `${entry.emoji} ${entry.name}が なかまに なったよ！`;
         companionMsg.style.cssText = `
+          position: relative;
+          z-index: 1;
           font-family: 'Zen Maru Gothic', sans-serif;
           font-size: 1.2rem;
           font-weight: 700;
@@ -1492,6 +1504,8 @@ export class StageScene implements Scene {
         rewardButton.setAttribute('data-stage-clear-card', '');
         rewardButton.textContent = 'カードをみる';
         rewardButton.style.cssText = `
+          position: relative;
+          z-index: 1;
           margin-top: 1rem;
           min-width: min(72vw, 280px);
           min-height: 72px;
@@ -1593,6 +1607,8 @@ export class StageScene implements Scene {
     continueButton.textContent = continueLabel;
     continueButton.disabled = true;
     continueButton.style.cssText = `
+      position: relative;
+      z-index: 1;
       margin-top: 1.4rem;
       min-width: min(78vw, 320px);
       min-height: 88px;
@@ -1620,6 +1636,60 @@ export class StageScene implements Scene {
     this.clearOverlay.appendChild(continueButton);
 
     uiOverlay.appendChild(this.clearOverlay);
+  }
+
+  private appendClearCelebrationBurst(): void {
+    if (!this.clearOverlay) return;
+
+    this.injectStageClearBurstAnimation();
+
+    const burstLayer = document.createElement('div');
+    burstLayer.setAttribute('data-stage-clear-burst', '');
+    burstLayer.style.cssText = `
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 0;
+    `;
+
+    const burstItems = [
+      { emoji: '⭐', x: '0px', y: '-164px', midX: '0px', midY: '-84px', size: '2.6rem', scale: '1.12', delay: '0ms', duration: '1500ms' },
+      { emoji: '✨', x: '138px', y: '-108px', midX: '72px', midY: '-56px', size: '2.2rem', scale: '0.96', delay: '90ms', duration: '1440ms' },
+      { emoji: '🌟', x: '176px', y: '-10px', midX: '96px', midY: '-8px', size: '2.5rem', scale: '1.04', delay: '150ms', duration: '1520ms' },
+      { emoji: '⭐', x: '136px', y: '112px', midX: '74px', midY: '58px', size: '2.3rem', scale: '0.92', delay: '220ms', duration: '1480ms' },
+      { emoji: '✨', x: '0px', y: '170px', midX: '0px', midY: '88px', size: '2rem', scale: '0.88', delay: '280ms', duration: '1400ms' },
+      { emoji: '🌟', x: '-142px', y: '118px', midX: '-76px', midY: '60px', size: '2.4rem', scale: '1.02', delay: '340ms', duration: '1500ms' },
+      { emoji: '⭐', x: '-182px', y: '-8px', midX: '-98px', midY: '-6px', size: '2.6rem', scale: '1.08', delay: '410ms', duration: '1560ms' },
+      { emoji: '✨', x: '-126px', y: '-118px', midX: '-68px', midY: '-64px', size: '2.1rem', scale: '0.94', delay: '470ms', duration: '1460ms' },
+      { emoji: '🌟', x: '78px', y: '-182px', midX: '40px', midY: '-96px', size: '2rem', scale: '0.86', delay: '520ms', duration: '1380ms' },
+    ] as const;
+
+    for (const item of burstItems) {
+      const emoji = document.createElement('span');
+      emoji.setAttribute('data-stage-clear-burst-emoji', '');
+      emoji.setAttribute('aria-hidden', 'true');
+      emoji.textContent = item.emoji;
+      emoji.style.cssText = `
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        font-size: ${item.size};
+        line-height: 1;
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.3);
+        will-change: transform, opacity;
+        animation: stageClearEmojiBurst ${item.duration} ease-out ${item.delay} forwards;
+        --stage-clear-burst-mid-x: ${item.midX};
+        --stage-clear-burst-mid-y: ${item.midY};
+        --stage-clear-burst-x: ${item.x};
+        --stage-clear-burst-y: ${item.y};
+        --stage-clear-burst-scale: ${item.scale};
+      `;
+      burstLayer.appendChild(emoji);
+    }
+
+    this.clearOverlay.appendChild(burstLayer);
   }
 
   private revealClearContinueButtonIfReady(): void {
@@ -1686,6 +1756,36 @@ export class StageScene implements Scene {
         0%   { transform: scale(0.6); opacity: 0; }
         60%  { transform: scale(1.2); opacity: 1; }
         100% { transform: scale(1.0); opacity: 1; }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  private injectStageClearBurstAnimation(): void {
+    if (document.getElementById('stage-clear-burst-animation')) return;
+
+    const style = document.createElement('style');
+    style.id = 'stage-clear-burst-animation';
+    style.textContent = `
+      @keyframes stageClearEmojiBurst {
+        0% {
+          opacity: 0;
+          transform: translate(-50%, -50%) scale(0.3);
+        }
+        22% {
+          opacity: 1;
+          transform: translate(
+            calc(-50% + var(--stage-clear-burst-mid-x)),
+            calc(-50% + var(--stage-clear-burst-mid-y))
+          ) scale(calc(var(--stage-clear-burst-scale) * 0.82));
+        }
+        100% {
+          opacity: 0;
+          transform: translate(
+            calc(-50% + var(--stage-clear-burst-x)),
+            calc(-50% + var(--stage-clear-burst-y))
+          ) scale(var(--stage-clear-burst-scale));
+        }
       }
     `;
     document.head.appendChild(style);
