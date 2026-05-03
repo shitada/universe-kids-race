@@ -5,6 +5,15 @@ import { EncyclopediaOverlay } from '../../../src/ui/EncyclopediaOverlay';
 describe('EncyclopediaOverlay', () => {
   let overlay: EncyclopediaOverlay;
   let uiOverlay: HTMLDivElement;
+  const originalInnerHeight = window.innerHeight;
+
+  const setViewportHeight = (height: number) => {
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      writable: true,
+      value: height,
+    });
+  };
 
   beforeEach(() => {
     uiOverlay = document.createElement('div');
@@ -16,6 +25,7 @@ describe('EncyclopediaOverlay', () => {
   afterEach(() => {
     overlay.hide();
     uiOverlay.remove();
+    setViewportHeight(originalInnerHeight);
   });
 
   it('show creates fullscreen DOM in #ui-overlay', () => {
@@ -188,6 +198,42 @@ describe('EncyclopediaOverlay', () => {
     card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     const detail = uiOverlay.querySelector('[data-detail]');
     expect(detail).not.toBeNull();
+  });
+
+  it('uses a compact scrollable gallery layout on low viewport heights', () => {
+    setViewportHeight(520);
+
+    overlay.show([1], () => {});
+
+    const galleryContent = uiOverlay.querySelector('[data-gallery-content]') as HTMLElement | null;
+    const grid = uiOverlay.querySelector('[data-gallery-grid]') as HTMLElement | null;
+    const backBtn = uiOverlay.querySelector('[data-gallery-back]') as HTMLButtonElement | null;
+
+    expect(galleryContent).not.toBeNull();
+    expect(galleryContent?.style.maxHeight).toContain('calc');
+    expect(galleryContent?.style.overflowY).toBe('auto');
+    expect(grid?.style.gridTemplateColumns).toContain('minmax(110px, 1fr)');
+    expect(backBtn).not.toBeNull();
+  });
+
+  it('keeps detail actions inside compact scrollable containers on low viewport heights', () => {
+    setViewportHeight(520);
+
+    overlay.show([1], () => {}, () => {});
+    const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
+    card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    const detailContent = uiOverlay.querySelector('[data-detail-content]') as HTMLElement | null;
+    const detailCard = uiOverlay.querySelector('[data-detail-card]') as HTMLElement | null;
+    const backBtn = uiOverlay.querySelector('[data-detail-back]') as HTMLButtonElement | null;
+    const playBtn = uiOverlay.querySelector('[data-detail-play]') as HTMLButtonElement | null;
+
+    expect(detailContent).not.toBeNull();
+    expect(detailContent?.style.maxHeight).toContain('calc');
+    expect(detailContent?.style.overflowY).toBe('auto');
+    expect(detailCard).not.toBeNull();
+    expect(backBtn).not.toBeNull();
+    expect(playBtn).not.toBeNull();
   });
 
   describe('bestStageStars display', () => {

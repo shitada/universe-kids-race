@@ -1,11 +1,13 @@
 export class TutorialOverlay {
   private overlayEl: HTMLDivElement | null = null;
+  private static readonly COMPACT_HEIGHT_THRESHOLD = 720;
 
   show(onClose: () => void): void {
     if (this.overlayEl) return;
 
     const uiOverlay = document.getElementById('ui-overlay');
     if (!uiOverlay) return;
+    const isCompactHeight = this.isCompactHeight();
 
     this.overlayEl = document.createElement('div');
     this.overlayEl.setAttribute('data-tutorial-overlay', '');
@@ -15,32 +17,50 @@ export class TutorialOverlay {
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: ${isCompactHeight ? 'flex-start' : 'center'};
       background: rgba(0, 0, 32, 0.92);
       pointer-events: auto;
       z-index: 30;
+      padding: ${isCompactHeight ? '0.75rem' : '1.25rem'};
+      box-sizing: border-box;
+    `;
+
+    const content = document.createElement('div');
+    content.setAttribute('data-tutorial-content', '');
+    content.style.cssText = `
+      width: min(960px, 100%);
+      max-height: calc(100% - ${isCompactHeight ? '0.5rem' : '1rem'});
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      overflow-y: auto;
+      padding: ${isCompactHeight ? '0.75rem 0.35rem 1rem' : '0.5rem'};
+      box-sizing: border-box;
     `;
 
     // Title
     const title = document.createElement('div');
+    title.setAttribute('data-tutorial-title', '');
     title.textContent = 'あそびかた';
     title.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: 2.2rem;
+      font-size: ${isCompactHeight ? '1.8rem' : '2.2rem'};
       font-weight: 900;
       color: #FFD700;
       text-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
-      margin-bottom: 1.5rem;
+      margin-bottom: ${isCompactHeight ? '0.9rem' : '1.5rem'};
+      text-align: center;
     `;
-    this.overlayEl.appendChild(title);
+    content.appendChild(title);
 
     // Cards container
     const cardsContainer = document.createElement('div');
     cardsContainer.style.cssText = `
       display: flex;
-      gap: 1.5rem;
+      gap: ${isCompactHeight ? '0.8rem' : '1.5rem'};
       flex-wrap: wrap;
       justify-content: center;
+      width: 100%;
       max-width: 90%;
     `;
 
@@ -50,6 +70,7 @@ export class TutorialOverlay {
       'ひだり・みぎ を タッチ',
       'うちゅうせんが うごくよ',
       'swipe 2s ease-in-out infinite',
+      isCompactHeight,
     ));
 
     // Card 2: Boost
@@ -58,6 +79,7 @@ export class TutorialOverlay {
       'ブースト ボタン',
       'はやく すすめるよ！',
       'boostPulse 1.5s ease-in-out infinite',
+      isCompactHeight,
     ));
 
     // Card 3: Goal
@@ -66,19 +88,20 @@ export class TutorialOverlay {
       'ほしを あつめて',
       'ゴールを めざそう！',
       'starGlow 3s linear infinite',
+      isCompactHeight,
     ));
 
-    this.overlayEl.appendChild(cardsContainer);
+    content.appendChild(cardsContainer);
 
     // Close button
     const closeBtn = document.createElement('button');
     closeBtn.textContent = 'とじる';
     closeBtn.style.cssText = `
-      margin-top: 1.5rem;
+      margin-top: ${isCompactHeight ? '0.9rem' : '1.5rem'};
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: 1.4rem;
+      font-size: ${isCompactHeight ? '1.15rem' : '1.4rem'};
       font-weight: 700;
-      padding: 0.8rem 2.5rem;
+      padding: ${isCompactHeight ? '0.7rem 2rem' : '0.8rem 2.5rem'};
       border: none;
       border-radius: 2rem;
       background: linear-gradient(135deg, #FF6B6B, #FFE66D);
@@ -92,11 +115,12 @@ export class TutorialOverlay {
       e.stopPropagation();
       onClose();
     });
-    this.overlayEl.appendChild(closeBtn);
+    content.appendChild(closeBtn);
 
     // Inject keyframes
     this.injectAnimations();
 
+    this.overlayEl.appendChild(content);
     uiOverlay.appendChild(this.overlayEl);
   }
 
@@ -107,14 +131,20 @@ export class TutorialOverlay {
     }
   }
 
-  private createCard(icon: string, titleText: string, description: string, animation: string): HTMLDivElement {
+  private createCard(
+    icon: string,
+    titleText: string,
+    description: string,
+    animation: string,
+    isCompactHeight: boolean,
+  ): HTMLDivElement {
     const card = document.createElement('div');
     card.setAttribute('data-tutorial-card', '');
     card.style.cssText = `
       background: rgba(255, 255, 255, 0.08);
       border-radius: 1.5rem;
-      padding: 1.5rem 1.2rem;
-      width: 180px;
+      padding: ${isCompactHeight ? '1rem 0.85rem' : '1.5rem 1.2rem'};
+      width: ${isCompactHeight ? '150px' : '180px'};
       text-align: center;
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
     `;
@@ -122,8 +152,8 @@ export class TutorialOverlay {
     const iconEl = document.createElement('div');
     iconEl.textContent = icon;
     iconEl.style.cssText = `
-      font-size: 2.5rem;
-      margin-bottom: 0.8rem;
+      font-size: ${isCompactHeight ? '2rem' : '2.5rem'};
+      margin-bottom: ${isCompactHeight ? '0.55rem' : '0.8rem'};
       animation: ${animation};
     `;
 
@@ -131,7 +161,7 @@ export class TutorialOverlay {
     titleEl.textContent = titleText;
     titleEl.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: 1.1rem;
+      font-size: ${isCompactHeight ? '0.95rem' : '1.1rem'};
       font-weight: 700;
       color: #fff;
       margin-bottom: 0.4rem;
@@ -141,7 +171,7 @@ export class TutorialOverlay {
     descEl.textContent = description;
     descEl.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: 0.9rem;
+      font-size: ${isCompactHeight ? '0.8rem' : '0.9rem'};
       color: rgba(255, 255, 255, 0.7);
     `;
 
@@ -149,6 +179,10 @@ export class TutorialOverlay {
     card.appendChild(titleEl);
     card.appendChild(descEl);
     return card;
+  }
+
+  private isCompactHeight(): boolean {
+    return window.innerHeight <= TutorialOverlay.COMPACT_HEIGHT_THRESHOLD;
   }
 
   private injectAnimations(): void {
