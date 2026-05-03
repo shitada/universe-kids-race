@@ -4,6 +4,7 @@ import { SceneManager } from '../../src/game/SceneManager';
 import type { Scene, SceneContext, SceneType } from '../../src/types';
 import * as THREE from 'three';
 import { StageScene } from '../../src/game/scenes/StageScene';
+import { TitleScene } from '../../src/game/scenes/TitleScene';
 import { TOTAL_STAGES } from '../../src/game/config/StageConfig';
 import type { InputSystem } from '../../src/game/systems/InputSystem';
 import type { AudioManager } from '../../src/game/audio/AudioManager';
@@ -140,6 +141,63 @@ describe('Stage Flow Integration', () => {
 
     await manager.transitionTo('stage', { stageNumber: 1 });
     expect(manager.getCurrentType()).toBe('stage');
+  });
+
+  it('keeps the title next-adventure preview aligned with the actual start stage', async () => {
+    const log: { type: SceneType; context: SceneContext }[] = [];
+    const manager = new SceneManager();
+    const saveManager = {
+      load: vi.fn(() => ({
+        clearedStage: 4,
+        unlockedPlanets: [],
+        muted: false,
+        tutorialShown: true,
+        bestStageStars: {},
+      })),
+      save: vi.fn(),
+      clear: vi.fn(),
+      markTutorialShown: vi.fn(),
+    } as unknown as SaveManager;
+    const audioManager = {
+      init: vi.fn(),
+      initSync: vi.fn(),
+      isInitialized: vi.fn(() => true),
+      playBGM: vi.fn(),
+      stopBGM: vi.fn(),
+      isMuted: vi.fn(() => false),
+      toggleMute: vi.fn(() => false),
+      setMuted: vi.fn(),
+      playSFX: vi.fn(),
+      startBoostSFX: vi.fn(),
+      stopBoostSFX: vi.fn(),
+      ensureResumed: vi.fn(),
+      dispose: vi.fn(),
+    } as unknown as AudioManager;
+    const titleScene = new TitleScene(manager, saveManager, audioManager);
+
+    manager.registerScene('title', titleScene);
+    manager.registerScene('stage', createTrackingScene(log, 'stage'));
+
+    await manager.transitionTo('title');
+
+    const nextAdventureCard = document.querySelector('[data-next-adventure-card]') as HTMLDivElement | null;
+    const playButtonHint = document.querySelector('[data-play-button-hint]') as HTMLDivElement | null;
+    const playButton = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent === 'あそぶ',
+    ) as HTMLButtonElement | undefined;
+
+    expect(nextAdventureCard?.getAttribute('data-next-stage-number')).toBe('5');
+    expect(playButtonHint?.textContent).toContain('ステージ 5');
+    expect(playButton).toBeTruthy();
+
+    playButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+
+    expect(manager.getCurrentType()).toBe('stage');
+    expect(log).toContainEqual({
+      type: 'stage',
+      context: { stageNumber: 5, totalScore: 0, totalStarCount: 0, launchSource: 'campaign' },
+    });
   });
 
   it('keeps StageScene uncreated during title while module prefetch is in flight, then transitions successfully', async () => {
