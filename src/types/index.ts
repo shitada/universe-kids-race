@@ -7,6 +7,7 @@ export interface SceneContext {
   stageNumber?: number;
   totalScore?: number;
   totalStarCount?: number;
+  launchSource?: 'campaign' | 'encyclopedia';
   replayToken?: number;
 }
 

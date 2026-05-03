@@ -23,7 +23,7 @@ import { followCameraZ } from '../utils/followCameraZ';
 import { getViewportSize } from '../utils/getViewportSize';
 import { ScorePopupManager } from '../../ui/ScorePopupManager';
 import { EncyclopediaOverlay } from '../../ui/EncyclopediaOverlay';
-import { getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
+import { getNextPlanetEncyclopediaEntry, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { TouchGuideOverlay, type TouchGuideMode } from '../../ui/TouchGuideOverlay';
 
 const BG_STAR_PARALLAX = 1.0;
@@ -250,6 +250,7 @@ export class StageScene implements Scene {
 
   private stageConfig!: StageConfig;
   private stageNumber = 1;
+  private launchSource: 'campaign' | 'encyclopedia' = 'campaign';
   private isCleared = false;
   private clearTimer = 0;
   private clearOverlay: HTMLDivElement | null = null;
@@ -311,6 +312,18 @@ export class StageScene implements Scene {
   private touchGuideIdleTimer = 0;
   private hasSeenMoveInput = false;
   private static readonly TOUCH_GUIDE_IDLE_DELAY = 3;
+  private assistElapsedTime = 0;
+  private recentMeteoriteHitTimes: number[] = [];
+  private assistNavigationUntil = 0;
+  private assistRecommendationMode: 'assist-left' | 'assist-right' | null = null;
+  private assistReevaluateTimer = 0;
+  private static readonly ASSIST_HIT_WINDOW = 8;
+  private static readonly ASSIST_NAV_DURATION = 4;
+  private static readonly ASSIST_REEVALUATE_INTERVAL = 0.4;
+  private static readonly ASSIST_LOOKAHEAD_DISTANCE = 28;
+  private static readonly ASSIST_TARGET_OFFSET = 4;
+  private static readonly ASSIST_LATERAL_RANGE = 7;
+  private static readonly ASSIST_SCORE_MARGIN = 0.2;
 
   constructor(sceneManager: SceneManager, inputSystem: InputSystem, audioManager: AudioManager, saveManager: SaveManager) {
     this.sceneManager = sceneManager;
@@ -362,6 +375,7 @@ export class StageScene implements Scene {
     this.ensureInitialized();
     this.lastAspect = 0;
     this.stageNumber = context.stageNumber ?? 1;
+    this.launchSource = context.launchSource ?? 'campaign';
     this.stageConfig = getStageConfig(this.stageNumber);
     this.prefetchEndingSceneModuleIfNeeded();
     this.isCleared = false;
@@ -377,6 +391,7 @@ export class StageScene implements Scene {
     this.touchGuideIdleTimer = 0;
     this.hasSeenMoveInput = false;
     this.touchGuideMode = 'intro';
+    this.resetAssistNavigation();
 
     const totalScore = context.totalScore ?? 0;
     const totalStarCount = context.totalStarCount ?? 0;
@@ -826,6 +841,8 @@ export class StageScene implements Scene {
     }
 
     const input = this.inputSystem.getState();
+    this.assistElapsedTime += deltaTime;
+    this.updateAssistNavigation(deltaTime);
     this.updateTouchGuide(input.moveDirection, deltaTime);
 
     // Capture boost state before changes
@@ -973,6 +990,7 @@ export class StageScene implements Scene {
         );
       }
       this.spaceship.onMeteoriteHit();
+      this.registerMeteoriteHitForAssist();
       this.boostSystem.cancel();
       this.damageTimer = StageScene.DAMAGE_FLASH_DURATION;
       this.audioManager.playSFX('meteoriteHit');
@@ -1072,6 +1090,11 @@ export class StageScene implements Scene {
   }
 
   private updateTouchGuide(moveDirection: number, deltaTime: number): void {
+    if (this.isAssistNavigationActive() && this.assistRecommendationMode) {
+      this.setTouchGuideMode(this.assistRecommendationMode);
+      return;
+    }
+
     if (moveDirection !== 0) {
       this.touchGuideIdleTimer = 0;
       this.hasSeenMoveInput = true;
@@ -1097,6 +1120,90 @@ export class StageScene implements Scene {
     if (this.touchGuideMode === mode) return;
     this.touchGuideMode = mode;
     this.touchGuide.setMode(mode);
+  }
+
+  private resetAssistNavigation(): void {
+    this.assistElapsedTime = 0;
+    this.recentMeteoriteHitTimes.length = 0;
+    this.assistNavigationUntil = 0;
+    this.assistRecommendationMode = null;
+    this.assistReevaluateTimer = 0;
+  }
+
+  private isAssistNavigationActive(): boolean {
+    return this.assistNavigationUntil > this.assistElapsedTime;
+  }
+
+  private updateAssistNavigation(deltaTime: number): void {
+    if (!this.isAssistNavigationActive()) {
+      this.assistRecommendationMode = null;
+      this.assistReevaluateTimer = 0;
+      return;
+    }
+
+    this.assistReevaluateTimer -= deltaTime;
+    if (this.assistReevaluateTimer <= 0) {
+      this.refreshAssistRecommendation();
+    }
+  }
+
+  private registerMeteoriteHitForAssist(): void {
+    const now = this.assistElapsedTime;
+    this.recentMeteoriteHitTimes.push(now);
+    this.recentMeteoriteHitTimes = this.recentMeteoriteHitTimes.filter((time) => now - time <= StageScene.ASSIST_HIT_WINDOW);
+    if (this.recentMeteoriteHitTimes.length < 2) {
+      return;
+    }
+
+    this.assistNavigationUntil = now + StageScene.ASSIST_NAV_DURATION;
+    this.refreshAssistRecommendation();
+    if (this.assistRecommendationMode) {
+      this.setTouchGuideMode(this.assistRecommendationMode);
+    }
+  }
+
+  private refreshAssistRecommendation(): void {
+    this.assistRecommendationMode = this.determineAssistTouchGuideMode();
+    this.assistReevaluateTimer = StageScene.ASSIST_REEVALUATE_INTERVAL;
+  }
+
+  private determineAssistTouchGuideMode(): 'assist-left' | 'assist-right' | null {
+    const leftDanger = this.getAssistDangerScore(-1);
+    const rightDanger = this.getAssistDangerScore(1);
+    const dangerGap = Math.abs(leftDanger - rightDanger);
+    if (dangerGap < StageScene.ASSIST_SCORE_MARGIN) {
+      return null;
+    }
+    return leftDanger < rightDanger ? 'assist-left' : 'assist-right';
+  }
+
+  private getAssistDangerScore(direction: -1 | 1): number {
+    const targetX = THREE.MathUtils.clamp(
+      this.spaceship.position.x + direction * StageScene.ASSIST_TARGET_OFFSET,
+      this.spaceship.boundaryMin,
+      this.spaceship.boundaryMax,
+    );
+    let score = 0;
+
+    for (const meteorite of this.meteorites) {
+      if (!meteorite.isActive) continue;
+
+      const forwardDistance = this.spaceship.position.z - meteorite.position.z;
+      if (forwardDistance <= 0 || forwardDistance > StageScene.ASSIST_LOOKAHEAD_DISTANCE) {
+        continue;
+      }
+
+      const lateralDistance = Math.abs(meteorite.position.x - targetX);
+      if (lateralDistance >= StageScene.ASSIST_LATERAL_RANGE) {
+        continue;
+      }
+
+      const forwardWeight = 0.35 + (1 - (forwardDistance / StageScene.ASSIST_LOOKAHEAD_DISTANCE)) * 0.65;
+      const lateralWeight = 1 - (lateralDistance / StageScene.ASSIST_LATERAL_RANGE);
+      score += forwardWeight * lateralWeight * lateralWeight;
+    }
+
+    return score;
   }
 
   private updateDamageEffect(deltaTime: number): void {
@@ -1179,6 +1286,7 @@ export class StageScene implements Scene {
     this.clearTimer = 0;
     this.isClearContinueEnabled = false;
     this.hasHandledClearContinue = false;
+    this.resetAssistNavigation();
     this.touchGuide.hide();
     const isNewPlanetUnlock = this.saveManager.markStageCleared(this.stageNumber);
     this.audioManager.playSFX('stageClear');
@@ -1229,11 +1337,15 @@ export class StageScene implements Scene {
       padding: 1.2rem;
       box-sizing: border-box;
       text-align: center;
+      overflow: hidden;
     `;
+    this.appendClearCelebrationBurst();
 
     const msg = document.createElement('div');
     msg.textContent = 'やったね！';
     msg.style.cssText = `
+      position: relative;
+      z-index: 1;
       font-family: 'Zen Maru Gothic', sans-serif;
       font-size: 3rem;
       font-weight: 900;
@@ -1247,6 +1359,8 @@ export class StageScene implements Scene {
     const score = document.createElement('div');
     score.textContent = `⭐ ${starCount} こ あつめたよ！`;
     score.style.cssText = `
+      position: relative;
+      z-index: 1;
       font-family: 'Zen Maru Gothic', sans-serif;
       font-size: 1.5rem;
       font-weight: 700;
@@ -1260,6 +1374,8 @@ export class StageScene implements Scene {
       const bestMsg = document.createElement('div');
       bestMsg.textContent = `✨ じこベストこうしん！ ⭐ ${starCount} こ`;
       bestMsg.style.cssText = `
+        position: relative;
+        z-index: 1;
         font-family: 'Zen Maru Gothic', sans-serif;
         font-size: 1.2rem;
         font-weight: 700;
@@ -1273,6 +1389,85 @@ export class StageScene implements Scene {
 
     this.clearOverlay.appendChild(score);
 
+    const nextEntry = getNextPlanetEncyclopediaEntry(this.stageNumber);
+    if (nextEntry) {
+      const nextAdventureCard = document.createElement('section');
+      nextAdventureCard.setAttribute('data-stage-clear-next-preview', '');
+      nextAdventureCard.style.cssText = `
+        margin-top: 1.1rem;
+        width: min(88vw, 420px);
+        padding: 1rem 1.1rem 1.15rem;
+        border-radius: 28px;
+        background: linear-gradient(180deg, rgba(30, 46, 112, 0.92), rgba(12, 22, 66, 0.96));
+        border: 2px solid rgba(255, 255, 255, 0.18);
+        box-shadow: 0 14px 32px rgba(0, 0, 0, 0.26);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.45rem;
+      `;
+
+      const nextAdventureLabel = document.createElement('div');
+      nextAdventureLabel.textContent = 'つぎのぼうけん';
+      nextAdventureLabel.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: 1rem;
+        font-weight: 700;
+        color: #b9d7ff;
+        letter-spacing: 0.08em;
+      `;
+
+      const nextAdventureTitle = document.createElement('div');
+      nextAdventureTitle.textContent = `つぎは ${nextEntry.name}！`;
+      nextAdventureTitle.setAttribute('data-stage-clear-next-title', '');
+      nextAdventureTitle.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: clamp(1.5rem, 5.2vmin, 2.05rem);
+        font-weight: 900;
+        color: #fff4a3;
+        text-shadow: 0 0 14px rgba(255, 230, 120, 0.25);
+      `;
+
+      const nextAdventureEmoji = document.createElement('div');
+      nextAdventureEmoji.textContent = nextEntry.emoji;
+      nextAdventureEmoji.setAttribute('data-stage-clear-next-emoji', '');
+      nextAdventureEmoji.style.cssText = `
+        font-size: clamp(3.2rem, 13vmin, 4.8rem);
+        line-height: 1;
+        filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.24));
+      `;
+
+      const nextAdventureName = document.createElement('div');
+      nextAdventureName.textContent = nextEntry.name;
+      nextAdventureName.setAttribute('data-stage-clear-next-name', '');
+      nextAdventureName.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: clamp(1.35rem, 4.8vmin, 1.8rem);
+        font-weight: 800;
+        color: #ffffff;
+      `;
+
+      const nextAdventureTrivia = document.createElement('div');
+      nextAdventureTrivia.textContent = nextEntry.trivia;
+      nextAdventureTrivia.setAttribute('data-stage-clear-next-trivia', '');
+      nextAdventureTrivia.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: clamp(1.02rem, 3.9vmin, 1.2rem);
+        font-weight: 700;
+        color: #dfeaff;
+        line-height: 1.45;
+      `;
+
+      nextAdventureCard.append(
+        nextAdventureLabel,
+        nextAdventureTitle,
+        nextAdventureEmoji,
+        nextAdventureName,
+        nextAdventureTrivia,
+      );
+      this.clearOverlay.appendChild(nextAdventureCard);
+    }
+
     // Card acquisition notification for newly unlocked planets
     if (isNewPlanetUnlock) {
       const entry = getPlanetEncyclopediaEntry(this.stageNumber);
@@ -1280,6 +1475,8 @@ export class StageScene implements Scene {
         const cardMsg = document.createElement('div');
         cardMsg.textContent = `${entry.emoji} ${entry.name}の ずかんカード ゲット！`;
         cardMsg.style.cssText = `
+          position: relative;
+          z-index: 1;
           font-family: 'Zen Maru Gothic', sans-serif;
           font-size: 1.2rem;
           font-weight: 700;
@@ -1292,6 +1489,8 @@ export class StageScene implements Scene {
         const companionMsg = document.createElement('div');
         companionMsg.textContent = `${entry.emoji} ${entry.name}が なかまに なったよ！`;
         companionMsg.style.cssText = `
+          position: relative;
+          z-index: 1;
           font-family: 'Zen Maru Gothic', sans-serif;
           font-size: 1.2rem;
           font-weight: 700;
@@ -1305,6 +1504,8 @@ export class StageScene implements Scene {
         rewardButton.setAttribute('data-stage-clear-card', '');
         rewardButton.textContent = 'カードをみる';
         rewardButton.style.cssText = `
+          position: relative;
+          z-index: 1;
           margin-top: 1rem;
           min-width: min(72vw, 280px);
           min-height: 72px;
@@ -1399,8 +1600,12 @@ export class StageScene implements Scene {
       background: linear-gradient(135deg, #5fd3ff, #4b7bff);
     `;
 
+    const continueLabel = this.launchSource === 'encyclopedia'
+      ? 'タイトルへ'
+      : this.stageNumber >= TOTAL_STAGES
+        ? 'おいわいへ'
+        : 'つぎへ';
     const continueButton = document.createElement('button');
-    const continueLabel = this.stageNumber >= TOTAL_STAGES ? 'おいわいへ' : 'つぎへ';
     continueButton.setAttribute('data-stage-clear-continue', '');
     continueButton.setAttribute('aria-label', continueLabel);
     continueButton.textContent = continueLabel;
@@ -1411,68 +1616,12 @@ export class StageScene implements Scene {
       background: linear-gradient(135deg, #ffe66d, #ffb347);
     `;
 
-    const disableClearActionButtons = (): void => {
-      if (this.clearRetryButton) {
-        this.clearRetryButton.disabled = true;
-        this.clearRetryButton.style.pointerEvents = 'none';
-        this.clearRetryButton.style.transform = 'scale(1)';
-      }
-      if (this.clearContinueButton) {
-        this.clearContinueButton.disabled = true;
-        this.clearContinueButton.style.pointerEvents = 'none';
-        this.clearContinueButton.style.transform = 'scale(1)';
-      }
-    };
-
-    const activateRetry = (event: Event): void => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (this.isClearRewardOpen) return;
-      if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
-      this.hasHandledClearContinue = true;
-      disableClearActionButtons();
+    this.bindClearActionButton(retryButton, () => {
       this.handleStageReplay();
-    };
-    const releaseRetry = (): void => {
-      if (this.clearRetryButton) {
-        this.clearRetryButton.style.transform = 'scale(1)';
-      }
-    };
-    retryButton.addEventListener('pointerdown', (event) => {
-      if (this.isClearRewardOpen) return;
-      if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
-      retryButton.style.transform = 'scale(0.96)';
-      activateRetry(event);
     });
-    retryButton.addEventListener('click', activateRetry);
-    retryButton.addEventListener('pointerup', releaseRetry);
-    retryButton.addEventListener('pointercancel', releaseRetry);
-    retryButton.addEventListener('pointerleave', releaseRetry);
-
-    const activate = (event: Event): void => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (this.isClearRewardOpen) return;
-      if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
-      this.hasHandledClearContinue = true;
-      disableClearActionButtons();
+    this.bindClearActionButton(continueButton, () => {
       this.handleStageComplete();
-    };
-    const release = (): void => {
-      if (this.clearContinueButton) {
-        this.clearContinueButton.style.transform = 'scale(1)';
-      }
-    };
-    continueButton.addEventListener('pointerdown', (event) => {
-      if (this.isClearRewardOpen) return;
-      if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
-      continueButton.style.transform = 'scale(0.96)';
-      activate(event);
     });
-    continueButton.addEventListener('click', activate);
-    continueButton.addEventListener('pointerup', release);
-    continueButton.addEventListener('pointercancel', release);
-    continueButton.addEventListener('pointerleave', release);
     this.clearRetryButton = retryButton;
     this.clearContinueButton = continueButton;
     actionButtons.appendChild(retryButton);
@@ -1482,22 +1631,112 @@ export class StageScene implements Scene {
     uiOverlay.appendChild(this.clearOverlay);
   }
 
+  private appendClearCelebrationBurst(): void {
+    if (!this.clearOverlay) return;
+
+    this.injectStageClearBurstAnimation();
+
+    const burstLayer = document.createElement('div');
+    burstLayer.setAttribute('data-stage-clear-burst', '');
+    burstLayer.style.cssText = `
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 0;
+    `;
+
+    const burstItems = [
+      { emoji: '⭐', x: '0px', y: '-164px', midX: '0px', midY: '-84px', size: '2.6rem', scale: '1.12', delay: '0ms', duration: '1500ms' },
+      { emoji: '✨', x: '138px', y: '-108px', midX: '72px', midY: '-56px', size: '2.2rem', scale: '0.96', delay: '90ms', duration: '1440ms' },
+      { emoji: '🌟', x: '176px', y: '-10px', midX: '96px', midY: '-8px', size: '2.5rem', scale: '1.04', delay: '150ms', duration: '1520ms' },
+      { emoji: '⭐', x: '136px', y: '112px', midX: '74px', midY: '58px', size: '2.3rem', scale: '0.92', delay: '220ms', duration: '1480ms' },
+      { emoji: '✨', x: '0px', y: '170px', midX: '0px', midY: '88px', size: '2rem', scale: '0.88', delay: '280ms', duration: '1400ms' },
+      { emoji: '🌟', x: '-142px', y: '118px', midX: '-76px', midY: '60px', size: '2.4rem', scale: '1.02', delay: '340ms', duration: '1500ms' },
+      { emoji: '⭐', x: '-182px', y: '-8px', midX: '-98px', midY: '-6px', size: '2.6rem', scale: '1.08', delay: '410ms', duration: '1560ms' },
+      { emoji: '✨', x: '-126px', y: '-118px', midX: '-68px', midY: '-64px', size: '2.1rem', scale: '0.94', delay: '470ms', duration: '1460ms' },
+      { emoji: '🌟', x: '78px', y: '-182px', midX: '40px', midY: '-96px', size: '2rem', scale: '0.86', delay: '520ms', duration: '1380ms' },
+    ] as const;
+
+    for (const item of burstItems) {
+      const emoji = document.createElement('span');
+      emoji.setAttribute('data-stage-clear-burst-emoji', '');
+      emoji.setAttribute('aria-hidden', 'true');
+      emoji.textContent = item.emoji;
+      emoji.style.cssText = `
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        font-size: ${item.size};
+        line-height: 1;
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.3);
+        will-change: transform, opacity;
+        animation: stageClearEmojiBurst ${item.duration} ease-out ${item.delay} forwards;
+        --stage-clear-burst-mid-x: ${item.midX};
+        --stage-clear-burst-mid-y: ${item.midY};
+        --stage-clear-burst-x: ${item.x};
+        --stage-clear-burst-y: ${item.y};
+        --stage-clear-burst-scale: ${item.scale};
+      `;
+      burstLayer.appendChild(emoji);
+    }
+
+    this.clearOverlay.appendChild(burstLayer);
+  }
+
   private revealClearContinueButtonIfReady(): void {
     if (this.isClearContinueEnabled) return;
     if (this.clearTimer < StageScene.CLEAR_CONTINUE_DELAY) return;
-    if (!this.clearContinueButton) return;
+    if (!this.clearContinueButton || !this.clearRetryButton) return;
 
     this.isClearContinueEnabled = true;
-    if (this.clearRetryButton) {
-      this.clearRetryButton.disabled = false;
-      this.clearRetryButton.style.opacity = '1';
-      this.clearRetryButton.style.visibility = 'visible';
-      this.clearRetryButton.style.pointerEvents = 'auto';
+    this.revealClearActionButton(this.clearRetryButton);
+    this.revealClearActionButton(this.clearContinueButton);
+  }
+
+  private bindClearActionButton(button: HTMLButtonElement, onActivate: () => void): void {
+    const activate = (event: Event): void => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!this.canActivateClearAction()) return;
+      this.hasHandledClearContinue = true;
+      this.lockClearActionButtons();
+      onActivate();
+    };
+    const release = (): void => {
+      button.style.transform = 'scale(1)';
+    };
+    button.addEventListener('pointerdown', (event) => {
+      if (!this.canActivateClearAction()) return;
+      button.style.transform = 'scale(0.96)';
+      activate(event);
+    });
+    button.addEventListener('click', activate);
+    button.addEventListener('pointerup', release);
+    button.addEventListener('pointercancel', release);
+    button.addEventListener('pointerleave', release);
+  }
+
+  private canActivateClearAction(): boolean {
+    return !this.isClearRewardOpen && this.isClearContinueEnabled && !this.hasHandledClearContinue;
+  }
+
+  private revealClearActionButton(button: HTMLButtonElement | null): void {
+    if (!button) return;
+    button.disabled = false;
+    button.style.opacity = '1';
+    button.style.visibility = 'visible';
+    button.style.pointerEvents = 'auto';
+  }
+
+  private lockClearActionButtons(): void {
+    for (const button of [this.clearRetryButton, this.clearContinueButton]) {
+      if (!button) continue;
+      button.disabled = true;
+      button.style.pointerEvents = 'none';
+      button.style.transform = 'scale(1)';
     }
-    this.clearContinueButton.disabled = false;
-    this.clearContinueButton.style.opacity = '1';
-    this.clearContinueButton.style.visibility = 'visible';
-    this.clearContinueButton.style.pointerEvents = 'auto';
   }
 
   private injectBestStageStarsAnimation(): void {
@@ -1515,8 +1754,43 @@ export class StageScene implements Scene {
     document.head.appendChild(style);
   }
 
+  private injectStageClearBurstAnimation(): void {
+    if (document.getElementById('stage-clear-burst-animation')) return;
+
+    const style = document.createElement('style');
+    style.id = 'stage-clear-burst-animation';
+    style.textContent = `
+      @keyframes stageClearEmojiBurst {
+        0% {
+          opacity: 0;
+          transform: translate(-50%, -50%) scale(0.3);
+        }
+        22% {
+          opacity: 1;
+          transform: translate(
+            calc(-50% + var(--stage-clear-burst-mid-x)),
+            calc(-50% + var(--stage-clear-burst-mid-y))
+          ) scale(calc(var(--stage-clear-burst-scale) * 0.82));
+        }
+        100% {
+          opacity: 0;
+          transform: translate(
+            calc(-50% + var(--stage-clear-burst-x)),
+            calc(-50% + var(--stage-clear-burst-y))
+          ) scale(var(--stage-clear-burst-scale));
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
   private handleStageComplete(): void {
     const { totalScore, totalStarCount } = this.scoreSystem.finalizeStage();
+
+    if (this.launchSource === 'encyclopedia') {
+      this.sceneManager.requestTransition('title');
+      return;
+    }
 
     if (this.stageNumber >= TOTAL_STAGES) {
       this.sceneManager.requestTransition('ending', { totalScore, totalStarCount });
@@ -1547,6 +1821,7 @@ export class StageScene implements Scene {
     this.clearRetryButton = null;
     this.clearRewardButton = null;
     this.isClearRewardOpen = false;
+    this.resetAssistNavigation();
     this.touchGuide.hide();
     this.hud.hide();
     this.scorePopupManager.dispose();

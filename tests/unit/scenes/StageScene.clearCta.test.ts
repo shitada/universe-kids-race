@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StageScene } from '../../../src/game/scenes/StageScene';
 import { TOTAL_STAGES } from '../../../src/game/config/StageConfig';
+import { getNextPlanetEncyclopediaEntry } from '../../../src/game/config/PlanetEncyclopedia';
 import type { SceneManager } from '../../../src/game/SceneManager';
 import type { InputSystem } from '../../../src/game/systems/InputSystem';
 import type { AudioManager } from '../../../src/game/audio/AudioManager';
@@ -29,6 +30,7 @@ function createScene(options?: {
   stageNumber?: number;
   totalScore?: number;
   totalStarCount?: number;
+  launchSource?: 'campaign' | 'encyclopedia';
   saveData?: Partial<SaveData>;
   isNewPlanetUnlock?: boolean;
   earnedStars?: number;
@@ -79,7 +81,7 @@ function createScene(options?: {
     audioManager,
     saveManager,
   );
-  scene.enter({ stageNumber, totalScore, totalStarCount });
+  scene.enter({ stageNumber, totalScore, totalStarCount, launchSource: options?.launchSource });
 
   const internal = scene as unknown as StageSceneInternals;
   const finalizeStageMock = vi.fn(() => finalizeStageResult);
@@ -107,6 +109,10 @@ function getRetryButton(): HTMLButtonElement {
 
 function getCardButton(): HTMLButtonElement | null {
   return document.querySelector<HTMLButtonElement>('[data-stage-clear-card]');
+}
+
+function getNextPreviewCard(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[data-stage-clear-next-preview]');
 }
 
 function mockCanvasContext(): void {
@@ -177,6 +183,52 @@ describe('StageScene clear CTA', () => {
     });
   });
 
+  it('通常ステージではつぎのわくせいプレビューを表示する', () => {
+    const stageNumber = 4;
+    const { scene } = createScene({ stageNumber });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const nextEntry = getNextPlanetEncyclopediaEntry(stageNumber);
+    expect(nextEntry).toBeDefined();
+
+    const previewCard = getNextPreviewCard();
+    expect(previewCard).not.toBeNull();
+    expect(previewCard?.textContent).toContain('つぎのぼうけん');
+    expect(document.querySelector('[data-stage-clear-next-title]')?.textContent).toBe(`つぎは ${nextEntry?.name}！`);
+    expect(document.querySelector('[data-stage-clear-next-emoji]')?.textContent).toBe(nextEntry?.emoji);
+    expect(document.querySelector('[data-stage-clear-next-name]')?.textContent).toBe(nextEntry?.name);
+    expect(document.querySelector('[data-stage-clear-next-trivia]')?.textContent).toBe(nextEntry?.trivia);
+  });
+
+  it('クリア画面にもういちどボタンを表示し、同じステージへ再挑戦できる', () => {
+    const { scene, sceneManager } = createScene({
+      stageNumber: 4,
+      finalizeStageResult: { totalScore: 2400, totalStarCount: 14 },
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const retryButton = getRetryButton();
+    expect(retryButton.textContent).toBe('もういちど');
+    expect(retryButton.disabled).toBe(false);
+
+    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    retryButton.dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith('stage', {
+      stageNumber: 4,
+      totalScore: 0,
+      totalStarCount: 0,
+      replayToken: expect.any(Number),
+    });
+  });
+
   it('最終ステージではCTAタップでendingへ進む', () => {
     const { scene, sceneManager } = createScene({
       stageNumber: TOTAL_STAGES,
@@ -189,6 +241,7 @@ describe('StageScene clear CTA', () => {
 
     const button = getContinueButton();
     expect(button.textContent).toBe('おいわいへ');
+    expect(getNextPreviewCard()).toBeNull();
     button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
 
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
@@ -196,6 +249,45 @@ describe('StageScene clear CTA', () => {
       totalScore: 9000,
       totalStarCount: 72,
     });
+  });
+
+  it('図鑑から始めた通常ステージではCTAタップでタイトルへ戻る', () => {
+    const { scene, sceneManager } = createScene({
+      stageNumber: 4,
+      launchSource: 'encyclopedia',
+      finalizeStageResult: { totalScore: 2400, totalStarCount: 14 },
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const button = getContinueButton();
+    expect(button.textContent).toBe('タイトルへ');
+
+    button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith('title');
+  });
+
+  it('図鑑から始めた最終ステージでもCTAタップでタイトルへ戻る', () => {
+    const { scene, sceneManager } = createScene({
+      stageNumber: TOTAL_STAGES,
+      launchSource: 'encyclopedia',
+      finalizeStageResult: { totalScore: 9000, totalStarCount: 72 },
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const button = getContinueButton();
+    expect(button.textContent).toBe('タイトルへ');
+    button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith('title');
   });
 
   it('じこベスト・ずかん・なかま表示とCTAが共存する', () => {
@@ -215,6 +307,7 @@ describe('StageScene clear CTA', () => {
     expect(overlay?.textContent).toContain('じこベストこうしん');
     expect(overlay?.textContent).toContain('ずかんカード ゲット');
     expect(overlay?.textContent).toContain('なかまに なったよ');
+    expect(overlay?.textContent).toContain('つぎのぼうけん');
 
     const button = getContinueButton();
     const retryButton = getRetryButton();
@@ -316,6 +409,38 @@ describe('StageScene clear CTA', () => {
       stageNumber: 3,
       totalScore: 2000,
       totalStarCount: 9,
+    });
+  });
+
+  it('カード詳細が開いている間はもういちどできず、閉じた後に再挑戦できる', () => {
+    const { scene, sceneManager } = createScene({
+      stageNumber: 2,
+      earnedStars: 5,
+      isNewPlanetUnlock: true,
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const cardButton = getCardButton();
+    const retryButton = getRetryButton();
+    expect(cardButton).not.toBeNull();
+
+    cardButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(sceneManager.requestTransition).not.toHaveBeenCalled();
+
+    const backButton = document.querySelector('[data-detail-back]') as HTMLElement | null;
+    backButton?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith('stage', {
+      stageNumber: 2,
+      totalScore: 0,
+      totalStarCount: 0,
+      replayToken: expect.any(Number),
     });
   });
 });
