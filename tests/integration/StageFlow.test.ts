@@ -54,6 +54,11 @@ function flushPromises(): Promise<void> {
   });
 }
 
+function dispatchReleaseConfirm(button: HTMLElement): void {
+  button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+  button.dispatchEvent(new Event('pointerup', { bubbles: true }));
+}
+
 describe('Stage Flow Integration', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -277,7 +282,7 @@ describe('Stage Flow Integration', () => {
 
     const retryButton = document.querySelector('[data-stage-clear-retry]') as HTMLButtonElement | null;
     expect(retryButton).toBeTruthy();
-    retryButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton!);
     await flushPromises();
 
     expect(transitionLog.at(-1)).toEqual({
@@ -299,7 +304,7 @@ describe('Stage Flow Integration', () => {
 
     const continueButton = document.querySelector('[data-stage-clear-continue]') as HTMLButtonElement | null;
     expect(continueButton).toBeTruthy();
-    continueButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(continueButton!);
     await flushPromises();
 
     expect(transitionLog.at(-1)).toEqual({
@@ -355,7 +360,7 @@ describe('Stage Flow Integration', () => {
     ) as HTMLButtonElement | undefined;
     expect(playButton).toBeTruthy();
 
-    playButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(playButton!);
     await flushPromises();
 
     expect(log.at(-1)?.type).toBe('stage');
@@ -786,7 +791,7 @@ describe('Stage Flow Integration', () => {
 
     const button = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
     expect(button).not.toBeNull();
-    button!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(button!);
     await Promise.resolve();
     await Promise.resolve();
 
@@ -852,7 +857,7 @@ describe('Stage Flow Integration', () => {
 
     const retryButton = document.querySelector<HTMLButtonElement>('[data-stage-clear-retry]');
     expect(retryButton?.textContent).toBe('もういちど');
-    retryButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton!);
     await Promise.resolve();
     await Promise.resolve();
 
@@ -916,7 +921,7 @@ describe('Stage Flow Integration', () => {
 
     const button = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
     expect(button?.textContent).toBe('おいわいへ');
-    button!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(button!);
     await flushPromises();
 
     expect(manager.getCurrentType()).toBe('ending');
@@ -988,7 +993,7 @@ describe('Stage Flow Integration', () => {
 
     const button = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
     expect(button?.textContent).toBe('おいわいへ');
-    button!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(button!);
     await flushPromises();
 
     expect(manager.getCurrentType()).toBe('ending');
@@ -1063,7 +1068,7 @@ describe('Stage Flow Integration', () => {
     expect(document.querySelector('[data-load-failure-overlay]')).not.toBeNull();
 
     const retryButton = document.querySelector('[data-load-failure-primary]') as HTMLButtonElement;
-    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton);
     await flushPromises();
     await flushPromises();
 
@@ -1146,7 +1151,7 @@ describe('Stage Flow Integration', () => {
     expect(document.querySelector('[data-load-failure-overlay]')).not.toBeNull();
 
     const retryButton = document.querySelector('[data-load-failure-primary]') as HTMLButtonElement;
-    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton);
     await flushPromises();
     await flushPromises();
 

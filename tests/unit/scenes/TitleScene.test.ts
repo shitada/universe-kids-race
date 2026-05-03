@@ -80,6 +80,16 @@ function findButtonByText(text: string): HTMLButtonElement | undefined {
   ) as HTMLButtonElement | undefined;
 }
 
+function dispatchReleaseConfirm(button: HTMLElement): void {
+  button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+  button.dispatchEvent(new Event('pointerup', { bubbles: true }));
+}
+
+function dispatchReleaseOutside(button: HTMLElement): void {
+  button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+  document.body.dispatchEvent(new Event('pointerup', { bubbles: true }));
+}
+
 function findCompanionParade(scene: TitleScene): THREE.Group | undefined {
   return scene.getThreeScene().children.find(
     (child) => child instanceof THREE.Group && child.name === 'title-companion-parade',
@@ -160,8 +170,7 @@ describe('TitleScene (T009)', () => {
     const playButton = Array.from(buttons).find(b => b.textContent === 'あそぶ');
     expect(playButton).toBeTruthy();
 
-    const event = new Event('pointerdown', { bubbles: true });
-    playButton!.dispatchEvent(event);
+    dispatchReleaseConfirm(playButton!);
 
     expect(audioManager.initSync).not.toHaveBeenCalled();
     // ボタン押下では追加 playBGM は呼ばれない（StageScene 側が呼ぶため）
@@ -189,7 +198,7 @@ describe('TitleScene (T009)', () => {
     const playButton = findButtonByText('あそぶ');
     expect(playButton).toBeTruthy();
 
-    playButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(playButton!);
 
     expect(audioManager.initSync).toHaveBeenCalledTimes(1);
     expect(audioManager.playBGM).not.toHaveBeenCalled();
@@ -201,6 +210,45 @@ describe('TitleScene (T009)', () => {
         totalStarCount: 0,
       }),
     );
+
+    scene.exit();
+  });
+
+  it('"あそぶ" button cancels when the finger leaves on another element', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager(false);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager);
+    scene.enter({});
+
+    const playButton = findButtonByText('あそぶ');
+    expect(playButton).toBeTruthy();
+
+    dispatchReleaseOutside(playButton!);
+
+    expect(audioManager.initSync).not.toHaveBeenCalled();
+    expect(sceneManager.requestTransition).not.toHaveBeenCalled();
+
+    scene.exit();
+  });
+
+  it('"あそぶ" button suppresses the follow-up click after a same-button release', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager(false);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager);
+    scene.enter({});
+
+    const playButton = findButtonByText('あそぶ');
+    expect(playButton).toBeTruthy();
+
+    dispatchReleaseConfirm(playButton!);
+    playButton!.dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(audioManager.initSync).toHaveBeenCalledTimes(1);
+    expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
 
     scene.exit();
   });
@@ -227,7 +275,7 @@ describe('TitleScene (T009)', () => {
     expect(hint?.textContent).toContain('ステージ 1');
     expect(hint?.textContent).toContain('さいしょから');
 
-    findButtonByText('あそぶ')?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(findButtonByText('あそぶ')!);
 
     expect(sceneManager.requestTransition).toHaveBeenCalledWith(
       'stage',
@@ -298,7 +346,7 @@ describe('TitleScene (T009)', () => {
     const tutorialButton = findButtonByText('あそびかた');
     expect(tutorialButton).toBeTruthy();
 
-    tutorialButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(tutorialButton!);
 
     expect(audioManager.initSync).toHaveBeenCalledTimes(1);
     expect(audioManager.playBGM).toHaveBeenCalledTimes(1);
@@ -353,7 +401,7 @@ describe('TitleScene (T009)', () => {
     ) as HTMLButtonElement | undefined;
     expect(encyclopediaButton).toBeTruthy();
 
-    encyclopediaButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(encyclopediaButton!);
     await flushPromises();
     await flushPromises();
 
@@ -398,7 +446,7 @@ describe('TitleScene (T009)', () => {
     ) as HTMLButtonElement | undefined;
     expect(encyclopediaButton).toBeTruthy();
 
-    encyclopediaButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(encyclopediaButton!);
     await flushPromises();
     await flushPromises();
 
@@ -494,7 +542,7 @@ describe('TitleScene (T009)', () => {
     ) as HTMLButtonElement | undefined;
     expect(encyclopediaButton).toBeTruthy();
 
-    encyclopediaButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(encyclopediaButton!);
     await flushPromises();
     await flushPromises();
 
@@ -626,7 +674,7 @@ describe('TitleScene (T009)', () => {
     const playButton = findButtonByText('あそぶ');
     expect(playButton).toBeTruthy();
 
-    playButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(playButton!);
 
     expect(sceneManager.requestTransition).toHaveBeenCalledWith(
       'stage',
@@ -1005,7 +1053,7 @@ describe('TitleScene first-run onboarding (auto tutorial)', () => {
     const tutorialBtn = Array.from(uiOverlay.querySelectorAll('button'))
       .find((b) => b.textContent === 'あそびかた');
     expect(tutorialBtn).toBeTruthy();
-    tutorialBtn!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(tutorialBtn!);
 
     expect(document.querySelector('[data-tutorial-overlay]')).toBeTruthy();
 

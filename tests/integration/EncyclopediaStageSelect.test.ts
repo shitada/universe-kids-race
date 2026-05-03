@@ -67,6 +67,11 @@ function flushPromises(): Promise<void> {
   });
 }
 
+function dispatchReleaseConfirm(button: HTMLElement): void {
+  button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+  button.dispatchEvent(new Event('pointerup', { bubbles: true }));
+}
+
 describe('Encyclopedia Stage Selection Integration', () => {
   let uiOverlay: HTMLDivElement;
   let hud: HTMLDivElement;
@@ -114,7 +119,7 @@ describe('Encyclopedia Stage Selection Integration', () => {
     const encyclopediaBtn = Array.from(uiOverlay.querySelectorAll('button')).find(
       (button) => button.textContent?.includes('ずかん'),
     ) as HTMLButtonElement;
-    encyclopediaBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(encyclopediaBtn);
 
     expect(loadEncyclopediaOverlay).toHaveBeenCalledTimes(1);
     expect(document.querySelector('[data-loading-overlay]')).not.toBeNull();
@@ -137,7 +142,7 @@ describe('Encyclopedia Stage Selection Integration', () => {
 
     const playButton = uiOverlay.querySelector('[data-detail-play]') as HTMLElement;
     expect(playButton).not.toBeNull();
-    playButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(playButton);
     await flushPromises();
 
      expect(manager.getCurrentType()).toBe('stage');
@@ -176,13 +181,13 @@ describe('Encyclopedia Stage Selection Integration', () => {
         (button) => button.textContent?.includes('ずかん'),
       ) as HTMLButtonElement;
 
-    encyclopediaBtn().dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(encyclopediaBtn());
     await flushPromises();
     await flushPromises();
     const backButton = uiOverlay.querySelector('[data-gallery-back]') as HTMLElement;
     backButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
 
-    encyclopediaBtn().dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(encyclopediaBtn());
     await flushPromises();
     await flushPromises();
 
@@ -220,7 +225,7 @@ describe('Encyclopedia Stage Selection Integration', () => {
     const encyclopediaBtn = Array.from(uiOverlay.querySelectorAll('button')).find(
       (button) => button.textContent?.includes('ずかん'),
     ) as HTMLButtonElement;
-    encyclopediaBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(encyclopediaBtn);
     await flushPromises();
 
     expect(loadEncyclopediaOverlay).toHaveBeenCalledTimes(1);
@@ -261,7 +266,7 @@ describe('Encyclopedia Stage Selection Integration', () => {
     const encyclopediaBtn = Array.from(uiOverlay.querySelectorAll('button')).find(
       (button) => button.textContent?.includes('ずかん'),
     ) as HTMLButtonElement;
-    encyclopediaBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(encyclopediaBtn);
     await flushPromises();
     await flushPromises();
 
@@ -314,7 +319,7 @@ describe('Encyclopedia Stage Selection Integration', () => {
         (button) => button.textContent?.includes('ずかん'),
       ) as HTMLButtonElement;
 
-    findEncyclopediaButton().dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(findEncyclopediaButton());
     expect(document.querySelector('[data-loading-overlay]')).not.toBeNull();
 
     await manager.requestTransition('stage', {
@@ -335,7 +340,7 @@ describe('Encyclopedia Stage Selection Integration', () => {
 
     await manager.requestTransition('title');
 
-    findEncyclopediaButton().dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(findEncyclopediaButton());
     await flushPromises();
 
     expect(loadEncyclopediaOverlay).toHaveBeenCalledTimes(1);
@@ -374,7 +379,7 @@ describe('Encyclopedia Stage Selection Integration', () => {
     const encyclopediaBtn = Array.from(uiOverlay.querySelectorAll('button')).find(
       (button) => button.textContent?.includes('ずかん'),
     ) as HTMLButtonElement;
-    encyclopediaBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(encyclopediaBtn);
     expect(document.querySelector('[data-loading-overlay]')).not.toBeNull();
 
     await manager.requestTransition('stage', {
@@ -426,7 +431,7 @@ describe('Encyclopedia Stage Selection Integration', () => {
     const playButton = Array.from(uiOverlay.querySelectorAll('button')).find(
       (button) => button.textContent === 'あそぶ',
     ) as HTMLButtonElement;
-    playButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(playButton);
     await flushPromises();
 
     stageInternal.countdownOverlay?.dispose();
@@ -441,7 +446,7 @@ describe('Encyclopedia Stage Selection Integration', () => {
     const replayButton = Array.from(uiOverlay.querySelectorAll('button')).find(
       (button) => button.textContent === 'あそぶ',
     ) as HTMLButtonElement;
-    replayButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(replayButton);
     await flushPromises();
 
     stageInternal.countdownOverlay?.dispose();

@@ -124,6 +124,16 @@ function getNextPreviewCard(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[data-stage-clear-next-preview]');
 }
 
+function dispatchReleaseConfirm(button: HTMLElement): void {
+  button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+  button.dispatchEvent(new Event('pointerup', { bubbles: true }));
+}
+
+function dispatchReleaseOutside(button: HTMLElement): void {
+  button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+  document.body.dispatchEvent(new Event('pointerup', { bubbles: true }));
+}
+
 function mockCanvasContext(): void {
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => {
     return {
@@ -178,7 +188,7 @@ describe('StageScene clear CTA', () => {
     expect(retryButton.disabled).toBe(true);
     expect(continueButton.disabled).toBe(true);
 
-    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton);
     internal.update(30);
 
     expect(sceneManager.requestTransition).not.toHaveBeenCalled();
@@ -199,7 +209,7 @@ describe('StageScene clear CTA', () => {
     const button = getContinueButton();
     expect(button.textContent).toBe('つぎへ');
 
-    button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(button);
     button.dispatchEvent(new Event('click', { bubbles: true }));
 
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
@@ -208,6 +218,22 @@ describe('StageScene clear CTA', () => {
       totalScore: 2400,
       totalStarCount: 14,
     });
+  });
+
+  it('通常ステージでは同じボタン上で離した時だけつぎへ進む', () => {
+    const { scene, sceneManager } = createScene({
+      stageNumber: 4,
+      finalizeStageResult: { totalScore: 2400, totalStarCount: 14 },
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const button = getContinueButton();
+    dispatchReleaseOutside(button);
+
+    expect(sceneManager.requestTransition).not.toHaveBeenCalled();
   });
 
   it('通常ステージではつぎのわくせいプレビューを表示する', () => {
@@ -244,7 +270,7 @@ describe('StageScene clear CTA', () => {
     expect(retryButton.textContent).toBe('もういちど');
     expect(retryButton.disabled).toBe(false);
 
-    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton);
     retryButton.dispatchEvent(new Event('click', { bubbles: true }));
 
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
@@ -269,7 +295,7 @@ describe('StageScene clear CTA', () => {
     const button = getContinueButton();
     expect(button.textContent).toBe('おいわいへ');
     expect(getNextPreviewCard()).toBeNull();
-    button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(button);
 
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
     expect(sceneManager.requestTransition).toHaveBeenCalledWith('ending', {
@@ -293,7 +319,7 @@ describe('StageScene clear CTA', () => {
     const retryButton = getRetryButton();
     expect(retryButton.textContent).toBe('もういちど');
 
-    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton);
     retryButton.dispatchEvent(new Event('click', { bubbles: true }));
 
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
@@ -318,7 +344,7 @@ describe('StageScene clear CTA', () => {
     internal.update(1);
 
     const retryButton = getRetryButton();
-    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton);
 
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
     expect(sceneManager.requestTransition).toHaveBeenCalledWith('stage', {
@@ -370,7 +396,7 @@ describe('StageScene clear CTA', () => {
     internal.update(1);
 
     const retryButton = getRetryButton();
-    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton);
 
     expect(finalizeStageMock).not.toHaveBeenCalled();
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
@@ -431,7 +457,7 @@ describe('StageScene clear CTA', () => {
 
     await flushPromises();
 
-    getCardButton()?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(getCardButton()!);
     expect(loadEncyclopediaOverlay).toHaveBeenCalledTimes(1);
   });
 
@@ -451,7 +477,7 @@ describe('StageScene clear CTA', () => {
 
     const cardButton = getCardButton();
     expect(cardButton).not.toBeNull();
-    cardButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(cardButton!);
     await flushPromises();
     await flushPromises();
 
@@ -463,10 +489,10 @@ describe('StageScene clear CTA', () => {
     expect(sceneManager.requestTransition).not.toHaveBeenCalled();
 
     const continueButton = getContinueButton();
-    continueButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(continueButton);
     expect(sceneManager.requestTransition).not.toHaveBeenCalled();
     const retryButton = getRetryButton();
-    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton);
     expect(sceneManager.requestTransition).not.toHaveBeenCalled();
 
     const backButton = document.querySelector('[data-detail-back]') as HTMLElement | null;
@@ -476,7 +502,7 @@ describe('StageScene clear CTA', () => {
     expect(document.querySelector('[data-encyclopedia-detail-overlay]')).toBeNull();
     expect(document.querySelector('[data-stage-clear-overlay]')).not.toBeNull();
 
-    continueButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(continueButton);
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
     expect(sceneManager.requestTransition).toHaveBeenCalledWith('stage', {
       stageNumber: 3,
@@ -500,7 +526,7 @@ describe('StageScene clear CTA', () => {
 
     const cardButton = getCardButton();
     expect(cardButton).not.toBeNull();
-    cardButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(cardButton!);
 
     expect(document.querySelector('[data-encyclopedia-detail-overlay]')).toBeNull();
     expect(cardButton?.style.pointerEvents).toBe('none');
@@ -530,7 +556,7 @@ describe('StageScene clear CTA', () => {
 
     const cardButton = getCardButton();
     expect(cardButton).not.toBeNull();
-    cardButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(cardButton!);
     await flushPromises();
     await flushPromises();
 
@@ -538,7 +564,7 @@ describe('StageScene clear CTA', () => {
     expect(cardButton?.style.pointerEvents).toBe('auto');
     expect(cardButton?.style.transform).toBe('scale(1)');
 
-    cardButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(cardButton!);
     await flushPromises();
     await flushPromises();
 
@@ -561,7 +587,7 @@ describe('StageScene clear CTA', () => {
 
     const cardButton = getCardButton();
     expect(cardButton).not.toBeNull();
-    cardButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(cardButton!);
 
     scene.exit();
     deferred.resolve({ EncyclopediaOverlay });
@@ -590,18 +616,18 @@ describe('StageScene clear CTA', () => {
     const cardButton = getCardButton();
     expect(cardButton).not.toBeNull();
 
-    cardButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(cardButton!);
     await flushPromises();
     await flushPromises();
-    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton);
     expect(sceneManager.requestTransition).not.toHaveBeenCalled();
 
     const backButton = document.querySelector('[data-detail-back]') as HTMLElement | null;
     backButton?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
 
-    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton);
     retryButton.dispatchEvent(new Event('click', { bubbles: true }));
-    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton);
 
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
     expect(sceneManager.requestTransition).toHaveBeenCalledWith('stage', {

@@ -68,6 +68,11 @@ function flushPromises(): Promise<void> {
   });
 }
 
+function dispatchReleaseConfirm(button: HTMLElement): void {
+  button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+  button.dispatchEvent(new Event('pointerup', { bubbles: true }));
+}
+
 function createTrackingAudioManager(initialized: boolean): {
   audioManager: AudioManager;
   calls: AudioCall[];
@@ -122,7 +127,7 @@ describe('Title → Stage BGM transition (bugfix: BGM_0 plays during title)', ()
     const playButton = Array.from(
       document.getElementById('ui-overlay')!.querySelectorAll('button'),
     ).find((b) => b.textContent === 'あそぶ')!;
-    playButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(playButton);
 
     expect(sceneManager.requestTransition).toHaveBeenCalledWith(
       'stage',
@@ -217,7 +222,7 @@ describe('Title → Stage BGM transition (bugfix: BGM_0 plays during title)', ()
 
     const playButton = Array.from(document.querySelectorAll('button'))
       .find((button) => button.textContent === 'あそぶ') as HTMLButtonElement;
-    playButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(playButton);
 
     expect(sceneManager.requestTransition).toHaveBeenCalledWith(
       'stage',
@@ -249,7 +254,7 @@ describe('Title → Stage BGM transition (bugfix: BGM_0 plays during title)', ()
 
     const encyclopediaButton = Array.from(document.querySelectorAll('button'))
       .find((button) => button.textContent?.startsWith('ずかん')) as HTMLButtonElement;
-    encyclopediaButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(encyclopediaButton);
     await flushPromises();
     await flushPromises();
 

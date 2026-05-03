@@ -12,6 +12,7 @@ import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
 import { getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { formatEncyclopediaLabel } from '../../ui/formatEncyclopediaLabel';
 import { getViewportSize } from '../utils/getViewportSize';
+import { attachReleaseConfirmButton } from '../../ui/attachReleaseConfirmButton';
 import { prewarmStageVisualAssets } from './stageVisualAssets';
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -181,6 +182,7 @@ export class TitleScene implements Scene {
   // 機能する。初回起動時は overlay の pointerdown ハンドラ内で initSync()
   // 直後に再生開始するため、その判定にこのフラグを利用する。
   private bgmPending = false;
+  private readonly overlayButtonCleanups = new Set<() => void>();
 
   constructor(
     sceneManager: SceneManager,
@@ -531,24 +533,30 @@ export class TitleScene implements Scene {
       cursor: pointer;
       touch-action: manipulation;
       box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
+      transform: scale(1);
+      transition: transform 0.08s ease-out;
     `;
 
-    button.addEventListener('pointerdown', (e) => {
-      e.stopPropagation();
-      // Initialize AudioContext synchronously on user gesture (iPad Safari requirement).
-      // ここで playBGM(0) は呼ばない。直後の StageScene.enter() が
-      // playBGM(stageNumber) を呼び、内部の stopBGM() でタイトル BGM を即停止
-      // するため、タイトル BGM は実質的に再生されない無駄な処理になっていた。
-      this.ensureTitleAudioInitialized(false);
-      const saveData = this.saveManager.load();
-      const startStage = getNextAdventurePreview(saveData).startStage;
-      this.sceneManager.requestTransition('stage', {
-        stageNumber: startStage,
-        totalScore: 0,
-        totalStarCount: 0,
-        launchSource: 'campaign',
-      });
-    });
+    this.overlayButtonCleanups.add(attachReleaseConfirmButton(button, {
+      onActivate: () => {
+        // Initialize AudioContext synchronously on user gesture (iPad Safari requirement).
+        // ここで playBGM(0) は呼ばない。直後の StageScene.enter() が
+        // playBGM(stageNumber) を呼び、内部の stopBGM() でタイトル BGM を即停止
+        // するため、タイトル BGM は実質的に再生されない無駄な処理になっていた。
+        this.ensureTitleAudioInitialized(false);
+        const saveData = this.saveManager.load();
+        const startStage = getNextAdventurePreview(saveData).startStage;
+        this.sceneManager.requestTransition('stage', {
+          stageNumber: startStage,
+          totalScore: 0,
+          totalStarCount: 0,
+          launchSource: 'campaign',
+        });
+      },
+      onPressChange: (pressed) => {
+        button.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+      },
+    }));
 
     const playButtonHint = document.createElement('div');
     playButtonHint.setAttribute('data-play-button-hint', '');
@@ -578,18 +586,24 @@ export class TitleScene implements Scene {
       position: absolute;
       bottom: ${compact ? '1rem' : '2rem'};
       right: ${compact ? '1rem' : '2rem'};
+      transform: scale(1);
+      transition: transform 0.08s ease-out;
     `;
     tutorialBtn.style.position = 'absolute';
     tutorialBtn.style.bottom = compact ? '1rem' : '2rem';
     tutorialBtn.style.right = compact ? '1rem' : '2rem';
-    tutorialBtn.addEventListener('pointerdown', (e) => {
-      e.stopPropagation();
-      this.ensureTitleAudioInitialized(true);
-      this.tutorialOverlay.show(() => {
+    this.overlayButtonCleanups.add(attachReleaseConfirmButton(tutorialBtn, {
+      onActivate: () => {
         this.ensureTitleAudioInitialized(true);
-        this.tutorialOverlay.hide();
-      });
-    });
+        this.tutorialOverlay.show(() => {
+          this.ensureTitleAudioInitialized(true);
+          this.tutorialOverlay.hide();
+        });
+      },
+      onPressChange: (pressed) => {
+        tutorialBtn.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+      },
+    }));
 
     // Encyclopedia button
     const encyclopediaBtn = document.createElement('button');
@@ -612,16 +626,22 @@ export class TitleScene implements Scene {
       position: absolute;
       bottom: ${compact ? '1rem' : '2rem'};
       left: ${compact ? '1rem' : '2rem'};
+      transform: scale(1);
+      transition: transform 0.08s ease-out;
     `;
     encyclopediaBtn.style.position = 'absolute';
     encyclopediaBtn.style.bottom = compact ? '1rem' : '2rem';
     encyclopediaBtn.style.left = compact ? '1rem' : '2rem';
     this.encyclopediaBtn = encyclopediaBtn;
-    encyclopediaBtn.addEventListener('pointerdown', (e) => {
-      e.stopPropagation();
-      this.ensureTitleAudioInitialized(true);
-      void this.openEncyclopedia();
-    });
+    this.overlayButtonCleanups.add(attachReleaseConfirmButton(encyclopediaBtn, {
+      onActivate: () => {
+        this.ensureTitleAudioInitialized(true);
+        void this.openEncyclopedia();
+      },
+      onPressChange: (pressed) => {
+        encyclopediaBtn.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+      },
+    }));
 
     playArea.appendChild(button);
     playArea.appendChild(playButtonHint);
@@ -752,6 +772,11 @@ export class TitleScene implements Scene {
       this.stars = null;
     }
     this.clearCompanionParade();
+    const overlayButtonCleanups = Array.from(this.overlayButtonCleanups);
+    this.overlayButtonCleanups.clear();
+    for (const cleanup of overlayButtonCleanups) {
+      cleanup();
+    }
     if (this.overlay) {
       this.overlay.remove();
       this.overlay = null;

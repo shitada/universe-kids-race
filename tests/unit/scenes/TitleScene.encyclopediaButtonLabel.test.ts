@@ -69,6 +69,11 @@ function flushPromises(): Promise<void> {
   });
 }
 
+function dispatchReleaseConfirm(button: HTMLElement): void {
+  button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+  button.dispatchEvent(new Event('pointerup', { bubbles: true }));
+}
+
 describe('TitleScene encyclopedia button label', () => {
   it('shows plain "ずかん" when no planets are unlocked', () => {
     const scene = new TitleScene(
@@ -123,7 +128,7 @@ describe('TitleScene encyclopedia button label', () => {
     expect(btn?.textContent).toBe('ずかん');
 
     // ずかんを開く
-    btn!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(btn!);
     await flushPromises();
     await flushPromises();
 

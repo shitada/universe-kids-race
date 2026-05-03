@@ -25,6 +25,7 @@ import { getViewportSize } from '../utils/getViewportSize';
 import { ScorePopupManager } from '../../ui/ScorePopupManager';
 import { getNextPlanetEncyclopediaEntry, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { TouchGuideOverlay, type TouchGuideMode } from '../../ui/TouchGuideOverlay';
+import { attachReleaseConfirmButton } from '../../ui/attachReleaseConfirmButton';
 import {
   __resetStageSceneSharedAssetCachesForTest,
   __stageSceneSharedAssetCachesForTest,
@@ -190,6 +191,7 @@ export class StageScene implements Scene {
   private readonly scheduleIdleTask: (callback: () => void) => void;
   private readonly loadEncyclopediaOverlay: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
   private clearRewardRequestToken = 0;
+  private readonly clearButtonCleanups = new Set<() => void>();
 
   constructor(
     sceneManager: SceneManager,
@@ -565,6 +567,11 @@ export class StageScene implements Scene {
     if (this.clearOverlay) {
       this.clearOverlay.remove();
       this.clearOverlay = null;
+    }
+    const clearButtonCleanups = Array.from(this.clearButtonCleanups);
+    this.clearButtonCleanups.clear();
+    for (const cleanup of clearButtonCleanups) {
+      cleanup();
     }
     this.clearContinueButton = null;
     this.clearRetryButton = null;
@@ -1467,21 +1474,17 @@ export class StageScene implements Scene {
           transition: transform 0.08s ease-out, opacity 0.18s ease-out;
         `;
 
-        const releaseRewardButton = (): void => {
-          if (this.clearRewardButton) {
-            this.clearRewardButton.style.transform = 'scale(1)';
-          }
-        };
-        rewardButton.addEventListener('pointerdown', (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          if (this.isClearRewardOpen || this.isOpeningClearReward) return;
-          rewardButton.style.transform = 'scale(0.96)';
-          void this.openClearRewardOverlay(starCount);
-        });
-        rewardButton.addEventListener('pointerup', releaseRewardButton);
-        rewardButton.addEventListener('pointercancel', releaseRewardButton);
-        rewardButton.addEventListener('pointerleave', releaseRewardButton);
+        this.clearButtonCleanups.add(attachReleaseConfirmButton(rewardButton, {
+          canActivate: () => !this.isClearRewardOpen && !this.isOpeningClearReward,
+          onActivate: () => {
+            void this.openClearRewardOverlay(starCount);
+          },
+          onPressChange: (pressed) => {
+            rewardButton.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+          },
+          preventDefaultOnPointerDown: true,
+          stopPropagation: true,
+        }));
         this.clearRewardButton = rewardButton;
       }
     }
@@ -1548,15 +1551,12 @@ export class StageScene implements Scene {
       transition: opacity 0.18s ease-out, transform 0.08s ease-out;
     `;
 
-    const activate = (
-      event: Event,
-      button: HTMLButtonElement,
-      onActivate: () => void,
-    ): void => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (this.isClearRewardOpen) return;
-      if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
+    const canActivateClearCta = (): boolean => {
+      if (this.isClearRewardOpen) return false;
+      if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return false;
+      return true;
+    };
+    const activate = (button: HTMLButtonElement, onActivate: () => void): void => {
       this.hasHandledClearContinue = true;
       for (const actionButton of [this.clearRetryButton, this.clearContinueButton]) {
         if (!actionButton) continue;
@@ -1567,43 +1567,34 @@ export class StageScene implements Scene {
       button.style.transform = 'scale(1)';
       onActivate();
     };
-    const release = (button: HTMLButtonElement | null): void => {
-      if (button) {
-        button.style.transform = 'scale(1)';
-      }
-    };
-    retryButton.addEventListener('pointerdown', (event) => {
-      if (this.isClearRewardOpen) return;
-      if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
-      retryButton.style.transform = 'scale(0.96)';
-      activate(event, retryButton, () => {
-        this.handleStageRetry();
-      });
-    });
-    retryButton.addEventListener('click', (event) => {
-      activate(event, retryButton, () => {
-        this.handleStageRetry();
-      });
-    });
-    retryButton.addEventListener('pointerup', () => release(this.clearRetryButton));
-    retryButton.addEventListener('pointercancel', () => release(this.clearRetryButton));
-    retryButton.addEventListener('pointerleave', () => release(this.clearRetryButton));
-    continueButton.addEventListener('pointerdown', (event) => {
-      if (this.isClearRewardOpen) return;
-      if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
-      continueButton.style.transform = 'scale(0.96)';
-      activate(event, continueButton, () => {
-        this.handleStageComplete();
-      });
-    });
-    continueButton.addEventListener('click', (event) => {
-      activate(event, continueButton, () => {
-        this.handleStageComplete();
-      });
-    });
-    continueButton.addEventListener('pointerup', () => release(this.clearContinueButton));
-    continueButton.addEventListener('pointercancel', () => release(this.clearContinueButton));
-    continueButton.addEventListener('pointerleave', () => release(this.clearContinueButton));
+    this.clearButtonCleanups.add(attachReleaseConfirmButton(retryButton, {
+      canActivate: canActivateClearCta,
+      onActivate: () => {
+        activate(retryButton, () => {
+          this.handleStageRetry();
+        });
+      },
+      onPressChange: (pressed) => {
+        retryButton.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+      },
+      preventDefaultOnPointerDown: true,
+      preventDefaultOnClick: true,
+      stopPropagation: true,
+    }));
+    this.clearButtonCleanups.add(attachReleaseConfirmButton(continueButton, {
+      canActivate: canActivateClearCta,
+      onActivate: () => {
+        activate(continueButton, () => {
+          this.handleStageComplete();
+        });
+      },
+      onPressChange: (pressed) => {
+        continueButton.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+      },
+      preventDefaultOnPointerDown: true,
+      preventDefaultOnClick: true,
+      stopPropagation: true,
+    }));
     this.clearRetryButton = retryButton;
     this.clearContinueButton = continueButton;
     if (this.clearRewardButton) {
