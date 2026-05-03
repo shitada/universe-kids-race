@@ -34,7 +34,7 @@ describe('EncyclopediaOverlay', () => {
     const cards = uiOverlay.querySelectorAll('[data-card]');
     const firstCard = cards[0] as HTMLElement;
     expect(firstCard.textContent).toContain('🌙');
-    expect(firstCard.textContent).toContain('月');
+    expect(firstCard.textContent).toContain('月（つき）');
   });
 
   it('locked card shows ???', () => {
@@ -88,7 +88,7 @@ describe('EncyclopediaOverlay', () => {
     const detailOverlay = uiOverlay.querySelector('[data-encyclopedia-detail-overlay]') as HTMLElement | null;
     expect(detailOverlay).not.toBeNull();
     expect(detailOverlay?.style.zIndex).toBe('50');
-    expect(detailOverlay?.textContent).toContain('水星');
+    expect(detailOverlay?.textContent).toContain('水星（すいせい）');
     expect(detailOverlay?.textContent).toContain('すいせいは たいように いちばん ちかい わくせいだよ');
     expect(detailOverlay?.textContent).toContain('⭐ ベスト 5');
     expect(detailOverlay?.querySelector('[data-detail-play]')).toBeNull();
@@ -141,7 +141,7 @@ describe('EncyclopediaOverlay', () => {
     expect(selected).toEqual([]);
     const detail = uiOverlay.querySelector('[data-detail]') as HTMLElement | null;
     expect(detail).not.toBeNull();
-    expect(detail?.textContent).toContain('水星');
+    expect(detail?.textContent).toContain('水星（すいせい）');
     expect(detail?.textContent).toContain('すいせいは たいように いちばん ちかい わくせいだよ');
     expect(detail?.textContent).toContain('⭐ ベスト 4');
   });

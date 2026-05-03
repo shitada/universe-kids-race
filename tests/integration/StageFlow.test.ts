@@ -345,7 +345,7 @@ describe('Stage Flow Integration', () => {
     const card = document.querySelector('[data-next-adventure-card]') as HTMLDivElement | null;
     expect(card).toBeTruthy();
     expect(card?.getAttribute('data-next-stage-number')).toBe('5');
-    expect(card?.getAttribute('data-next-stage-destination')).toBe('木星');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('もくせい');
 
     const playButton = Array.from(document.querySelectorAll('button')).find(
       (button) => button.textContent === 'あそぶ',
@@ -357,7 +357,7 @@ describe('Stage Flow Integration', () => {
 
     expect(log.at(-1)?.type).toBe('stage');
     expect(log.at(-1)?.context.stageNumber).toBe(5);
-    expect(getStageConfig(log.at(-1)?.context.stageNumber ?? 0).destination).toBe(
+    expect(getStageConfig(log.at(-1)?.context.stageNumber ?? 0).destinationReading).toBe(
       card?.getAttribute('data-next-stage-destination'),
     );
   });
@@ -436,7 +436,7 @@ describe('Stage Flow Integration', () => {
     const card = document.querySelector('[data-next-adventure-card]') as HTMLDivElement | null;
     const hint = document.querySelector('[data-play-button-hint]') as HTMLDivElement | null;
     expect(card?.getAttribute('data-next-stage-number')).toBe('1');
-    expect(card?.getAttribute('data-next-stage-destination')).toBe('月');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('つき');
     expect(card?.textContent).toContain('ぜんぶ クリア');
     expect(hint?.textContent).toContain('ステージ 1');
     expect(hint?.textContent).toContain('さいしょから');

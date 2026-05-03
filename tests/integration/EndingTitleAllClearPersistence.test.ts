@@ -90,7 +90,7 @@ describe('Ending → Title all-clear persistence', () => {
     const card = document.querySelector('[data-next-adventure-card]') as HTMLDivElement | null;
     const hint = document.querySelector('[data-play-button-hint]') as HTMLDivElement | null;
     expect(card?.getAttribute('data-next-stage-number')).toBe('1');
-    expect(card?.getAttribute('data-next-stage-destination')).toBe('月');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('つき');
     expect(card?.textContent).toContain('ぜんぶ クリア！');
     expect(hint?.textContent).toContain('ステージ 1');
     expect(hint?.textContent).toContain('さいしょから');

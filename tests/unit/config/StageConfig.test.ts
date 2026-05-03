@@ -40,6 +40,14 @@ describe('StageConfig', () => {
   it('has non-empty displayName for all stages', () => {
     for (const config of STAGE_CONFIGS) {
       expect(config.displayName).toBeTruthy();
+      expect(config.displayName).toContain(config.destinationReading);
+    }
+  });
+
+  it('keeps a child-friendly hiragana reading for each destination', () => {
+    const expectedReadings = ['つき', 'すいせい', 'きんせい', 'かせい', 'もくせい', 'どせい', 'てんのうせい', 'かいおうせい', 'めいおうせい', 'たいよう', 'ちきゅう'];
+    for (let i = 0; i < expectedReadings.length; i++) {
+      expect(STAGE_CONFIGS[i].destinationReading).toBe(expectedReadings[i]);
     }
   });
 

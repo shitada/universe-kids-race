@@ -1322,7 +1322,7 @@ export class StageScene implements Scene {
       `;
 
       const nextAdventureTitle = document.createElement('div');
-      nextAdventureTitle.textContent = `つぎは ${nextEntry.name}！`;
+      nextAdventureTitle.textContent = `つぎは ${nextEntry.reading}！`;
       nextAdventureTitle.setAttribute('data-stage-clear-next-title', '');
       nextAdventureTitle.style.cssText = `
         font-family: 'Zen Maru Gothic', sans-serif;
@@ -1342,7 +1342,7 @@ export class StageScene implements Scene {
       `;
 
       const nextAdventureName = document.createElement('div');
-      nextAdventureName.textContent = nextEntry.name;
+      nextAdventureName.textContent = nextEntry.reading;
       nextAdventureName.setAttribute('data-stage-clear-next-name', '');
       nextAdventureName.style.cssText = `
         font-family: 'Zen Maru Gothic', sans-serif;
@@ -1378,7 +1378,7 @@ export class StageScene implements Scene {
       const entry = getPlanetEncyclopediaEntry(this.stageNumber);
       if (entry) {
         const cardMsg = document.createElement('div');
-        cardMsg.textContent = `${entry.emoji} ${entry.name}の ずかんカード ゲット！`;
+          cardMsg.textContent = `${entry.emoji} ${entry.reading}の ずかんカード ゲット！`;
         cardMsg.style.cssText = `
           position: relative;
           z-index: 1;
@@ -1392,7 +1392,7 @@ export class StageScene implements Scene {
         this.clearOverlay.appendChild(cardMsg);
 
         const companionMsg = document.createElement('div');
-        companionMsg.textContent = `${entry.emoji} ${entry.name}が なかまに なったよ！`;
+          companionMsg.textContent = `${entry.emoji} ${entry.reading}が なかまに なったよ！`;
         companionMsg.style.cssText = `
           position: relative;
           z-index: 1;

@@ -223,9 +223,9 @@ describe('StageScene clear CTA', () => {
     const previewCard = getNextPreviewCard();
     expect(previewCard).not.toBeNull();
     expect(previewCard?.textContent).toContain('つぎのぼうけん');
-    expect(document.querySelector('[data-stage-clear-next-title]')?.textContent).toBe(`つぎは ${nextEntry?.name}！`);
+    expect(document.querySelector('[data-stage-clear-next-title]')?.textContent).toBe(`つぎは ${nextEntry?.reading}！`);
     expect(document.querySelector('[data-stage-clear-next-emoji]')?.textContent).toBe(nextEntry?.emoji);
-    expect(document.querySelector('[data-stage-clear-next-name]')?.textContent).toBe(nextEntry?.name);
+    expect(document.querySelector('[data-stage-clear-next-name]')?.textContent).toBe(nextEntry?.reading);
     expect(document.querySelector('[data-stage-clear-next-trivia]')?.textContent).toBe(nextEntry?.trivia);
   });
 
@@ -456,7 +456,7 @@ describe('StageScene clear CTA', () => {
 
     const detailOverlay = document.querySelector('[data-encyclopedia-detail-overlay]') as HTMLElement | null;
     expect(detailOverlay).not.toBeNull();
-    expect(detailOverlay?.textContent).toContain('水星');
+    expect(detailOverlay?.textContent).toContain('水星（すいせい）');
     expect(detailOverlay?.textContent).toContain('⚫');
     expect(detailOverlay?.textContent).toContain('すいせいは たいように いちばん ちかい わくせいだよ');
     expect(sceneManager.requestTransition).not.toHaveBeenCalled();

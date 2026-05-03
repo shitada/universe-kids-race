@@ -221,7 +221,7 @@ describe('TitleScene (T009)', () => {
     const card = findNextAdventureCard();
     const hint = document.querySelector('[data-play-button-hint]') as HTMLDivElement | null;
     expect(card?.getAttribute('data-next-stage-number')).toBe('1');
-    expect(card?.getAttribute('data-next-stage-destination')).toBe('月');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('つき');
     expect(card?.textContent).toContain('ぜんぶ クリア！');
     expect(card?.textContent).toContain('🌙');
     expect(hint?.textContent).toContain('ステージ 1');
@@ -256,7 +256,7 @@ describe('TitleScene (T009)', () => {
     const card = findNextAdventureCard();
     const hint = document.querySelector('[data-play-button-hint]') as HTMLDivElement | null;
     expect(card?.getAttribute('data-next-stage-number')).toBe('4');
-    expect(card?.getAttribute('data-next-stage-destination')).toBe('火星');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('かせい');
     expect(card?.textContent).toContain('つづきから しゅっぱつ！');
     expect(hint?.textContent).toContain('ステージ 4');
     expect(hint?.textContent).not.toContain('さいしょから');
@@ -279,7 +279,7 @@ describe('TitleScene (T009)', () => {
     const card = findNextAdventureCard();
     const hint = document.querySelector('[data-play-button-hint]') as HTMLDivElement | null;
     expect(card?.getAttribute('data-next-stage-number')).toBe('1');
-    expect(card?.getAttribute('data-next-stage-destination')).toBe('月');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('つき');
     expect(card?.textContent).toContain('はじめての しゅっぱつ！');
     expect(hint?.textContent).toContain('ステージ 1');
     expect(hint?.textContent).not.toContain('さいしょから');
@@ -572,11 +572,11 @@ describe('TitleScene (T009)', () => {
     const card = findNextAdventureCard();
     expect(card).toBeTruthy();
     expect(card?.getAttribute('data-next-stage-number')).toBe('1');
-    expect(card?.getAttribute('data-next-stage-destination')).toBe('月');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('つき');
     expect(card?.textContent).toContain('つぎの ぼうけん');
     expect(card?.textContent).toContain('🌙');
     expect(card?.textContent).toContain('ステージ 1');
-    expect(card?.textContent).toContain('月');
+    expect(card?.textContent).toContain('つき');
     expect(document.querySelector('[data-play-button-hint]')?.textContent).toContain('ステージ 1');
 
     scene.exit();
@@ -593,10 +593,10 @@ describe('TitleScene (T009)', () => {
 
     const card = findNextAdventureCard();
     expect(card?.getAttribute('data-next-stage-number')).toBe('5');
-    expect(card?.getAttribute('data-next-stage-destination')).toBe('木星');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('もくせい');
     expect(card?.textContent).toContain('🟠');
     expect(card?.textContent).toContain('ステージ 5');
-    expect(card?.textContent).toContain('木星');
+    expect(card?.textContent).toContain('もくせい');
     expect(document.querySelector('[data-play-button-hint]')?.textContent).toContain('ステージ 5');
 
     scene.exit();
@@ -617,7 +617,7 @@ describe('TitleScene (T009)', () => {
 
     const card = findNextAdventureCard();
     expect(card?.getAttribute('data-next-stage-number')).toBe('1');
-    expect(card?.getAttribute('data-next-stage-destination')).toBe('月');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('つき');
     expect(card?.textContent).toContain('ぜんぶ クリア');
     expect(card?.textContent).toContain('🌙');
     expect(document.querySelector('[data-play-button-hint]')?.textContent).toContain('ステージ 1');

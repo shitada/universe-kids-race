@@ -128,20 +128,20 @@ function getNextAdventurePreview(saveData: SaveData): NextAdventurePreview {
   if (isAllClear) {
     return {
       startStage,
-      destination: stageConfig.destination,
+      destination: stageConfig.destinationReading,
       emoji: stageConfig.emoji,
       statusLabel: 'ぜんぶ クリア！',
-      destinationLabel: `${stageConfig.destination}へ さいしょから しゅっぱつ！`,
+      destinationLabel: `${stageConfig.destinationReading}へ さいしょから しゅっぱつ！`,
       buttonHint: `${stageConfig.emoji} ステージ ${startStage} から さいしょから あそぶ`,
     };
   }
 
   return {
     startStage,
-    destination: stageConfig.destination,
+    destination: stageConfig.destinationReading,
     emoji: stageConfig.emoji,
     statusLabel: saveData.clearedStage > 0 ? 'つづきから しゅっぱつ！' : 'はじめての しゅっぱつ！',
-    destinationLabel: `${stageConfig.destination}へ むかおう！`,
+    destinationLabel: `${stageConfig.destinationReading}へ むかおう！`,
     buttonHint: `${stageConfig.emoji} ステージ ${startStage} から スタート`,
   };
 }

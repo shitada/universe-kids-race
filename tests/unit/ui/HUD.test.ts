@@ -236,17 +236,17 @@ describe('HUD', () => {
 
   describe('Stage Number Display (004-US1)', () => {
     it('displays stage name with stage number prefix', () => {
-      hud.show('ステージ1: 🌙 月をめざせ！');
+      hud.show('ステージ1: 🌙 つきを めざせ！');
       const hudRoot = document.getElementById('hud')!;
       const stageNameEl = hudRoot.children[1] as HTMLElement;
-      expect(stageNameEl.textContent).toBe('ステージ1: 🌙 月をめざせ！');
+      expect(stageNameEl.textContent).toBe('ステージ1: 🌙 つきを めざせ！');
     });
 
     it('displays stage 8 with correct format', () => {
-      hud.show('ステージ8: ☀️ 太陽をめざせ！');
+      hud.show('ステージ8: ☀️ たいようを めざせ！');
       const hudRoot = document.getElementById('hud')!;
       const stageNameEl = hudRoot.children[1] as HTMLElement;
-      expect(stageNameEl.textContent).toBe('ステージ8: ☀️ 太陽をめざせ！');
+      expect(stageNameEl.textContent).toBe('ステージ8: ☀️ たいようを めざせ！');
     });
   });
 

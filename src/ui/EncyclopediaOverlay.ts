@@ -167,7 +167,7 @@ export class EncyclopediaOverlay {
       card.appendChild(emoji);
 
       const name = document.createElement('div');
-      name.textContent = entry.name;
+      name.textContent = entry.encyclopediaLabel;
       name.style.cssText = `
         font-family: 'Zen Maru Gothic', sans-serif;
         font-size: 1rem;
@@ -260,7 +260,7 @@ export class EncyclopediaOverlay {
     detailCard.appendChild(emoji);
 
     const name = document.createElement('div');
-    name.textContent = entry.name;
+    name.textContent = entry.encyclopediaLabel;
     name.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
       font-size: 2rem;
