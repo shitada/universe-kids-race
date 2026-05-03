@@ -51,12 +51,21 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
     return (stageScene as (StageScene & { isManuallyPaused?: () => boolean }) | null)?.isManuallyPaused?.() === true;
   }
 
+  function getCanvasClientMetrics(): { left: number; width: number } {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      left: rect.left,
+      width: rect.width > 0 ? rect.width : canvas.clientWidth,
+    };
+  }
+
   function applyRendererSize(width: number, height: number): void {
     if (width !== lastAppliedWidth || height !== lastAppliedHeight) {
       renderer.setSize(width, height);
       lastAppliedWidth = width;
       lastAppliedHeight = height;
-      inputSystem.notifyResize(canvas.clientWidth);
+      const metrics = getCanvasClientMetrics();
+      inputSystem.notifyResize(metrics.left, metrics.width);
     }
 
     const camera = sceneManager.getCurrentCamera();

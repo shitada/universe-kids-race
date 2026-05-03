@@ -6,6 +6,10 @@ interface SetupResult {
   sceneManagerInstance: {
     requestTransition: (sceneType: 'title' | 'stage' | 'ending', context?: object) => Promise<void>;
   };
+  inputSystemInstance: {
+    setup: ReturnType<typeof vi.fn>;
+    notifyResize: ReturnType<typeof vi.fn>;
+  };
   gameLoopInstance: {
     pause: ReturnType<typeof vi.fn>;
     resume: ReturnType<typeof vi.fn>;
@@ -24,17 +28,54 @@ interface SetupResult {
     requestResumeCountdown: ReturnType<typeof vi.fn>;
   };
   visibilityCallbacks: { onHide: () => void; onShow: () => void };
+  viewportResizeCallback: (() => void) | null;
+  viewportSize: { width: number; height: number };
+  canvasMetrics: { left: number; width: number };
 }
 
-async function setup(): Promise<SetupResult> {
+async function setup(
+  options: {
+    canvasLeft?: number;
+    canvasWidth?: number;
+    viewportWidth?: number;
+    viewportHeight?: number;
+  } = {},
+): Promise<SetupResult> {
   vi.resetModules();
   document.body.innerHTML = '<canvas id="game-canvas"></canvas><div id="hud"></div><div id="ui-overlay"></div>';
+  const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
+  const canvasMetrics = {
+    left: options.canvasLeft ?? 0,
+    width: options.canvasWidth ?? 1024,
+  };
+  const viewportSize = {
+    width: options.viewportWidth ?? 1024,
+    height: options.viewportHeight ?? 768,
+  };
+  Object.defineProperty(canvas, 'clientWidth', {
+    configurable: true,
+    get: () => canvasMetrics.width,
+  });
+  canvas.getBoundingClientRect = () =>
+    ({
+      left: canvasMetrics.left,
+      width: canvasMetrics.width,
+      right: canvasMetrics.left + canvasMetrics.width,
+      top: 0,
+      bottom: 0,
+      height: 0,
+      x: canvasMetrics.left,
+      y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
 
   let sceneManagerInstance: SetupResult['sceneManagerInstance'] | null = null;
+  let inputSystemInstance: SetupResult['inputSystemInstance'] | null = null;
   let gameLoopInstance: SetupResult['gameLoopInstance'] | null = null;
   let audioManagerInstance: SetupResult['audioManagerInstance'] | null = null;
   let stageSceneInstance: SetupResult['stageSceneInstance'] | null = null;
   let visibilityCallbacks: SetupResult['visibilityCallbacks'] | null = null;
+  let viewportResizeCallback: SetupResult['viewportResizeCallback'] = null;
 
   class MockSceneManager {
     private factories = new Map<string, () => Promise<unknown> | unknown>();
@@ -107,6 +148,9 @@ async function setup(): Promise<SetupResult> {
 
   vi.doMock('../../../src/game/systems/InputSystem', () => ({
     InputSystem: class {
+      constructor() {
+        inputSystemInstance = this as unknown as SetupResult['inputSystemInstance'];
+      }
       setup = vi.fn();
       notifyResize = vi.fn();
     },
@@ -178,9 +222,11 @@ async function setup(): Promise<SetupResult> {
   }));
 
   vi.doMock('../../../src/game/utils/getViewportSize', () => ({
-    getViewportSize: () => ({ width: 1024, height: 768 }),
-    updateViewportSizeCache: () => ({ width: 1024, height: 768 }),
-    subscribeViewportResize: vi.fn(),
+    getViewportSize: () => ({ ...viewportSize }),
+    updateViewportSizeCache: () => ({ ...viewportSize }),
+    subscribeViewportResize: vi.fn((_target: Window, callback: () => void) => {
+      viewportResizeCallback = callback;
+    }),
   }));
 
   vi.doMock('../../../src/game/utils/resolveInitialPixelTier', () => ({
@@ -288,16 +334,20 @@ async function setup(): Promise<SetupResult> {
 
   const { bootstrapGame } = await import('../../../src/game/bootstrapGame');
   await bootstrapGame({
-    canvas: document.getElementById('game-canvas') as HTMLCanvasElement,
+    canvas,
   });
   await sceneManagerInstance!.requestTransition('stage');
 
   return {
     sceneManagerInstance: sceneManagerInstance!,
+    inputSystemInstance: inputSystemInstance!,
     gameLoopInstance: gameLoopInstance!,
     audioManagerInstance: audioManagerInstance!,
     stageSceneInstance: stageSceneInstance!,
     visibilityCallbacks: visibilityCallbacks!,
+    viewportResizeCallback,
+    viewportSize,
+    canvasMetrics,
   };
 }
 
@@ -305,6 +355,28 @@ describe('bootstrapGame manual pause wiring', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     document.body.innerHTML = '';
+  });
+
+  it('passes canvas left and width to InputSystem on boot and viewport resize', async () => {
+    const {
+      inputSystemInstance,
+      viewportResizeCallback,
+      viewportSize,
+      canvasMetrics,
+    } = await setup({
+      canvasLeft: 40,
+      canvasWidth: 900,
+    });
+
+    expect(inputSystemInstance.notifyResize).toHaveBeenCalledWith(40, 900);
+
+    canvasMetrics.left = 120;
+    canvasMetrics.width = 860;
+    viewportSize.width = 1280;
+    viewportSize.height = 720;
+    viewportResizeCallback?.();
+
+    expect(inputSystemInstance.notifyResize).toHaveBeenLastCalledWith(120, 860);
   });
 
   it('connects StageScene pause handlers to gameLoop/audio/countdown flow', async () => {

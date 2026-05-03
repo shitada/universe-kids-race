@@ -1,10 +1,28 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { InputSystem } from '../../../src/game/systems/InputSystem';
 
-function createCanvas(): HTMLCanvasElement {
+function setCanvasLayout(
+  canvas: HTMLCanvasElement,
+  { width, left = 0 }: { width: number; left?: number },
+): void {
+  Object.defineProperty(canvas, 'clientWidth', { configurable: true, value: width });
+  canvas.getBoundingClientRect = vi.fn(() => ({
+    left,
+    width,
+    right: left + width,
+    top: 0,
+    bottom: 0,
+    height: 0,
+    x: left,
+    y: 0,
+    toJSON: () => ({}),
+  })) as typeof canvas.getBoundingClientRect;
+}
+
+function createCanvas(options: { width?: number; left?: number } = {}): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
-  Object.defineProperty(canvas, 'clientWidth', { value: 1024 });
+  setCanvasLayout(canvas, { width: options.width ?? 1024, left: options.left ?? 0 });
   document.body.appendChild(canvas);
   return canvas;
 }
@@ -190,6 +208,21 @@ describe('InputSystem — pointermove tracking', () => {
     expect(input.getState().moveDirection).toBe(0);
   });
 
+  it('uses the canvas center instead of the viewport center when canvas has a left offset', () => {
+    input.dispose();
+    canvas.remove();
+
+    input = new InputSystem();
+    canvas = createCanvas({ width: 1000, left: 200 });
+    input.setup(canvas);
+
+    pointerDown(canvas, 300);
+    expect(input.getState().moveDirection).toBe(-1);
+
+    pointerMove(canvas, 1100);
+    expect(input.getState().moveDirection).toBe(1);
+  });
+
   it('center-start pointer can resolve to right on pointermove', () => {
     pointerDown(canvas, 512);
     expect(input.getState().moveDirection).toBe(0);
@@ -306,23 +339,41 @@ describe('InputSystem — passive pointermove & cached width', () => {
   it('sideOf() uses the cached width from notifyResize() instead of clientWidth', () => {
     const canvas = document.createElement('canvas');
     // Initial DOM width 1000 → half=500, deadZone=20 → clientX=600 is right.
-    Object.defineProperty(canvas, 'clientWidth', { configurable: true, value: 1000 });
+    setCanvasLayout(canvas, { width: 1000, left: 0 });
     document.body.appendChild(canvas);
     const input = new InputSystem();
     input.setup(canvas);
 
-    // Now mutate clientWidth in a way notifyResize would NOT see, and also
-    // call notifyResize with a *different* width to prove sideOf trusts the
-    // cached value rather than re-reading clientWidth.
-    Object.defineProperty(canvas, 'clientWidth', { configurable: true, value: 200 });
-    input.notifyResize(2000); // half=1000, deadZone=40 → clientX=600 is left
+    // Now mutate the DOM metrics in a way notifyResize would NOT see, and also
+    // call notifyResize with different left/width values to prove sideOf trusts
+    // the cached values rather than re-reading layout on pointer events.
+    setCanvasLayout(canvas, { width: 200, left: 10 });
+    input.notifyResize(400, 2000); // localX=200 → left side of cached canvas
 
     canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 600, pointerId: 1, bubbles: true }));
     expect(input.getState().moveDirection).toBe(-1);
 
-    // Update cache again — boundary moves back so clientX=600 becomes right.
-    input.notifyResize(800); // half=400, deadZone=16 → clientX=600 is right
-    canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 600, pointerId: 1, bubbles: true }));
+    // Update the cache again — boundary moves back so clientX=950 becomes right.
+    input.notifyResize(200, 800); // localX=750 → right side of cached canvas
+    canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 950, pointerId: 1, bubbles: true }));
+    expect(input.getState().moveDirection).toBe(1);
+
+    input.dispose();
+    canvas.remove();
+  });
+
+  it('notifyResize updates the cached canvas left and width together', () => {
+    const canvas = document.createElement('canvas');
+    setCanvasLayout(canvas, { width: 1000, left: 0 });
+    document.body.appendChild(canvas);
+    const input = new InputSystem();
+    input.setup(canvas);
+
+    input.notifyResize(200, 1000);
+    canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 700, pointerId: 1, bubbles: true }));
+    expect(input.getState().moveDirection).toBe(0);
+
+    canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 1100, pointerId: 1, bubbles: true }));
     expect(input.getState().moveDirection).toBe(1);
 
     input.dispose();
@@ -331,16 +382,37 @@ describe('InputSystem — passive pointermove & cached width', () => {
 
   it('notifyResize ignores non-positive widths (defensive)', () => {
     const canvas = document.createElement('canvas');
-    Object.defineProperty(canvas, 'clientWidth', { configurable: true, value: 1000 });
+    setCanvasLayout(canvas, { width: 1000, left: 0 });
     document.body.appendChild(canvas);
     const input = new InputSystem();
     input.setup(canvas);
 
-    input.notifyResize(0);
-    input.notifyResize(-50);
-    // Cached width should remain the original 1000 (half=500); clientX=900 → right
-    canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 900, pointerId: 1, bubbles: true }));
+    input.notifyResize(200, 0);
+    input.notifyResize(200, -50);
+    // Cached left/width should remain the original metrics; clientX=700 stays right.
+    canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 700, pointerId: 1, bubbles: true }));
     expect(input.getState().moveDirection).toBe(1);
+
+    input.dispose();
+    canvas.remove();
+  });
+
+  it('center dead zone stays canvas-relative after a left-offset resize', () => {
+    const canvas = document.createElement('canvas');
+    setCanvasLayout(canvas, { width: 1000, left: 0 });
+    document.body.appendChild(canvas);
+    const input = new InputSystem();
+    input.setup(canvas);
+
+    input.notifyResize(200, 1000);
+    canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 700, pointerId: 1, bubbles: true }));
+    expect(input.getState().moveDirection).toBe(0);
+
+    canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 685, pointerId: 1, bubbles: true }));
+    expect(input.getState().moveDirection).toBe(0);
+
+    canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 650, pointerId: 1, bubbles: true }));
+    expect(input.getState().moveDirection).toBe(-1);
 
     input.dispose();
     canvas.remove();
