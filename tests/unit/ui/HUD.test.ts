@@ -39,6 +39,7 @@ describe('HUD', () => {
       const hudRoot = document.getElementById('hud')!;
       const stageNameEl = hudRoot.children[1] as HTMLElement;
       expect(stageNameEl.style.cssText).toContain('1.5rem');
+      expect(stageNameEl.style.padding).toBe('0.5rem');
     });
 
     it('applies text-shadow for contrast', () => {

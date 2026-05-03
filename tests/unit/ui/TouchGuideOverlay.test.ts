@@ -34,6 +34,16 @@ describe('TouchGuideOverlay', () => {
     expect(rightGuide?.style.cssText).not.toContain('env(');
   });
 
+  it('positions guides with overlay-local side spacing only', () => {
+    overlay.show();
+
+    const leftGuide = document.querySelector<HTMLElement>('[data-touch-guide="left"]');
+    const rightGuide = document.querySelector<HTMLElement>('[data-touch-guide="right"]');
+
+    expect(leftGuide?.style.left).toBe('0.8rem');
+    expect(rightGuide?.style.right).toBe('0.8rem');
+  });
+
   it('starts in intro mode by default', () => {
     overlay.show();
 

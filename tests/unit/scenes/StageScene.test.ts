@@ -294,6 +294,8 @@ describe('StageScene boost activation SFX feedback (PC keyboard parity with HUD)
 describe('StageScene best-stage-stars-update feedback on clear', () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="hud"></div><div id="ui-overlay"></div>';
+    document.getElementById('best-stage-stars-animation')?.remove();
+    document.getElementById('stage-clear-burst-animation')?.remove();
   });
 
   function setupClearScene(opts: {
@@ -336,11 +338,21 @@ describe('StageScene best-stage-stars-update feedback on clear', () => {
     (scene as unknown as { ensureInitialized(): void }).ensureInitialized();
     const internal = scene as unknown as {
       stageNumber: number;
-      scoreSystem: { getStarCount(): number };
+      scoreSystem: {
+        getStarCount(): number;
+        finalizeStage(): { totalScore: number; totalStarCount: number };
+      };
       companionManager: unknown | null;
+      update(deltaTime: number): void;
     };
     internal.stageNumber = opts.stageNumber;
-    internal.scoreSystem = { getStarCount: () => opts.earnedStars } as { getStarCount(): number };
+    internal.scoreSystem = {
+      getStarCount: () => opts.earnedStars,
+      finalizeStage: () => ({ totalScore: 999, totalStarCount: opts.earnedStars }),
+    } as {
+      getStarCount(): number;
+      finalizeStage(): { totalScore: number; totalStarCount: number };
+    };
     internal.companionManager = null;
 
     return {
@@ -459,7 +471,9 @@ describe('StageScene best-stage-stars-update feedback on clear', () => {
     const overlayDiv = (scene as unknown as { clearOverlay: HTMLDivElement | null })
       .clearOverlay;
     expect(overlayDiv).not.toBeNull();
-    const texts = Array.from(overlayDiv!.children).map((el) => (el as HTMLElement).textContent ?? '');
+    const texts = Array.from(overlayDiv!.children)
+      .filter((el) => !(el as HTMLElement).hasAttribute('data-stage-clear-burst'))
+      .map((el) => (el as HTMLElement).textContent ?? '');
     const yattaneIdx = texts.findIndex((t) => t.includes('やったね'));
     const bestIdx = texts.findIndex((t) => t.includes('じこベストこうしん'));
     const scoreIdx = texts.findIndex((t) => t.startsWith('⭐'));
@@ -469,8 +483,6 @@ describe('StageScene best-stage-stars-update feedback on clear', () => {
   });
 
   it('injects @keyframes bestStageStarsPop into document.head when best is updated', () => {
-    document.getElementById('best-stage-stars-animation')?.remove();
-
     const { scene } = setupClearScene({
       stageNumber: 2,
       earnedStars: 3,
@@ -487,8 +499,6 @@ describe('StageScene best-stage-stars-update feedback on clear', () => {
   });
 
   it('does NOT inject the keyframes style when best is not updated', () => {
-    document.getElementById('best-stage-stars-animation')?.remove();
-
     const { scene } = setupClearScene({
       stageNumber: 3,
       earnedStars: 2,
@@ -499,6 +509,65 @@ describe('StageScene best-stage-stars-update feedback on clear', () => {
     (scene as unknown as { onStageClear(): void }).onStageClear();
 
     expect(document.getElementById('best-stage-stars-animation')).toBeNull();
+  });
+
+  it('creates a pointer-events-none emoji burst when clearing a stage', () => {
+    const { scene } = setupClearScene({
+      stageNumber: 2,
+      earnedStars: 3,
+      previousBest: 1,
+      alreadyUnlocked: true,
+    });
+
+    (scene as unknown as { onStageClear(): void }).onStageClear();
+
+    const burstLayer = document.querySelector<HTMLElement>('[data-stage-clear-burst]');
+    const emojis = document.querySelectorAll('[data-stage-clear-burst-emoji]');
+    expect(burstLayer).not.toBeNull();
+    expect(burstLayer?.style.pointerEvents).toBe('none');
+    expect(emojis.length).toBeGreaterThanOrEqual(9);
+  });
+
+  it('does NOT duplicate the clear burst style across multiple clears', () => {
+    const first = setupClearScene({
+      stageNumber: 2,
+      earnedStars: 4,
+      previousBest: 1,
+      alreadyUnlocked: true,
+    }).scene;
+    (first as unknown as { onStageClear(): void }).onStageClear();
+
+    const second = setupClearScene({
+      stageNumber: 3,
+      earnedStars: 2,
+      previousBest: 2,
+      alreadyUnlocked: true,
+    }).scene;
+    (second as unknown as { onStageClear(): void }).onStageClear();
+
+    expect(document.querySelectorAll('#stage-clear-burst-animation')).toHaveLength(1);
+  });
+
+  it('keeps the burst effect alongside best-update feedback and next-button activation', () => {
+    const { scene } = setupClearScene({
+      stageNumber: 2,
+      earnedStars: 4,
+      previousBest: 1,
+      alreadyUnlocked: true,
+    });
+    const internal = scene as unknown as {
+      onStageClear(): void;
+      update(deltaTime: number): void;
+    };
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const overlay = document.getElementById('ui-overlay');
+    const continueButton = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
+    expect(overlay?.textContent).toContain('じこベストこうしん');
+    expect(document.querySelector('[data-stage-clear-burst]')).not.toBeNull();
+    expect(continueButton?.style.pointerEvents).toBe('auto');
   });
 });
 

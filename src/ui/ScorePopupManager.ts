@@ -7,6 +7,8 @@ interface PopupEntry {
   active: boolean;
   timeoutId: number | null;
   onAnimationEnd: ((ev: AnimationEvent) => void) | null;
+  useAltAnimation: boolean;
+  currentAnimationName: 'scorePopupFloatA' | 'scorePopupFloatB' | 'none';
 }
 
 export class ScorePopupManager {
@@ -23,12 +25,6 @@ export class ScorePopupManager {
     const root = this.ensureRoot();
     if (!root) return;
 
-    const overlay = root.parentElement;
-    if (!overlay) return;
-
-    const width = overlay.clientWidth || window.innerWidth || document.documentElement.clientWidth || 1;
-    const height = overlay.clientHeight || window.innerHeight || document.documentElement.clientHeight || 1;
-
     this.scratch.set(worldPosition.x, worldPosition.y, worldPosition.z).project(camera);
     if (
       !Number.isFinite(this.scratch.x) ||
@@ -38,20 +34,23 @@ export class ScorePopupManager {
       return;
     }
 
-    const x = (this.scratch.x * 0.5 + 0.5) * width;
-    const y = (-this.scratch.y * 0.5 + 0.5) * height;
+    const x = Math.round((this.scratch.x * 0.5 + 0.5) * 100000) / 1000;
+    const y = Math.round((-this.scratch.y * 0.5 + 0.5) * 100000) / 1000;
     const entry = this.acquireEntry(root);
     const color = score >= 500 ? '#ff9cf7' : '#ffe066';
+    const animationName = entry.useAltAnimation ? 'scorePopupFloatB' : 'scorePopupFloatA';
+    entry.useAltAnimation = !entry.useAltAnimation;
+    entry.currentAnimationName = animationName;
 
     entry.el.textContent = `+${score}`;
-    entry.el.style.left = `${Math.round(x)}px`;
-    entry.el.style.top = `${Math.round(y)}px`;
+    entry.el.style.left = `${x}%`;
+    entry.el.style.top = `${y}%`;
     entry.el.style.color = color;
     entry.el.style.textShadow = `0 2px 10px ${score >= 500 ? 'rgba(255, 156, 247, 0.55)' : 'rgba(255, 214, 102, 0.55)'}`;
     entry.el.style.visibility = 'visible';
     entry.el.style.opacity = '1';
+    entry.el.style.animationName = animationName;
     entry.el.removeAttribute('data-score-popup-active');
-    void entry.el.offsetWidth;
     entry.el.setAttribute('data-score-popup-active', '');
     entry.active = true;
 
@@ -60,7 +59,7 @@ export class ScorePopupManager {
     };
 
     entry.onAnimationEnd = (ev: AnimationEvent): void => {
-      if (ev.animationName !== 'scorePopupFloat') return;
+      if (ev.animationName !== entry.currentAnimationName) return;
       cleanup();
     };
     entry.el.addEventListener('animationend', entry.onAnimationEnd);
@@ -128,11 +127,16 @@ export class ScorePopupManager {
     el.style.willChange = 'transform, opacity';
     el.style.visibility = 'hidden';
     el.style.opacity = '0';
+    el.style.animationDuration = `${ScorePopupManager.POPUP_LIFETIME_MS}ms`;
+    el.style.animationTimingFunction = 'ease-out';
+    el.style.animationIterationCount = '1';
     return {
       el,
       active: false,
       timeoutId: null,
       onAnimationEnd: null,
+      useAltAnimation: false,
+      currentAnimationName: 'none',
     };
   }
 
@@ -144,7 +148,9 @@ export class ScorePopupManager {
 
   private clearEntry(entry: PopupEntry): void {
     entry.active = false;
+    entry.currentAnimationName = 'none';
     entry.el.removeAttribute('data-score-popup-active');
+    entry.el.style.animationName = 'none';
     if (entry.timeoutId !== null) {
       window.clearTimeout(entry.timeoutId);
       entry.timeoutId = null;
@@ -161,7 +167,7 @@ export class ScorePopupManager {
     const style = document.createElement('style');
     style.id = ScorePopupManager.STYLE_ID;
     style.textContent = `
-      @keyframes scorePopupFloat {
+      @keyframes scorePopupFloatA {
         0% {
           opacity: 0;
           transform: translate3d(-50%, -35%, 0) scale(0.92);
@@ -175,8 +181,19 @@ export class ScorePopupManager {
           transform: translate3d(-50%, -105%, 0) scale(1.04);
         }
       }
-      div[data-score-popup][data-score-popup-active] {
-        animation: scorePopupFloat 0.72s ease-out 1;
+      @keyframes scorePopupFloatB {
+        0% {
+          opacity: 0;
+          transform: translate3d(-50%, -35%, 0) scale(0.92);
+        }
+        18% {
+          opacity: 1;
+          transform: translate3d(-50%, -50%, 0) scale(1);
+        }
+        100% {
+          opacity: 0;
+          transform: translate3d(-50%, -105%, 0) scale(1.04);
+        }
       }
     `;
     document.head.appendChild(style);

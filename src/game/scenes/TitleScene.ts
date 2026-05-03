@@ -17,8 +17,8 @@ import { prewarmStageVisualAssets } from './stageVisualAssets';
 // ──────────────────────────────────────────────────────────────────────────────
 // SHARED background-star resources for TitleScene
 //
-// `enter()` は毎回 `Float32Array(3000)` の `BufferGeometry` と
-// `PointsMaterial` を新規生成していたが、対応する `exit()` で dispose されず
+// `enter()` は毎回 `Float32Array(3000)` の `THREE.BufferGeometry` と
+// `THREE.PointsMaterial` を新規生成していたが、対応する `exit()` で dispose されず
 // GPU バッファが滞留していた。HUD の 🏠 ボタンでタイトルへ何度も戻る構成のため
 // 再入場ごとに VBO アップロードと Math.random ループが走り、60fps 維持上の
 // 不利益となる。
@@ -147,7 +147,7 @@ function getNextAdventurePreview(saveData: SaveData): NextAdventurePreview {
 }
 
 export class TitleScene implements Scene {
-  // Scene / AmbientLight はインスタンスで再利用し、🏠 ボタンによる再入場ごとの
+  // Scene / THREE.AmbientLight はインスタンスで再利用し、🏠 ボタンによる再入場ごとの
   // per-entry GPU/JS アロケーションを抑える。
   private readonly threeScene: THREE.Scene;
   private readonly ambientLight: THREE.AmbientLight = new THREE.AmbientLight(0xffffff, 1);
@@ -174,6 +174,7 @@ export class TitleScene implements Scene {
   private isOpeningEncyclopedia = false;
   private isActive = false;
   private encyclopediaRequestToken = 0;
+  private companionParadeRequestToken = 0;
   // タイトル滞在中、初回 user gesture（AudioContext 初期化）を待つフラグ。
   // iPad Safari の AudioContext は user gesture 必須のため、enter() 直後の
   // 即時 playBGM(0) は AudioManager が既に初期化済みのとき（再訪問時）のみ
@@ -214,6 +215,7 @@ export class TitleScene implements Scene {
   enter(_context: SceneContext): void {
     this.isActive = true;
     this.encyclopediaRequestToken += 1;
+    this.companionParadeRequestToken += 1;
     this.lastAspect = 0;
 
     // Starfield background (SHARED: 共有 geometry / material は dispose しない)
@@ -336,6 +338,7 @@ export class TitleScene implements Scene {
           stageNumber,
           totalScore: 0,
           totalStarCount: 0,
+          launchSource: 'encyclopedia',
         });
       },
       saveData.bestStageStars ?? {},
@@ -541,6 +544,7 @@ export class TitleScene implements Scene {
         stageNumber: startStage,
         totalScore: 0,
         totalStarCount: 0,
+        launchSource: 'campaign',
       });
     });
 
@@ -727,6 +731,7 @@ export class TitleScene implements Scene {
   exit(): void {
     this.isActive = false;
     this.encyclopediaRequestToken += 1;
+    this.companionParadeRequestToken += 1;
     this.isOpeningEncyclopedia = false;
     this.tutorialOverlay.hide();
     this.encyclopediaOverlay?.hide();
@@ -738,6 +743,7 @@ export class TitleScene implements Scene {
     // 「タイトル BGM がステージ突入後にうっすら残る」可能性を断つ。
     this.audioManager.stopBGM();
     this.bgmPending = false;
+    this.clearCompanionParade();
     if (this.stars) {
       // SHARED: geometry / material はモジュールキャッシュで使い回すため dispose しない。
       this.stars.parent?.remove(this.stars);

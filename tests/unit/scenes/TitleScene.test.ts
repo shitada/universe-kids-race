@@ -6,6 +6,7 @@ import * as StageVisualAssetsModule from '../../../src/game/scenes/stageVisualAs
 import type { SceneManager } from '../../../src/game/SceneManager';
 import type { SaveManager } from '../../../src/game/storage/SaveManager';
 import type { AudioManager } from '../../../src/game/audio/AudioManager';
+import { TOTAL_STAGES } from '../../../src/game/config/StageConfig';
 import { EncyclopediaOverlay } from '../../../src/ui/EncyclopediaOverlay';
 import type { LoadFailureOverlayOptions } from '../../../src/ui/LoadFailureOverlay';
 import { TOTAL_STAGES } from '../../../src/game/config/StageConfig';
@@ -200,6 +201,88 @@ describe('TitleScene (T009)', () => {
         totalStarCount: 0,
       }),
     );
+
+    scene.exit();
+  });
+
+  it('shows the first stage preview when every planet is unlocked but clearedStage is reset', () => {
+    const sceneManager = createMockSceneManager();
+    const scene = new TitleScene(
+      sceneManager,
+      createMockSaveManager({
+        clearedStage: 0,
+        unlockedPlanets: Array.from({ length: TOTAL_STAGES }, (_, index) => index + 1),
+      }),
+      createMockAudioManager(true),
+    );
+
+    scene.enter({});
+
+    const card = findNextAdventureCard();
+    const hint = document.querySelector('[data-play-button-hint]') as HTMLDivElement | null;
+    expect(card?.getAttribute('data-next-stage-number')).toBe('1');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('月');
+    expect(card?.textContent).toContain('ぜんぶ クリア！');
+    expect(card?.textContent).toContain('🌙');
+    expect(hint?.textContent).toContain('ステージ 1');
+    expect(hint?.textContent).toContain('さいしょから');
+
+    findButtonByText('あそぶ')?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith(
+      'stage',
+      expect.objectContaining({
+        stageNumber: 1,
+        totalScore: 0,
+        totalStarCount: 0,
+      }),
+    );
+
+    scene.exit();
+  });
+
+  it('keeps the next-stage preview for in-progress saves', () => {
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager({
+        clearedStage: 3,
+        unlockedPlanets: [1, 2, 3],
+      }),
+      createMockAudioManager(true),
+    );
+
+    scene.enter({});
+
+    const card = findNextAdventureCard();
+    const hint = document.querySelector('[data-play-button-hint]') as HTMLDivElement | null;
+    expect(card?.getAttribute('data-next-stage-number')).toBe('4');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('火星');
+    expect(card?.textContent).toContain('つづきから しゅっぱつ！');
+    expect(hint?.textContent).toContain('ステージ 4');
+    expect(hint?.textContent).not.toContain('さいしょから');
+
+    scene.exit();
+  });
+
+  it('shows the first-start preview for a brand-new save', () => {
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager({
+        clearedStage: 0,
+        unlockedPlanets: [],
+      }),
+      createMockAudioManager(true),
+    );
+
+    scene.enter({});
+
+    const card = findNextAdventureCard();
+    const hint = document.querySelector('[data-play-button-hint]') as HTMLDivElement | null;
+    expect(card?.getAttribute('data-next-stage-number')).toBe('1');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('月');
+    expect(card?.textContent).toContain('はじめての しゅっぱつ！');
+    expect(hint?.textContent).toContain('ステージ 1');
+    expect(hint?.textContent).not.toContain('さいしょから');
 
     scene.exit();
   });

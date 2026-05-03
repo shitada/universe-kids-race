@@ -22,7 +22,7 @@ import { CompanionManager } from '../entities/CompanionManager';
 import { followCameraZ } from '../utils/followCameraZ';
 import { getViewportSize } from '../utils/getViewportSize';
 import { ScorePopupManager } from '../../ui/ScorePopupManager';
-import { getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
+import { getNextPlanetEncyclopediaEntry, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { TouchGuideOverlay, type TouchGuideMode } from '../../ui/TouchGuideOverlay';
 import {
   __resetStageSceneSharedAssetCachesForTest,
@@ -103,6 +103,7 @@ export class StageScene implements Scene {
 
   private stageConfig!: StageConfig;
   private stageNumber = 1;
+  private launchSource: 'campaign' | 'encyclopedia' = 'campaign';
   private isCleared = false;
   private clearTimer = 0;
   private clearOverlay: HTMLDivElement | null = null;
@@ -257,6 +258,7 @@ export class StageScene implements Scene {
     this.clearRewardRequestToken += 1;
     this.lastAspect = 0;
     this.stageNumber = context.stageNumber ?? 1;
+    this.launchSource = context.launchSource ?? 'campaign';
     this.stageConfig = getStageConfig(this.stageNumber);
     this.prefetchEndingSceneModuleIfNeeded();
     this.isCleared = false;
@@ -866,6 +868,14 @@ export class StageScene implements Scene {
     this.touchGuide.setMode(mode);
   }
 
+  private resetAssistNavigation(): void {
+    this.meteoriteHitTimes.length = 0;
+    this.assistTimer = 0;
+    this.assistMessageTimer = 0;
+    this.assistDirection = null;
+    this.assistDirectionRefreshTimer = 0;
+  }
+
   private updateAssistTimers(deltaTime: number): void {
     if (this.assistTimer > 0) {
       this.assistDirectionRefreshTimer = Math.max(0, this.assistDirectionRefreshTimer - deltaTime);
@@ -1092,6 +1102,7 @@ export class StageScene implements Scene {
     this.clearTimer = 0;
     this.isClearContinueEnabled = false;
     this.hasHandledClearContinue = false;
+    this.resetAssistNavigation();
     this.touchGuide.hide();
     const isNewPlanetUnlock = this.saveManager.markStageCleared(this.stageNumber);
     this.audioManager.playSFX('stageClear');
@@ -1229,11 +1240,15 @@ export class StageScene implements Scene {
       padding: 1.2rem;
       box-sizing: border-box;
       text-align: center;
+      overflow: hidden;
     `;
+    this.appendClearCelebrationBurst();
 
     const msg = document.createElement('div');
     msg.textContent = 'やったね！';
     msg.style.cssText = `
+      position: relative;
+      z-index: 1;
       font-family: 'Zen Maru Gothic', sans-serif;
       font-size: 3rem;
       font-weight: 900;
@@ -1247,6 +1262,8 @@ export class StageScene implements Scene {
     const score = document.createElement('div');
     score.textContent = `⭐ ${starCount} こ あつめたよ！`;
     score.style.cssText = `
+      position: relative;
+      z-index: 1;
       font-family: 'Zen Maru Gothic', sans-serif;
       font-size: 1.5rem;
       font-weight: 700;
@@ -1260,6 +1277,8 @@ export class StageScene implements Scene {
       const bestMsg = document.createElement('div');
       bestMsg.textContent = `✨ じこベストこうしん！ ⭐ ${starCount} こ`;
       bestMsg.style.cssText = `
+        position: relative;
+        z-index: 1;
         font-family: 'Zen Maru Gothic', sans-serif;
         font-size: 1.2rem;
         font-weight: 700;
@@ -1273,6 +1292,85 @@ export class StageScene implements Scene {
 
     this.clearOverlay.appendChild(score);
 
+    const nextEntry = getNextPlanetEncyclopediaEntry(this.stageNumber);
+    if (nextEntry) {
+      const nextAdventureCard = document.createElement('section');
+      nextAdventureCard.setAttribute('data-stage-clear-next-preview', '');
+      nextAdventureCard.style.cssText = `
+        margin-top: 1.1rem;
+        width: min(88vw, 420px);
+        padding: 1rem 1.1rem 1.15rem;
+        border-radius: 28px;
+        background: linear-gradient(180deg, rgba(30, 46, 112, 0.92), rgba(12, 22, 66, 0.96));
+        border: 2px solid rgba(255, 255, 255, 0.18);
+        box-shadow: 0 14px 32px rgba(0, 0, 0, 0.26);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.45rem;
+      `;
+
+      const nextAdventureLabel = document.createElement('div');
+      nextAdventureLabel.textContent = 'つぎのぼうけん';
+      nextAdventureLabel.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: 1rem;
+        font-weight: 700;
+        color: #b9d7ff;
+        letter-spacing: 0.08em;
+      `;
+
+      const nextAdventureTitle = document.createElement('div');
+      nextAdventureTitle.textContent = `つぎは ${nextEntry.name}！`;
+      nextAdventureTitle.setAttribute('data-stage-clear-next-title', '');
+      nextAdventureTitle.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: clamp(1.5rem, 5.2vmin, 2.05rem);
+        font-weight: 900;
+        color: #fff4a3;
+        text-shadow: 0 0 14px rgba(255, 230, 120, 0.25);
+      `;
+
+      const nextAdventureEmoji = document.createElement('div');
+      nextAdventureEmoji.textContent = nextEntry.emoji;
+      nextAdventureEmoji.setAttribute('data-stage-clear-next-emoji', '');
+      nextAdventureEmoji.style.cssText = `
+        font-size: clamp(3.2rem, 13vmin, 4.8rem);
+        line-height: 1;
+        filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.24));
+      `;
+
+      const nextAdventureName = document.createElement('div');
+      nextAdventureName.textContent = nextEntry.name;
+      nextAdventureName.setAttribute('data-stage-clear-next-name', '');
+      nextAdventureName.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: clamp(1.35rem, 4.8vmin, 1.8rem);
+        font-weight: 800;
+        color: #ffffff;
+      `;
+
+      const nextAdventureTrivia = document.createElement('div');
+      nextAdventureTrivia.textContent = nextEntry.trivia;
+      nextAdventureTrivia.setAttribute('data-stage-clear-next-trivia', '');
+      nextAdventureTrivia.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: clamp(1.02rem, 3.9vmin, 1.2rem);
+        font-weight: 700;
+        color: #dfeaff;
+        line-height: 1.45;
+      `;
+
+      nextAdventureCard.append(
+        nextAdventureLabel,
+        nextAdventureTitle,
+        nextAdventureEmoji,
+        nextAdventureName,
+        nextAdventureTrivia,
+      );
+      this.clearOverlay.appendChild(nextAdventureCard);
+    }
+
     // Card acquisition notification for newly unlocked planets
     if (isNewPlanetUnlock) {
       this.prefetchClearRewardOverlay();
@@ -1281,6 +1379,8 @@ export class StageScene implements Scene {
         const cardMsg = document.createElement('div');
         cardMsg.textContent = `${entry.emoji} ${entry.name}の ずかんカード ゲット！`;
         cardMsg.style.cssText = `
+          position: relative;
+          z-index: 1;
           font-family: 'Zen Maru Gothic', sans-serif;
           font-size: 1.2rem;
           font-weight: 700;
@@ -1293,6 +1393,8 @@ export class StageScene implements Scene {
         const companionMsg = document.createElement('div');
         companionMsg.textContent = `${entry.emoji} ${entry.name}が なかまに なったよ！`;
         companionMsg.style.cssText = `
+          position: relative;
+          z-index: 1;
           font-family: 'Zen Maru Gothic', sans-serif;
           font-size: 1.2rem;
           font-weight: 700;
@@ -1306,6 +1408,8 @@ export class StageScene implements Scene {
         rewardButton.setAttribute('data-stage-clear-card', '');
         rewardButton.textContent = 'カードをみる';
         rewardButton.style.cssText = `
+          position: relative;
+          z-index: 1;
           margin-top: 1rem;
           min-width: min(72vw, 280px);
           min-height: 72px;
@@ -1361,7 +1465,7 @@ export class StageScene implements Scene {
     retryButton.disabled = true;
     retryButton.style.cssText = `
       min-width: min(72vw, 300px);
-      min-height: 80px;
+      min-height: 88px;
       padding: 0.95rem 1.7rem;
       border: none;
       border-radius: 999px;
@@ -1394,8 +1498,6 @@ export class StageScene implements Scene {
       font-family: 'Zen Maru Gothic', sans-serif;
       font-size: clamp(1.5rem, 5vmin, 2.1rem);
       font-weight: 900;
-      color: #00163a;
-      background: linear-gradient(135deg, #ffe66d, #ffb347);
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
       opacity: 0;
       visibility: hidden;
@@ -1470,6 +1572,60 @@ export class StageScene implements Scene {
     uiOverlay.appendChild(this.clearOverlay);
   }
 
+  private appendClearCelebrationBurst(): void {
+    if (!this.clearOverlay) return;
+
+    this.injectStageClearBurstAnimation();
+
+    const burstLayer = document.createElement('div');
+    burstLayer.setAttribute('data-stage-clear-burst', '');
+    burstLayer.style.cssText = `
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 0;
+    `;
+
+    const burstItems = [
+      { emoji: '⭐', x: '0px', y: '-164px', midX: '0px', midY: '-84px', size: '2.6rem', scale: '1.12', delay: '0ms', duration: '1500ms' },
+      { emoji: '✨', x: '138px', y: '-108px', midX: '72px', midY: '-56px', size: '2.2rem', scale: '0.96', delay: '90ms', duration: '1440ms' },
+      { emoji: '🌟', x: '176px', y: '-10px', midX: '96px', midY: '-8px', size: '2.5rem', scale: '1.04', delay: '150ms', duration: '1520ms' },
+      { emoji: '⭐', x: '136px', y: '112px', midX: '74px', midY: '58px', size: '2.3rem', scale: '0.92', delay: '220ms', duration: '1480ms' },
+      { emoji: '✨', x: '0px', y: '170px', midX: '0px', midY: '88px', size: '2rem', scale: '0.88', delay: '280ms', duration: '1400ms' },
+      { emoji: '🌟', x: '-142px', y: '118px', midX: '-76px', midY: '60px', size: '2.4rem', scale: '1.02', delay: '340ms', duration: '1500ms' },
+      { emoji: '⭐', x: '-182px', y: '-8px', midX: '-98px', midY: '-6px', size: '2.6rem', scale: '1.08', delay: '410ms', duration: '1560ms' },
+      { emoji: '✨', x: '-126px', y: '-118px', midX: '-68px', midY: '-64px', size: '2.1rem', scale: '0.94', delay: '470ms', duration: '1460ms' },
+      { emoji: '🌟', x: '78px', y: '-182px', midX: '40px', midY: '-96px', size: '2rem', scale: '0.86', delay: '520ms', duration: '1380ms' },
+    ] as const;
+
+    for (const item of burstItems) {
+      const emoji = document.createElement('span');
+      emoji.setAttribute('data-stage-clear-burst-emoji', '');
+      emoji.setAttribute('aria-hidden', 'true');
+      emoji.textContent = item.emoji;
+      emoji.style.cssText = `
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        font-size: ${item.size};
+        line-height: 1;
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.3);
+        will-change: transform, opacity;
+        animation: stageClearEmojiBurst ${item.duration} ease-out ${item.delay} forwards;
+        --stage-clear-burst-mid-x: ${item.midX};
+        --stage-clear-burst-mid-y: ${item.midY};
+        --stage-clear-burst-x: ${item.x};
+        --stage-clear-burst-y: ${item.y};
+        --stage-clear-burst-scale: ${item.scale};
+      `;
+      burstLayer.appendChild(emoji);
+    }
+
+    this.clearOverlay.appendChild(burstLayer);
+  }
+
   private revealClearActionButtonsIfReady(): void {
     if (this.isClearContinueEnabled) return;
     if (this.clearTimer < StageScene.CLEAR_CONTINUE_DELAY) return;
@@ -1499,8 +1655,43 @@ export class StageScene implements Scene {
     document.head.appendChild(style);
   }
 
+  private injectStageClearBurstAnimation(): void {
+    if (document.getElementById('stage-clear-burst-animation')) return;
+
+    const style = document.createElement('style');
+    style.id = 'stage-clear-burst-animation';
+    style.textContent = `
+      @keyframes stageClearEmojiBurst {
+        0% {
+          opacity: 0;
+          transform: translate(-50%, -50%) scale(0.3);
+        }
+        22% {
+          opacity: 1;
+          transform: translate(
+            calc(-50% + var(--stage-clear-burst-mid-x)),
+            calc(-50% + var(--stage-clear-burst-mid-y))
+          ) scale(calc(var(--stage-clear-burst-scale) * 0.82));
+        }
+        100% {
+          opacity: 0;
+          transform: translate(
+            calc(-50% + var(--stage-clear-burst-x)),
+            calc(-50% + var(--stage-clear-burst-y))
+          ) scale(var(--stage-clear-burst-scale));
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
   private handleStageComplete(): void {
     const { totalScore, totalStarCount } = this.scoreSystem.finalizeStage();
+
+    if (this.launchSource === 'encyclopedia') {
+      this.sceneManager.requestTransition('title');
+      return;
+    }
 
     if (this.stageNumber >= TOTAL_STAGES) {
       this.sceneManager.requestTransition('ending', { totalScore, totalStarCount });
@@ -1518,6 +1709,7 @@ export class StageScene implements Scene {
       stageNumber: this.stageNumber,
       totalScore: this.stageEntryTotalScore,
       totalStarCount: this.stageEntryTotalStarCount,
+      replayToken: Date.now() + Math.random(),
     });
   }
 
