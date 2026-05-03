@@ -1,10 +1,13 @@
 import type { SFXType } from '../../types';
 import { BGM_CONFIGS } from './bgmConfigs';
+import type { BGMConfig } from './bgmConfigs';
 
 export { BGM_CONFIGS } from './bgmConfigs';
 export type { BGMConfig, BGMVolumes, BGMWaveforms } from './bgmConfigs';
 
 export class AudioManager {
+  private static readonly BGM_SCHEDULER_INTERVAL_MS = 25;
+  private static readonly BGM_SCHEDULE_AHEAD_SEC = 0.15;
   private ctx: AudioContext | null = null;
   private initialized = false;
   private masterGain: GainNode | null = null;
@@ -19,6 +22,11 @@ export class AudioManager {
   private noiseBuffer: AudioBuffer | null = null;
   private bgmPlaying = false;
   private bgmGeneration = 0;
+  private bgmConfig: BGMConfig | null = null;
+  private bgmBeatInterval = 0;
+  private bgmTotalBeats = 0;
+  private bgmStartTime = 0;
+  private bgmScheduledBeat = 0;
   // Per-SFX-type timestamp (ctx.currentTime, seconds) of the last successful playback.
   // Used to coalesce duplicate SFX triggers within the same frame to prevent
   // pop noise on iPad Safari WebAudio (Constitution I) and reduce node churn (Constitution IV).
@@ -133,6 +141,9 @@ export class AudioManager {
         this.masterGain.gain.value = target;
       } catch { /* ignore */ }
     }
+    if (muted) {
+      this.stopTrackedBgmShortVoices();
+    }
   }
 
   isMuted(): boolean {
@@ -157,6 +168,11 @@ export class AudioManager {
     const beatInterval = 60 / config.tempo;
     const startTime = this.ctx.currentTime;
     const fadeInDuration = 0.03;
+    this.bgmConfig = config;
+    this.bgmBeatInterval = beatInterval;
+    this.bgmTotalBeats = config.chords.length * config.beatsPerChord;
+    this.bgmStartTime = startTime;
+    this.bgmScheduledBeat = 0;
 
     // Bass layer - persistent oscillator
     try {
@@ -197,95 +213,7 @@ export class AudioManager {
       }
     }
 
-    // Sequencer - track beats and chords
-    let beat = 0;
-    const totalBeats = config.chords.length * config.beatsPerChord;
-
-    const tick = () => {
-      if (!this.initialized || !this.ctx) return;
-      if (currentGen !== this.bgmGeneration) return;
-
-      // While the AudioContext is not running (e.g. iOS Safari backgrounded
-      // and suspend() was invoked), skip scheduling new oscillators to avoid
-      // accumulating short voices whose start times are pinned to the
-      // suspended currentTime. Spin-reschedule cheaply until we resume.
-      if (this.ctx.state !== 'running') {
-        this.bgmTimer = setTimeout(tick, 200);
-        return;
-      }
-
-      // While muted, skip creating short-lived voices (arpeggio/melody).
-      // Persistent layers (bass/pad) are already silenced via masterGain=0,
-      // and we keep the tick cadence so unmute resumes within one beat.
-      // Same approach as playSFX muted skip optimization.
-      if (this.muted) {
-        beat = (beat + 1) % totalBeats;
-        this.bgmTimer = setTimeout(tick, beatInterval * 1000);
-        return;
-      }
-
-      const chordIndex = Math.floor(beat / config.beatsPerChord) % config.chords.length;
-      const beatInChord = beat % config.beatsPerChord;
-
-      // Update bass and pad frequencies on chord change
-      if (beatInChord === 0) {
-        try {
-          if (this.bgmOscillators[0]) {
-            this.bgmOscillators[0].frequency.value = config.bassNotes[chordIndex];
-          }
-        } catch { /* ignore */ }
-
-        const chord = config.chords[chordIndex];
-        for (let i = 0; i < padOscs.length && i < chord.length; i++) {
-          try { padOscs[i].frequency.value = chord[i]; } catch { /* ignore */ }
-        }
-      }
-
-      // Arpeggio - play one note from current chord
-      try {
-        const chord = config.chords[chordIndex];
-        const arpFreq = chord[beatInChord % chord.length];
-        const osc = this.ctx!.createOscillator();
-        const gain = this.ctx!.createGain();
-        osc.type = config.waveforms.arpeggio;
-        osc.frequency.value = arpFreq;
-        const now = this.ctx!.currentTime;
-        gain.gain.setValueAtTime(config.volumes.arpeggio, now);
-        gain.gain.linearRampToValueAtTime(0.001, now + beatInterval * 0.9);
-        osc.connect(gain);
-        gain.connect(this.sink()!);
-        osc.start(now);
-        osc.stop(now + beatInterval * 0.95);
-        this.trackShortVoice(osc, gain);
-      } catch {
-        // Ignore arpeggio errors
-      }
-
-      // Melody - play note from melody sequence
-      try {
-        const melodySeq = config.melodyNotes[chordIndex];
-        const melodyFreq = melodySeq[beatInChord % melodySeq.length];
-        const osc = this.ctx!.createOscillator();
-        const gain = this.ctx!.createGain();
-        osc.type = config.waveforms.melody;
-        osc.frequency.value = melodyFreq;
-        const now = this.ctx!.currentTime;
-        gain.gain.setValueAtTime(config.volumes.melody, now);
-        gain.gain.linearRampToValueAtTime(0.001, now + beatInterval * 0.9);
-        osc.connect(gain);
-        gain.connect(this.sink()!);
-        osc.start(now);
-        osc.stop(now + beatInterval * 0.95);
-        this.trackShortVoice(osc, gain);
-      } catch {
-        // Ignore melody errors
-      }
-
-      beat = (beat + 1) % totalBeats;
-      this.bgmTimer = setTimeout(tick, beatInterval * 1000);
-    };
-
-    tick();
+    this.scheduleBgmWindow(currentGen, padOscs);
   }
 
   private trackShortVoice(osc: OscillatorNode, gain: GainNode): void {
@@ -301,26 +229,101 @@ export class AudioManager {
     };
   }
 
-  stopBGM(): void {
-    this.bgmGeneration++;
-    this.bgmPlaying = false;
+  private scheduleBgmWindow(currentGen: number, padOscs: OscillatorNode[]): void {
+    if (!this.initialized || !this.ctx || !this.bgmConfig || !this.bgmPlaying) return;
+    if (currentGen !== this.bgmGeneration) return;
+    if (this.ctx.state !== 'running') {
+      this.armBgmScheduler(currentGen, padOscs);
+      return;
+    }
+
+    const horizon = this.ctx.currentTime + AudioManager.BGM_SCHEDULE_AHEAD_SEC;
+    while (this.bgmStartTime + this.bgmScheduledBeat * this.bgmBeatInterval < horizon) {
+      const beatNumber = this.bgmScheduledBeat;
+      const beatTime = this.bgmStartTime + beatNumber * this.bgmBeatInterval;
+      this.scheduleBeat(beatNumber, beatTime, padOscs);
+      this.bgmScheduledBeat++;
+    }
+
+    this.armBgmScheduler(currentGen, padOscs);
+  }
+
+  private armBgmScheduler(currentGen: number, padOscs: OscillatorNode[]): void {
     if (this.bgmTimer) {
       clearTimeout(this.bgmTimer);
-      this.bgmTimer = null;
     }
-    const now = this.ctx ? this.ctx.currentTime : 0;
-    // Snapshot then synchronously clear arrays to prevent re-entrancy with
-    // any subsequent playBGM() call while disconnects are deferred.
-    const shortVoiceSnapshot = this.bgmShortVoices;
-    const persistentOscSnapshot = this.bgmOscillators;
-    const persistentGainSnapshot = this.bgmGains;
-    this.bgmShortVoices = [];
-    this.bgmOscillators = [];
-    this.bgmGains = [];
+    this.bgmTimer = setTimeout(() => {
+      this.scheduleBgmWindow(currentGen, padOscs);
+    }, AudioManager.BGM_SCHEDULER_INTERVAL_MS);
+  }
 
-    // Short-lived voices: schedule a 20ms fade-out, then stop, then defer
-    // disconnect so the fade is actually audible (do not break the audio
-    // graph synchronously).
+  private scheduleBeat(absoluteBeat: number, beatTime: number, padOscs: OscillatorNode[]): void {
+    if (!this.ctx || !this.bgmConfig || this.bgmTotalBeats === 0) return;
+    const config = this.bgmConfig;
+    const beat = absoluteBeat % this.bgmTotalBeats;
+    const chordIndex = Math.floor(beat / config.beatsPerChord) % config.chords.length;
+    const beatInChord = beat % config.beatsPerChord;
+    const scheduleTime = Math.max(beatTime, this.ctx.currentTime);
+
+    if (beatInChord === 0) {
+      this.setFrequencyAtTime(this.bgmOscillators[0], config.bassNotes[chordIndex], scheduleTime);
+
+      const chord = config.chords[chordIndex];
+      for (let i = 0; i < padOscs.length && i < chord.length; i++) {
+        this.setFrequencyAtTime(padOscs[i], chord[i], scheduleTime);
+      }
+    }
+
+    if (this.muted) return;
+
+    const chord = config.chords[chordIndex];
+    const arpFreq = chord[beatInChord % chord.length];
+    this.playScheduledVoice(config.waveforms.arpeggio, arpFreq, config.volumes.arpeggio, scheduleTime);
+
+    const melodySeq = config.melodyNotes[chordIndex];
+    const melodyFreq = melodySeq[beatInChord % melodySeq.length];
+    this.playScheduledVoice(config.waveforms.melody, melodyFreq, config.volumes.melody, scheduleTime);
+  }
+
+  private setFrequencyAtTime(osc: OscillatorNode | undefined, frequency: number, when: number): void {
+    if (!osc) return;
+    try {
+      osc.frequency.setValueAtTime(frequency, when);
+    } catch {
+      try {
+        osc.frequency.value = frequency;
+      } catch { /* ignore */ }
+    }
+  }
+
+  private playScheduledVoice(
+    waveform: OscillatorType,
+    frequency: number,
+    volume: number,
+    startTime: number,
+  ): void {
+    if (!this.ctx) return;
+    try {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = waveform;
+      this.setFrequencyAtTime(osc, frequency, startTime);
+      gain.gain.setValueAtTime(volume, startTime);
+      gain.gain.linearRampToValueAtTime(0.001, startTime + this.bgmBeatInterval * 0.9);
+      osc.connect(gain);
+      gain.connect(this.sink()!);
+      osc.start(startTime);
+      osc.stop(startTime + this.bgmBeatInterval * 0.95);
+      this.trackShortVoice(osc, gain);
+    } catch {
+      // Ignore scheduled voice errors
+    }
+  }
+
+  private stopTrackedBgmShortVoices(): void {
+    const now = this.ctx ? this.ctx.currentTime : 0;
+    const shortVoiceSnapshot = this.bgmShortVoices;
+    this.bgmShortVoices = [];
     for (const { osc, gain } of shortVoiceSnapshot) {
       try { gain.gain.cancelScheduledValues(now); } catch { /* ignore */ }
       try { gain.gain.setValueAtTime(gain.gain.value, now); } catch { /* ignore */ }
@@ -333,6 +336,26 @@ export class AudioManager {
         try { gain.disconnect(); } catch { /* ignore */ }
       }
     }, 40);
+  }
+
+  stopBGM(): void {
+    this.bgmGeneration++;
+    this.bgmPlaying = false;
+    if (this.bgmTimer) {
+      clearTimeout(this.bgmTimer);
+      this.bgmTimer = null;
+    }
+    const now = this.ctx ? this.ctx.currentTime : 0;
+    this.bgmConfig = null;
+    this.bgmBeatInterval = 0;
+    this.bgmTotalBeats = 0;
+    this.bgmStartTime = 0;
+    this.bgmScheduledBeat = 0;
+    const persistentOscSnapshot = this.bgmOscillators;
+    const persistentGainSnapshot = this.bgmGains;
+    this.bgmOscillators = [];
+    this.bgmGains = [];
+    this.stopTrackedBgmShortVoices();
 
     // Persistent layers (bass/pad): apply a short ~30ms fade so iPad Safari
     // does not emit a click when the graph is torn down.

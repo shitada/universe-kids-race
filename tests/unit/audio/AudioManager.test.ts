@@ -61,6 +61,11 @@ vi.stubGlobal('AudioContext', MockAudioContext);
 // Import after mocking
 const { AudioManager, BGM_CONFIGS } = await import('../../../src/game/audio/AudioManager');
 
+function advanceAudioClock(ctx: MockAudioContext, ms: number): void {
+  ctx.currentTime += ms / 1000;
+  vi.advanceTimersByTime(ms);
+}
+
 describe('AudioManager', () => {
   let audioManager: InstanceType<typeof AudioManager>;
 
@@ -300,10 +305,10 @@ describe('AudioManager', () => {
       vi.advanceTimersByTime(1000);
       expect(ctx.createOscillator.mock.calls.length).toBe(oscCallsAfterInitialTick);
 
-      // Resume: next spin tick (within 200ms) should fire a normal beat that
-      // schedules arpeggio + melody (2 new oscillators).
+      // Resume: once currentTime passes the lookahead threshold, the scheduler
+      // should reserve the next beat's arpeggio + melody pair.
       ctx.state = 'running';
-      vi.advanceTimersByTime(250);
+      advanceAudioClock(ctx, 450);
 
       expect(ctx.createOscillator.mock.calls.length).toBeGreaterThanOrEqual(
         oscCallsAfterInitialTick + 2,
@@ -350,12 +355,43 @@ describe('AudioManager', () => {
       am.playBGM(1);
       const baseline = ctx.createOscillator.mock.calls.length;
 
-      // Make sure ctx is running and advance one beat (Stage 1: 120 BPM => 0.5s).
+      // Make sure ctx is running and advance past one beat horizon.
       ctx.state = 'running';
-      vi.advanceTimersByTime(550);
+      advanceAudioClock(ctx, 600);
 
       // After one full beat we expect at least one additional arpeggio + melody pair.
       expect(ctx.createOscillator.mock.calls.length).toBeGreaterThanOrEqual(baseline + 2);
+
+      am.stopBGM();
+      am.dispose();
+      vi.useRealTimers();
+    });
+
+    it('pre-schedules the next beat slightly ahead of currentTime', () => {
+      vi.useFakeTimers();
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      const ctx = (am as any).ctx as MockAudioContext;
+      const beatInterval = 60 / BGM_CONFIGS[1].tempo;
+
+      am.playBGM(1);
+      const baselineOscCount = ctx.createOscillator.mock.calls.length;
+
+      ctx.state = 'running';
+      ctx.currentTime = beatInterval - 0.12;
+      const currentTimeBeforeSchedule = ctx.currentTime;
+      vi.advanceTimersByTime(25);
+
+      const scheduledOscillators = ctx.createOscillator.mock.results
+        .slice(baselineOscCount)
+        .map((result: any) => result.value as MockOscillatorNode);
+      expect(scheduledOscillators).toHaveLength(2);
+      for (const osc of scheduledOscillators) {
+        const startTime = (osc.start as ReturnType<typeof vi.fn>).mock.calls[0][0];
+        expect(startTime).toBeCloseTo(beatInterval, 5);
+        expect(startTime).toBeGreaterThan(currentTimeBeforeSchedule);
+      }
 
       am.stopBGM();
       am.dispose();
