@@ -155,7 +155,7 @@ async function setupBootSession(): Promise<MockBootSession> {
 
   vi.doMock('../../../src/game/storage/SaveManager', () => ({
     SaveManager: class {
-      isFreshSession = vi.fn(() => false);
+      getSessionState = vi.fn(() => 'existing');
       resetSessionDataPreservingMuted = vi.fn();
       load = vi.fn(() => ({
         muted: false,
@@ -345,7 +345,7 @@ async function setupBootSession(): Promise<MockBootSession> {
       setPauseHandlers = vi.fn();
       setVisualQualityTier = vi.fn();
       isPlaying = vi.fn(() => false);
-      isManuallyPaused = vi.fn(() => false);
+      isUserPaused = vi.fn(() => false);
       requestResumeCountdown = vi.fn();
       enter(): void {
         this.overlay = document.createElement('div');

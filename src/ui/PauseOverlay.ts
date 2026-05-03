@@ -131,13 +131,18 @@ export class PauseOverlay {
   }
 
   hide(): void {
+    if (!this.overlayEl) return;
     const cleanups = Array.from(this.activePressCleanups);
     this.activePressCleanups.clear();
     for (const cleanup of cleanups) {
       cleanup();
     }
-    this.overlayEl?.remove();
+    this.overlayEl.remove();
     this.overlayEl = null;
+  }
+
+  dispose(): void {
+    this.hide();
   }
 
   isVisible(): boolean {

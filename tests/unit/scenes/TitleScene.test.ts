@@ -54,6 +54,7 @@ function createMockSaveManager(overrides: Partial<ReturnType<SaveManager['load']
     load: vi.fn(() => ({ ...saveData, unlockedPlanets: [...saveData.unlockedPlanets] })),
     save: vi.fn(),
     clear: vi.fn(),
+    resetProgressPreservingSettings: vi.fn(),
     markTutorialShown: vi.fn(),
   } as unknown as SaveManager;
 }
@@ -101,6 +102,14 @@ function findNextAdventureCard(): HTMLDivElement | null {
 
 function findNextRewardChip(type: 'card' | 'companion'): HTMLDivElement | null {
   return document.querySelector(`[data-next-reward-chip="${type}"]`);
+}
+
+function findNextAdventureMedalDisplay(): HTMLDivElement | null {
+  return document.querySelector('[data-stage-medal-display][data-stage-medal-scope="title-next-adventure"]');
+}
+
+function findResetProgressButton(): HTMLButtonElement | null {
+  return document.querySelector('[data-reset-progress-button]') as HTMLButtonElement | null;
 }
 
 describe('TitleScene (T009)', () => {
@@ -278,7 +287,8 @@ describe('TitleScene (T009)', () => {
     expect(card?.textContent).toContain('🌙');
     expect(rewardPreview).toBeNull();
     expect(hint?.textContent).toContain('ステージ 1');
-    expect(hint?.textContent).toContain('さいしょから');
+    expect(hint?.textContent).toContain('もういちど');
+    expect(findResetProgressButton()?.textContent).toBe('さいしょから');
 
     dispatchReleaseConfirm(findButtonByText('あそぶ')!);
 
@@ -308,18 +318,14 @@ describe('TitleScene (T009)', () => {
 
     const card = findNextAdventureCard();
     const hint = document.querySelector('[data-play-button-hint]') as HTMLDivElement | null;
-    const cardRewardChip = findNextRewardChip('card');
-    const companionRewardChip = findNextRewardChip('companion');
+    const medalDisplay = findNextAdventureMedalDisplay();
     expect(card?.getAttribute('data-next-stage-number')).toBe('4');
     expect(card?.getAttribute('data-next-stage-destination')).toBe('かせい');
     expect(card?.textContent).toContain('つづきから しゅっぱつ！');
-    expect(card?.textContent).toContain('つぎにもらえる');
-    expect(cardRewardChip?.textContent).toContain('📘');
-    expect(cardRewardChip?.textContent).toContain('🔴');
-    expect(companionRewardChip?.textContent).toContain('👾');
-    expect(companionRewardChip?.textContent).toContain('🔴');
+    expect(medalDisplay).not.toBeNull();
     expect(hint?.textContent).toContain('ステージ 4');
     expect(hint?.textContent).not.toContain('さいしょから');
+    expect(findResetProgressButton()?.textContent).toBe('さいしょから');
 
     scene.exit();
   });
@@ -338,16 +344,75 @@ describe('TitleScene (T009)', () => {
 
     const card = findNextAdventureCard();
     const hint = document.querySelector('[data-play-button-hint]') as HTMLDivElement | null;
-    const cardRewardChip = findNextRewardChip('card');
-    const companionRewardChip = findNextRewardChip('companion');
+    const medalDisplay = findNextAdventureMedalDisplay();
     expect(card?.getAttribute('data-next-stage-number')).toBe('1');
     expect(card?.getAttribute('data-next-stage-destination')).toBe('つき');
     expect(card?.textContent).toContain('はじめての しゅっぱつ！');
-    expect(card?.textContent).toContain('つぎにもらえる');
-    expect(cardRewardChip?.textContent).toContain('🌙');
-    expect(companionRewardChip?.textContent).toContain('🌙');
+    expect(medalDisplay).not.toBeNull();
     expect(hint?.textContent).toContain('ステージ 1');
     expect(hint?.textContent).not.toContain('さいしょから');
+    expect(findResetProgressButton()).toBeNull();
+
+    scene.exit();
+  });
+
+  it('opens a reset confirmation overlay and cancels safely', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager({
+      clearedStage: 3,
+      unlockedPlanets: [1, 2, 3],
+      bestStageStars: { 1: 3, 2: 2 },
+    });
+    const scene = new TitleScene(sceneManager, saveManager, createMockAudioManager(true));
+
+    scene.enter({});
+
+    findResetProgressButton()?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    const confirmOverlay = document.querySelector('[data-title-reset-confirm-overlay]');
+    expect(confirmOverlay).toBeTruthy();
+    expect(confirmOverlay?.textContent).toContain('さいしょからに する？');
+
+    const cancelButton = findButtonByText('やめる');
+    expect(cancelButton).toBeTruthy();
+    cancelButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(document.querySelector('[data-title-reset-confirm-overlay]')).toBeNull();
+    expect(saveManager.resetProgressPreservingSettings).not.toHaveBeenCalled();
+    expect(sceneManager.requestTransition).not.toHaveBeenCalled();
+
+    scene.exit();
+  });
+
+  it('confirms reset, clears progress only, and starts from stage 1', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager({
+      clearedStage: 4,
+      unlockedPlanets: [1, 2, 3, 4],
+      bestStageStars: { 1: 3, 4: 1 },
+      tutorialShown: true,
+      muted: true,
+    });
+    const scene = new TitleScene(sceneManager, saveManager, createMockAudioManager(true));
+
+    scene.enter({});
+
+    findResetProgressButton()?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    const confirmButton = findButtonByText('うん！ さいしょから');
+    expect(confirmButton).toBeTruthy();
+    confirmButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(saveManager.resetProgressPreservingSettings).toHaveBeenCalledTimes(1);
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith(
+      'stage',
+      expect.objectContaining({
+        stageNumber: 1,
+        totalScore: 0,
+        totalStarCount: 0,
+        launchSource: 'campaign',
+      }),
+    );
 
     scene.exit();
   });
@@ -650,19 +715,42 @@ describe('TitleScene (T009)', () => {
   it('shows stage 5 as the next adventure after clearing stage 4', () => {
     const scene = new TitleScene(
       createMockSceneManager(),
-      createMockSaveManager({ clearedStage: 4, unlockedPlanets: [1, 2, 3, 4] }),
+      createMockSaveManager({
+        clearedStage: 4,
+        unlockedPlanets: [1, 2, 3, 4],
+        bestStageStars: { 5: 11 },
+      }),
       createMockAudioManager(true),
     );
 
     scene.enter({});
 
     const card = findNextAdventureCard();
+    const medalDisplay = findNextAdventureMedalDisplay();
     expect(card?.getAttribute('data-next-stage-number')).toBe('5');
     expect(card?.getAttribute('data-next-stage-destination')).toBe('もくせい');
     expect(card?.textContent).toContain('🟠');
     expect(card?.textContent).toContain('ステージ 5');
     expect(card?.textContent).toContain('もくせい');
+    expect(medalDisplay?.getAttribute('data-stage-medal-earned')).toBe('2');
+    expect(medalDisplay?.textContent).toContain('つぎ ⭐ 15');
     expect(document.querySelector('[data-play-button-hint]')?.textContent).toContain('ステージ 5');
+
+    scene.exit();
+  });
+
+  it('shows empty medal progress on a fresh save next-adventure card', () => {
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager({ clearedStage: 0, unlockedPlanets: [], bestStageStars: {} }),
+      createMockAudioManager(true),
+    );
+
+    scene.enter({});
+
+    const medalDisplay = findNextAdventureMedalDisplay();
+    expect(medalDisplay?.getAttribute('data-stage-medal-earned')).toBe('0');
+    expect(medalDisplay?.textContent).toContain('つぎ ⭐ 2');
 
     scene.exit();
   });
@@ -688,7 +776,8 @@ describe('TitleScene (T009)', () => {
     expect(card?.textContent).toContain('🌙');
     expect(rewardPreview).toBeNull();
     expect(document.querySelector('[data-play-button-hint]')?.textContent).toContain('ステージ 1');
-    expect(document.querySelector('[data-play-button-hint]')?.textContent).toContain('さいしょから');
+    expect(document.querySelector('[data-play-button-hint]')?.textContent).toContain('もういちど');
+    expect(findResetProgressButton()?.textContent).toBe('さいしょから');
 
     const playButton = findButtonByText('あそぶ');
     expect(playButton).toBeTruthy();

@@ -93,7 +93,7 @@ describe('StageScene manual pause', () => {
       spaceship: { position: { x: number; z: number } };
       spawnSystem: { update: (...args: unknown[]) => unknown };
       update(dt: number): void;
-      isPauseOverlayOpen: boolean;
+      isPauseOpen: boolean;
     };
     const spawnSpy = vi.spyOn(internal.spawnSystem, 'update');
     inputState.boostPressed = true;
@@ -106,7 +106,7 @@ describe('StageScene manual pause', () => {
 
     expect(onPause).toHaveBeenCalledTimes(1);
     expect(document.querySelectorAll('[data-pause-overlay]')).toHaveLength(1);
-    expect(internal.isPauseOverlayOpen).toBe(true);
+    expect(internal.isPauseOpen).toBe(true);
     expect(scene.isPlaying()).toBe(false);
     expect(internal.spaceship.position.x).toBe(x);
     expect(internal.spaceship.position.z).toBe(z);
@@ -126,10 +126,10 @@ describe('StageScene manual pause', () => {
     tapPauseButton();
     confirmButtonTap('[data-pause-continue]');
 
-    const internal = scene as unknown as { awaitingResume: boolean; isPauseOverlayOpen: boolean };
+    const internal = scene as unknown as { awaitingResume: boolean; isPauseOpen: boolean };
     expect(document.querySelector('[data-pause-overlay]')).toBeNull();
     expect(document.querySelector('[data-countdown-overlay]')).not.toBeNull();
-    expect(internal.isPauseOverlayOpen).toBe(false);
+    expect(internal.isPauseOpen).toBe(false);
     expect(internal.awaitingResume).toBe(true);
   });
 

@@ -14,7 +14,19 @@ let sharedBgStarsMaterial: THREE.PointsMaterial | null = null;
 function createTextureCanvas(
   width: number,
   height: number,
-): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D | null } {
+): { canvas: HTMLCanvasElement | OffscreenCanvas; ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null } {
+  if (typeof document === 'undefined') {
+    const supportsOffscreenCanvas = typeof OffscreenCanvas === 'function';
+    const offscreenCanvas = supportsOffscreenCanvas
+      ? new OffscreenCanvas(width, height)
+      : ({ width, height } as HTMLCanvasElement);
+    return {
+      canvas: offscreenCanvas,
+      ctx: supportsOffscreenCanvas
+        ? (offscreenCanvas.getContext('2d') as OffscreenCanvasRenderingContext2D | null)
+        : null,
+    };
+  }
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -356,6 +368,9 @@ export function createStageBackground(drawCount: number): THREE.Points {
 
 export function prewarmStageVisualAssets(stageNumber: number): void {
   if (!Number.isInteger(stageNumber) || stageNumber < 1 || stageNumber > TOTAL_STAGES) {
+    return;
+  }
+  if (typeof document === 'undefined' && typeof OffscreenCanvas !== 'function') {
     return;
   }
   prewarmBackgroundAssets();

@@ -2,6 +2,7 @@ import type { PlanetEncyclopediaEntry } from '../types';
 import { getPlanetEncyclopediaEntry, PLANET_ENCYCLOPEDIA } from '../game/config/PlanetEncyclopedia';
 import { createCompanionPreviewController, type CompanionPreviewController } from './CompanionPreview';
 import { attachReleaseConfirmButton } from './attachReleaseConfirmButton';
+import { createStageMedalDisplay } from './stageMedalDisplay';
 
 interface DetailOverlayOptions {
   bestStageStars?: Record<number, number>;
@@ -226,20 +227,14 @@ export class EncyclopediaOverlay {
       `;
       card.appendChild(name);
 
-      const bestCount = this.bestStageStars[entry.stageNumber];
-      if (typeof bestCount === 'number' && bestCount > 0) {
-        const best = document.createElement('div');
-        best.setAttribute('data-card-best', '');
-        best.textContent = `⭐ ベスト ${bestCount}`;
-        best.style.cssText = `
-          font-family: 'Zen Maru Gothic', sans-serif;
-          font-size: ${isCompactHeight ? '0.78rem' : '0.85rem'};
-          font-weight: 700;
-          color: #FFD700;
-          margin-top: 0.2rem;
-        `;
-        card.appendChild(best);
-      }
+      const bestCount = this.bestStageStars[entry.stageNumber] ?? 0;
+      const medalDisplay = createStageMedalDisplay(entry.stageNumber, bestCount, {
+        hint: bestCount > 0 ? `⭐ ベスト ${bestCount}` : undefined,
+        size: 'compact',
+        scope: 'encyclopedia-card',
+      });
+      medalDisplay.style.marginTop = '0.35rem';
+      card.appendChild(medalDisplay);
 
       this.galleryActionCleanups.add(attachReleaseConfirmButton(card, {
         onActivate: () => {
@@ -385,20 +380,15 @@ export class EncyclopediaOverlay {
     `;
     detailCard.appendChild(trivia);
 
-    const bestCount = this.bestStageStars[entry.stageNumber];
-    if (typeof bestCount === 'number' && bestCount > 0) {
-      const best = document.createElement('div');
-      best.setAttribute('data-detail-best', '');
-      best.textContent = `⭐ ベスト ${bestCount}`;
-      best.style.cssText = `
-        font-family: 'Zen Maru Gothic', sans-serif;
-        font-size: ${isCompactHeight ? '1.1rem' : '1.3rem'};
-        font-weight: 700;
-        color: #FFD700;
-        margin-top: 0.5rem;
-      `;
-      detailCard.appendChild(best);
-    }
+    const bestCount = this.bestStageStars[entry.stageNumber] ?? 0;
+    const medalDisplay = createStageMedalDisplay(entry.stageNumber, bestCount, {
+      label: 'メダル',
+      hint: bestCount > 0 ? `⭐ ベスト ${bestCount}` : undefined,
+      size: 'hero',
+      scope: 'encyclopedia-detail',
+    });
+    medalDisplay.style.marginTop = '0.4rem';
+    detailCard.appendChild(medalDisplay);
 
     if (this.onSelectStage) {
       const playBtn = document.createElement('button');

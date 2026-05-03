@@ -197,7 +197,7 @@ async function setup(
 
   vi.doMock('../../../src/game/storage/SaveManager', () => ({
     SaveManager: class {
-      isFreshSession = vi.fn(() => false);
+      getSessionState = vi.fn(() => 'existing');
       resetSessionDataPreservingMuted = vi.fn();
       load = vi.fn(() => ({
         muted: false,
@@ -361,7 +361,7 @@ async function setup(
       manuallyPaused = false;
       setVisualQualityTier = vi.fn();
       isPlaying = vi.fn(() => true);
-      isManuallyPaused = vi.fn(() => this.manuallyPaused);
+      isUserPaused = vi.fn(() => this.manuallyPaused);
       requestResumeCountdown = vi.fn();
       setPauseHandlers = vi.fn((handlers: SetupResult['stageSceneInstance']['pauseHandlers']) => {
         this.pauseHandlers = handlers;

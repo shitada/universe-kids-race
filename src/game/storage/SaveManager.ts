@@ -5,6 +5,8 @@ const STORAGE_KEY = 'universe-kids-race-save';
 const SESSION_KEY = 'universe-kids-race-session';
 const DEFAULT_DATA: SaveData = { clearedStage: 0, unlockedPlanets: [], muted: false, bestStageStars: {}, tutorialShown: false };
 
+export type SessionState = 'fresh' | 'existing' | 'unavailable';
+
 function defaults(): SaveData {
   return { ...DEFAULT_DATA, unlockedPlanets: [], bestStageStars: {}, tutorialShown: false };
 }
@@ -22,8 +24,6 @@ function cloneSaveData(src: SaveData): SaveData {
 }
 
 export class SaveManager {
-  private static sessionFallbackActive = false;
-
   // In-memory cache of the validated SaveData. Populated lazily on the first
   // load() call and invalidated on save()/clear()/reset paths. This avoids
   // the per-call cost of localStorage.getItem + JSON.parse + full revalidation
@@ -128,8 +128,38 @@ export class SaveManager {
     }
   }
 
-  // Resets session-scoped progress / onboarding data while preserving stable
-  // preferences needed across Safari swipe-to-close on shared iPads.
+  // Resets only gameplay progress (clearedStage, unlockedPlanets,
+  // bestStageStars) while preserving stable settings and onboarding state.
+  // Used for the title-screen "さいしょから" flow so mute preference,
+  // tutorial read-state, and the adaptive pixel-ratio hint survive while
+  // progress returns to defaults.
+  resetProgressPreservingSettings(): void {
+    try {
+      const prev = this.load();
+      const muted = prev.muted === true;
+      const lastStablePixelTier = prev.lastStablePixelTier;
+      const tutorialShown = prev.tutorialShown === true;
+      this.clear();
+      const next: SaveData = {
+        clearedStage: 0,
+        unlockedPlanets: [],
+        muted,
+        bestStageStars: {},
+        tutorialShown,
+      };
+      if (typeof lastStablePixelTier === 'number') {
+        next.lastStablePixelTier = lastStablePixelTier;
+      }
+      this.save(next);
+      this.cached = cloneSaveData(next);
+    } catch (e) {
+      this.cached = null;
+      console.warn('SaveManager.resetProgressPreservingSettings failed:', e);
+    }
+  }
+
+  // Resets session-scoped progress and onboarding data while preserving
+  // stable preferences needed across Safari swipe-to-close on shared iPads.
   // Used on Safari new-session detection so gameplay progress and the
   // auto-shown tutorial both return to first-run defaults, while mute
   // preference and adaptive pixel-ratio hint survive.
@@ -150,12 +180,8 @@ export class SaveManager {
         next.lastStablePixelTier = lastStablePixelTier;
       }
       this.save(next);
-      // save() already updates this.cached, but explicitly reaffirm the
-      // contract: after this call the cache must reflect the reset state.
       this.cached = cloneSaveData(next);
     } catch (e) {
-      // Conservatively drop the cache so the next load() re-reads from
-      // storage (which may be in an unknown intermediate state).
       this.cached = null;
       console.warn('SaveManager.resetSessionDataPreservingMuted failed:', e);
     }
@@ -249,25 +275,22 @@ export class SaveManager {
     }
   }
 
-  // Returns true if this is a fresh session (no session flag yet).
-  // Safe against sessionStorage exceptions (iPad Safari private mode etc.).
-  // Also marks the session as active as a side-effect.
-  isFreshSession(): boolean {
+  // Returns whether this launch is a fresh session, an existing live session,
+  // or a sessionStorage-unavailable fallback case. Also marks the session as
+  // active when sessionStorage is fully usable.
+  getSessionState(): SessionState {
     try {
-      const fresh = !sessionStorage.getItem(SESSION_KEY) && !SaveManager.sessionFallbackActive;
+      const fresh = !sessionStorage.getItem(SESSION_KEY);
       try {
         sessionStorage.setItem(SESSION_KEY, 'active');
-        SaveManager.sessionFallbackActive = false;
       } catch (e) {
-        SaveManager.sessionFallbackActive = true;
-        console.warn('SaveManager.isFreshSession setItem failed:', e);
+        console.warn('SaveManager.getSessionState setItem failed:', e);
+        return 'unavailable';
       }
-      return fresh;
+      return fresh ? 'fresh' : 'existing';
     } catch (e) {
-      const fresh = !SaveManager.sessionFallbackActive;
-      SaveManager.sessionFallbackActive = true;
-      console.warn('SaveManager.isFreshSession getItem failed:', e);
-      return fresh;
+      console.warn('SaveManager.getSessionState getItem failed:', e);
+      return 'unavailable';
     }
   }
 }

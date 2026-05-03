@@ -5,6 +5,9 @@ import { HUD } from '../../../src/ui/HUD';
 describe('HUD', () => {
   let hud: HUD;
 
+  const getPauseButton = (): HTMLButtonElement =>
+    document.querySelector('#hud button[aria-label="やすむ"]') as HTMLButtonElement;
+
   beforeEach(() => {
     // Create #hud and #ui-overlay elements
     const hudRoot = document.createElement('div');

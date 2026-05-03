@@ -10,7 +10,7 @@ interface CreatedScene {
   scene: StageScene;
   sceneManager: { requestTransition: ReturnType<typeof vi.fn> };
   inputState: { moveDirection: -1 | 0 | 1; boostPressed: boolean };
-  input: { resetPointers: ReturnType<typeof vi.fn> };
+  resetPointers: ReturnType<typeof vi.fn>;
 }
 
 function createScene(): CreatedScene {
@@ -19,14 +19,15 @@ function createScene(): CreatedScene {
     moveDirection: 0,
     boostPressed: false,
   };
+  const resetPointers = vi.fn(() => {
+    inputState.moveDirection = 0;
+  });
   const inputSystem = {
     getState: () => inputState,
     setBoostPressed: (v: boolean) => {
       inputState.boostPressed = v;
     },
-    resetPointers: vi.fn(() => {
-      inputState.moveDirection = 0;
-    }),
+    resetPointers,
   } as unknown as InputSystem;
   const audioManager = {
     playBGM: vi.fn(),
@@ -54,7 +55,7 @@ function createScene(): CreatedScene {
     ),
     sceneManager,
     inputState,
-    input: inputSystem as unknown as { resetPointers: ReturnType<typeof vi.fn> },
+    resetPointers,
   };
 }
 
@@ -116,9 +117,10 @@ describe('StageScene home confirm pause', () => {
   });
 
   it('✋ つづけるでホーム確認を閉じて復帰カウントダウンへ入る', () => {
-    const { scene } = createScene();
+    const { scene, resetPointers } = createScene();
     scene.enter({ stageNumber: 1 });
     finishStartCountdown(scene);
+    resetPointers.mockClear();
 
     const internal = scene as unknown as {
       awaitingResume: boolean;
@@ -135,6 +137,45 @@ describe('StageScene home confirm pause', () => {
     expect(document.querySelector('[data-countdown-overlay]')).not.toBeNull();
     expect(internal.awaitingResume).toBe(true);
     expect(internal.isHomeConfirmOpen).toBe(false);
+    expect(resetPointers).toHaveBeenCalledTimes(2);
+  });
+
+  it('ホーム確認を開くと残留ポインタ入力が解除される', () => {
+    const { scene, inputState, resetPointers } = createScene();
+    scene.enter({ stageNumber: 1 });
+    finishStartCountdown(scene);
+    resetPointers.mockClear();
+    inputState.moveDirection = 1;
+
+    tapHomeButton();
+
+    expect(resetPointers).toHaveBeenCalledTimes(1);
+    expect(inputState.moveDirection).toBe(0);
+  });
+
+  it('つづける後の復帰カウントダウン完了後も宇宙船が横に流れない', () => {
+    const { scene, inputState } = createScene();
+    scene.enter({ stageNumber: 1 });
+    finishStartCountdown(scene);
+    inputState.moveDirection = 1;
+
+    const internal = scene as unknown as {
+      spaceship: { position: { x: number } };
+      update(dt: number): void;
+    };
+
+    tapHomeButton();
+    const continueButton = document.querySelector<HTMLButtonElement>(
+      '[data-home-confirm-continue]',
+    )!;
+    confirmOverlayButtonTap(continueButton);
+
+    const xBeforeResume = internal.spaceship.position.x;
+    for (let i = 0; i < 4; i++) internal.update(1.0);
+    internal.update(0.25);
+
+    expect(inputState.moveDirection).toBe(0);
+    expect(internal.spaceship.position.x).toBe(xBeforeResume);
   });
 
   it('🏠 タイトルへ もどるで title 遷移を 1 回だけ要求する', () => {
@@ -212,16 +253,16 @@ describe('StageScene home confirm pause', () => {
   });
 
   it('ホーム確認を開く直前に pointer 入力をクリアし、復帰後も自動移動しない', () => {
-    const { scene, inputState, input } = createScene();
+    const { scene, inputState, resetPointers } = createScene();
     scene.enter({ stageNumber: 1 });
     finishStartCountdown(scene);
-    input.resetPointers.mockClear();
+    resetPointers.mockClear();
     inputState.moveDirection = 1;
     inputState.boostPressed = true;
 
     tapHomeButton();
 
-    expect(input.resetPointers).toHaveBeenCalledTimes(1);
+    expect(resetPointers).toHaveBeenCalledTimes(1);
     expect(inputState.moveDirection).toBe(0);
     expect(inputState.boostPressed).toBe(false);
 

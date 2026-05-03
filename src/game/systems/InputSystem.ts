@@ -21,6 +21,37 @@ export class InputSystem {
     return e.code === 'Space' || InputSystem.BOOST_KEYS.has(e.key);
   }
 
+  private onKeyDown = (e: KeyboardEvent): void => {
+    if (e.repeat) return;
+    if (this.isBoostKey(e)) {
+      e.preventDefault();
+      this.state.boostPressed = true;
+      return;
+    }
+    switch (e.key) {
+      case 'ArrowLeft':
+      case 'ArrowRight':
+        e.preventDefault();
+        this.pressedKeys.add(e.key);
+        this.updateDirection();
+        break;
+    }
+  };
+
+  private onKeyUp = (e: KeyboardEvent): void => {
+    if (this.isBoostKey(e)) {
+      this.state.boostPressed = false;
+      return;
+    }
+    switch (e.key) {
+      case 'ArrowLeft':
+      case 'ArrowRight':
+        this.pressedKeys.delete(e.key);
+        this.updateDirection();
+        break;
+    }
+  };
+
   private updateCanvasMetricsFromDom(): void {
     if (!this.canvas) return;
     const rect = this.canvas.getBoundingClientRect();
@@ -121,39 +152,6 @@ export class InputSystem {
     }
   };
 
-  private onKeyDown = (e: KeyboardEvent): void => {
-    if (e.repeat) return;
-    if (this.isBoostKey(e)) {
-      e.preventDefault();
-      this.state.boostPressed = true;
-      return;
-    }
-
-    switch (e.key) {
-      case 'ArrowLeft':
-      case 'ArrowRight':
-        e.preventDefault();
-        this.pressedKeys.add(e.key);
-        this.updateDirection();
-        break;
-    }
-  };
-
-  private onKeyUp = (e: KeyboardEvent): void => {
-    if (this.isBoostKey(e)) {
-      this.state.boostPressed = false;
-      return;
-    }
-
-    switch (e.key) {
-      case 'ArrowLeft':
-      case 'ArrowRight':
-        this.pressedKeys.delete(e.key);
-        this.updateDirection();
-        break;
-    }
-  };
-
   private resetInputs(): void {
     this.activePointers.clear();
     this.pendingPointers.clear();
@@ -234,7 +232,7 @@ export class InputSystem {
   }
 
   /**
-   * Clear all active pointer state without touching keyboard state.
+   * Clear all active pointer state.
    * Called on stage transitions to prevent ghost pointers from surviving
    * across stages (e.g. when a DOM overlay intercepts pointerup).
    */
@@ -267,7 +265,6 @@ export class InputSystem {
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
     this.activePointers.clear();
     this.pendingPointers.clear();
-    this.pressedKeys.clear();
     this.state = { moveDirection: 0, boostPressed: false };
   }
 }
