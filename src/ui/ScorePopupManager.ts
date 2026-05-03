@@ -190,9 +190,13 @@ export class ScorePopupManager {
           opacity: 1;
           transform: translate3d(-50%, -50%, 0) scale(1);
         }
+        72% {
+          opacity: 1;
+          transform: translate3d(-43%, -84%, 0) scale(1.02);
+        }
         100% {
           opacity: 0;
-          transform: translate3d(-50%, -105%, 0) scale(1.04);
+          transform: translate3d(-38%, -105%, 0) scale(1.04);
         }
       }
     `;
