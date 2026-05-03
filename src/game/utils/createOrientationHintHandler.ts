@@ -1,3 +1,5 @@
+import { getViewportSize, subscribeViewportResize, type SubscribeWindowLike } from './getViewportSize';
+
 /**
  * Subscribe to viewport orientation changes (portrait <-> landscape) and
  * call the appropriate callback exactly once per logical transition.
@@ -41,28 +43,38 @@ export interface OrientationHintHandler {
   dispose(): void;
 }
 
+interface OrientationWindowLike extends SubscribeWindowLike {
+  matchMedia?: ((query: string) => MediaQueryList) | undefined;
+  setTimeout(cb: () => void, ms?: number): number;
+  clearTimeout(handle: number): void;
+}
+
 /**
- * Decide if the viewport is currently portrait. Uses matchMedia first and
- * falls back to viewport size comparison so we still react in environments
- * where matchMedia is unavailable or stale (iPad Safari mid-rotation, jsdom).
+ * Decide if the viewport is currently portrait. Uses the visible viewport size
+ * first (visualViewport when available) and only uses matchMedia as a secondary
+ * signal when it agrees. This keeps the overlay aligned with the renderer size
+ * on iPad Safari while still behaving in test environments without
+ * visualViewport.
  */
-export function isPortraitViewport(win: Window = window): boolean {
+export function isPortraitViewport(win: Window | SubscribeWindowLike = window): boolean {
+  const viewportWindow = win as SubscribeWindowLike;
+  const { width, height } = getViewportSize(viewportWindow);
+  // Treat exact-square viewports as landscape (iPad's natural play mode).
+  const sizeSaysPortrait = height > width;
+  const mediaWindow = win as Window;
   let mediaSaysPortrait: boolean | null = null;
-  if (typeof win.matchMedia === 'function') {
+  if (typeof mediaWindow.matchMedia === 'function') {
     try {
-      mediaSaysPortrait = win.matchMedia('(orientation: portrait)').matches;
+      mediaSaysPortrait = mediaWindow.matchMedia('(orientation: portrait)').matches;
     } catch {
       mediaSaysPortrait = null;
     }
   }
-  const w = win.innerWidth;
-  const h = win.innerHeight;
-  // Treat exact-square viewports as landscape (iPad's natural play mode).
-  const sizeSaysPortrait = h > w;
   if (mediaSaysPortrait === null) return sizeSaysPortrait;
-  // If matchMedia and the viewport agree, trust that. If they disagree
-  // (mid-rotation Safari quirk), trust the viewport size — that's what the
-  // user actually sees and what our renderer is sized to.
+  // If matchMedia and the visible viewport disagree (mid-rotation Safari
+  // quirk, URL bar transition, Split View restore), trust the visible
+  // viewport size — that's what the user actually sees and what our renderer
+  // is sized to.
   return mediaSaysPortrait && sizeSaysPortrait
     ? true
     : !mediaSaysPortrait && !sizeSaysPortrait
@@ -73,7 +85,7 @@ export function isPortraitViewport(win: Window = window): boolean {
 export function createOrientationHintHandler(
   options: OrientationHintHandlerOptions,
 ): OrientationHintHandler {
-  const win = options.win ?? window;
+  const win = (options.win ?? window) as unknown as OrientationWindowLike;
   const debounceMs = options.debounceMs ?? 150;
   const schedule = options.scheduler ?? ((cb, ms) => win.setTimeout(cb, ms));
   const cancel = options.cancelScheduled ?? ((h) => win.clearTimeout(h));
@@ -126,8 +138,7 @@ export function createOrientationHintHandler(
     }
   }
 
-  win.addEventListener('resize', onChange);
-  win.addEventListener('orientationchange', onChange);
+  const unsubscribeViewport = subscribeViewportResize(win, onChange);
 
   return {
     evaluate: (): void => {
@@ -153,8 +164,7 @@ export function createOrientationHintHandler(
           (mql as unknown as { removeListener: (cb: () => void) => void }).removeListener(onChange);
         }
       }
-      win.removeEventListener('resize', onChange);
-      win.removeEventListener('orientationchange', onChange);
+      unsubscribeViewport();
     },
   };
 }

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as THREE from 'three';
 import { StageScene } from '../../../src/game/scenes/StageScene';
 import {
@@ -95,7 +95,7 @@ function makeFakeCtx(): CanvasRenderingContext2D {
 beforeEach(() => {
   __resetStageSceneSharedAssetCachesForTest();
   // jsdom は getContext('2d') が null を返すため、最低限の Stub を当てる。
-  const origGetContext = HTMLCanvasElement.prototype.getContext;
+  origGetContext = HTMLCanvasElement.prototype.getContext;
   HTMLCanvasElement.prototype.getContext = function patched(
     this: HTMLCanvasElement,
     type: string,
@@ -104,9 +104,12 @@ beforeEach(() => {
     if (type === '2d') return makeFakeCtx();
     return (origGetContext as unknown as (...a: unknown[]) => unknown).call(this, type, ...rest);
   } as typeof HTMLCanvasElement.prototype.getContext;
-  return () => {
-    HTMLCanvasElement.prototype.getContext = origGetContext;
-  };
+});
+
+let origGetContext: typeof HTMLCanvasElement.prototype.getContext;
+
+afterEach(() => {
+  HTMLCanvasElement.prototype.getContext = origGetContext;
 });
 
 describe('StageScene shared asset cache', () => {
@@ -238,5 +241,19 @@ describe('StageScene shared asset cache', () => {
     expect(__stageSceneSharedAssetCachesForTest.planetMaterialCache.size).toBe(firstCounts.materials);
     expect(__stageSceneSharedAssetCachesForTest.getBgStarsGeometry()).toBe(firstCounts.bgGeometry);
     expect(__stageSceneSharedAssetCachesForTest.getBgStarsMaterial()).toBe(firstCounts.bgMaterial);
+  });
+
+  it('prewarmStageVisualAssets does not throw when 2d canvas context is unavailable', () => {
+    HTMLCanvasElement.prototype.getContext = function unavailable(
+      this: HTMLCanvasElement,
+      type: string,
+      ...rest: unknown[]
+    ): unknown {
+      if (type === '2d') return null;
+      return (origGetContext as unknown as (...a: unknown[]) => unknown).call(this, type, ...rest);
+    } as typeof HTMLCanvasElement.prototype.getContext;
+
+    expect(() => prewarmStageVisualAssets(2)).not.toThrow();
+    expect(__stageSceneSharedAssetCachesForTest.planetTextureCache.has('mercury')).toBe(true);
   });
 });

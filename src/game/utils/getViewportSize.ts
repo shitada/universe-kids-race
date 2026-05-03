@@ -3,12 +3,12 @@ export interface ViewportSize {
   height: number;
 }
 
-interface VisualViewportLike {
+export interface VisualViewportLike {
   width: number;
   height: number;
 }
 
-interface WindowLike {
+export interface WindowLike {
   innerWidth: number;
   innerHeight: number;
   visualViewport?: VisualViewportLike | null;
@@ -29,12 +29,12 @@ export function getViewportSize(win: WindowLike = window): ViewportSize {
 
 type Listener = () => void;
 
-interface EventTargetLike {
+export interface EventTargetLike {
   addEventListener(type: string, listener: Listener): void;
   removeEventListener(type: string, listener: Listener): void;
 }
 
-interface SubscribeWindowLike extends WindowLike, EventTargetLike {
+export interface SubscribeWindowLike extends WindowLike, EventTargetLike {
   visualViewport?: (VisualViewportLike & EventTargetLike) | null;
 }
 

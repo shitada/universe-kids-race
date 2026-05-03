@@ -13,6 +13,15 @@ interface FakeMQL {
   dispatch: () => void;
 }
 
+interface FakeVisualViewport {
+  width: number;
+  height: number;
+  listeners: Map<string, Set<() => void>>;
+  addEventListener: (event: string, cb: () => void) => void;
+  removeEventListener: (event: string, cb: () => void) => void;
+  dispatch: (event: string) => void;
+}
+
 function makeFakeWindow(initial: { width: number; height: number }) {
   const listeners = new Map<string, Set<() => void>>();
   const mql: FakeMQL = {
@@ -28,11 +37,27 @@ function makeFakeWindow(initial: { width: number; height: number }) {
       mql.listeners.slice().forEach((l) => l());
     },
   };
+  const visualViewport: FakeVisualViewport = {
+    width: initial.width,
+    height: initial.height,
+    listeners: new Map(),
+    addEventListener: (event, cb) => {
+      if (!visualViewport.listeners.has(event)) visualViewport.listeners.set(event, new Set());
+      visualViewport.listeners.get(event)!.add(cb);
+    },
+    removeEventListener: (event, cb) => {
+      visualViewport.listeners.get(event)?.delete(cb);
+    },
+    dispatch: (event) => {
+      visualViewport.listeners.get(event)?.forEach((cb) => cb());
+    },
+  };
   let nextHandle = 1;
   const timers = new Map<number, () => void>();
   const win = {
     innerWidth: initial.width,
     innerHeight: initial.height,
+    visualViewport,
     matchMedia: (query: string) => {
       // Always return the same instance so the test can flip `matches`.
       void query;
@@ -58,6 +83,7 @@ function makeFakeWindow(initial: { width: number; height: number }) {
   return {
     win,
     mql,
+    visualViewport,
     fireResize: () => listeners.get('resize')?.forEach((cb) => cb()),
     fireOrientationChange: () =>
       listeners.get('orientationchange')?.forEach((cb) => cb()),
@@ -69,10 +95,17 @@ function makeFakeWindow(initial: { width: number; height: number }) {
     setSize: (width: number, height: number) => {
       (win as { innerWidth: number; innerHeight: number }).innerWidth = width;
       (win as { innerWidth: number; innerHeight: number }).innerHeight = height;
+      visualViewport.width = width;
+      visualViewport.height = height;
       mql.matches = height > width;
+    },
+    setVisualViewportSize: (width: number, height: number) => {
+      visualViewport.width = width;
+      visualViewport.height = height;
     },
     listenerCount: (event: string) => listeners.get(event)?.size ?? 0,
     mqlListenerCount: () => mql.listeners.length,
+    visualViewportListenerCount: (event: string) => visualViewport.listeners.get(event)?.size ?? 0,
   };
 }
 
@@ -98,6 +131,14 @@ describe('isPortraitViewport', () => {
     // already landscape. Trust what the user actually sees.
     const fake = makeFakeWindow({ width: 1024, height: 768 });
     fake.mql.matches = true;
+    expect(isPortraitViewport(fake.win)).toBe(false);
+  });
+
+  it('prefers visualViewport when inner size and matchMedia are temporarily stale', () => {
+    const fake = makeFakeWindow({ width: 768, height: 1024 });
+    fake.setVisualViewportSize(1024, 768);
+    fake.mql.matches = true;
+
     expect(isPortraitViewport(fake.win)).toBe(false);
   });
 });
@@ -235,5 +276,28 @@ describe('createOrientationHintHandler', () => {
     expect(fake.listenerCount('resize')).toBe(0);
     expect(fake.listenerCount('orientationchange')).toBe(0);
     expect(fake.mqlListenerCount()).toBe(0);
+    expect(fake.visualViewportListenerCount('resize')).toBe(0);
+    expect(fake.visualViewportListenerCount('scroll')).toBe(0);
+  });
+
+  it('reacts to visualViewport resize when only the visible viewport becomes portrait', () => {
+    const fake = makeFakeWindow({ width: 1024, height: 768 });
+    const handler = createOrientationHintHandler({
+      win: fake.win,
+      onPortrait,
+      onLandscape,
+    });
+    handler.evaluate();
+    onLandscape.mockClear();
+
+    fake.setSize(1024, 768);
+    fake.mql.matches = false;
+    fake.setVisualViewportSize(768, 1024);
+    fake.visualViewport.dispatch('resize');
+    fake.flushTimers();
+
+    expect(onPortrait).toHaveBeenCalledTimes(1);
+    expect(onLandscape).not.toHaveBeenCalled();
+    handler.dispose();
   });
 });

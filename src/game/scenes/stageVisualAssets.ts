@@ -11,6 +11,19 @@ const planetMaterialCache = new Map<string, THREE.Material>();
 let sharedBgStarsGeometry: THREE.BufferGeometry | null = null;
 let sharedBgStarsMaterial: THREE.PointsMaterial | null = null;
 
+function createTextureCanvas(
+  width: number,
+  height: number,
+): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D | null } {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  return {
+    canvas,
+    ctx: canvas.getContext('2d'),
+  };
+}
+
 function getPlanetTexture(key: string, factory: () => THREE.CanvasTexture): THREE.CanvasTexture {
   let tex = planetTextureCache.get(key);
   if (!tex) {
@@ -69,10 +82,8 @@ function prewarmBackgroundAssets(): void {
 }
 
 function buildMercuryTexture(): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 256;
-  const ctx = canvas.getContext('2d')!;
+  const { canvas, ctx } = createTextureCanvas(256, 256);
+  if (!ctx) return new THREE.CanvasTexture(canvas);
   ctx.fillStyle = '#888888';
   ctx.fillRect(0, 0, 256, 256);
   for (let i = 0; i < 30; i++) {
@@ -88,10 +99,8 @@ function buildMercuryTexture(): THREE.CanvasTexture {
 }
 
 function buildVenusTexture(): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 256;
-  const ctx = canvas.getContext('2d')!;
+  const { canvas, ctx } = createTextureCanvas(256, 256);
+  if (!ctx) return new THREE.CanvasTexture(canvas);
   ctx.fillStyle = '#ddaa44';
   ctx.fillRect(0, 0, 256, 256);
   for (let i = 0; i < 8; i++) {
@@ -110,10 +119,8 @@ function buildVenusTexture(): THREE.CanvasTexture {
 }
 
 function buildJupiterTexture(): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 256;
-  const ctx = canvas.getContext('2d')!;
+  const { canvas, ctx } = createTextureCanvas(256, 256);
+  if (!ctx) return new THREE.CanvasTexture(canvas);
   const colors = ['#cc7733', '#dd9955', '#bb6622', '#eebb77', '#aa5511', '#ddaa66'];
   for (let y = 0; y < 256; y++) {
     const bandIdx = Math.floor(y / (256 / colors.length)) % colors.length;
@@ -124,10 +131,8 @@ function buildJupiterTexture(): THREE.CanvasTexture {
 }
 
 function buildEarthTexture(): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 256;
-  const ctx = canvas.getContext('2d')!;
+  const { canvas, ctx } = createTextureCanvas(512, 256);
+  if (!ctx) return new THREE.CanvasTexture(canvas);
   ctx.fillStyle = '#2266aa';
   ctx.fillRect(0, 0, 512, 256);
   ctx.fillStyle = '#886644';
@@ -157,10 +162,8 @@ function buildEarthTexture(): THREE.CanvasTexture {
 }
 
 function buildEarthCloudTexture(): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 256;
-  const ctx = canvas.getContext('2d')!;
+  const { canvas, ctx } = createTextureCanvas(512, 256);
+  if (!ctx) return new THREE.CanvasTexture(canvas);
   ctx.clearRect(0, 0, 512, 256);
   ctx.fillStyle = 'rgba(255,255,255,0.6)';
   for (let i = 0; i < 20; i++) {
