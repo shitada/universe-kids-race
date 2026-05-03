@@ -534,7 +534,7 @@ describe('Stage Flow Integration', () => {
     expect(internal.stageNumber).toBe(3);
 
     const retryButton = document.querySelector<HTMLButtonElement>('[data-stage-clear-retry]');
-    expect(retryButton?.textContent).toBe('このステージを もういちど');
+    expect(retryButton?.textContent).toBe('もういちど');
     retryButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     await Promise.resolve();
     await Promise.resolve();
@@ -603,6 +603,83 @@ describe('Stage Flow Integration', () => {
     await flushPromises();
 
     expect(manager.getCurrentType()).toBe('ending');
+  });
+
+  it('uses the clear retry CTA to re-enter the same stage without adding clear totals twice', async () => {
+    const manager = new SceneManager();
+    const inputSystem = {
+      setBoostPressed: vi.fn(),
+      getState: vi.fn(() => ({ moveDirection: 0, boostPressed: false })),
+    } as unknown as InputSystem;
+    const audioManager = {
+      playBGM: vi.fn(),
+      stopBGM: vi.fn(),
+      playSFX: vi.fn(),
+      stopBoostSFX: vi.fn(),
+      startBoostSFX: vi.fn(),
+      isMuted: vi.fn(() => false),
+      toggleMute: vi.fn(() => false),
+      setMuted: vi.fn(),
+      initFromInteraction: vi.fn(),
+    } as unknown as AudioManager;
+    const saveManager = {
+      load: vi.fn(() => ({
+        clearedStage: 0,
+        unlockedPlanets: [],
+        muted: false,
+        tutorialShown: true,
+        bestStageStars: {},
+      })),
+      save: vi.fn(),
+      clear: vi.fn(),
+      markStageCleared: vi.fn(() => false),
+      updateBestStageStars: vi.fn(),
+    } as unknown as SaveManager;
+    let stageScene: StageScene | null = null;
+
+    manager.registerSceneFactory('stage', async () => {
+      stageScene = new StageScene(manager, inputSystem, audioManager, saveManager);
+      return stageScene;
+    });
+
+    await manager.transitionTo('stage', { stageNumber: 3, totalScore: 1500, totalStarCount: 7 });
+
+    const internal = stageScene as unknown as {
+      stageNumber: number;
+      scoreSystem: {
+        getStarCount(): number;
+        getTotalScore(): number;
+        getTotalStarCount(): number;
+        finalizeStage(): { totalScore: number; totalStarCount: number };
+      };
+      onStageClear(): void;
+      update(deltaTime: number): void;
+      enter(context: SceneContext): void;
+    };
+    const enterSpy = vi.spyOn(stageScene!, 'enter');
+    const finalizeStageMock = vi.fn(() => ({ totalScore: 2100, totalStarCount: 10 }));
+    internal.scoreSystem.getStarCount = () => 3;
+    internal.scoreSystem.finalizeStage = finalizeStageMock;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const retryButton = document.querySelector<HTMLButtonElement>('[data-stage-clear-retry]');
+    expect(retryButton?.textContent).toBe('もういちど');
+    retryButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+
+    expect(finalizeStageMock).not.toHaveBeenCalled();
+    expect(manager.getCurrentType()).toBe('stage');
+    expect(internal.stageNumber).toBe(3);
+    expect(internal.scoreSystem.getTotalScore()).toBe(1500);
+    expect(internal.scoreSystem.getTotalStarCount()).toBe(7);
+    expect(enterSpy).toHaveBeenCalledWith({
+      stageNumber: 3,
+      totalScore: 1500,
+      totalStarCount: 7,
+      replayToken: expect.any(Number),
+    });
   });
 
   it('starts ending module prefetch only after reaching the final stage', async () => {

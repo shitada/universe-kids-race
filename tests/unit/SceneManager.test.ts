@@ -118,6 +118,34 @@ describe('SceneManager', () => {
     expect(stageScene.enter).toHaveBeenNthCalledWith(2, { stageNumber: 2 });
   });
 
+  it('re-enters the current stage scene when replayToken changes', async () => {
+    const manager = new SceneManager();
+    const stageScene = createMockScene();
+
+    manager.registerScene('stage', stageScene);
+
+    await manager.transitionTo('stage', { stageNumber: 3, totalScore: 1200, totalStarCount: 8 });
+    await manager.transitionTo('stage', {
+      stageNumber: 3,
+      totalScore: 1200,
+      totalStarCount: 8,
+      replayToken: 1,
+    });
+
+    expect(stageScene.exit).toHaveBeenCalledTimes(1);
+    expect(stageScene.enter).toHaveBeenNthCalledWith(1, {
+      stageNumber: 3,
+      totalScore: 1200,
+      totalStarCount: 8,
+    });
+    expect(stageScene.enter).toHaveBeenNthCalledWith(2, {
+      stageNumber: 3,
+      totalScore: 1200,
+      totalStarCount: 8,
+      replayToken: 1,
+    });
+  });
+
   it('passes context through transitions title → stage → ending', async () => {
     const manager = new SceneManager();
     const titleScene = createMockScene();

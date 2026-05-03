@@ -1561,55 +1561,17 @@ export class StageScene implements Scene {
       }
     }
 
-    const retryButton = document.createElement('button');
-    retryButton.setAttribute('data-stage-clear-retry', '');
-    retryButton.setAttribute('aria-label', 'このステージを もういちど');
-    retryButton.textContent = 'このステージを もういちど';
-    retryButton.disabled = true;
-    retryButton.style.cssText = `
-      margin-top: 1.1rem;
-      min-width: min(72vw, 300px);
-      min-height: 76px;
-      padding: 0.95rem 1.6rem;
-      border: none;
-      border-radius: 999px;
-      font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: clamp(1.2rem, 4.2vmin, 1.6rem);
-      font-weight: 900;
-      color: #fff;
-      background: rgba(255, 255, 255, 0.18);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
-      opacity: 0;
-      visibility: hidden;
-      pointer-events: none;
-      touch-action: manipulation;
-      transform: scale(1);
-      transition: opacity 0.18s ease-out, transform 0.08s ease-out;
-    `;
-    this.bindClearActionButton(retryButton, () => {
-      this.sceneManager.requestTransition('stage', {
-        stageNumber: this.stageNumber,
-        totalScore: 0,
-        totalStarCount: 0,
-      });
-    });
-    this.clearRetryButton = retryButton;
-    this.clearOverlay.appendChild(retryButton);
-
-    const continueButton = document.createElement('button');
-    const continueLabel = this.launchSource === 'encyclopedia'
-      ? 'タイトルへ'
-      : this.stageNumber >= TOTAL_STAGES
-        ? 'おいわいへ'
-        : 'つぎへ';
-    continueButton.setAttribute('data-stage-clear-continue', '');
-    continueButton.setAttribute('aria-label', continueLabel);
-    continueButton.textContent = continueLabel;
-    continueButton.disabled = true;
-    continueButton.style.cssText = `
-      position: relative;
-      z-index: 1;
+    const actionButtons = document.createElement('div');
+    actionButtons.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.9rem;
+      width: 100%;
       margin-top: 1.4rem;
+    `;
+
+    const clearActionButtonStyle = `
       min-width: min(78vw, 320px);
       min-height: 88px;
       padding: 1rem 1.8rem;
@@ -1618,8 +1580,6 @@ export class StageScene implements Scene {
       font-family: 'Zen Maru Gothic', sans-serif;
       font-size: clamp(1.5rem, 5vmin, 2.1rem);
       font-weight: 900;
-      color: #00163a;
-      background: linear-gradient(135deg, #ffe66d, #ffb347);
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
       opacity: 0;
       visibility: hidden;
@@ -1629,11 +1589,44 @@ export class StageScene implements Scene {
       transition: opacity 0.18s ease-out, transform 0.08s ease-out;
     `;
 
+    const retryButton = document.createElement('button');
+    retryButton.setAttribute('data-stage-clear-retry', '');
+    retryButton.setAttribute('aria-label', 'もういちど');
+    retryButton.textContent = 'もういちど';
+    retryButton.disabled = true;
+    retryButton.style.cssText = `
+      ${clearActionButtonStyle}
+      color: #ffffff;
+      background: linear-gradient(135deg, #5fd3ff, #4b7bff);
+    `;
+
+    const continueLabel = this.launchSource === 'encyclopedia'
+      ? 'タイトルへ'
+      : this.stageNumber >= TOTAL_STAGES
+        ? 'おいわいへ'
+        : 'つぎへ';
+    const continueButton = document.createElement('button');
+    continueButton.setAttribute('data-stage-clear-continue', '');
+    continueButton.setAttribute('aria-label', continueLabel);
+    continueButton.textContent = continueLabel;
+    continueButton.disabled = true;
+    continueButton.style.cssText = `
+      ${clearActionButtonStyle}
+      color: #00163a;
+      background: linear-gradient(135deg, #ffe66d, #ffb347);
+    `;
+
+    this.bindClearActionButton(retryButton, () => {
+      this.handleStageReplay();
+    });
     this.bindClearActionButton(continueButton, () => {
       this.handleStageComplete();
     });
+    this.clearRetryButton = retryButton;
     this.clearContinueButton = continueButton;
-    this.clearOverlay.appendChild(continueButton);
+    actionButtons.appendChild(retryButton);
+    actionButtons.appendChild(continueButton);
+    this.clearOverlay.appendChild(actionButtons);
 
     uiOverlay.appendChild(this.clearOverlay);
   }
@@ -1810,11 +1803,21 @@ export class StageScene implements Scene {
     }
   }
 
+  private handleStageReplay(): void {
+    this.sceneManager.requestTransition('stage', {
+      stageNumber: this.stageNumber,
+      totalScore: this.scoreSystem.getTotalScore(),
+      totalStarCount: this.scoreSystem.getTotalStarCount(),
+      replayToken: Date.now() + Math.random(),
+    });
+  }
+
   exit(): void {
     if (!this.initialized) {
       return;
     }
     this.clearRewardOverlay.hide();
+    this.clearContinueButton = null;
     this.clearRetryButton = null;
     this.clearRewardButton = null;
     this.isClearRewardOpen = false;

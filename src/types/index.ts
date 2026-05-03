@@ -8,6 +8,7 @@ export interface SceneContext {
   totalScore?: number;
   totalStarCount?: number;
   launchSource?: 'campaign' | 'encyclopedia';
+  replayToken?: number;
 }
 
 export interface Scene {
