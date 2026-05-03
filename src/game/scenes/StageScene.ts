@@ -177,6 +177,8 @@ export class StageScene implements Scene {
   private resumeCountdownOverlay: CountdownOverlay | null = null;
   private isHomeConfirmOpen = false;
   private shouldResumeAfterHomeConfirm = false;
+  private isPauseOpen = false;
+  private shouldResumeAfterPause = false;
   private touchGuide = new TouchGuideOverlay();
   private touchGuideMode: TouchGuideMode = 'intro';
   private touchGuideIdleTimer = 0;
@@ -272,6 +274,8 @@ export class StageScene implements Scene {
     this.destinationPlanetSpinTarget = null;
     this.isHomeConfirmOpen = false;
     this.shouldResumeAfterHomeConfirm = false;
+    this.isPauseOpen = false;
+    this.shouldResumeAfterPause = false;
     this.touchGuideIdleTimer = 0;
     this.hasSeenMoveInput = false;
     this.touchGuideMode = 'intro';
@@ -344,6 +348,26 @@ export class StageScene implements Scene {
       const shouldResume = this.shouldResumeAfterHomeConfirm;
       this.isHomeConfirmOpen = false;
       this.shouldResumeAfterHomeConfirm = false;
+      if (shouldResume) {
+        this.requestResumeCountdown();
+        return;
+      }
+      this.syncBoostInputLock();
+    });
+    this.hud.setPauseOpenCallback(() => {
+      if (!this.isPlaying()) {
+        return false;
+      }
+      this.shouldResumeAfterPause = true;
+      this.releasePointerInputForLock();
+      this.isPauseOpen = true;
+      this.syncBoostInputLock();
+      return true;
+    });
+    this.hud.setPauseResumeCallback(() => {
+      const shouldResume = this.shouldResumeAfterPause;
+      this.isPauseOpen = false;
+      this.shouldResumeAfterPause = false;
       if (shouldResume) {
         this.requestResumeCountdown();
         return;
@@ -425,7 +449,7 @@ export class StageScene implements Scene {
   }
 
   private syncBoostInputLock(): void {
-    const locked = this.isStarting || this.awaitingResume || this.isHomeConfirmOpen;
+    const locked = this.isStarting || this.awaitingResume || this.isHomeConfirmOpen || this.isPauseOpen;
     this.hud.setBoostLocked(locked);
     if (locked) {
       this.inputSystem.setBoostPressed?.(false);
@@ -458,6 +482,7 @@ export class StageScene implements Scene {
     if (this.isStarting) return false;
     if (this.awaitingResume) return false;
     if (this.isHomeConfirmOpen) return false;
+    if (this.isPauseOpen) return false;
     return true;
   }
 
@@ -577,9 +602,9 @@ export class StageScene implements Scene {
     // countdown is showing, freeze input, spawning, and ship forward motion.
     // Only the destination planet's gentle spin and background-star centering
     // keep moving so the scene feels alive (Constitution I/IV).
-    if (this.isStarting || this.awaitingResume || this.isHomeConfirmOpen) {
+    if (this.isStarting || this.awaitingResume || this.isHomeConfirmOpen || this.isPauseOpen) {
       this.inputSystem.setBoostPressed?.(false);
-      if (!this.isHomeConfirmOpen) {
+      if (!this.isHomeConfirmOpen && !this.isPauseOpen) {
         this.countdownOverlay?.tick(deltaTime);
         this.resumeCountdownOverlay?.tick(deltaTime);
       }
@@ -1747,6 +1772,8 @@ export class StageScene implements Scene {
     this.awaitingResume = false;
     this.isHomeConfirmOpen = false;
     this.shouldResumeAfterHomeConfirm = false;
+    this.isPauseOpen = false;
+    this.shouldResumeAfterPause = false;
     this.boostFlameEffect.remove();
     this.boostLinesEffect.update(false, this.spaceship.position.x, this.spaceship.position.z);
     this.airShield.reset(this.spaceship.position.x, this.spaceship.position.y, this.spaceship.position.z);

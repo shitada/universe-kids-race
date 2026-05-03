@@ -1,5 +1,6 @@
 import { createMuteButton, type MuteButtonHandle } from './createMuteButton';
 import { HomeConfirmOverlay } from './HomeConfirmOverlay';
+import { PauseOverlay } from './PauseOverlay';
 
 export class HUD {
   private container: HTMLDivElement | null = null;
@@ -11,7 +12,9 @@ export class HUD {
   private bestStarCountEl: HTMLSpanElement | null = null;
   private boostButton: HTMLButtonElement | null = null;
   private homeButton: HTMLButtonElement | null = null;
+  private pauseButton: HTMLButtonElement | null = null;
   private homeConfirmOverlay: HomeConfirmOverlay = new HomeConfirmOverlay();
+  private pauseOverlay: PauseOverlay = new PauseOverlay();
   private muteButton: HTMLButtonElement | null = null;
   private muteHandle: MuteButtonHandle | null = null;
   private cooldownContainer: HTMLDivElement | null = null;
@@ -24,6 +27,8 @@ export class HUD {
   private onHomeCallback: (() => void) | null = null;
   private onHomeConfirmOpenCallback: (() => void) | null = null;
   private onHomeConfirmCancelCallback: (() => void) | null = null;
+  private onPauseOpenCallback: (() => boolean | void) | null = null;
+  private onPauseResumeCallback: (() => void) | null = null;
   private onMuteCallback: (() => void) | null = null;
   private muted = false;
   private boostLocked = false;
@@ -205,6 +210,8 @@ export class HUD {
     // Boost button on ui-overlay
     this.createBoostButton();
 
+    this.createPauseButton(hudRoot);
+
     // Mute toggle button on HUD root (top-right) — created after stage name
     // and other elements so existing children indices remain stable.
     this.createMuteButton();
@@ -289,6 +296,58 @@ export class HUD {
       onToggle: () => this.onMuteCallback?.(),
     });
     this.muteButton = this.muteHandle.element;
+  }
+
+  private createPauseButton(hudRoot: HTMLElement): void {
+    this.pauseButton = document.createElement('button');
+    this.pauseButton.textContent = '⏸ やすむ';
+    this.pauseButton.setAttribute('aria-label', 'やすむ');
+    this.pauseButton.style.position = 'absolute';
+    this.pauseButton.style.top = '0.8rem';
+    this.pauseButton.style.left = '4.5rem';
+    this.pauseButton.style.minWidth = '6rem';
+    this.pauseButton.style.minHeight = '3rem';
+    this.pauseButton.style.padding = '0 1rem';
+    this.pauseButton.style.border = 'none';
+    this.pauseButton.style.borderRadius = '999px';
+    this.pauseButton.style.background = 'rgba(255, 255, 255, 0.16)';
+    this.pauseButton.style.color = '#fff';
+    this.pauseButton.style.fontFamily = "'Zen Maru Gothic', sans-serif";
+    this.pauseButton.style.fontSize = 'clamp(1rem, 3.2vmin, 1.2rem)';
+    this.pauseButton.style.fontWeight = '900';
+    this.pauseButton.style.cursor = 'pointer';
+    this.pauseButton.style.pointerEvents = 'auto';
+    this.pauseButton.style.touchAction = 'manipulation';
+    this.pauseButton.style.transform = 'scale(1)';
+    this.pauseButton.style.transition = 'transform 0.08s ease-out';
+
+    const releasePausePress = (): void => {
+      if (this.pauseButton) {
+        this.pauseButton.style.transform = 'scale(1)';
+      }
+    };
+
+    this.pauseButton.addEventListener('pointerdown', (event) => {
+      event.stopPropagation();
+      if (this.pauseButton) {
+        this.pauseButton.style.transform = 'scale(0.96)';
+      }
+      if (this.pauseOverlay.isVisible() || this.homeConfirmOverlay.isVisible()) {
+        return;
+      }
+      if (!document.getElementById('ui-overlay')) {
+        return;
+      }
+      const shouldOpen = this.onPauseOpenCallback?.() !== false;
+      if (!shouldOpen) {
+        return;
+      }
+      this.pauseOverlay.show(() => this.onPauseResumeCallback?.());
+    });
+    this.pauseButton.addEventListener('pointerup', releasePausePress);
+    this.pauseButton.addEventListener('pointercancel', releasePausePress);
+    this.pauseButton.addEventListener('pointerleave', releasePausePress);
+    hudRoot.appendChild(this.pauseButton);
   }
 
   private createBoostButton(): void {
@@ -458,6 +517,14 @@ export class HUD {
 
   setMuteCallback(callback: () => void): void {
     this.onMuteCallback = callback;
+  }
+
+  setPauseOpenCallback(callback: () => boolean | void): void {
+    this.onPauseOpenCallback = callback;
+  }
+
+  setPauseResumeCallback(callback: () => void): void {
+    this.onPauseResumeCallback = callback;
   }
 
   /**
@@ -690,9 +757,14 @@ export class HUD {
 
   hide(): void {
     this.homeConfirmOverlay.hide();
+    this.pauseOverlay.hide();
     if (this.homeButton) {
       this.homeButton.remove();
       this.homeButton = null;
+    }
+    if (this.pauseButton) {
+      this.pauseButton.remove();
+      this.pauseButton = null;
     }
     if (this.muteHandle) {
       this.muteHandle.remove();
