@@ -98,3 +98,7 @@ const PLANET_ENCYCLOPEDIA_BY_STAGE = new Map(
 export function getPlanetEncyclopediaEntry(stageNumber: number): PlanetEncyclopediaEntry | undefined {
   return PLANET_ENCYCLOPEDIA_BY_STAGE.get(stageNumber);
 }
+
+export function getNextPlanetEncyclopediaEntry(stageNumber: number): PlanetEncyclopediaEntry | undefined {
+  return getPlanetEncyclopediaEntry(stageNumber + 1);
+}

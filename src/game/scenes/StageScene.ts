@@ -23,7 +23,7 @@ import { followCameraZ } from '../utils/followCameraZ';
 import { getViewportSize } from '../utils/getViewportSize';
 import { ScorePopupManager } from '../../ui/ScorePopupManager';
 import { EncyclopediaOverlay } from '../../ui/EncyclopediaOverlay';
-import { getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
+import { getNextPlanetEncyclopediaEntry, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { TouchGuideOverlay, type TouchGuideMode } from '../../ui/TouchGuideOverlay';
 
 const BG_STAR_PARALLAX = 1.0;
@@ -1274,6 +1274,85 @@ export class StageScene implements Scene {
     }
 
     this.clearOverlay.appendChild(score);
+
+    const nextEntry = getNextPlanetEncyclopediaEntry(this.stageNumber);
+    if (nextEntry) {
+      const nextAdventureCard = document.createElement('section');
+      nextAdventureCard.setAttribute('data-stage-clear-next-preview', '');
+      nextAdventureCard.style.cssText = `
+        margin-top: 1.1rem;
+        width: min(88vw, 420px);
+        padding: 1rem 1.1rem 1.15rem;
+        border-radius: 28px;
+        background: linear-gradient(180deg, rgba(30, 46, 112, 0.92), rgba(12, 22, 66, 0.96));
+        border: 2px solid rgba(255, 255, 255, 0.18);
+        box-shadow: 0 14px 32px rgba(0, 0, 0, 0.26);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.45rem;
+      `;
+
+      const nextAdventureLabel = document.createElement('div');
+      nextAdventureLabel.textContent = 'つぎのぼうけん';
+      nextAdventureLabel.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: 1rem;
+        font-weight: 700;
+        color: #b9d7ff;
+        letter-spacing: 0.08em;
+      `;
+
+      const nextAdventureTitle = document.createElement('div');
+      nextAdventureTitle.textContent = `つぎは ${nextEntry.name}！`;
+      nextAdventureTitle.setAttribute('data-stage-clear-next-title', '');
+      nextAdventureTitle.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: clamp(1.5rem, 5.2vmin, 2.05rem);
+        font-weight: 900;
+        color: #fff4a3;
+        text-shadow: 0 0 14px rgba(255, 230, 120, 0.25);
+      `;
+
+      const nextAdventureEmoji = document.createElement('div');
+      nextAdventureEmoji.textContent = nextEntry.emoji;
+      nextAdventureEmoji.setAttribute('data-stage-clear-next-emoji', '');
+      nextAdventureEmoji.style.cssText = `
+        font-size: clamp(3.2rem, 13vmin, 4.8rem);
+        line-height: 1;
+        filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.24));
+      `;
+
+      const nextAdventureName = document.createElement('div');
+      nextAdventureName.textContent = nextEntry.name;
+      nextAdventureName.setAttribute('data-stage-clear-next-name', '');
+      nextAdventureName.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: clamp(1.35rem, 4.8vmin, 1.8rem);
+        font-weight: 800;
+        color: #ffffff;
+      `;
+
+      const nextAdventureTrivia = document.createElement('div');
+      nextAdventureTrivia.textContent = nextEntry.trivia;
+      nextAdventureTrivia.setAttribute('data-stage-clear-next-trivia', '');
+      nextAdventureTrivia.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: clamp(1.02rem, 3.9vmin, 1.2rem);
+        font-weight: 700;
+        color: #dfeaff;
+        line-height: 1.45;
+      `;
+
+      nextAdventureCard.append(
+        nextAdventureLabel,
+        nextAdventureTitle,
+        nextAdventureEmoji,
+        nextAdventureName,
+        nextAdventureTrivia,
+      );
+      this.clearOverlay.appendChild(nextAdventureCard);
+    }
 
     // Card acquisition notification for newly unlocked planets
     if (isNewPlanetUnlock) {

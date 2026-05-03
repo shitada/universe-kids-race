@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StageScene } from '../../../src/game/scenes/StageScene';
 import { TOTAL_STAGES } from '../../../src/game/config/StageConfig';
+import { getNextPlanetEncyclopediaEntry } from '../../../src/game/config/PlanetEncyclopedia';
 import type { SceneManager } from '../../../src/game/SceneManager';
 import type { InputSystem } from '../../../src/game/systems/InputSystem';
 import type { AudioManager } from '../../../src/game/audio/AudioManager';
@@ -100,6 +101,10 @@ function getCardButton(): HTMLButtonElement | null {
   return document.querySelector<HTMLButtonElement>('[data-stage-clear-card]');
 }
 
+function getNextPreviewCard(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[data-stage-clear-next-preview]');
+}
+
 function mockCanvasContext(): void {
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => {
     return {
@@ -165,6 +170,26 @@ describe('StageScene clear CTA', () => {
     });
   });
 
+  it('通常ステージではつぎのわくせいプレビューを表示する', () => {
+    const stageNumber = 4;
+    const { scene } = createScene({ stageNumber });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const nextEntry = getNextPlanetEncyclopediaEntry(stageNumber);
+    expect(nextEntry).toBeDefined();
+
+    const previewCard = getNextPreviewCard();
+    expect(previewCard).not.toBeNull();
+    expect(previewCard?.textContent).toContain('つぎのぼうけん');
+    expect(document.querySelector('[data-stage-clear-next-title]')?.textContent).toBe(`つぎは ${nextEntry?.name}！`);
+    expect(document.querySelector('[data-stage-clear-next-emoji]')?.textContent).toBe(nextEntry?.emoji);
+    expect(document.querySelector('[data-stage-clear-next-name]')?.textContent).toBe(nextEntry?.name);
+    expect(document.querySelector('[data-stage-clear-next-trivia]')?.textContent).toBe(nextEntry?.trivia);
+  });
+
   it('クリア画面にもういちどボタンを表示し、同じステージへ再挑戦できる', () => {
     const { scene, sceneManager } = createScene({
       stageNumber: 4,
@@ -202,6 +227,7 @@ describe('StageScene clear CTA', () => {
 
     const button = getContinueButton();
     expect(button.textContent).toBe('おいわいへ');
+    expect(getNextPreviewCard()).toBeNull();
     button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
 
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
@@ -267,6 +293,7 @@ describe('StageScene clear CTA', () => {
     expect(overlay?.textContent).toContain('じこベストこうしん');
     expect(overlay?.textContent).toContain('ずかんカード ゲット');
     expect(overlay?.textContent).toContain('なかまに なったよ');
+    expect(overlay?.textContent).toContain('つぎのぼうけん');
 
     const button = getContinueButton();
     expect(button.textContent).toBe('つぎへ');
