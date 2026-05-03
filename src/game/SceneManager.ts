@@ -30,6 +30,7 @@ export class SceneManager {
         promise: Promise<void>;
       }
     | null = null;
+  private disposed = false;
 
   registerScene(type: SceneType, scene: Scene): void {
     this.scenes.set(type, scene);
@@ -58,6 +59,10 @@ export class SceneManager {
   }
 
   requestTransition(sceneType: SceneType, context: SceneContext = {}): Promise<void> {
+    if (this.disposed) {
+      return Promise.resolve();
+    }
+
     const transitionPromise = this.onTransitionRequest
       ? Promise.resolve(this.onTransitionRequest(sceneType, context))
       : this.transitionTo(sceneType, context);
@@ -68,10 +73,18 @@ export class SceneManager {
   }
 
   prefetchScene(sceneType: SceneType): Promise<void> {
+    if (this.disposed) {
+      return Promise.resolve();
+    }
+
     return this.resolveScene(sceneType).then(() => undefined);
   }
 
   prefetchSceneModule(sceneType: SceneType): Promise<void> {
+    if (this.disposed) {
+      return Promise.resolve();
+    }
+
     const existingPromise = this.sceneModulePrefetchPromises.get(sceneType);
     if (existingPromise) {
       return existingPromise.then(() => undefined);
@@ -92,6 +105,10 @@ export class SceneManager {
   }
 
   transitionTo(sceneType: SceneType, context: SceneContext = {}): Promise<void> {
+    if (this.disposed) {
+      return Promise.resolve();
+    }
+
     if (
       this.inFlightTransition?.sceneType === sceneType &&
       this.hasSameContext(this.inFlightTransition.context, context)
@@ -131,6 +148,10 @@ export class SceneManager {
   }
 
   private resolveScene(sceneType: SceneType): Promise<Scene | null> {
+    if (this.disposed) {
+      return Promise.resolve(null);
+    }
+
     const cachedScene = this.scenes.get(sceneType);
     if (cachedScene) {
       return Promise.resolve(cachedScene);
@@ -208,7 +229,7 @@ export class SceneManager {
 
     return this.resolveScene(sceneType)
       .then((nextScene) => {
-        if (!nextScene || !this.isLatestTransitionRequest(requestId)) return;
+        if (this.disposed || !nextScene || !this.isLatestTransitionRequest(requestId)) return;
 
         if (this.currentScene) {
           this.currentScene.exit();
@@ -240,5 +261,34 @@ export class SceneManager {
 
   getCurrentType(): SceneType | null {
     return this.currentType;
+  }
+
+  dispose(): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.disposed = true;
+    this.transitionRequestId++;
+    this.inFlightTransition = null;
+
+    if (this.activeLoadStateSceneType) {
+      this.onLoadStateChange?.(false, this.activeLoadStateSceneType);
+    }
+
+    this.activeLoadStateRequestId = null;
+    this.activeLoadStateSceneType = null;
+    this.currentScene?.exit();
+    this.currentScene = null;
+    this.currentType = null;
+    this.currentContext = null;
+    this.scenes.clear();
+    this.sceneFactories.clear();
+    this.sceneLoadPromises.clear();
+    this.sceneModulePrefetchers.clear();
+    this.sceneModulePrefetchPromises.clear();
+    this.onTransitionRequest = null;
+    this.onTransitionError = null;
+    this.onLoadStateChange = null;
   }
 }

@@ -29,7 +29,11 @@ export interface BootstrapGameOptions {
   loadFailureOverlay?: LoadFailureOverlay;
 }
 
-export async function bootstrapGame(options: BootstrapGameOptions): Promise<void> {
+export interface BootstrapGameHandle {
+  dispose(): void;
+}
+
+export async function bootstrapGame(options: BootstrapGameOptions): Promise<BootstrapGameHandle> {
   const { canvas } = options;
   const renderer = createRenderer(canvas);
   const maxPixelRatio = Math.min(window.devicePixelRatio, 2);
@@ -42,6 +46,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
   const gameLoop = new GameLoop();
   const loadingOverlay = options.loadingOverlay ?? new LoadingOverlay();
   const loadFailureOverlay = options.loadFailureOverlay ?? new LoadFailureOverlay();
+  let disposed = false;
 
   let lastAppliedWidth = 0;
   let lastAppliedHeight = 0;
@@ -61,6 +66,10 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
   }
 
   function applyRendererSize(width: number, height: number): void {
+    if (disposed) {
+      return;
+    }
+
     if (width !== lastAppliedWidth || height !== lastAppliedHeight) {
       renderer.setSize(width, height);
       lastAppliedWidth = width;
@@ -80,6 +89,10 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
   }
 
   function applyPixelRatioTier(tier: number): void {
+    if (disposed) {
+      return;
+    }
+
     const clamped = Math.max(0, Math.min(maxTier, tier));
     renderer.setPixelRatio(pixelRatioTiers[clamped]);
     lastAppliedWidth = 0;
@@ -277,7 +290,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
     const { width, height } = getViewportSize();
     resizeCoalescer.schedule(width, height);
   }
-  subscribeViewportResize(window, scheduleResize);
+  const unsubscribeViewportResize = subscribeViewportResize(window, scheduleResize);
 
   function resumeGame(): void {
     gameLoop.resume();
@@ -334,7 +347,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
     handleResumeAfterRestore();
   }
 
-  createVisibilityPauseHandler({
+  const unsubscribeVisibilityPause = createVisibilityPauseHandler({
     onHide: () => {
       pendingBackgroundResume = !isStageManuallyPaused();
       gameLoop.pause();
@@ -372,7 +385,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
   orientationHintHandler.evaluate();
 
   const contextLossOverlay = new ContextLossOverlay();
-  createWebGLContextLossHandler(canvas, {
+  const unsubscribeContextLoss = createWebGLContextLossHandler(canvas, {
     onLost: () => {
       gameLoop.pause();
       audioManager.suspend();
@@ -404,4 +417,33 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
 
   await sceneManager.requestTransition('title');
   scheduleStagePrefetchAfterTitleReady();
+
+  return {
+    dispose(): void {
+      if (disposed) {
+        return;
+      }
+
+      disposed = true;
+      unsubscribeViewportResize();
+      unsubscribeVisibilityPause();
+      unsubscribeContextLoss();
+      orientationHintHandler.dispose();
+      gameLoop.stop();
+      resizeCoalescer.dispose();
+      sceneManager.dispose();
+      stageScene = null;
+      inputSystem.dispose();
+      audioManager.dispose();
+      resumeOverlay.hide();
+      resumeOverlay.dispose();
+      contextLossOverlay.hide();
+      orientationHintOverlay.hide();
+      orientationHintOverlay.dispose();
+      loadingOverlay.hide();
+      loadFailureOverlay.hide();
+      renderer.forceContextLoss?.();
+      renderer.dispose();
+    },
+  };
 }

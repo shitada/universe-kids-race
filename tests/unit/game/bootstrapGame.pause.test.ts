@@ -3,20 +3,26 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 
 interface SetupResult {
+  bootstrapHandle: {
+    dispose: () => void;
+  };
   sceneManagerInstance: {
     requestTransition: (sceneType: 'title' | 'stage' | 'ending', context?: object) => Promise<void>;
   };
   inputSystemInstance: {
     setup: ReturnType<typeof vi.fn>;
     notifyResize: ReturnType<typeof vi.fn>;
+    dispose: ReturnType<typeof vi.fn>;
   };
   gameLoopInstance: {
     pause: ReturnType<typeof vi.fn>;
     resume: ReturnType<typeof vi.fn>;
+    stop: ReturnType<typeof vi.fn>;
   };
   audioManagerInstance: {
     suspend: ReturnType<typeof vi.fn>;
     ensureResumed: ReturnType<typeof vi.fn>;
+    dispose: ReturnType<typeof vi.fn>;
   };
   stageSceneInstance: {
     pauseHandlers: {
@@ -114,6 +120,11 @@ async function setup(
     setLoadStateHandler(): void {}
     setTransitionErrorHandler(): void {}
     setTransitionHandler(): void {}
+    dispose(): void {
+      this.currentScene?.exit?.();
+      this.currentScene = null;
+      this.currentType = null;
+    }
     prefetchSceneModule(): Promise<void> {
       return Promise.resolve();
     }
@@ -166,6 +177,9 @@ async function setup(
       resume = vi.fn(() => {
         this.paused = false;
       });
+      stop = vi.fn(() => {
+        this.paused = false;
+      });
       isPaused = vi.fn(() => this.paused);
     },
   }));
@@ -177,6 +191,7 @@ async function setup(
       }
       setup = vi.fn();
       notifyResize = vi.fn();
+      dispose = vi.fn();
     },
   }));
 
@@ -203,6 +218,7 @@ async function setup(
       setMuted = vi.fn();
       ensureResumed = vi.fn();
       suspend = vi.fn();
+      dispose = vi.fn();
     },
   }));
 
@@ -235,12 +251,14 @@ async function setup(
   vi.doMock('../../../src/game/utils/createWebGLContextLossHandler', () => ({
     createWebGLContextLossHandler: vi.fn((_canvas: HTMLCanvasElement, callbacks: SetupResult['contextLossCallbacks']) => {
       contextLossCallbacks = callbacks;
+      return () => {};
     }),
   }));
 
   vi.doMock('../../../src/game/utils/createVisibilityPauseHandler', () => ({
     createVisibilityPauseHandler: vi.fn((callbacks: SetupResult['visibilityCallbacks']) => {
       visibilityCallbacks = callbacks;
+      return () => {};
     }),
   }));
 
@@ -250,6 +268,8 @@ async function setup(
       setPixelRatio: vi.fn(),
       setClearColor: vi.fn(),
       render: vi.fn(),
+      dispose: vi.fn(),
+      forceContextLoss: vi.fn(),
     }),
   }));
 
@@ -258,6 +278,7 @@ async function setup(
     updateViewportSizeCache: () => ({ ...viewportSize }),
     subscribeViewportResize: vi.fn((_target: Window, callback: () => void) => {
       viewportResizeCallback = callback;
+      return () => {};
     }),
   }));
 
@@ -310,7 +331,8 @@ async function setup(
     createOrientationHintHandler: (callbacks: SetupResult['orientationCallbacks']) => {
       orientationCallbacks = callbacks;
       return {
-      evaluate: vi.fn(),
+        evaluate: vi.fn(),
+        dispose: vi.fn(),
       };
     },
   }));
@@ -374,12 +396,13 @@ async function setup(
   }));
 
   const { bootstrapGame } = await import('../../../src/game/bootstrapGame');
-  await bootstrapGame({
+  const bootstrapHandle = await bootstrapGame({
     canvas,
   });
   await sceneManagerInstance!.requestTransition('stage');
 
   return {
+    bootstrapHandle,
     sceneManagerInstance: sceneManagerInstance!,
     inputSystemInstance: inputSystemInstance!,
     gameLoopInstance: gameLoopInstance!,

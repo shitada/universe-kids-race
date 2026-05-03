@@ -89,6 +89,7 @@ async function bootMain(
       start = vi.fn();
       pause = vi.fn();
       resume = vi.fn();
+      stop = vi.fn();
       isPaused = vi.fn(() => false);
     },
   }));
@@ -97,6 +98,7 @@ async function bootMain(
     InputSystem: class {
       setup = vi.fn();
       notifyResize = vi.fn();
+      dispose = vi.fn();
     },
   }));
 
@@ -131,6 +133,7 @@ async function bootMain(
       setMuted = vi.fn();
       ensureResumed = vi.fn();
       suspend = vi.fn();
+      dispose = vi.fn();
     },
   }));
 
@@ -167,12 +170,13 @@ async function bootMain(
     createWebGLContextLossHandler: vi.fn(
       (_canvas: HTMLCanvasElement, callbacks: { onLost: () => void; onRestored: () => void }) => {
         contextLossState.callbacks = callbacks;
+        return () => {};
       },
     ),
   }));
 
   vi.doMock('../../src/game/utils/createVisibilityPauseHandler', () => ({
-    createVisibilityPauseHandler: vi.fn(),
+    createVisibilityPauseHandler: vi.fn(() => () => {}),
   }));
 
   vi.doMock('../../src/game/utils/createRenderer', () => ({
@@ -181,13 +185,15 @@ async function bootMain(
       setPixelRatio: vi.fn(),
       setClearColor: vi.fn(),
       render: vi.fn(),
+      dispose: vi.fn(),
+      forceContextLoss: vi.fn(),
     }),
   }));
 
   vi.doMock('../../src/game/utils/getViewportSize', () => ({
     getViewportSize: () => ({ width: 1024, height: 768 }),
     updateViewportSizeCache: () => ({ width: 1024, height: 768 }),
-    subscribeViewportResize: vi.fn(),
+    subscribeViewportResize: vi.fn(() => () => {}),
   }));
 
   vi.doMock('../../src/game/utils/resolveInitialPixelTier', () => ({
@@ -197,6 +203,7 @@ async function bootMain(
   vi.doMock('../../src/game/utils/createOrientationHintHandler', () => ({
     createOrientationHintHandler: () => ({
       evaluate: vi.fn(),
+      dispose: vi.fn(),
     }),
   }));
 
@@ -361,7 +368,9 @@ describe('Main lazy title bootstrap', () => {
     vi.resetModules();
     document.body.innerHTML = '';
 
-    const bootstrapGameMock = vi.fn(async () => {});
+    const bootstrapGameMock = vi.fn(async () => ({
+      dispose: vi.fn(),
+    }));
     const loadBootstrapModule = vi
       .fn<() => Promise<{ bootstrapGame: typeof bootstrapGameMock }>>()
       .mockRejectedValueOnce(new Error('boot chunk failed'))
@@ -396,6 +405,36 @@ describe('Main lazy title bootstrap', () => {
     );
 
     consoleErrorSpy.mockRestore();
+  });
+
+  it('disposes the previous boot session before starting a new main bootstrap', async () => {
+    vi.resetModules();
+    document.body.innerHTML = '';
+
+    const firstHandle = { dispose: vi.fn() };
+    const secondHandle = { dispose: vi.fn() };
+    const bootstrapGameMock = vi
+      .fn()
+      .mockResolvedValueOnce(firstHandle)
+      .mockResolvedValueOnce(secondHandle);
+    const loadBootstrapModule = vi.fn().mockResolvedValue({ bootstrapGame: bootstrapGameMock });
+
+    const mainModule = await import('../../src/main');
+
+    document.body.innerHTML = '<canvas id="game-canvas"></canvas><div id="hud"></div><div id="ui-overlay"></div>';
+    const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
+
+    const firstBoot = mainModule.startMainBootstrap({ canvas, loadBootstrapModule });
+    await flushPromises();
+    await expect(firstBoot).resolves.toBe(firstHandle);
+    expect(firstHandle.dispose).not.toHaveBeenCalled();
+
+    const secondBoot = mainModule.startMainBootstrap({ canvas, loadBootstrapModule });
+    await flushPromises();
+
+    await expect(secondBoot).resolves.toBe(secondHandle);
+    expect(firstHandle.dispose).toHaveBeenCalledTimes(1);
+    expect(secondHandle.dispose).not.toHaveBeenCalled();
   });
 
   it('starts stage prefetch right after title transition finishes', async () => {
