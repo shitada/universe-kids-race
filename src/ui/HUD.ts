@@ -60,18 +60,19 @@ export class HUD {
     hudRoot.style.zIndex = '10';
 
     // Home button (top-left)
+    const compact = window.innerHeight <= 500;
     this.homeButton = document.createElement('button');
     this.homeButton.textContent = '🏠';
     this.homeButton.setAttribute('aria-label', 'ホームへ もどる');
     this.homeButton.style.position = 'absolute';
     this.homeButton.style.top = '0.8rem';
     this.homeButton.style.left = '1rem';
-    this.homeButton.style.fontSize = 'clamp(1.4rem, 4vmin, 1.8rem)';
+    this.homeButton.style.fontSize = compact ? 'clamp(1.1rem, 3.5vmin, 1.4rem)' : 'clamp(1.4rem, 4vmin, 1.8rem)';
     this.homeButton.style.background = 'rgba(255, 255, 255, 0.15)';
     this.homeButton.style.border = 'none';
     this.homeButton.style.borderRadius = '50%';
-    this.homeButton.style.width = '3rem';
-    this.homeButton.style.height = '3rem';
+    this.homeButton.style.width = compact ? '2.4rem' : '3rem';
+    this.homeButton.style.height = compact ? '2.4rem' : '3rem';
     this.homeButton.style.display = 'flex';
     this.homeButton.style.alignItems = 'center';
     this.homeButton.style.justifyContent = 'center';
@@ -118,9 +119,9 @@ export class HUD {
         text-align: center;
         font-family: 'Zen Maru Gothic', sans-serif;
         color: #FFD700;
-        font-size: 1.5rem;
+        font-size: ${compact ? '1.1rem' : '1.5rem'};
         font-weight: 700;
-        padding: 0.5rem;
+        padding: ${compact ? '0.25rem' : '0.5rem'};
         pointer-events: none;
         text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
       `;
@@ -156,10 +157,10 @@ export class HUD {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 1rem 2rem;
+      padding: ${compact ? '0.4rem 1rem' : '1rem 2rem'};
       font-family: 'Zen Maru Gothic', sans-serif;
       color: #fff;
-      font-size: 1.4rem;
+      font-size: ${compact ? '1.1rem' : '1.4rem'};
       font-weight: 700;
       pointer-events: none;
     `;
@@ -226,7 +227,7 @@ export class HUD {
     wrapper.style.justifyContent = 'center';
     wrapper.style.gap = '0.4rem';
     wrapper.style.margin = '0 auto 0.4rem';
-    wrapper.style.width = 'clamp(160px, 32vmin, 280px)';
+    wrapper.style.width = window.innerHeight <= 500 ? 'clamp(100px, 24vmin, 180px)' : 'clamp(160px, 32vmin, 280px)';
     wrapper.style.pointerEvents = 'none';
     wrapper.style.fontFamily = "'Zen Maru Gothic', sans-serif";
 
@@ -302,13 +303,14 @@ export class HUD {
     this.boostButton.textContent = '🚀 ブースト!';
     this.boostButton.setAttribute('aria-label', 'ブースト');
     this.boostButton.setAttribute('aria-disabled', 'false');
+    const boostCompact = window.innerHeight <= 500;
     this.boostButton.style.position = 'absolute';
-    this.boostButton.style.bottom = '2rem';
-    this.boostButton.style.right = '2rem';
+    this.boostButton.style.bottom = boostCompact ? '1rem' : '2rem';
+    this.boostButton.style.right = boostCompact ? '1rem' : '2rem';
     this.boostButton.style.fontFamily = "'Zen Maru Gothic', sans-serif";
-    this.boostButton.style.fontSize = 'clamp(1rem, 3.5vmin, 1.3rem)';
+    this.boostButton.style.fontSize = boostCompact ? 'clamp(0.85rem, 2.8vmin, 1.05rem)' : 'clamp(1rem, 3.5vmin, 1.3rem)';
     this.boostButton.style.fontWeight = '700';
-    this.boostButton.style.padding = '0.8rem 1.5rem';
+    this.boostButton.style.padding = boostCompact ? '0.5rem 1rem' : '0.8rem 1.5rem';
     this.boostButton.style.border = 'none';
     this.boostButton.style.borderRadius = '2rem';
     this.boostButton.style.background = 'linear-gradient(135deg, #FF6B6B, #FFD93D, #6BCB77)';
@@ -352,17 +354,17 @@ export class HUD {
     this.cooldownContainer.setAttribute('data-cooldown-container', '');
     this.cooldownContainer.style.cssText = `
       position: absolute;
-      bottom: 1rem;
-      right: 2rem;
-      width: 80px;
+      bottom: ${boostCompact ? '0.4rem' : '1rem'};
+      right: ${boostCompact ? '1rem' : '2rem'};
+      width: ${boostCompact ? '60px' : '80px'};
       height: 6px;
       border-radius: 3px;
       background: rgba(255, 255, 255, 0.2);
       pointer-events: none;
     `;
     this.cooldownContainer.style.position = 'absolute';
-    this.cooldownContainer.style.bottom = '1rem';
-    this.cooldownContainer.style.right = '2rem';
+    this.cooldownContainer.style.bottom = boostCompact ? '0.4rem' : '1rem';
+    this.cooldownContainer.style.right = boostCompact ? '1rem' : '2rem';
 
     this.cooldownBar = document.createElement('div');
     this.cooldownBar.setAttribute('data-cooldown-bar', '');

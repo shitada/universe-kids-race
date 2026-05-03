@@ -20,6 +20,7 @@ export interface MuteButtonHandle {
  */
 export function createMuteButton(opts: MuteButtonOptions): MuteButtonHandle {
   const topRem = opts.topRem ?? 0.8;
+  const compact = window.innerHeight <= 500;
   const button = document.createElement('button');
   let muted = opts.initialMuted;
 
@@ -32,12 +33,12 @@ export function createMuteButton(opts: MuteButtonOptions): MuteButtonHandle {
   button.style.position = 'absolute';
   button.style.top = `${topRem}rem`;
   button.style.right = '1rem';
-  button.style.fontSize = 'clamp(1.4rem, 4vmin, 1.8rem)';
+  button.style.fontSize = compact ? 'clamp(1.1rem, 3.5vmin, 1.4rem)' : 'clamp(1.4rem, 4vmin, 1.8rem)';
   button.style.background = 'rgba(255, 255, 255, 0.15)';
   button.style.border = 'none';
   button.style.borderRadius = '50%';
-  button.style.width = '3rem';
-  button.style.height = '3rem';
+  button.style.width = compact ? '2.4rem' : '3rem';
+  button.style.height = compact ? '2.4rem' : '3rem';
   button.style.display = 'flex';
   button.style.alignItems = 'center';
   button.style.justifyContent = 'center';

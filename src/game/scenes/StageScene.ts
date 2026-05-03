@@ -1224,6 +1224,7 @@ export class StageScene implements Scene {
 
     this.clearOverlay = document.createElement('div');
     this.clearOverlay.setAttribute('data-stage-clear-overlay', '');
+    const compact = window.innerHeight <= 500;
     this.clearOverlay.style.cssText = `
       position: absolute;
       inset: 0;
@@ -1237,7 +1238,7 @@ export class StageScene implements Scene {
       pointer-events: auto;
       touch-action: manipulation;
       z-index: 40;
-      padding: 1.2rem;
+      padding: ${compact ? '0.5rem' : '1.2rem'};
       box-sizing: border-box;
       text-align: center;
       overflow: hidden;
@@ -1250,11 +1251,11 @@ export class StageScene implements Scene {
       position: relative;
       z-index: 1;
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: 3rem;
+      font-size: ${compact ? '1.8rem' : '3rem'};
       font-weight: 900;
       color: #FFD700;
       text-shadow: 0 0 20px rgba(255, 215, 0, 0.6);
-      margin-bottom: 1rem;
+      margin-bottom: ${compact ? '0.3rem' : '1rem'};
     `;
 
     const starCount = _earnedStars ?? this.scoreSystem.getStarCount();
@@ -1265,7 +1266,7 @@ export class StageScene implements Scene {
       position: relative;
       z-index: 1;
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: 1.5rem;
+      font-size: ${compact ? '1.1rem' : '1.5rem'};
       font-weight: 700;
       color: #fff;
     `;
@@ -1280,10 +1281,10 @@ export class StageScene implements Scene {
         position: relative;
         z-index: 1;
         font-family: 'Zen Maru Gothic', sans-serif;
-        font-size: 1.2rem;
+        font-size: ${compact ? '0.95rem' : '1.2rem'};
         font-weight: 700;
         color: #FFD700;
-        margin-bottom: 0.6rem;
+        margin-bottom: ${compact ? '0.2rem' : '0.6rem'};
         text-shadow: 0 0 12px rgba(255, 215, 0, 0.6);
         animation: bestStageStarsPop 0.6s ease-out;
       `;
@@ -1297,24 +1298,24 @@ export class StageScene implements Scene {
       const nextAdventureCard = document.createElement('section');
       nextAdventureCard.setAttribute('data-stage-clear-next-preview', '');
       nextAdventureCard.style.cssText = `
-        margin-top: 1.1rem;
-        width: min(88vw, 420px);
-        padding: 1rem 1.1rem 1.15rem;
-        border-radius: 28px;
+        margin-top: ${compact ? '0.4rem' : '1.1rem'};
+        width: min(${compact ? '80vw' : '88vw'}, ${compact ? '320px' : '420px'});
+        padding: ${compact ? '0.5rem 0.7rem 0.55rem' : '1rem 1.1rem 1.15rem'};
+        border-radius: ${compact ? '18px' : '28px'};
         background: linear-gradient(180deg, rgba(30, 46, 112, 0.92), rgba(12, 22, 66, 0.96));
         border: 2px solid rgba(255, 255, 255, 0.18);
         box-shadow: 0 14px 32px rgba(0, 0, 0, 0.26);
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 0.45rem;
+        gap: ${compact ? '0.15rem' : '0.45rem'};
       `;
 
       const nextAdventureLabel = document.createElement('div');
       nextAdventureLabel.textContent = 'つぎのぼうけん';
       nextAdventureLabel.style.cssText = `
         font-family: 'Zen Maru Gothic', sans-serif;
-        font-size: 1rem;
+        font-size: ${compact ? '0.8rem' : '1rem'};
         font-weight: 700;
         color: #b9d7ff;
         letter-spacing: 0.08em;
@@ -1325,7 +1326,7 @@ export class StageScene implements Scene {
       nextAdventureTitle.setAttribute('data-stage-clear-next-title', '');
       nextAdventureTitle.style.cssText = `
         font-family: 'Zen Maru Gothic', sans-serif;
-        font-size: clamp(1.5rem, 5.2vmin, 2.05rem);
+        font-size: ${compact ? 'clamp(1.1rem, 3.8vmin, 1.4rem)' : 'clamp(1.5rem, 5.2vmin, 2.05rem)'};
         font-weight: 900;
         color: #fff4a3;
         text-shadow: 0 0 14px rgba(255, 230, 120, 0.25);
@@ -1335,7 +1336,7 @@ export class StageScene implements Scene {
       nextAdventureEmoji.textContent = nextEntry.emoji;
       nextAdventureEmoji.setAttribute('data-stage-clear-next-emoji', '');
       nextAdventureEmoji.style.cssText = `
-        font-size: clamp(3.2rem, 13vmin, 4.8rem);
+        font-size: ${compact ? 'clamp(2rem, 8vmin, 3rem)' : 'clamp(3.2rem, 13vmin, 4.8rem)'};
         line-height: 1;
         filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.24));
       `;
@@ -1345,7 +1346,7 @@ export class StageScene implements Scene {
       nextAdventureName.setAttribute('data-stage-clear-next-name', '');
       nextAdventureName.style.cssText = `
         font-family: 'Zen Maru Gothic', sans-serif;
-        font-size: clamp(1.35rem, 4.8vmin, 1.8rem);
+        font-size: ${compact ? 'clamp(1rem, 3.5vmin, 1.3rem)' : 'clamp(1.35rem, 4.8vmin, 1.8rem)'};
         font-weight: 800;
         color: #ffffff;
       `;
@@ -1355,7 +1356,7 @@ export class StageScene implements Scene {
       nextAdventureTrivia.setAttribute('data-stage-clear-next-trivia', '');
       nextAdventureTrivia.style.cssText = `
         font-family: 'Zen Maru Gothic', sans-serif;
-        font-size: clamp(1.02rem, 3.9vmin, 1.2rem);
+        font-size: ${compact ? 'clamp(0.85rem, 3vmin, 1rem)' : 'clamp(1.02rem, 3.9vmin, 1.2rem)'};
         font-weight: 700;
         color: #dfeaff;
         line-height: 1.45;
@@ -1382,10 +1383,10 @@ export class StageScene implements Scene {
           position: relative;
           z-index: 1;
           font-family: 'Zen Maru Gothic', sans-serif;
-          font-size: 1.2rem;
+          font-size: ${compact ? '0.95rem' : '1.2rem'};
           font-weight: 700;
           color: #FFD700;
-          margin-top: 1rem;
+          margin-top: ${compact ? '0.4rem' : '1rem'};
           text-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
         `;
         this.clearOverlay.appendChild(cardMsg);
@@ -1396,10 +1397,10 @@ export class StageScene implements Scene {
           position: relative;
           z-index: 1;
           font-family: 'Zen Maru Gothic', sans-serif;
-          font-size: 1.2rem;
+          font-size: ${compact ? '0.95rem' : '1.2rem'};
           font-weight: 700;
           color: #FFD700;
-          margin-top: 0.5rem;
+          margin-top: ${compact ? '0.2rem' : '0.5rem'};
           text-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
         `;
         this.clearOverlay.appendChild(companionMsg);
@@ -1412,12 +1413,12 @@ export class StageScene implements Scene {
           z-index: 1;
           flex: 1;
           min-width: 0;
-          min-height: 56px;
-          padding: 0.7rem 0.8rem;
+          min-height: ${compact ? '40px' : '56px'};
+          padding: ${compact ? '0.4rem 0.5rem' : '0.7rem 0.8rem'};
           border: none;
           border-radius: 999px;
           font-family: 'Zen Maru Gothic', sans-serif;
-          font-size: clamp(1rem, 3.2vmin, 1.35rem);
+          font-size: ${compact ? 'clamp(0.8rem, 2.6vmin, 1rem)' : 'clamp(1rem, 3.2vmin, 1.35rem)'};
           font-weight: 900;
           color: #fff;
           background: rgba(255, 255, 255, 0.18);
@@ -1453,9 +1454,9 @@ export class StageScene implements Scene {
       flex-direction: row;
       justify-content: center;
       align-items: center;
-      gap: 0.7rem;
+      gap: ${compact ? '0.4rem' : '0.7rem'};
       width: 100%;
-      margin-top: 1.4rem;
+      margin-top: ${compact ? '0.5rem' : '1.4rem'};
     `;
 
     const retryButton = document.createElement('button');
@@ -1466,12 +1467,12 @@ export class StageScene implements Scene {
     retryButton.style.cssText = `
       flex: 1;
       min-width: 0;
-      min-height: 56px;
-      padding: 0.7rem 0.8rem;
+      min-height: ${compact ? '40px' : '56px'};
+      padding: ${compact ? '0.4rem 0.5rem' : '0.7rem 0.8rem'};
       border: none;
       border-radius: 999px;
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: clamp(1rem, 3.2vmin, 1.35rem);
+      font-size: ${compact ? 'clamp(0.8rem, 2.6vmin, 1rem)' : 'clamp(1rem, 3.2vmin, 1.35rem)'};
       font-weight: 900;
       color: #fff;
       background: rgba(255, 255, 255, 0.2);
@@ -1493,12 +1494,12 @@ export class StageScene implements Scene {
     continueButton.style.cssText = `
       flex: 1;
       min-width: 0;
-      min-height: 56px;
-      padding: 0.7rem 0.8rem;
+      min-height: ${compact ? '40px' : '56px'};
+      padding: ${compact ? '0.4rem 0.5rem' : '0.7rem 0.8rem'};
       border: none;
       border-radius: 999px;
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: clamp(1rem, 3.2vmin, 1.35rem);
+      font-size: ${compact ? 'clamp(0.8rem, 2.6vmin, 1rem)' : 'clamp(1rem, 3.2vmin, 1.35rem)'};
       font-weight: 900;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
       opacity: 0;
