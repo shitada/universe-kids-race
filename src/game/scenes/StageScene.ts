@@ -336,6 +336,7 @@ export class StageScene implements Scene {
     });
     this.hud.setHomeConfirmOpenCallback(() => {
       this.shouldResumeAfterHomeConfirm = this.isPlaying();
+      this.releasePointerInputForLock();
       this.isHomeConfirmOpen = true;
       this.syncBoostInputLock();
     });
@@ -419,6 +420,10 @@ export class StageScene implements Scene {
     });
   }
 
+  private releasePointerInputForLock(): void {
+    this.inputSystem.resetPointers?.();
+  }
+
   private syncBoostInputLock(): void {
     const locked = this.isStarting || this.awaitingResume || this.isHomeConfirmOpen;
     this.hud.setBoostLocked(locked);
@@ -467,6 +472,7 @@ export class StageScene implements Scene {
   requestResumeCountdown(): void {
     if (!this.isPlaying()) return;
     if (this.resumeCountdownOverlay) return;
+    this.releasePointerInputForLock();
     if (this.shouldSkipCountdown()) return;
 
     this.awaitingResume = true;

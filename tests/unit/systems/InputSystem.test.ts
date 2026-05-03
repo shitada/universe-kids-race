@@ -540,6 +540,15 @@ describe('InputSystem — resetPointers', () => {
     expect(input.getState().moveDirection).toBe(-1);
   });
 
+  it('does not clear keyboard-triggered boost state', () => {
+    keyDown(' ');
+    pointerDown(canvas, 900, 1);
+
+    input.resetPointers();
+
+    expect(input.getState()).toEqual({ moveDirection: 0, boostPressed: true });
+  });
+
   it('subsequent pointerup after resetPointers is a no-op', () => {
     pointerDown(canvas, 900, 1);
     input.resetPointers();
