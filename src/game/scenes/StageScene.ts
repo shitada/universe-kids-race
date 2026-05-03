@@ -23,7 +23,7 @@ import { followCameraZ } from '../utils/followCameraZ';
 import { getViewportSize } from '../utils/getViewportSize';
 import { ScorePopupManager } from '../../ui/ScorePopupManager';
 import { EncyclopediaOverlay } from '../../ui/EncyclopediaOverlay';
-import { getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
+import { getNextPlanetEncyclopediaEntry, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { TouchGuideOverlay, type TouchGuideMode } from '../../ui/TouchGuideOverlay';
 
 const BG_STAR_PARALLAX = 1.0;
@@ -250,10 +250,12 @@ export class StageScene implements Scene {
 
   private stageConfig!: StageConfig;
   private stageNumber = 1;
+  private launchSource: 'campaign' | 'encyclopedia' = 'campaign';
   private isCleared = false;
   private clearTimer = 0;
   private clearOverlay: HTMLDivElement | null = null;
   private clearContinueButton: HTMLButtonElement | null = null;
+  private clearRetryButton: HTMLButtonElement | null = null;
   private clearRewardButton: HTMLButtonElement | null = null;
   private isClearContinueEnabled = false;
   private hasHandledClearContinue = false;
@@ -361,6 +363,7 @@ export class StageScene implements Scene {
     this.ensureInitialized();
     this.lastAspect = 0;
     this.stageNumber = context.stageNumber ?? 1;
+    this.launchSource = context.launchSource ?? 'campaign';
     this.stageConfig = getStageConfig(this.stageNumber);
     this.prefetchEndingSceneModuleIfNeeded();
     this.isCleared = false;
@@ -767,6 +770,7 @@ export class StageScene implements Scene {
       this.clearOverlay = null;
     }
     this.clearContinueButton = null;
+    this.clearRetryButton = null;
     this.clearRewardButton = null;
     this.isClearContinueEnabled = false;
     this.hasHandledClearContinue = false;
@@ -1271,6 +1275,85 @@ export class StageScene implements Scene {
 
     this.clearOverlay.appendChild(score);
 
+    const nextEntry = getNextPlanetEncyclopediaEntry(this.stageNumber);
+    if (nextEntry) {
+      const nextAdventureCard = document.createElement('section');
+      nextAdventureCard.setAttribute('data-stage-clear-next-preview', '');
+      nextAdventureCard.style.cssText = `
+        margin-top: 1.1rem;
+        width: min(88vw, 420px);
+        padding: 1rem 1.1rem 1.15rem;
+        border-radius: 28px;
+        background: linear-gradient(180deg, rgba(30, 46, 112, 0.92), rgba(12, 22, 66, 0.96));
+        border: 2px solid rgba(255, 255, 255, 0.18);
+        box-shadow: 0 14px 32px rgba(0, 0, 0, 0.26);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.45rem;
+      `;
+
+      const nextAdventureLabel = document.createElement('div');
+      nextAdventureLabel.textContent = 'つぎのぼうけん';
+      nextAdventureLabel.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: 1rem;
+        font-weight: 700;
+        color: #b9d7ff;
+        letter-spacing: 0.08em;
+      `;
+
+      const nextAdventureTitle = document.createElement('div');
+      nextAdventureTitle.textContent = `つぎは ${nextEntry.name}！`;
+      nextAdventureTitle.setAttribute('data-stage-clear-next-title', '');
+      nextAdventureTitle.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: clamp(1.5rem, 5.2vmin, 2.05rem);
+        font-weight: 900;
+        color: #fff4a3;
+        text-shadow: 0 0 14px rgba(255, 230, 120, 0.25);
+      `;
+
+      const nextAdventureEmoji = document.createElement('div');
+      nextAdventureEmoji.textContent = nextEntry.emoji;
+      nextAdventureEmoji.setAttribute('data-stage-clear-next-emoji', '');
+      nextAdventureEmoji.style.cssText = `
+        font-size: clamp(3.2rem, 13vmin, 4.8rem);
+        line-height: 1;
+        filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.24));
+      `;
+
+      const nextAdventureName = document.createElement('div');
+      nextAdventureName.textContent = nextEntry.name;
+      nextAdventureName.setAttribute('data-stage-clear-next-name', '');
+      nextAdventureName.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: clamp(1.35rem, 4.8vmin, 1.8rem);
+        font-weight: 800;
+        color: #ffffff;
+      `;
+
+      const nextAdventureTrivia = document.createElement('div');
+      nextAdventureTrivia.textContent = nextEntry.trivia;
+      nextAdventureTrivia.setAttribute('data-stage-clear-next-trivia', '');
+      nextAdventureTrivia.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: clamp(1.02rem, 3.9vmin, 1.2rem);
+        font-weight: 700;
+        color: #dfeaff;
+        line-height: 1.45;
+      `;
+
+      nextAdventureCard.append(
+        nextAdventureLabel,
+        nextAdventureTitle,
+        nextAdventureEmoji,
+        nextAdventureName,
+        nextAdventureTrivia,
+      );
+      this.clearOverlay.appendChild(nextAdventureCard);
+    }
+
     // Card acquisition notification for newly unlocked planets
     if (isNewPlanetUnlock) {
       const entry = getPlanetEncyclopediaEntry(this.stageNumber);
@@ -1358,8 +1441,47 @@ export class StageScene implements Scene {
       }
     }
 
+    const retryButton = document.createElement('button');
+    retryButton.setAttribute('data-stage-clear-retry', '');
+    retryButton.setAttribute('aria-label', 'このステージを もういちど');
+    retryButton.textContent = 'このステージを もういちど';
+    retryButton.disabled = true;
+    retryButton.style.cssText = `
+      margin-top: 1.1rem;
+      min-width: min(72vw, 300px);
+      min-height: 76px;
+      padding: 0.95rem 1.6rem;
+      border: none;
+      border-radius: 999px;
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: clamp(1.2rem, 4.2vmin, 1.6rem);
+      font-weight: 900;
+      color: #fff;
+      background: rgba(255, 255, 255, 0.18);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      touch-action: manipulation;
+      transform: scale(1);
+      transition: opacity 0.18s ease-out, transform 0.08s ease-out;
+    `;
+    this.bindClearActionButton(retryButton, () => {
+      this.sceneManager.requestTransition('stage', {
+        stageNumber: this.stageNumber,
+        totalScore: 0,
+        totalStarCount: 0,
+      });
+    });
+    this.clearRetryButton = retryButton;
+    this.clearOverlay.appendChild(retryButton);
+
     const continueButton = document.createElement('button');
-    const continueLabel = this.stageNumber >= TOTAL_STAGES ? 'おいわいへ' : 'つぎへ';
+    const continueLabel = this.launchSource === 'encyclopedia'
+      ? 'タイトルへ'
+      : this.stageNumber >= TOTAL_STAGES
+        ? 'おいわいへ'
+        : 'つぎへ';
     continueButton.setAttribute('data-stage-clear-continue', '');
     continueButton.setAttribute('aria-label', continueLabel);
     continueButton.textContent = continueLabel;
@@ -1385,32 +1507,9 @@ export class StageScene implements Scene {
       transition: opacity 0.18s ease-out, transform 0.08s ease-out;
     `;
 
-    const activate = (event: Event): void => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (this.isClearRewardOpen) return;
-      if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
-      this.hasHandledClearContinue = true;
-      continueButton.disabled = true;
-      continueButton.style.pointerEvents = 'none';
-      continueButton.style.transform = 'scale(1)';
+    this.bindClearActionButton(continueButton, () => {
       this.handleStageComplete();
-    };
-    const release = (): void => {
-      if (this.clearContinueButton) {
-        this.clearContinueButton.style.transform = 'scale(1)';
-      }
-    };
-    continueButton.addEventListener('pointerdown', (event) => {
-      if (this.isClearRewardOpen) return;
-      if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
-      continueButton.style.transform = 'scale(0.96)';
-      activate(event);
     });
-    continueButton.addEventListener('click', activate);
-    continueButton.addEventListener('pointerup', release);
-    continueButton.addEventListener('pointercancel', release);
-    continueButton.addEventListener('pointerleave', release);
     this.clearContinueButton = continueButton;
     this.clearOverlay.appendChild(continueButton);
 
@@ -1420,13 +1519,55 @@ export class StageScene implements Scene {
   private revealClearContinueButtonIfReady(): void {
     if (this.isClearContinueEnabled) return;
     if (this.clearTimer < StageScene.CLEAR_CONTINUE_DELAY) return;
-    if (!this.clearContinueButton) return;
+    if (!this.clearContinueButton || !this.clearRetryButton) return;
 
     this.isClearContinueEnabled = true;
-    this.clearContinueButton.disabled = false;
-    this.clearContinueButton.style.opacity = '1';
-    this.clearContinueButton.style.visibility = 'visible';
-    this.clearContinueButton.style.pointerEvents = 'auto';
+    this.revealClearActionButton(this.clearRetryButton);
+    this.revealClearActionButton(this.clearContinueButton);
+  }
+
+  private bindClearActionButton(button: HTMLButtonElement, onActivate: () => void): void {
+    const activate = (event: Event): void => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!this.canActivateClearAction()) return;
+      this.hasHandledClearContinue = true;
+      this.lockClearActionButtons();
+      onActivate();
+    };
+    const release = (): void => {
+      button.style.transform = 'scale(1)';
+    };
+    button.addEventListener('pointerdown', (event) => {
+      if (!this.canActivateClearAction()) return;
+      button.style.transform = 'scale(0.96)';
+      activate(event);
+    });
+    button.addEventListener('click', activate);
+    button.addEventListener('pointerup', release);
+    button.addEventListener('pointercancel', release);
+    button.addEventListener('pointerleave', release);
+  }
+
+  private canActivateClearAction(): boolean {
+    return !this.isClearRewardOpen && this.isClearContinueEnabled && !this.hasHandledClearContinue;
+  }
+
+  private revealClearActionButton(button: HTMLButtonElement | null): void {
+    if (!button) return;
+    button.disabled = false;
+    button.style.opacity = '1';
+    button.style.visibility = 'visible';
+    button.style.pointerEvents = 'auto';
+  }
+
+  private lockClearActionButtons(): void {
+    for (const button of [this.clearRetryButton, this.clearContinueButton]) {
+      if (!button) continue;
+      button.disabled = true;
+      button.style.pointerEvents = 'none';
+      button.style.transform = 'scale(1)';
+    }
   }
 
   private injectBestStageStarsAnimation(): void {
@@ -1447,6 +1588,11 @@ export class StageScene implements Scene {
   private handleStageComplete(): void {
     const { totalScore, totalStarCount } = this.scoreSystem.finalizeStage();
 
+    if (this.launchSource === 'encyclopedia') {
+      this.sceneManager.requestTransition('title');
+      return;
+    }
+
     if (this.stageNumber >= TOTAL_STAGES) {
       this.sceneManager.requestTransition('ending', { totalScore, totalStarCount });
     } else {
@@ -1463,6 +1609,7 @@ export class StageScene implements Scene {
       return;
     }
     this.clearRewardOverlay.hide();
+    this.clearRetryButton = null;
     this.clearRewardButton = null;
     this.isClearRewardOpen = false;
     this.touchGuide.hide();

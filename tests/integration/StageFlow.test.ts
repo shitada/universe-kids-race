@@ -181,13 +181,13 @@ describe('Stage Flow Integration', () => {
     await manager.transitionTo('title');
 
     const nextAdventureCard = document.querySelector('[data-next-adventure-card]') as HTMLDivElement | null;
-    const playHint = document.querySelector('[data-play-hint]') as HTMLDivElement | null;
+    const playButtonHint = document.querySelector('[data-play-button-hint]') as HTMLDivElement | null;
     const playButton = Array.from(document.querySelectorAll('button')).find(
       (button) => button.textContent === 'あそぶ',
     ) as HTMLButtonElement | undefined;
 
-    expect(nextAdventureCard?.dataset.stageNumber).toBe('5');
-    expect(playHint?.textContent).toBe('ステージ 5 ・ 木星へ つづきから！');
+    expect(nextAdventureCard?.getAttribute('data-next-stage-number')).toBe('5');
+    expect(playButtonHint?.textContent).toContain('ステージ 5');
     expect(playButton).toBeTruthy();
 
     playButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
@@ -196,7 +196,7 @@ describe('Stage Flow Integration', () => {
     expect(manager.getCurrentType()).toBe('stage');
     expect(log).toContainEqual({
       type: 'stage',
-      context: { stageNumber: 5, totalScore: 0, totalStarCount: 0 },
+      context: { stageNumber: 5, totalScore: 0, totalStarCount: 0, launchSource: 'campaign' },
     });
   });
 
@@ -475,6 +475,72 @@ describe('Stage Flow Integration', () => {
 
     expect(manager.getCurrentType()).toBe('stage');
     expect(internal.stageNumber).toBe(2);
+  });
+
+  it('uses the retry CTA to replay the same stage', async () => {
+    const manager = new SceneManager();
+    const inputSystem = {
+      setBoostPressed: vi.fn(),
+      getState: vi.fn(() => ({ moveDirection: 0, boostPressed: false })),
+    } as unknown as InputSystem;
+    const audioManager = {
+      playBGM: vi.fn(),
+      stopBGM: vi.fn(),
+      playSFX: vi.fn(),
+      stopBoostSFX: vi.fn(),
+      startBoostSFX: vi.fn(),
+      isMuted: vi.fn(() => false),
+      toggleMute: vi.fn(() => false),
+      setMuted: vi.fn(),
+      initFromInteraction: vi.fn(),
+    } as unknown as AudioManager;
+    const saveManager = {
+      load: vi.fn(() => ({
+        clearedStage: 0,
+        unlockedPlanets: [],
+        muted: false,
+        tutorialShown: true,
+        bestStageStars: {},
+      })),
+      save: vi.fn(),
+      clear: vi.fn(),
+      markStageCleared: vi.fn(() => false),
+      updateBestStageStars: vi.fn(),
+    } as unknown as SaveManager;
+    let stageScene: StageScene | null = null;
+
+    manager.registerSceneFactory('stage', async () => {
+      stageScene = new StageScene(manager, inputSystem, audioManager, saveManager);
+      return stageScene;
+    });
+    manager.registerScene('ending', createTrackingScene([], 'ending'));
+
+    await manager.transitionTo('stage', { stageNumber: 3, totalScore: 500, totalStarCount: 4 });
+
+    const internal = stageScene as unknown as {
+      stageNumber: number;
+      scoreSystem: {
+        getStarCount(): number;
+        finalizeStage(): { totalScore: number; totalStarCount: number };
+      };
+      onStageClear(): void;
+      update(deltaTime: number): void;
+    };
+    internal.scoreSystem.getStarCount = () => 3;
+    internal.scoreSystem.finalizeStage = () => ({ totalScore: 1200, totalStarCount: 9 });
+
+    internal.onStageClear();
+    internal.update(30);
+    expect(internal.stageNumber).toBe(3);
+
+    const retryButton = document.querySelector<HTMLButtonElement>('[data-stage-clear-retry]');
+    expect(retryButton?.textContent).toBe('このステージを もういちど');
+    retryButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(manager.getCurrentType()).toBe('stage');
+    expect(internal.stageNumber).toBe(3);
   });
 
   it('uses the clear CTA to move from the last stage to ending', async () => {

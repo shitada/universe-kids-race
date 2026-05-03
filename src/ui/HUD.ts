@@ -64,7 +64,7 @@ export class HUD {
     this.homeButton.setAttribute('aria-label', 'ホームへ もどる');
     this.homeButton.style.position = 'absolute';
     this.homeButton.style.top = '0.8rem';
-    this.homeButton.style.left = 'max(1rem, calc(env(safe-area-inset-left, 0px) + 0.5rem))';
+    this.homeButton.style.left = '1rem';
     this.homeButton.style.fontSize = 'clamp(1.4rem, 4vmin, 1.8rem)';
     this.homeButton.style.background = 'rgba(255, 255, 255, 0.15)';
     this.homeButton.style.border = 'none';
@@ -119,7 +119,7 @@ export class HUD {
         color: #FFD700;
         font-size: 1.5rem;
         font-weight: 700;
-        padding: calc(0.5rem + env(safe-area-inset-top, 0px)) 0.5rem 0.5rem;
+        padding: 0.5rem;
         pointer-events: none;
         text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
       `;
@@ -281,8 +281,8 @@ export class HUD {
     this.boostButton.setAttribute('aria-label', 'ブースト');
     this.boostButton.setAttribute('aria-disabled', 'false');
     this.boostButton.style.position = 'absolute';
-    this.boostButton.style.bottom = 'max(2rem, calc(env(safe-area-inset-bottom, 0px) + 1rem))';
-    this.boostButton.style.right = 'max(2rem, calc(env(safe-area-inset-right, 0px) + 1rem))';
+    this.boostButton.style.bottom = '2rem';
+    this.boostButton.style.right = '2rem';
     this.boostButton.style.fontFamily = "'Zen Maru Gothic', sans-serif";
     this.boostButton.style.fontSize = 'clamp(1rem, 3.5vmin, 1.3rem)';
     this.boostButton.style.fontWeight = '700';
@@ -330,8 +330,8 @@ export class HUD {
     this.cooldownContainer.setAttribute('data-cooldown-container', '');
     this.cooldownContainer.style.cssText = `
       position: absolute;
-      bottom: max(1rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem));
-      right: max(2rem, calc(env(safe-area-inset-right, 0px) + 1rem));
+      bottom: 1rem;
+      right: 2rem;
       width: 80px;
       height: 6px;
       border-radius: 3px;

@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import { PerspectiveCamera } from 'three';
 import { GameLoop } from './game/GameLoop';
 import { SceneManager } from './game/SceneManager';
 import { InputSystem } from './game/systems/InputSystem';
@@ -56,7 +56,7 @@ function applyRendererSize(width: number, height: number): void {
     inputSystem.notifyResize(canvas.clientWidth);
   }
   const camera = sceneManager.getCurrentCamera();
-  if (camera instanceof THREE.PerspectiveCamera) {
+  if (camera instanceof PerspectiveCamera) {
     const aspect = width / height;
     if (camera.aspect !== aspect) {
       camera.aspect = aspect;
