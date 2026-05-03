@@ -967,7 +967,7 @@ export class StageScene implements Scene {
     if (moveDirection !== 0) {
       this.touchGuideIdleTimer = 0;
       this.hasSeenMoveInput = true;
-      this.setTouchGuideMode('hidden');
+      this.setTouchGuideMode(moveDirection < 0 ? 'active-left' : 'active-right');
       return;
     }
 
