@@ -74,7 +74,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
     applyRendererSize(width, height);
   }
 
-  if (saveManager.isFreshSession()) {
+  if (saveManager.getSessionState() === 'fresh') {
     saveManager.resetSessionDataPreservingMuted();
   }
 
@@ -260,12 +260,35 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
     });
   }
 
+  function getStageRestoreMode(allowResumeOverlay: boolean): 'resume-overlay' | 'keep-paused' | 'immediate-resume' {
+    if (sceneManager.getCurrentType() !== 'stage' || !gameLoop.isPaused()) {
+      return 'immediate-resume';
+    }
+    if (stageScene?.isUserPaused() === true) {
+      return 'keep-paused';
+    }
+    if (allowResumeOverlay && stageScene?.isPlaying() === true) {
+      return 'resume-overlay';
+    }
+    return 'immediate-resume';
+  }
+
   function shouldShowStageResumeOverlay(): boolean {
-    return (
-      sceneManager.getCurrentType() === 'stage' &&
-      gameLoop.isPaused() &&
-      stageScene?.isPlaying() === true
-    );
+    return getStageRestoreMode(true) === 'resume-overlay';
+  }
+
+  function applyStageRestoreMode(allowResumeOverlay: boolean): void {
+    const restoreMode = getStageRestoreMode(allowResumeOverlay);
+    if (restoreMode === 'resume-overlay') {
+      showStageResumeOverlay();
+      return;
+    }
+
+    resumeOverlay.hide();
+    pendingBackgroundResume = false;
+    if (restoreMode === 'immediate-resume') {
+      resumeGame();
+    }
   }
 
   function handleVisibilityRestore(): void {
@@ -273,13 +296,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
     if (isPortraitLocked) {
       return;
     }
-    if (shouldShowStageResumeOverlay()) {
-      showStageResumeOverlay();
-    } else {
-      resumeOverlay.hide();
-      pendingBackgroundResume = false;
-      resumeGame();
-    }
+    applyStageRestoreMode(true);
   }
 
   createVisibilityPauseHandler({
@@ -305,12 +322,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
       isPortraitLocked = false;
       orientationHintOverlay.hide();
       refreshViewportAfterRestore();
-      if (pendingBackgroundResume && shouldShowStageResumeOverlay()) {
-        showStageResumeOverlay();
-      } else {
-        pendingBackgroundResume = false;
-        resumeGame();
-      }
+      applyStageRestoreMode(pendingBackgroundResume);
     },
   });
   orientationHintHandler.evaluate();

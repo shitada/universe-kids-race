@@ -5,7 +5,6 @@ export class InputSystem {
   private canvas: HTMLCanvasElement | null = null;
   private activePointers = new Map<number, 'left' | 'right'>();
   private pendingPointers = new Set<number>();
-  private pressedKeys = new Set<string>();
   // Cached canvas client width to avoid forced reflow on every pointer event
   // (Constitution III/IV: iPad Safari touch latency / 60fps). Updated via
   // notifyResize() from the main resize pipeline.
@@ -14,11 +13,6 @@ export class InputSystem {
   // calls preventDefault(); this lets iPad Safari run pointermove on the
   // compositor fast path. DO NOT call preventDefault() inside onPointerMove.
   private static readonly POINTERMOVE_OPTIONS: AddEventListenerOptions = { passive: true };
-  private static readonly BOOST_KEYS = new Set([' ', 'Spacebar']);
-
-  private isBoostKey(e: KeyboardEvent): boolean {
-    return e.code === 'Space' || InputSystem.BOOST_KEYS.has(e.key);
-  }
 
   private getCanvasWidth(): number {
     if (this.canvasWidth > 0) return this.canvasWidth;
@@ -102,43 +96,9 @@ export class InputSystem {
     }
   };
 
-  private onKeyDown = (e: KeyboardEvent): void => {
-    if (e.repeat) return;
-    if (this.isBoostKey(e)) {
-      e.preventDefault();
-      this.state.boostPressed = true;
-      return;
-    }
-
-    switch (e.key) {
-      case 'ArrowLeft':
-      case 'ArrowRight':
-        e.preventDefault();
-        this.pressedKeys.add(e.key);
-        this.updateDirection();
-        break;
-    }
-  };
-
-  private onKeyUp = (e: KeyboardEvent): void => {
-    if (this.isBoostKey(e)) {
-      this.state.boostPressed = false;
-      return;
-    }
-
-    switch (e.key) {
-      case 'ArrowLeft':
-      case 'ArrowRight':
-        this.pressedKeys.delete(e.key);
-        this.updateDirection();
-        break;
-    }
-  };
-
   private resetInputs(): void {
     this.activePointers.clear();
     this.pendingPointers.clear();
-    this.pressedKeys.clear();
     this.state.boostPressed = false;
     this.updateDirection();
   }
@@ -160,8 +120,6 @@ export class InputSystem {
       if (side === 'left') left = true;
       if (side === 'right') right = true;
     }
-    if (this.pressedKeys.has('ArrowLeft')) left = true;
-    if (this.pressedKeys.has('ArrowRight')) right = true;
     if (left && right) {
       this.state.moveDirection = 0;
     } else if (left) {
@@ -183,8 +141,6 @@ export class InputSystem {
     canvas.addEventListener('pointercancel', this.onPointerCancel);
     canvas.addEventListener('pointerleave', this.onPointerUp);
     canvas.addEventListener('lostpointercapture', this.onLostPointerCapture);
-    window.addEventListener('keydown', this.onKeyDown);
-    window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onLoseFocus);
     window.addEventListener('pagehide', this.onLoseFocus);
     document.addEventListener('visibilitychange', this.onVisibilityChange);
@@ -210,7 +166,7 @@ export class InputSystem {
   }
 
   /**
-   * Clear all active pointer state without touching keyboard state.
+   * Clear all active pointer state.
    * Called on stage transitions to prevent ghost pointers from surviving
    * across stages (e.g. when a DOM overlay intercepts pointerup).
    */
@@ -231,14 +187,11 @@ export class InputSystem {
       this.canvas = null;
       this.canvasWidth = 0;
     }
-    window.removeEventListener('keydown', this.onKeyDown);
-    window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('blur', this.onLoseFocus);
     window.removeEventListener('pagehide', this.onLoseFocus);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
     this.activePointers.clear();
     this.pendingPointers.clear();
-    this.pressedKeys.clear();
     this.state = { moveDirection: 0, boostPressed: false };
   }
 }

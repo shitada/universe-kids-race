@@ -1,5 +1,6 @@
 import { createMuteButton, type MuteButtonHandle } from './createMuteButton';
 import { HomeConfirmOverlay } from './HomeConfirmOverlay';
+import { PauseOverlay } from './PauseOverlay';
 
 export class HUD {
   private container: HTMLDivElement | null = null;
@@ -10,8 +11,11 @@ export class HUD {
   private bestStarContainerEl: HTMLSpanElement | null = null;
   private bestStarCountEl: HTMLSpanElement | null = null;
   private boostButton: HTMLButtonElement | null = null;
+  private boostHintEl: HTMLDivElement | null = null;
   private homeButton: HTMLButtonElement | null = null;
+  private pauseButton: HTMLButtonElement | null = null;
   private homeConfirmOverlay: HomeConfirmOverlay = new HomeConfirmOverlay();
+  private pauseOverlay: PauseOverlay = new PauseOverlay();
   private muteButton: HTMLButtonElement | null = null;
   private muteHandle: MuteButtonHandle | null = null;
   private cooldownContainer: HTMLDivElement | null = null;
@@ -24,6 +28,8 @@ export class HUD {
   private onHomeCallback: (() => void) | null = null;
   private onHomeConfirmOpenCallback: (() => void) | null = null;
   private onHomeConfirmCancelCallback: (() => void) | null = null;
+  private onPauseOpenCallback: (() => boolean | void) | null = null;
+  private onPauseResumeCallback: (() => void) | null = null;
   private onMuteCallback: (() => void) | null = null;
   private muted = false;
   private boostLocked = false;
@@ -205,6 +211,8 @@ export class HUD {
     // Boost button on ui-overlay
     this.createBoostButton();
 
+    this.createPauseButton(hudRoot);
+
     // Mute toggle button on HUD root (top-right) — created after stage name
     // and other elements so existing children indices remain stable.
     this.createMuteButton();
@@ -291,6 +299,58 @@ export class HUD {
     this.muteButton = this.muteHandle.element;
   }
 
+  private createPauseButton(hudRoot: HTMLElement): void {
+    this.pauseButton = document.createElement('button');
+    this.pauseButton.textContent = '⏸ やすむ';
+    this.pauseButton.setAttribute('aria-label', 'やすむ');
+    this.pauseButton.style.position = 'absolute';
+    this.pauseButton.style.top = '0.8rem';
+    this.pauseButton.style.left = '4.5rem';
+    this.pauseButton.style.minWidth = '6rem';
+    this.pauseButton.style.minHeight = '3rem';
+    this.pauseButton.style.padding = '0 1rem';
+    this.pauseButton.style.border = 'none';
+    this.pauseButton.style.borderRadius = '999px';
+    this.pauseButton.style.background = 'rgba(255, 255, 255, 0.16)';
+    this.pauseButton.style.color = '#fff';
+    this.pauseButton.style.fontFamily = "'Zen Maru Gothic', sans-serif";
+    this.pauseButton.style.fontSize = 'clamp(1rem, 3.2vmin, 1.2rem)';
+    this.pauseButton.style.fontWeight = '900';
+    this.pauseButton.style.cursor = 'pointer';
+    this.pauseButton.style.pointerEvents = 'auto';
+    this.pauseButton.style.touchAction = 'manipulation';
+    this.pauseButton.style.transform = 'scale(1)';
+    this.pauseButton.style.transition = 'transform 0.08s ease-out';
+
+    const releasePausePress = (): void => {
+      if (this.pauseButton) {
+        this.pauseButton.style.transform = 'scale(1)';
+      }
+    };
+
+    this.pauseButton.addEventListener('pointerdown', (event) => {
+      event.stopPropagation();
+      if (this.pauseButton) {
+        this.pauseButton.style.transform = 'scale(0.96)';
+      }
+      if (this.pauseOverlay.isVisible() || this.homeConfirmOverlay.isVisible()) {
+        return;
+      }
+      if (!document.getElementById('ui-overlay')) {
+        return;
+      }
+      const shouldOpen = this.onPauseOpenCallback?.() !== false;
+      if (!shouldOpen) {
+        return;
+      }
+      this.pauseOverlay.show(() => this.onPauseResumeCallback?.());
+    });
+    this.pauseButton.addEventListener('pointerup', releasePausePress);
+    this.pauseButton.addEventListener('pointercancel', releasePausePress);
+    this.pauseButton.addEventListener('pointerleave', releasePausePress);
+    hudRoot.appendChild(this.pauseButton);
+  }
+
   private createBoostButton(): void {
     const uiOverlay = document.getElementById('ui-overlay');
     if (!uiOverlay) return;
@@ -346,6 +406,32 @@ export class HUD {
     });
 
     uiOverlay.appendChild(this.boostButton);
+
+    this.boostHintEl = document.createElement('div');
+    this.boostHintEl.setAttribute('data-boost-hint', '');
+    this.boostHintEl.setAttribute('aria-hidden', 'true');
+    this.boostHintEl.style.cssText = `
+      position: absolute;
+      right: 2rem;
+      bottom: 6.25rem;
+      display: none;
+      max-width: min(54vw, 240px);
+      padding: 0.45rem 0.85rem;
+      border-radius: 999px;
+      background: rgba(14, 20, 60, 0.9);
+      border: 2px solid rgba(255, 217, 61, 0.9);
+      color: #fff7bf;
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: clamp(0.95rem, 3.2vmin, 1.12rem);
+      font-weight: 700;
+      text-align: center;
+      pointer-events: none;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+      transform-origin: right bottom;
+      z-index: 12;
+      white-space: nowrap;
+    `;
+    uiOverlay.appendChild(this.boostHintEl);
 
     // Cooldown indicator below boost button
     this.cooldownContainer = document.createElement('div');
@@ -408,6 +494,22 @@ export class HUD {
       button[data-boost-ready-flash] {
         animation: boostBtnReadyFlash 0.45s ease-out 1 !important;
       }
+      @keyframes boostHintBob {
+        0%, 100% { transform: translateY(0) scale(1); }
+        50% { transform: translateY(-4px) scale(1.04); }
+      }
+      [data-boost-hint][data-boost-hint-visible] {
+        animation: boostHintBob 0.9s ease-in-out infinite;
+      }
+      button[data-boost-hint-active] {
+        box-shadow:
+          0 0 0 6px rgba(255, 217, 61, 0.18),
+          0 10px 28px rgba(255, 107, 107, 0.62);
+        transform: scale(1.08);
+      }
+      div[data-cooldown-container][data-boost-hint-active] {
+        box-shadow: 0 0 14px rgba(255, 217, 61, 0.9);
+      }
       @keyframes stageGoalFlash {
         0%   { transform: scale(1.0); }
         40%  { transform: scale(1.35); }
@@ -460,6 +562,14 @@ export class HUD {
     this.onMuteCallback = callback;
   }
 
+  setPauseOpenCallback(callback: () => boolean | void): void {
+    this.onPauseOpenCallback = callback;
+  }
+
+  setPauseResumeCallback(callback: () => void): void {
+    this.onPauseResumeCallback = callback;
+  }
+
   /**
    * Update the mute button display to reflect the given state.
    * Safe to call before or after show(); the latest value is used the next
@@ -480,6 +590,27 @@ export class HUD {
     if (!this.assistMessageEl) return;
     this.assistMessageEl.style.display = 'none';
     this.assistMessageEl.textContent = '';
+  }
+
+  showBoostHint(message: string): void {
+    if (!this.boostHintEl || !this.boostButton || !this.cooldownContainer) return;
+    this.boostHintEl.textContent = message;
+    this.boostHintEl.style.display = 'block';
+    this.boostHintEl.setAttribute('data-boost-hint-visible', '');
+    this.boostHintEl.setAttribute('aria-hidden', 'false');
+    this.boostButton.setAttribute('data-boost-hint-active', '');
+    this.cooldownContainer.setAttribute('data-boost-hint-active', '');
+  }
+
+  hideBoostHint(): void {
+    if (this.boostHintEl) {
+      this.boostHintEl.style.display = 'none';
+      this.boostHintEl.textContent = '';
+      this.boostHintEl.removeAttribute('data-boost-hint-visible');
+      this.boostHintEl.setAttribute('aria-hidden', 'true');
+    }
+    this.boostButton?.removeAttribute('data-boost-hint-active');
+    this.cooldownContainer?.removeAttribute('data-boost-hint-active');
   }
 
   isMuted(): boolean {
@@ -685,14 +816,20 @@ export class HUD {
 
     if (!enabled) {
       this.clearBoostReadyFlash();
+      this.hideBoostHint();
     }
   }
 
   hide(): void {
     this.homeConfirmOverlay.hide();
+    this.pauseOverlay.hide();
     if (this.homeButton) {
       this.homeButton.remove();
       this.homeButton = null;
+    }
+    if (this.pauseButton) {
+      this.pauseButton.remove();
+      this.pauseButton = null;
     }
     if (this.muteHandle) {
       this.muteHandle.remove();
@@ -720,6 +857,10 @@ export class HUD {
     if (this.boostButton) {
       this.boostButton.remove();
       this.boostButton = null;
+    }
+    if (this.boostHintEl) {
+      this.boostHintEl.remove();
+      this.boostHintEl = null;
     }
     if (this.cooldownContainer) {
       this.cooldownContainer.remove();

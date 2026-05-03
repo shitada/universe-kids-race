@@ -385,6 +385,7 @@ describe('Stage Flow Integration', () => {
         saveState.bestStageStars = { ...(nextData.bestStageStars ?? {}) };
       }),
       clear: vi.fn(),
+      resetProgressPreservingSettings: vi.fn(),
       markTutorialShown: vi.fn(() => {
         saveState.tutorialShown = true;
       }),
@@ -439,7 +440,8 @@ describe('Stage Flow Integration', () => {
     expect(card?.getAttribute('data-next-stage-destination')).toBe('月');
     expect(card?.textContent).toContain('ぜんぶ クリア');
     expect(hint?.textContent).toContain('ステージ 1');
-    expect(hint?.textContent).toContain('さいしょから');
+    expect(hint?.textContent).toContain('もういちど');
+    expect(document.querySelector('[data-reset-progress-button]')?.textContent).toBe('さいしょから');
   });
 
   it('keeps StageScene uncreated during title while module prefetch is in flight, then transitions successfully', async () => {
@@ -558,7 +560,7 @@ describe('Stage Flow Integration', () => {
     expect(firstSceneRef.children.filter((child) => child.type === 'DirectionalLight')).toHaveLength(1);
   });
 
-  it('does not carry a released keyboard boost into the title → stage transition', async () => {
+  it('does not carry touch movement or HUD boost into the title → stage transition', async () => {
     const manager = new SceneManager();
     const canvas = document.createElement('canvas');
     Object.defineProperty(canvas, 'clientWidth', { value: 1024 });
@@ -602,13 +604,14 @@ describe('Stage Flow Integration', () => {
     });
 
     try {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
-      window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
-      expect(inputSystem.getState().boostPressed).toBe(false);
+      canvas.setPointerCapture = canvas.setPointerCapture ?? (() => {});
+      canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 100, pointerId: 1, bubbles: true }));
+      inputSystem.setBoostPressed(true);
+      expect(inputSystem.getState()).toEqual({ moveDirection: -1, boostPressed: true });
 
       await manager.transitionTo('title');
       await manager.transitionTo('stage', { stageNumber: 1 });
-      expect(inputSystem.getState().boostPressed).toBe(false);
+      expect(inputSystem.getState()).toEqual({ moveDirection: 0, boostPressed: false });
 
       const internal = stageScene as unknown as {
         countdownOverlay: { dispose(): void } | null;

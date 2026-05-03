@@ -35,7 +35,7 @@ function pointerMove(canvas: HTMLCanvasElement, clientX: number, pointerId = 1):
   );
 }
 
-describe('InputSystem — keyboard', () => {
+describe('InputSystem — touch-only input', () => {
   let input: InputSystem;
   let canvas: HTMLCanvasElement;
 
@@ -50,19 +50,15 @@ describe('InputSystem — keyboard', () => {
     canvas.remove();
   });
 
-  it('ArrowLeft keydown sets moveDirection to -1', () => {
+  it('ignores ArrowLeft and ArrowRight keyboard events', () => {
     keyDown('ArrowLeft');
-    expect(input.getState().moveDirection).toBe(-1);
-  });
+    expect(input.getState().moveDirection).toBe(0);
 
-  it('ArrowRight keydown sets moveDirection to 1', () => {
     keyDown('ArrowRight');
-    expect(input.getState().moveDirection).toBe(1);
-  });
+    expect(input.getState().moveDirection).toBe(0);
 
-  it('ArrowLeft + ArrowRight simultaneous sets moveDirection to 0', () => {
-    keyDown('ArrowLeft');
-    keyDown('ArrowRight');
+    keyUp('ArrowLeft');
+    keyUp('ArrowRight');
     expect(input.getState().moveDirection).toBe(0);
   });
 
@@ -70,64 +66,28 @@ describe('InputSystem — keyboard', () => {
     { key: ' ', label: 'space character' },
     { key: 'Spacebar', label: 'legacy Spacebar key' },
     { key: 'Unidentified', code: 'Space', label: 'Space code fallback' },
-  ])('Space-compatible keydown (%s) sets boostPressed to true', ({ key, code }) => {
+  ])('ignores boost-related keyboard events: %s', ({ key, code }) => {
     keyDown(key, code ? { code } : undefined);
-    expect(input.getState().boostPressed).toBe(true);
-  });
-
-  it.each([
-    { key: ' ', label: 'space character' },
-    { key: 'Spacebar', label: 'legacy Spacebar key' },
-    { key: 'Unidentified', code: 'Space', label: 'Space code fallback' },
-  ])('Space-compatible keyup (%s) resets boostPressed to false', ({ key, code }) => {
-    keyDown(key, code ? { code } : undefined);
-    expect(input.getState().boostPressed).toBe(true);
-    keyUp(key, code ? { code } : undefined);
     expect(input.getState().boostPressed).toBe(false);
+
+    input.setBoostPressed(true);
+    keyUp(key, code ? { code } : undefined);
+    expect(input.getState().boostPressed).toBe(true);
   });
 
-  it('ArrowLeft keyup resets moveDirection to 0', () => {
-    keyDown('ArrowLeft');
-    expect(input.getState().moveDirection).toBe(-1);
-    keyUp('ArrowLeft');
-    expect(input.getState().moveDirection).toBe(0);
+  it('setBoostPressed updates boostPressed directly for HUD-driven boost input', () => {
+    input.setBoostPressed(true);
+    expect(input.getState()).toEqual({ moveDirection: 0, boostPressed: true });
+
+    input.setBoostPressed(false);
+    expect(input.getState()).toEqual({ moveDirection: 0, boostPressed: false });
   });
 
-  it('e.repeat=true keydown is ignored', () => {
-    keyDown('ArrowLeft');
-    expect(input.getState().moveDirection).toBe(-1);
-    keyUp('ArrowLeft');
-    expect(input.getState().moveDirection).toBe(0);
-    // repeat event should not re-register the key
-    keyDown('ArrowLeft', { repeat: true });
-    expect(input.getState().moveDirection).toBe(0);
-  });
-
-  it('dispose() stops keyboard events from being handled', () => {
+  it('dispose() stops keyboard events from changing state', () => {
     input.dispose();
     keyDown('ArrowLeft');
-    // After dispose, a fresh state is created with moveDirection=0
-    expect(input.getState().moveDirection).toBe(0);
-  });
-
-  it('pointer left + keyboard right merges to moveDirection 0', () => {
-    // Pointer on left side (clientX < half of 1024)
-    pointerDown(canvas, 100);
-    expect(input.getState().moveDirection).toBe(-1);
-    // Add keyboard right
-    keyDown('ArrowRight');
-    expect(input.getState().moveDirection).toBe(0);
-    // Release pointer, only keyboard right remains
-    pointerUp(canvas);
-    expect(input.getState().moveDirection).toBe(1);
-  });
-
-  it('Space keyup clears boost without affecting ArrowRight movement', () => {
-    keyDown('ArrowRight');
     keyDown(' ');
-    expect(input.getState()).toEqual({ moveDirection: 1, boostPressed: true });
-    keyUp(' ');
-    expect(input.getState()).toEqual({ moveDirection: 1, boostPressed: false });
+    expect(input.getState()).toEqual({ moveDirection: 0, boostPressed: false });
   });
 });
 
@@ -161,17 +121,14 @@ describe('InputSystem — pointermove tracking', () => {
   });
 
   it('pointermove within hysteresis dead zone keeps previous direction', () => {
-    // canvas width 1024, half = 512, dead zone ±2% (±20.48px) → [491.52, 532.48]
     pointerDown(canvas, 100);
     expect(input.getState().moveDirection).toBe(-1);
-    // Move into the dead zone — must stay -1
     pointerMove(canvas, 512);
     expect(input.getState().moveDirection).toBe(-1);
     pointerMove(canvas, 525);
     expect(input.getState().moveDirection).toBe(-1);
     pointerMove(canvas, 495);
     expect(input.getState().moveDirection).toBe(-1);
-    // Move clearly outside the dead zone
     pointerMove(canvas, 600);
     expect(input.getState().moveDirection).toBe(1);
   });
@@ -210,14 +167,11 @@ describe('InputSystem — pointermove tracking', () => {
   });
 
   it('two pointers: moving one across center does not affect the other', () => {
-    // Pointer 1 on left, pointer 2 on right → both active → moveDirection 0
     pointerDown(canvas, 100, 1);
     pointerDown(canvas, 900, 2);
     expect(input.getState().moveDirection).toBe(0);
-    // Move pointer 1 to right side; pointer 2 still right → both right → moveDirection 1
     pointerMove(canvas, 800, 1);
     expect(input.getState().moveDirection).toBe(1);
-    // Move pointer 2 to left side; pointer 1 still right → mixed → 0
     pointerMove(canvas, 100, 2);
     expect(input.getState().moveDirection).toBe(0);
   });
@@ -231,28 +185,13 @@ describe('InputSystem — pointermove tracking', () => {
     expect(input.getState().moveDirection).toBe(0);
   });
 
-  it('pointermove + keyboard composition follows existing precedence (left+right → 0)', () => {
-    pointerDown(canvas, 100);
-    expect(input.getState().moveDirection).toBe(-1);
-    // Slide pointer to right side
-    pointerMove(canvas, 900);
-    expect(input.getState().moveDirection).toBe(1);
-    // Hold keyboard left → mixed → 0
-    keyDown('ArrowLeft');
-    expect(input.getState().moveDirection).toBe(0);
-    keyUp('ArrowLeft');
-    expect(input.getState().moveDirection).toBe(1);
-  });
-
   it('pointermove ignored when canvas clientWidth is 0', () => {
-    // Replace canvas with one having width 0
     input.dispose();
     const zeroCanvas = document.createElement('canvas');
     Object.defineProperty(zeroCanvas, 'clientWidth', { value: 0 });
     document.body.appendChild(zeroCanvas);
     input = new InputSystem();
     input.setup(zeroCanvas);
-    // pointer events with width 0 must not crash or change direction
     zeroCanvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 0, pointerId: 1, bubbles: true }));
     const before = input.getState().moveDirection;
     zeroCanvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 100, pointerId: 1, bubbles: true }));
@@ -292,7 +231,6 @@ describe('InputSystem — passive pointermove & cached width', () => {
     expect(moveAdd).toBeDefined();
     expect(moveAdd!.options).toEqual({ passive: true });
 
-    // Other pointer listeners must remain non-passive (default — no options arg).
     const downAdd = addSpy.find((e) => e.type === 'pointerdown');
     expect(downAdd).toBeDefined();
     expect(downAdd!.options).toBeUndefined();
@@ -305,23 +243,18 @@ describe('InputSystem — passive pointermove & cached width', () => {
 
   it('sideOf() uses the cached width from notifyResize() instead of clientWidth', () => {
     const canvas = document.createElement('canvas');
-    // Initial DOM width 1000 → half=500, deadZone=20 → clientX=600 is right.
     Object.defineProperty(canvas, 'clientWidth', { configurable: true, value: 1000 });
     document.body.appendChild(canvas);
     const input = new InputSystem();
     input.setup(canvas);
 
-    // Now mutate clientWidth in a way notifyResize would NOT see, and also
-    // call notifyResize with a *different* width to prove sideOf trusts the
-    // cached value rather than re-reading clientWidth.
     Object.defineProperty(canvas, 'clientWidth', { configurable: true, value: 200 });
-    input.notifyResize(2000); // half=1000, deadZone=40 → clientX=600 is left
+    input.notifyResize(2000);
 
     canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 600, pointerId: 1, bubbles: true }));
     expect(input.getState().moveDirection).toBe(-1);
 
-    // Update cache again — boundary moves back so clientX=600 becomes right.
-    input.notifyResize(800); // half=400, deadZone=16 → clientX=600 is right
+    input.notifyResize(800);
     canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 600, pointerId: 1, bubbles: true }));
     expect(input.getState().moveDirection).toBe(1);
 
@@ -338,7 +271,6 @@ describe('InputSystem — passive pointermove & cached width', () => {
 
     input.notifyResize(0);
     input.notifyResize(-50);
-    // Cached width should remain the original 1000 (half=500); clientX=900 → right
     canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 900, pointerId: 1, bubbles: true }));
     expect(input.getState().moveDirection).toBe(1);
 
@@ -360,17 +292,15 @@ describe('InputSystem — focus/visibility reset', () => {
   afterEach(() => {
     input.dispose();
     canvas.remove();
-    // restore visibility default
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
   });
 
-  it('window blur clears pressedKeys and resets moveDirection to 0', () => {
-    keyDown('ArrowLeft');
+  it('window blur clears active pointers and resets moveDirection to 0', () => {
+    pointerDown(canvas, 100);
     expect(input.getState().moveDirection).toBe(-1);
     window.dispatchEvent(new Event('blur'));
     expect(input.getState().moveDirection).toBe(0);
-    // Subsequent keyup should not produce side effects
-    keyUp('ArrowLeft');
+    pointerUp(canvas);
     expect(input.getState().moveDirection).toBe(0);
   });
 
@@ -380,13 +310,12 @@ describe('InputSystem — focus/visibility reset', () => {
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
     document.dispatchEvent(new Event('visibilitychange'));
     expect(input.getState().moveDirection).toBe(0);
-    // After reset, pointerup for the same id must be a no-op (no negative side effects)
     pointerUp(canvas);
     expect(input.getState().moveDirection).toBe(0);
   });
 
   it('visibilitychange (hidden=false) does NOT reset inputs', () => {
-    keyDown('ArrowRight');
+    pointerDown(canvas, 900);
     expect(input.getState().moveDirection).toBe(1);
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
     document.dispatchEvent(new Event('visibilitychange'));
@@ -394,41 +323,42 @@ describe('InputSystem — focus/visibility reset', () => {
   });
 
   it('pagehide clears inputs (iOS Safari background fallback)', () => {
-    keyDown('ArrowLeft');
-    expect(input.getState().moveDirection).toBe(-1);
+    pointerDown(canvas, 100);
+    input.setBoostPressed(true);
+    expect(input.getState()).toEqual({ moveDirection: -1, boostPressed: true });
     window.dispatchEvent(new Event('pagehide'));
-    expect(input.getState().moveDirection).toBe(0);
+    expect(input.getState()).toEqual({ moveDirection: 0, boostPressed: false });
   });
 
   it('blur also resets boostPressed to false', () => {
-    keyDown(' ');
+    input.setBoostPressed(true);
     expect(input.getState().boostPressed).toBe(true);
     window.dispatchEvent(new Event('blur'));
     expect(input.getState().boostPressed).toBe(false);
   });
 
-  it('Space keyup stays cleared before and after blur / visibility resets', () => {
+  it('keyboard events remain ignored before and after blur / visibility resets', () => {
     keyDown(' ');
-    keyUp(' ');
-    expect(input.getState().boostPressed).toBe(false);
+    keyDown('ArrowLeft');
+    expect(input.getState()).toEqual({ moveDirection: 0, boostPressed: false });
 
     window.dispatchEvent(new Event('blur'));
-    expect(input.getState().boostPressed).toBe(false);
+    expect(input.getState()).toEqual({ moveDirection: 0, boostPressed: false });
 
     keyDown('Spacebar');
     keyUp('Spacebar');
-    expect(input.getState().boostPressed).toBe(false);
+    expect(input.getState()).toEqual({ moveDirection: 0, boostPressed: false });
 
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
     document.dispatchEvent(new Event('visibilitychange'));
-    expect(input.getState().boostPressed).toBe(false);
+    expect(input.getState()).toEqual({ moveDirection: 0, boostPressed: false });
   });
 
-  it('after reset, new keypress still updates moveDirection (listeners not removed)', () => {
-    keyDown('ArrowLeft');
+  it('after reset, new pointer input still updates moveDirection', () => {
+    pointerDown(canvas, 100);
     window.dispatchEvent(new Event('blur'));
     expect(input.getState().moveDirection).toBe(0);
-    keyDown('ArrowRight');
+    pointerDown(canvas, 900, 2);
     expect(input.getState().moveDirection).toBe(1);
   });
 
@@ -455,7 +385,6 @@ describe('InputSystem — focus/visibility reset', () => {
       sys.dispose();
       c.remove();
     }
-    // Reinitialize for afterEach to dispose cleanly
     input = new InputSystem();
     canvas = createCanvas();
     input.setup(canvas);
@@ -469,7 +398,6 @@ describe('InputSystem — pointer capture', () => {
   beforeEach(() => {
     input = new InputSystem();
     canvas = createCanvas();
-    // Provide setPointerCapture stub (jsdom does not implement it)
     canvas.setPointerCapture = canvas.setPointerCapture ?? (() => {});
     input.setup(canvas);
   });
@@ -489,7 +417,6 @@ describe('InputSystem — pointer capture', () => {
   it('lostpointercapture cleans up ghost pointer', () => {
     pointerDown(canvas, 900, 10);
     expect(input.getState().moveDirection).toBe(1);
-    // Simulate capture loss without pointerup
     canvas.dispatchEvent(
       new PointerEvent('lostpointercapture', { pointerId: 10, bubbles: true }),
     );
@@ -499,7 +426,6 @@ describe('InputSystem — pointer capture', () => {
   it('lostpointercapture for unknown pointer is a no-op', () => {
     pointerDown(canvas, 100, 1);
     expect(input.getState().moveDirection).toBe(-1);
-    // lostpointercapture for a different pointer ID — should not affect state
     canvas.dispatchEvent(
       new PointerEvent('lostpointercapture', { pointerId: 999, bubbles: true }),
     );
@@ -530,14 +456,13 @@ describe('InputSystem — resetPointers', () => {
     expect(input.getState().moveDirection).toBe(0);
   });
 
-  it('does not clear keyboard state', () => {
-    keyDown('ArrowLeft');
+  it('does not clear HUD-triggered boost state', () => {
+    input.setBoostPressed(true);
     pointerDown(canvas, 900, 1);
-    // left + right → 0
-    expect(input.getState().moveDirection).toBe(0);
-    // resetPointers clears only pointers; ArrowLeft key remains
+
     input.resetPointers();
-    expect(input.getState().moveDirection).toBe(-1);
+
+    expect(input.getState()).toEqual({ moveDirection: 0, boostPressed: true });
   });
 
   it('subsequent pointerup after resetPointers is a no-op', () => {

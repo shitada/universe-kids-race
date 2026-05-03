@@ -5,6 +5,9 @@ import { HUD } from '../../../src/ui/HUD';
 describe('HUD', () => {
   let hud: HUD;
 
+  const getPauseButton = (): HTMLButtonElement =>
+    document.querySelector('#hud button[aria-label="やすむ"]') as HTMLButtonElement;
+
   beforeEach(() => {
     // Create #hud and #ui-overlay elements
     const hudRoot = document.createElement('div');
@@ -173,6 +176,46 @@ describe('HUD', () => {
         backBtn.dispatchEvent(new Event('pointerup', { bubbles: true }));
         expect(called).toBe(1);
       });
+    });
+  });
+
+  describe('Pause Button', () => {
+    it('creates pause button element in #hud', () => {
+      hud.show('🌙 つきを めざせ！');
+      const pauseBtn = getPauseButton();
+      expect(pauseBtn).not.toBeNull();
+      expect(pauseBtn.textContent).toBe('⏸ やすむ');
+    });
+
+    it('positions pause button beside home with a large tap target', () => {
+      hud.show('🌙 つきを めざせ！');
+      const pauseBtn = getPauseButton();
+      expect(pauseBtn.style.position).toBe('absolute');
+      expect(pauseBtn.style.top).toBe('0.8rem');
+      expect(pauseBtn.style.left).toBe('4.5rem');
+      expect(pauseBtn.style.minHeight).toBe('3rem');
+      expect(pauseBtn.style.minWidth).toBe('6rem');
+    });
+
+    it('opens pause overlay and fires resume callback only from つづける', () => {
+      const onOpen = vi.fn();
+      const onResume = vi.fn();
+      hud.show('🌙 つきを めざせ！');
+      hud.setPauseOpenCallback(onOpen);
+      hud.setPauseResumeCallback(onResume);
+
+      getPauseButton().dispatchEvent(new Event('pointerdown'));
+
+      expect(onOpen).toHaveBeenCalledTimes(1);
+      expect(onResume).not.toHaveBeenCalled();
+      expect(document.querySelector('[data-pause-overlay]')).not.toBeNull();
+
+      const continueButton = document.querySelector<HTMLButtonElement>('[data-pause-continue]')!;
+      continueButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      continueButton.dispatchEvent(new Event('pointerup', { bubbles: true }));
+
+      expect(onResume).toHaveBeenCalledTimes(1);
+      expect(document.querySelector('[data-pause-overlay]')).toBeNull();
     });
   });
 

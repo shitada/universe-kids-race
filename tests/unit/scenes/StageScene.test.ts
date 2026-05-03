@@ -195,7 +195,7 @@ describe('StageScene cleanupPassedObjects', () => {
   });
 });
 
-describe('StageScene boost activation SFX feedback (PC keyboard parity with HUD)', () => {
+describe('StageScene boost activation SFX feedback (HUD/touch boost)', () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="hud"></div><div id="ui-overlay"></div>';
   });
@@ -258,7 +258,7 @@ describe('StageScene boost activation SFX feedback (PC keyboard parity with HUD)
 
     audioManager.playSFX.mockClear();
 
-    // Simulate PC keyboard Space press during cooldown.
+    // Simulate the HUD boost button press during cooldown.
     inputState.boostPressed = true;
     internal.update(0.016);
 
@@ -458,6 +458,54 @@ describe('StageScene best-stage-stars-update feedback on clear', () => {
     expect(sfxCalls).not.toContain('rainbowCollect');
   });
 
+  it('shows current and best medal progress on the clear overlay', () => {
+    const { scene } = setupClearScene({
+      stageNumber: 2,
+      earnedStars: 4,
+      previousBest: 9,
+      alreadyUnlocked: true,
+    });
+
+    (scene as unknown as { onStageClear(): void }).onStageClear();
+
+    const currentMedal = document.querySelector(
+      '[data-stage-medal-display][data-stage-medal-scope="stage-clear-current"]',
+    ) as HTMLElement | null;
+    const bestMedal = document.querySelector(
+      '[data-stage-medal-display][data-stage-medal-scope="stage-clear-best"]',
+    ) as HTMLElement | null;
+
+    expect(currentMedal).not.toBeNull();
+    expect(currentMedal?.getAttribute('data-stage-medal-earned')).toBe('1');
+    expect(currentMedal?.textContent).toContain('⭐ 4');
+
+    expect(bestMedal).not.toBeNull();
+    expect(bestMedal?.getAttribute('data-stage-medal-earned')).toBe('2');
+    expect(bestMedal?.textContent).toContain('⭐ 9');
+  });
+
+  it('upgrades both current and best medal progress after a new personal best', () => {
+    const { scene } = setupClearScene({
+      stageNumber: 1,
+      earnedStars: 8,
+      previousBest: 5,
+      alreadyUnlocked: true,
+    });
+
+    (scene as unknown as { onStageClear(): void }).onStageClear();
+
+    const currentMedal = document.querySelector(
+      '[data-stage-medal-display][data-stage-medal-scope="stage-clear-current"]',
+    ) as HTMLElement | null;
+    const bestMedal = document.querySelector(
+      '[data-stage-medal-display][data-stage-medal-scope="stage-clear-best"]',
+    ) as HTMLElement | null;
+
+    expect(currentMedal?.getAttribute('data-stage-medal-earned')).toBe('3');
+    expect(bestMedal?.getAttribute('data-stage-medal-earned')).toBe('3');
+    expect(bestMedal?.textContent).toContain('⭐ 8');
+  });
+
   it('inserts the best-update line between "やったね" and "⭐ N こ" lines', () => {
     const { scene } = setupClearScene({
       stageNumber: 2,
@@ -468,8 +516,7 @@ describe('StageScene best-stage-stars-update feedback on clear', () => {
 
     (scene as unknown as { onStageClear(): void }).onStageClear();
 
-    const overlayDiv = (scene as unknown as { clearOverlay: HTMLDivElement | null })
-      .clearOverlay;
+    const overlayDiv = document.querySelector('[data-stage-clear-overlay]');
     expect(overlayDiv).not.toBeNull();
     const texts = Array.from(overlayDiv!.children)
       .filter((el) => !(el as HTMLElement).hasAttribute('data-stage-clear-burst'))
@@ -678,7 +725,7 @@ describe('StageScene cumulative totals on re-entry', () => {
       boostLinesEffect: { getObject(): THREE.LineSegments | null };
       boostFlameEffect: { getObject(): THREE.Points | null };
       destinationPlanet: THREE.Group | null;
-      clearOverlay: HTMLDivElement | null;
+      stageClearOverlay: { show(options: unknown): void };
       damageTimer: number;
     };
 
@@ -701,8 +748,14 @@ describe('StageScene cumulative totals on re-entry', () => {
     internal.spaceship.activateBoost();
     internal.airShield.setShieldMode('BOOST');
     internal.damageTimer = 1;
-    internal.clearOverlay = document.createElement('div');
-    document.getElementById('ui-overlay')?.appendChild(internal.clearOverlay);
+    internal.stageClearOverlay.show({
+      stageNumber: 1,
+      starCount: 3,
+      bestStarCount: 3,
+      continueLabel: 'つぎへ',
+      onContinue: () => {},
+      onRetry: () => {},
+    });
 
     scene.exit();
     saveState.unlockedPlanets = [1, 2, 3, 4];
@@ -721,7 +774,7 @@ describe('StageScene cumulative totals on re-entry', () => {
     expect(internal.destinationPlanet).not.toBe(destinationPlanetRef);
 
     expect(internal.damageTimer).toBe(0);
-    expect(internal.clearOverlay).toBeNull();
+    expect(document.querySelector('[data-stage-clear-overlay]')).toBeNull();
     expect(internal.spaceship.position).toEqual({ x: 0, y: 0, z: 0 });
     expect(internal.spaceship.speedState).toBe('NORMAL');
     expect(internal.airShield.getMode()).toBe('OFF');

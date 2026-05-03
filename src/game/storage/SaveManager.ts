@@ -5,6 +5,8 @@ const STORAGE_KEY = 'universe-kids-race-save';
 const SESSION_KEY = 'universe-kids-race-session';
 const DEFAULT_DATA: SaveData = { clearedStage: 0, unlockedPlanets: [], muted: false, bestStageStars: {}, tutorialShown: false };
 
+export type SessionState = 'fresh' | 'existing' | 'unavailable';
+
 function defaults(): SaveData {
   return { ...DEFAULT_DATA, unlockedPlanets: [], bestStageStars: {}, tutorialShown: false };
 }
@@ -22,8 +24,6 @@ function cloneSaveData(src: SaveData): SaveData {
 }
 
 export class SaveManager {
-  private static sessionFallbackActive = false;
-
   // In-memory cache of the validated SaveData. Populated lazily on the first
   // load() call and invalidated on save()/clear()/reset paths. This avoids
   // the per-call cost of localStorage.getItem + JSON.parse + full revalidation
@@ -128,13 +128,12 @@ export class SaveManager {
     }
   }
 
-  // Resets only session progress data (clearedStage, unlockedPlanets,
-  // bestStageStars) while preserving stable preferences and onboarding state
-  // needed across Safari swipe-to-close on shared iPads.
-  // Used on Safari new-session detection so that mute preference, tutorial
-  // read-state, and adaptive pixel-ratio hint survive while gameplay progress
-  // returns to its first-run defaults.
-  resetSessionDataPreservingMuted(): void {
+  // Resets only gameplay progress (clearedStage, unlockedPlanets,
+  // bestStageStars) while preserving stable settings and onboarding state.
+  // Used both by the title-screen "さいしょから" flow and by Safari
+  // new-session detection so mute preference, tutorial read-state, and the
+  // adaptive pixel-ratio hint survive while progress returns to defaults.
+  resetProgressPreservingSettings(): void {
     try {
       const prev = this.load();
       const muted = prev.muted === true;
@@ -159,8 +158,13 @@ export class SaveManager {
       // Conservatively drop the cache so the next load() re-reads from
       // storage (which may be in an unknown intermediate state).
       this.cached = null;
-      console.warn('SaveManager.resetSessionDataPreservingMuted failed:', e);
+      console.warn('SaveManager.resetProgressPreservingSettings failed:', e);
     }
+  }
+
+  // Backward-compatible alias for the Safari session-reset path.
+  resetSessionDataPreservingMuted(): void {
+    this.resetProgressPreservingSettings();
   }
 
   // Updates the best (highest) star count for the given stage. Only persists
@@ -251,25 +255,22 @@ export class SaveManager {
     }
   }
 
-  // Returns true if this is a fresh session (no session flag yet).
-  // Safe against sessionStorage exceptions (iPad Safari private mode etc.).
-  // Also marks the session as active as a side-effect.
-  isFreshSession(): boolean {
+  // Returns whether this launch is a fresh session, an existing live session,
+  // or a sessionStorage-unavailable fallback case. Also marks the session as
+  // active when sessionStorage is fully usable.
+  getSessionState(): SessionState {
     try {
-      const fresh = !sessionStorage.getItem(SESSION_KEY) && !SaveManager.sessionFallbackActive;
+      const fresh = !sessionStorage.getItem(SESSION_KEY);
       try {
         sessionStorage.setItem(SESSION_KEY, 'active');
-        SaveManager.sessionFallbackActive = false;
       } catch (e) {
-        SaveManager.sessionFallbackActive = true;
-        console.warn('SaveManager.isFreshSession setItem failed:', e);
+        console.warn('SaveManager.getSessionState setItem failed:', e);
+        return 'unavailable';
       }
-      return fresh;
+      return fresh ? 'fresh' : 'existing';
     } catch (e) {
-      const fresh = !SaveManager.sessionFallbackActive;
-      SaveManager.sessionFallbackActive = true;
-      console.warn('SaveManager.isFreshSession getItem failed:', e);
-      return fresh;
+      console.warn('SaveManager.getSessionState getItem failed:', e);
+      return 'unavailable';
     }
   }
 }

@@ -90,7 +90,9 @@ describe('EncyclopediaOverlay', () => {
     expect(detailOverlay?.style.zIndex).toBe('50');
     expect(detailOverlay?.textContent).toContain('水星');
     expect(detailOverlay?.textContent).toContain('すいせいは たいように いちばん ちかい わくせいだよ');
-    expect(detailOverlay?.textContent).toContain('⭐ ベスト 5');
+    expect(
+      detailOverlay?.querySelector('[data-stage-medal-display][data-stage-medal-scope="encyclopedia-detail"]')?.textContent,
+    ).toContain('⭐ ベスト 5');
     expect(detailOverlay?.querySelector('[data-detail-play]')).toBeNull();
 
     const backBtn = uiOverlay.querySelector('[data-detail-back]') as HTMLElement;
@@ -143,7 +145,9 @@ describe('EncyclopediaOverlay', () => {
     expect(detail).not.toBeNull();
     expect(detail?.textContent).toContain('水星');
     expect(detail?.textContent).toContain('すいせいは たいように いちばん ちかい わくせいだよ');
-    expect(detail?.textContent).toContain('⭐ ベスト 4');
+    expect(
+      detail?.querySelector('[data-stage-medal-display][data-stage-medal-scope="encyclopedia-detail"]')?.textContent,
+    ).toContain('⭐ ベスト 4');
   });
 
   it('detail play button calls onSelectStage exactly once and hides overlay', () => {
@@ -180,60 +184,85 @@ describe('EncyclopediaOverlay', () => {
   });
 
   describe('bestStageStars display', () => {
-    it('does not show best label on unlocked card when no record exists', () => {
+    it('shows medal progress on unlocked card when no record exists', () => {
       overlay.show([1], () => {}, undefined, {});
       const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
-      expect(card.querySelector('[data-card-best]')).toBeNull();
+      const medal = card.querySelector(
+        '[data-stage-medal-display][data-stage-medal-scope="encyclopedia-card"]',
+      ) as HTMLElement | null;
+      expect(medal).not.toBeNull();
+      expect(medal?.getAttribute('data-stage-medal-earned')).toBe('0');
+      expect(medal?.textContent).toContain('つぎ ⭐ 2');
     });
 
-    it('does not show best label when bestStageStars omitted (backward compat)', () => {
+    it('shows medal progress when bestStageStars omitted (backward compat)', () => {
       overlay.show([1], () => {});
       const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
-      expect(card.querySelector('[data-card-best]')).toBeNull();
+      expect(
+        card.querySelector('[data-stage-medal-display][data-stage-medal-scope="encyclopedia-card"]'),
+      ).not.toBeNull();
     });
 
-    it('does not show best label when count is 0', () => {
+    it('shows empty medal progress when count is 0', () => {
       overlay.show([1], () => {}, undefined, { 1: 0 });
       const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
-      expect(card.querySelector('[data-card-best]')).toBeNull();
+      expect(
+        card.querySelector('[data-stage-medal-display][data-stage-medal-scope="encyclopedia-card"]')
+          ?.getAttribute('data-stage-medal-earned'),
+      ).toBe('0');
     });
 
-    it('shows "⭐ ベスト N" on unlocked card when a record exists', () => {
+    it('shows earned medals and best hint on unlocked card when a record exists', () => {
       overlay.show([1], () => {}, undefined, { 1: 7 });
       const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
-      const best = card.querySelector('[data-card-best]') as HTMLElement | null;
-      expect(best).not.toBeNull();
-      expect(best!.textContent).toBe('⭐ ベスト 7');
+      const medal = card.querySelector(
+        '[data-stage-medal-display][data-stage-medal-scope="encyclopedia-card"]',
+      ) as HTMLElement | null;
+      expect(medal).not.toBeNull();
+      expect(medal?.getAttribute('data-stage-medal-earned')).toBe('2');
+      expect(medal?.textContent).toContain('⭐ ベスト 7');
     });
 
-    it('does not show best label on locked card', () => {
+    it('does not show medal progress on locked card', () => {
       overlay.show([], () => {}, undefined, { 1: 9 });
       const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
-      expect(card.querySelector('[data-card-best]')).toBeNull();
+      expect(card.querySelector('[data-stage-medal-display]')).toBeNull();
     });
 
-    it('shows "⭐ ベスト N" inside detail view when a record exists', () => {
+    it('shows medal progress inside detail view when a record exists', () => {
       overlay.show([1], () => {}, undefined, { 1: 4 });
       const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
       card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-      const detailBest = uiOverlay.querySelector('[data-detail-best]') as HTMLElement | null;
-      expect(detailBest).not.toBeNull();
-      expect(detailBest!.textContent).toBe('⭐ ベスト 4');
+      const detailMedal = uiOverlay.querySelector(
+        '[data-stage-medal-display][data-stage-medal-scope="encyclopedia-detail"]',
+      ) as HTMLElement | null;
+      expect(detailMedal).not.toBeNull();
+      expect(detailMedal?.getAttribute('data-stage-medal-earned')).toBe('1');
+      expect(detailMedal?.textContent).toContain('⭐ ベスト 4');
     });
 
-    it('does not show best label inside detail when no record exists', () => {
+    it('shows next target inside detail when no record exists', () => {
       overlay.show([1], () => {}, undefined, {});
       const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
       card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-      expect(uiOverlay.querySelector('[data-detail-best]')).toBeNull();
+      expect(
+        uiOverlay.querySelector('[data-stage-medal-display][data-stage-medal-scope="encyclopedia-detail"]')
+          ?.textContent,
+      ).toContain('つぎ ⭐ 2');
     });
 
-    it('per-stage best counts render independently', () => {
+    it('per-stage medal counts render independently', () => {
       overlay.show([1, 2], () => {}, undefined, { 1: 3, 2: 8 });
       const c1 = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
       const c2 = uiOverlay.querySelector('[data-card][data-stage="2"]') as HTMLElement;
-      expect(c1.querySelector('[data-card-best]')!.textContent).toBe('⭐ ベスト 3');
-      expect(c2.querySelector('[data-card-best]')!.textContent).toBe('⭐ ベスト 8');
+      expect(
+        c1.querySelector('[data-stage-medal-display][data-stage-medal-scope="encyclopedia-card"]')
+          ?.getAttribute('data-stage-medal-earned'),
+      ).toBe('1');
+      expect(
+        c2.querySelector('[data-stage-medal-display][data-stage-medal-scope="encyclopedia-card"]')
+          ?.getAttribute('data-stage-medal-earned'),
+      ).toBe('2');
     });
   });
 });

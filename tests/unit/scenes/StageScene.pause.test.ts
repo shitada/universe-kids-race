@@ -64,9 +64,9 @@ function finishStartCountdown(scene: StageScene): void {
   for (let i = 0; i < 4; i++) internal.update(1.0);
 }
 
-function tapHomeButton(): void {
-  const homeButton = document.getElementById('hud')!.querySelector('button') as HTMLButtonElement;
-  homeButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+function tapPauseButton(): void {
+  const pauseButton = document.querySelector('#hud button[aria-label="やすむ"]') as HTMLButtonElement;
+  pauseButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
 }
 
 function confirmOverlayButtonTap(button: HTMLButtonElement): void {
@@ -74,23 +74,21 @@ function confirmOverlayButtonTap(button: HTMLButtonElement): void {
   button.dispatchEvent(new Event('pointerup', { bubbles: true }));
 }
 
-function dragOffAndRelease(button: HTMLButtonElement): void {
-  const overlayRoot = document.querySelector<HTMLDivElement>('[data-home-confirm-overlay]')!;
-  button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-  button.dispatchEvent(new Event('pointerleave', { bubbles: true }));
-  overlayRoot.dispatchEvent(new Event('pointerup', { bubbles: true }));
+function tapHomeButton(): void {
+  const homeButton = document.querySelector('#hud button[aria-label="ホームへ もどる"]') as HTMLButtonElement;
+  homeButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
 }
 
 function getBoostButton(): HTMLButtonElement {
   return document.querySelector('#ui-overlay button[aria-label="ブースト"]') as HTMLButtonElement;
 }
 
-describe('StageScene home confirm pause', () => {
+describe('StageScene pause', () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="hud"></div><div id="ui-overlay"></div>';
   });
 
-  it('ホーム確認表示中は宇宙船前進・スポーン・衝突判定が止まる', () => {
+  it('ポーズ表示中は宇宙船前進・スポーン・衝突判定が止まる', () => {
     const { scene } = createScene();
     scene.enter({ stageNumber: 1 });
     finishStartCountdown(scene);
@@ -105,18 +103,50 @@ describe('StageScene home confirm pause', () => {
     const spawnSpy = vi.spyOn(internal.spawnSystem, 'update');
     const collisionSpy = vi.spyOn(internal.collisionSystem, 'check');
 
-    tapHomeButton();
+    tapPauseButton();
     const z0 = internal.spaceship.position.z;
     internal.update(0.5);
 
-    expect(document.querySelector('[data-home-confirm-overlay]')).not.toBeNull();
+    expect(document.querySelector('[data-pause-overlay]')).not.toBeNull();
     expect(scene.isPlaying()).toBe(false);
+    expect(scene.isUserPaused()).toBe(true);
     expect(internal.spaceship.position.z).toBe(z0);
     expect(spawnSpy).not.toHaveBeenCalled();
     expect(collisionSpy).not.toHaveBeenCalled();
   });
 
-  it('✋ つづけるでホーム確認を閉じて復帰カウントダウンへ入る', () => {
+  it('手動ポーズ状態を isPlaying と分けて判定できる', () => {
+    const { scene } = createScene();
+    scene.enter({ stageNumber: 1 });
+    finishStartCountdown(scene);
+
+    expect(scene.isUserPaused()).toBe(false);
+
+    tapPauseButton();
+    expect(scene.isPlaying()).toBe(false);
+    expect(scene.isUserPaused()).toBe(true);
+
+    const continueButton = document.querySelector<HTMLButtonElement>('[data-pause-continue]')!;
+    confirmOverlayButtonTap(continueButton);
+
+    expect(scene.isUserPaused()).toBe(false);
+    expect(scene.isPlaying()).toBe(false);
+  });
+
+  it('ポーズを開くと残留ポインタ入力が解除される', () => {
+    const { scene, inputState, resetPointers } = createScene();
+    scene.enter({ stageNumber: 1 });
+    finishStartCountdown(scene);
+    resetPointers.mockClear();
+    inputState.moveDirection = 1;
+
+    tapPauseButton();
+
+    expect(resetPointers).toHaveBeenCalledTimes(1);
+    expect(inputState.moveDirection).toBe(0);
+  });
+
+  it('つづけるでポーズを閉じて復帰カウントダウンへ入る', () => {
     const { scene, resetPointers } = createScene();
     scene.enter({ stageNumber: 1 });
     finishStartCountdown(scene);
@@ -124,33 +154,18 @@ describe('StageScene home confirm pause', () => {
 
     const internal = scene as unknown as {
       awaitingResume: boolean;
-      isHomeConfirmOpen: boolean;
+      isPauseOpen: boolean;
     };
 
-    tapHomeButton();
-    const continueButton = document.querySelector<HTMLButtonElement>(
-      '[data-home-confirm-continue]',
-    )!;
+    tapPauseButton();
+    const continueButton = document.querySelector<HTMLButtonElement>('[data-pause-continue]')!;
     confirmOverlayButtonTap(continueButton);
 
-    expect(document.querySelector('[data-home-confirm-overlay]')).toBeNull();
+    expect(document.querySelector('[data-pause-overlay]')).toBeNull();
     expect(document.querySelector('[data-countdown-overlay]')).not.toBeNull();
     expect(internal.awaitingResume).toBe(true);
-    expect(internal.isHomeConfirmOpen).toBe(false);
+    expect(internal.isPauseOpen).toBe(false);
     expect(resetPointers).toHaveBeenCalledTimes(2);
-  });
-
-  it('ホーム確認を開くと残留ポインタ入力が解除される', () => {
-    const { scene, inputState, resetPointers } = createScene();
-    scene.enter({ stageNumber: 1 });
-    finishStartCountdown(scene);
-    resetPointers.mockClear();
-    inputState.moveDirection = 1;
-
-    tapHomeButton();
-
-    expect(resetPointers).toHaveBeenCalledTimes(1);
-    expect(inputState.moveDirection).toBe(0);
   });
 
   it('つづける後の復帰カウントダウン完了後も宇宙船が横に流れない', () => {
@@ -164,10 +179,8 @@ describe('StageScene home confirm pause', () => {
       update(dt: number): void;
     };
 
-    tapHomeButton();
-    const continueButton = document.querySelector<HTMLButtonElement>(
-      '[data-home-confirm-continue]',
-    )!;
+    tapPauseButton();
+    const continueButton = document.querySelector<HTMLButtonElement>('[data-pause-continue]')!;
     confirmOverlayButtonTap(continueButton);
 
     const xBeforeResume = internal.spaceship.position.x;
@@ -178,62 +191,13 @@ describe('StageScene home confirm pause', () => {
     expect(internal.spaceship.position.x).toBe(xBeforeResume);
   });
 
-  it('🏠 タイトルへ もどるで title 遷移を 1 回だけ要求する', () => {
-    const { scene, sceneManager } = createScene();
-    scene.enter({ stageNumber: 1 });
-    finishStartCountdown(scene);
-
-    tapHomeButton();
-    const backButton = document.querySelector<HTMLButtonElement>(
-      '[data-home-confirm-back]',
-    )!;
-    confirmOverlayButtonTap(backButton);
-
-    expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
-    expect(sceneManager.requestTransition).toHaveBeenCalledWith('title');
-    expect(document.querySelector('[data-home-confirm-overlay]')).toBeNull();
-  });
-
-  it('確認ボタンを押して外へずらして離すと title 遷移も復帰も起きない', () => {
-    const { scene, sceneManager } = createScene();
-    scene.enter({ stageNumber: 1 });
-    finishStartCountdown(scene);
-
-    const internal = scene as unknown as {
-      awaitingResume: boolean;
-      isHomeConfirmOpen: boolean;
-    };
-
-    tapHomeButton();
-    const continueButton = document.querySelector<HTMLButtonElement>(
-      '[data-home-confirm-continue]',
-    )!;
-    dragOffAndRelease(continueButton);
-
-    expect(document.querySelector('[data-home-confirm-overlay]')).not.toBeNull();
-    expect(document.querySelector('[data-countdown-overlay]')).toBeNull();
-    expect(sceneManager.requestTransition).not.toHaveBeenCalled();
-    expect(internal.awaitingResume).toBe(false);
-    expect(internal.isHomeConfirmOpen).toBe(true);
-
-    const backButton = document.querySelector<HTMLButtonElement>(
-      '[data-home-confirm-back]',
-    )!;
-    dragOffAndRelease(backButton);
-
-    expect(document.querySelector('[data-home-confirm-overlay]')).not.toBeNull();
-    expect(sceneManager.requestTransition).not.toHaveBeenCalled();
-    expect(internal.awaitingResume).toBe(false);
-    expect(internal.isHomeConfirmOpen).toBe(true);
-  });
-
-  it('ホーム確認表示中はブーストボタンが無効で queued boost も破棄される', () => {
+  it('ポーズ表示中はブーストボタンが無効で queued boost も破棄される', () => {
     const { scene, inputState } = createScene();
     scene.enter({ stageNumber: 1 });
     finishStartCountdown(scene);
     inputState.boostPressed = true;
 
-    tapHomeButton();
+    tapPauseButton();
 
     const boostButton = getBoostButton();
     expect(boostButton.getAttribute('aria-disabled')).toBe('true');
@@ -242,13 +206,35 @@ describe('StageScene home confirm pause', () => {
     internal.update(0.1);
     expect(inputState.boostPressed).toBe(false);
 
-    const continueButton = document.querySelector<HTMLButtonElement>(
-      '[data-home-confirm-continue]',
-    )!;
+    const continueButton = document.querySelector<HTMLButtonElement>('[data-pause-continue]')!;
     confirmOverlayButtonTap(continueButton);
     expect(boostButton.getAttribute('aria-disabled')).toBe('true');
 
     for (let i = 0; i < 4; i++) internal.update(1.0);
     expect(boostButton.getAttribute('aria-disabled')).toBe('false');
+  });
+
+  it('ポーズ再開後にホーム確認を開いてもオーバーレイが二重表示されない', () => {
+    const { scene } = createScene();
+    scene.enter({ stageNumber: 1 });
+    finishStartCountdown(scene);
+
+    const internal = scene as unknown as {
+      awaitingResume: boolean;
+      isHomeConfirmOpen: boolean;
+      isPauseOpen: boolean;
+    };
+
+    tapPauseButton();
+    const continueButton = document.querySelector<HTMLButtonElement>('[data-pause-continue]')!;
+    confirmOverlayButtonTap(continueButton);
+    tapHomeButton();
+
+    expect(document.querySelector('[data-pause-overlay]')).toBeNull();
+    expect(document.querySelector('[data-home-confirm-overlay]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-home-confirm-overlay]').length).toBe(1);
+    expect(internal.awaitingResume).toBe(true);
+    expect(internal.isHomeConfirmOpen).toBe(true);
+    expect(internal.isPauseOpen).toBe(false);
   });
 });

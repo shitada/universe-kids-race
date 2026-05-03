@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { STAGE_CONFIGS, getStageConfig } from '../../../src/game/config/StageConfig';
+import { STAGE_CONFIGS, getStageConfig, getStageMedalStatus } from '../../../src/game/config/StageConfig';
 
 describe('StageConfig', () => {
   it('has exactly 11 stage configs', () => {
@@ -50,6 +50,15 @@ describe('StageConfig', () => {
     }
   });
 
+  it('defines three ascending medal thresholds for every stage', () => {
+    for (const config of STAGE_CONFIGS) {
+      expect(config.medalThresholds).toHaveLength(3);
+      expect(config.medalThresholds[0]).toBeGreaterThan(0);
+      expect(config.medalThresholds[1]).toBeGreaterThan(config.medalThresholds[0]);
+      expect(config.medalThresholds[2]).toBeGreaterThan(config.medalThresholds[1]);
+    }
+  });
+
   it('getStageConfig returns correct config for each stage', () => {
     for (let i = 1; i <= 11; i++) {
       const config = getStageConfig(i);
@@ -66,13 +75,39 @@ describe('StageConfig', () => {
     const mercury = getStageConfig(2);
     expect(mercury.stageLength).toBe(1100);
     expect(mercury.meteoriteInterval).toBe(2.8);
+    expect(mercury.medalThresholds).toEqual([3, 6, 10]);
 
     const venus = getStageConfig(3);
     expect(venus.stageLength).toBe(1150);
     expect(venus.meteoriteInterval).toBe(2.6);
+    expect(venus.medalThresholds).toEqual([3, 7, 11]);
 
     const earth = getStageConfig(11);
     expect(earth.stageLength).toBe(2700);
     expect(earth.meteoriteInterval).toBe(0.5);
+    expect(earth.medalThresholds).toEqual([12, 24, 36]);
+  });
+
+  it('returns medal progress from star counts', () => {
+    expect(getStageMedalStatus(1, 0)).toMatchObject({
+      tier: 'none',
+      earnedCount: 0,
+      nextThreshold: 2,
+    });
+    expect(getStageMedalStatus(1, 2)).toMatchObject({
+      tier: 'bronze',
+      earnedCount: 1,
+      nextThreshold: 5,
+    });
+    expect(getStageMedalStatus(1, 5)).toMatchObject({
+      tier: 'silver',
+      earnedCount: 2,
+      nextThreshold: 8,
+    });
+    expect(getStageMedalStatus(1, 8)).toMatchObject({
+      tier: 'gold',
+      earnedCount: 3,
+      nextThreshold: null,
+    });
   });
 });
