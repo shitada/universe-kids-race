@@ -109,9 +109,28 @@ describe('StageScene pause', () => {
 
     expect(document.querySelector('[data-pause-overlay]')).not.toBeNull();
     expect(scene.isPlaying()).toBe(false);
+    expect(scene.isUserPaused()).toBe(true);
     expect(internal.spaceship.position.z).toBe(z0);
     expect(spawnSpy).not.toHaveBeenCalled();
     expect(collisionSpy).not.toHaveBeenCalled();
+  });
+
+  it('手動ポーズ状態を isPlaying と分けて判定できる', () => {
+    const { scene } = createScene();
+    scene.enter({ stageNumber: 1 });
+    finishStartCountdown(scene);
+
+    expect(scene.isUserPaused()).toBe(false);
+
+    tapPauseButton();
+    expect(scene.isPlaying()).toBe(false);
+    expect(scene.isUserPaused()).toBe(true);
+
+    const continueButton = document.querySelector<HTMLButtonElement>('[data-pause-continue]')!;
+    confirmOverlayButtonTap(continueButton);
+
+    expect(scene.isUserPaused()).toBe(false);
+    expect(scene.isPlaying()).toBe(false);
   });
 
   it('ポーズを開くと残留ポインタ入力が解除される', () => {

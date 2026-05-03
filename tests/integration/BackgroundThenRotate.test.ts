@@ -112,6 +112,7 @@ function makeFakeEnv(initial: { width: number; height: number }): FakeWindowHand
 interface SceneStub {
   type: 'title' | 'stage' | 'ending';
   isPlaying: () => boolean;
+  isUserPaused: () => boolean;
 }
 
 interface WiringHandles {
@@ -138,14 +139,17 @@ function setupWiring(opts: {
   height: number;
   scene: 'title' | 'stage' | 'ending';
   stagePlaying?: boolean;
+  userPaused?: boolean;
 }): WiringHandles {
   const fake = makeFakeEnv({ width: opts.width, height: opts.height });
   const resumeOverlay = new ResumeOverlay();
   const orientationHintOverlay = new OrientationHintOverlay();
   const stagePlaying = opts.stagePlaying ?? true;
+  const userPaused = opts.userPaused ?? false;
   const scene: SceneStub = {
     type: opts.scene,
-    isPlaying: () => opts.scene === 'stage' && stagePlaying,
+    isPlaying: () => opts.scene === 'stage' && stagePlaying && !userPaused,
+    isUserPaused: () => opts.scene === 'stage' && userPaused,
   };
 
   const pause = vi.fn();
@@ -178,15 +182,38 @@ function setupWiring(opts: {
     });
   };
 
-  const handleVisibilityRestore = (): void => {
-    if (isPortraitLocked) return;
-    if (scene.type === 'stage' && isPaused() && scene.isPlaying()) {
+  const getStageRestoreMode = (
+    allowResumeOverlay: boolean,
+  ): 'resume-overlay' | 'keep-paused' | 'immediate-resume' => {
+    if (scene.type !== 'stage' || !isPaused()) {
+      return 'immediate-resume';
+    }
+    if (scene.isUserPaused()) {
+      return 'keep-paused';
+    }
+    if (allowResumeOverlay && scene.isPlaying()) {
+      return 'resume-overlay';
+    }
+    return 'immediate-resume';
+  };
+
+  const applyStageRestoreMode = (allowResumeOverlay: boolean): void => {
+    const restoreMode = getStageRestoreMode(allowResumeOverlay);
+    if (restoreMode === 'resume-overlay') {
       showStageResumeOverlay();
-    } else {
-      resumeOverlay.hide();
-      pendingBackgroundResume = false;
+      return;
+    }
+
+    resumeOverlay.hide();
+    pendingBackgroundResume = false;
+    if (restoreMode === 'immediate-resume') {
       resumeGame();
     }
+  };
+
+  const handleVisibilityRestore = (): void => {
+    if (isPortraitLocked) return;
+    applyStageRestoreMode(true);
   };
 
   const detachVisibility = createVisibilityPauseHandler({
@@ -215,17 +242,7 @@ function setupWiring(opts: {
       if (!isPortraitLocked) return;
       isPortraitLocked = false;
       orientationHintOverlay.hide();
-      if (
-        pendingBackgroundResume &&
-        scene.type === 'stage' &&
-        isPaused() &&
-        scene.isPlaying()
-      ) {
-        showStageResumeOverlay();
-      } else {
-        pendingBackgroundResume = false;
-        resumeGame();
-      }
+      applyStageRestoreMode(pendingBackgroundResume);
     },
   });
   orientationHandler.evaluate();
@@ -451,6 +468,40 @@ describe('background-then-rotate integration', () => {
     expect(w.resumeOverlay.isVisible()).toBe(false);
     expect(w.requestResumeCountdown).not.toHaveBeenCalled();
     expect(w.resume).toHaveBeenCalledTimes(1);
+    expect(w.getPendingBackgroundResume()).toBe(false);
+
+    w.dispose();
+  });
+
+  it('stage(user-paused): bg → fg(portrait) → landscape keeps pause overlay state without auto resume', () => {
+    const w = setupWiring({
+      width: 1024,
+      height: 768,
+      scene: 'stage',
+      stagePlaying: false,
+      userPaused: true,
+    });
+
+    w.fake.setHidden(true);
+    w.fake.fireVisibilityChange();
+    w.fake.setSize(768, 1024);
+    w.fake.fireOrientationChange();
+    w.fake.flushTimers();
+
+    w.fake.setHidden(false);
+    w.fake.fireVisibilityChange();
+    expect(w.resumeOverlay.isVisible()).toBe(false);
+    expect(w.getPendingBackgroundResume()).toBe(true);
+
+    w.fake.setSize(1024, 768);
+    w.fake.fireOrientationChange();
+    w.fake.flushTimers();
+
+    expect(w.orientationHintOverlay.isVisible()).toBe(false);
+    expect(w.resumeOverlay.isVisible()).toBe(false);
+    expect(w.requestResumeCountdown).not.toHaveBeenCalled();
+    expect(w.resume).not.toHaveBeenCalled();
+    expect(w.isPaused()).toBe(true);
     expect(w.getPendingBackgroundResume()).toBe(false);
 
     w.dispose();

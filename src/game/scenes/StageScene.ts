@@ -496,6 +496,10 @@ export class StageScene implements Scene {
     return true;
   }
 
+  isUserPaused(): boolean {
+    return this.isPauseOpen;
+  }
+
   /**
    * バックグラウンド復帰直後に「3・2・1・スタート！」を挟んでから
    * プレイを再開させる。プレイ中でない場合や既に復帰カウントダウン中の
