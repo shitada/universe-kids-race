@@ -11,7 +11,7 @@ import { createSceneTransitionHandler } from './utils/createSceneTransitionHandl
 import { createWebGLContextLossHandler } from './utils/createWebGLContextLossHandler';
 import { createVisibilityPauseHandler } from './utils/createVisibilityPauseHandler';
 import { createRenderer } from './utils/createRenderer';
-import { getViewportSize, subscribeViewportResize } from './utils/getViewportSize';
+import { getViewportSize, subscribeViewportResize, updateViewportSizeCache } from './utils/getViewportSize';
 import { resolveInitialPixelTier } from './utils/resolveInitialPixelTier';
 import { ContextLossOverlay } from '../ui/ContextLossOverlay';
 import { ResumeOverlay } from '../ui/ResumeOverlay';
@@ -70,7 +70,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
     renderer.setPixelRatio(pixelRatioTiers[clamped]);
     lastAppliedWidth = 0;
     lastAppliedHeight = 0;
-    const { width, height } = getViewportSize();
+    const { width, height } = updateViewportSizeCache();
     applyRendererSize(width, height);
   }
 
@@ -243,7 +243,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
 
   function refreshViewportAfterRestore(): void {
     pixelRatioController.notifyResume(performance.now());
-    const { width, height } = getViewportSize();
+    const { width, height } = updateViewportSizeCache();
     resizeCoalescer.schedule(width, height);
     resizeCoalescer.flush();
   }

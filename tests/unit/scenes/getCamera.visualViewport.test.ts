@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { TitleScene } from '../../../src/game/scenes/TitleScene';
 import { EndingScene } from '../../../src/game/scenes/EndingScene';
 import { StageScene } from '../../../src/game/scenes/StageScene';
+import { updateViewportSizeCache } from '../../../src/game/utils/getViewportSize';
 import type { SceneManager } from '../../../src/game/SceneManager';
 import type { SaveManager } from '../../../src/game/storage/SaveManager';
 import type { AudioManager } from '../../../src/game/audio/AudioManager';
@@ -77,18 +78,21 @@ beforeEach(() => {
   document.body.appendChild(overlay);
   setWindowSize(1024, 768);
   clearVisualViewport();
+  updateViewportSizeCache();
 });
 
 afterEach(() => {
   const overlay = document.getElementById('ui-overlay');
   if (overlay) overlay.remove();
   clearVisualViewport();
+  updateViewportSizeCache();
 });
 
 describe('getCamera() uses getViewportSize() (visualViewport priority)', () => {
   it('TitleScene aspect follows visualViewport, ignoring window.innerWidth/Height', () => {
     setVisualViewport(900, 600);
     setWindowSize(1024, 768);
+    updateViewportSizeCache();
     const scene = new TitleScene(
       createMockSceneManager(),
       createMockSaveManager(),
@@ -108,6 +112,7 @@ describe('getCamera() uses getViewportSize() (visualViewport priority)', () => {
   it('EndingScene aspect follows visualViewport when window.innerHeight diverges (URL-bar case)', () => {
     setVisualViewport(900, 600);
     setWindowSize(900, 800); // simulate iPad Safari URL bar visible
+    updateViewportSizeCache();
     const scene = new EndingScene(
       createMockSceneManager(),
       createMockSaveManager(),
@@ -119,9 +124,10 @@ describe('getCamera() uses getViewportSize() (visualViewport priority)', () => {
     scene.exit();
   });
 
-  it('StageScene aspect follows visualViewport on getCamera()', () => {
+  it('StageScene aspect follows visualViewport after the cached viewport is refreshed', () => {
     setVisualViewport(900, 600);
     setWindowSize(1280, 720);
+    updateViewportSizeCache();
     const scene = new StageScene(
       createMockSceneManager(),
       createMockInputSystem(),
@@ -133,6 +139,7 @@ describe('getCamera() uses getViewportSize() (visualViewport priority)', () => {
     expect(cam.aspect).toBeCloseTo(900 / 600);
 
     setVisualViewport(800, 500);
+    updateViewportSizeCache();
     scene.getCamera();
     expect(cam.aspect).toBeCloseTo(800 / 500);
     scene.exit();
@@ -141,6 +148,7 @@ describe('getCamera() uses getViewportSize() (visualViewport priority)', () => {
   it('falls back to window.innerWidth/Height when visualViewport is undefined', () => {
     clearVisualViewport();
     setWindowSize(1280, 720);
+    updateViewportSizeCache();
     const scene = new TitleScene(
       createMockSceneManager(),
       createMockSaveManager(),
@@ -154,6 +162,7 @@ describe('getCamera() uses getViewportSize() (visualViewport priority)', () => {
 
   it('does not call updateProjectionMatrix when aspect is unchanged across calls (visualViewport stable)', () => {
     setVisualViewport(900, 600);
+    updateViewportSizeCache();
     const scene = new StageScene(
       createMockSceneManager(),
       createMockInputSystem(),
@@ -167,6 +176,30 @@ describe('getCamera() uses getViewportSize() (visualViewport priority)', () => {
     scene.getCamera();
     scene.getCamera();
     expect(spy).toHaveBeenCalledTimes(0);
+    scene.exit();
+  });
+
+  it('updates TitleScene aspect only after the viewport cache is refreshed for URL-bar/orientation changes', () => {
+    setVisualViewport(900, 600);
+    updateViewportSizeCache();
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager(),
+      createMockAudioManager(),
+    );
+    scene.enter({});
+    const cam = scene.getCamera() as THREE.PerspectiveCamera;
+    const spy = vi.spyOn(cam, 'updateProjectionMatrix');
+
+    setVisualViewport(600, 900);
+    scene.getCamera();
+    expect(cam.aspect).toBeCloseTo(900 / 600);
+    expect(spy).toHaveBeenCalledTimes(0);
+
+    updateViewportSizeCache();
+    scene.getCamera();
+    expect(cam.aspect).toBeCloseTo(600 / 900);
+    expect(spy).toHaveBeenCalledTimes(1);
     scene.exit();
   });
 });

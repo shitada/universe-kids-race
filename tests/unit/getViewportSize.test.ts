@@ -1,5 +1,10 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
-import { getViewportSize, subscribeViewportResize } from '../../src/game/utils/getViewportSize';
+import {
+  getViewportSize,
+  subscribeViewportResize,
+  updateViewportSizeCache,
+} from '../../src/game/utils/getViewportSize';
 
 function makeEventTarget() {
   const listeners = new Map<string, Set<() => void>>();
@@ -18,6 +23,22 @@ function makeEventTarget() {
       return listeners.get(type)?.size ?? 0;
     },
   };
+}
+
+function setWindowSize(width: number, height: number): void {
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: height });
+}
+
+function setVisualViewport(width: number, height: number): void {
+  Object.defineProperty(window, 'visualViewport', {
+    configurable: true,
+    value: { width, height, addEventListener: () => {}, removeEventListener: () => {} },
+  });
+}
+
+function clearVisualViewport(): void {
+  Object.defineProperty(window, 'visualViewport', { configurable: true, value: undefined });
 }
 
 describe('getViewportSize', () => {
@@ -47,6 +68,23 @@ describe('getViewportSize', () => {
       visualViewport: { width: 0, height: NaN },
     };
     expect(getViewportSize(win)).toEqual({ width: 320, height: 200 });
+  });
+
+  it('caches the global viewport until explicitly refreshed', () => {
+    setWindowSize(1024, 768);
+    setVisualViewport(900, 600);
+
+    expect(updateViewportSizeCache()).toEqual({ width: 900, height: 600 });
+    expect(getViewportSize()).toEqual({ width: 900, height: 600 });
+
+    setWindowSize(2048, 1536);
+    setVisualViewport(800, 500);
+
+    expect(getViewportSize()).toEqual({ width: 900, height: 600 });
+    expect(updateViewportSizeCache()).toEqual({ width: 800, height: 500 });
+    expect(getViewportSize()).toEqual({ width: 800, height: 500 });
+
+    clearVisualViewport();
   });
 });
 

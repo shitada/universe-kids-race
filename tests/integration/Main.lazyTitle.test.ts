@@ -186,6 +186,7 @@ async function bootMain(
 
   vi.doMock('../../src/game/utils/getViewportSize', () => ({
     getViewportSize: () => ({ width: 1024, height: 768 }),
+    updateViewportSizeCache: () => ({ width: 1024, height: 768 }),
     subscribeViewportResize: vi.fn(),
   }));
 
