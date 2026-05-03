@@ -26,6 +26,7 @@ import { ScorePopupManager } from '../../ui/ScorePopupManager';
 import { getNextPlanetEncyclopediaEntry, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { TouchGuideOverlay, type TouchGuideMode } from '../../ui/TouchGuideOverlay';
 import { attachReleaseConfirmButton } from '../../ui/attachReleaseConfirmButton';
+import { PauseOverlay } from '../../ui/PauseOverlay';
 import {
   __resetStageSceneSharedAssetCachesForTest,
   __stageSceneSharedAssetCachesForTest,
@@ -61,6 +62,12 @@ type EncyclopediaOverlayInstance = InstanceType<EncyclopediaOverlayCtor>;
 interface StageSceneOptions {
   scheduleIdleTask?: (callback: () => void) => void;
   loadEncyclopediaOverlay?: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
+}
+
+interface StagePauseHandlers {
+  onPauseRequested?: () => void;
+  onResumeRequested?: () => void;
+  onExitHomeRequested?: () => void;
 }
 
 export class StageScene implements Scene {
@@ -180,6 +187,8 @@ export class StageScene implements Scene {
   private resumeCountdownOverlay: CountdownOverlay | null = null;
   private isHomeConfirmOpen = false;
   private shouldResumeAfterHomeConfirm = false;
+  private pauseOverlay = new PauseOverlay();
+  private isPauseOverlayOpen = false;
   private touchGuide = new TouchGuideOverlay();
   private touchGuideMode: TouchGuideMode = 'intro';
   private touchGuideIdleTimer = 0;
@@ -192,6 +201,9 @@ export class StageScene implements Scene {
   private readonly loadEncyclopediaOverlay: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
   private clearRewardRequestToken = 0;
   private readonly clearButtonCleanups = new Set<() => void>();
+  private onPauseRequested: (() => void) | null = null;
+  private onResumeRequested: (() => void) | null = null;
+  private onExitHomeRequested: (() => void) | null = null;
 
   constructor(
     sceneManager: SceneManager,
@@ -276,6 +288,8 @@ export class StageScene implements Scene {
     this.destinationPlanetSpinTarget = null;
     this.isHomeConfirmOpen = false;
     this.shouldResumeAfterHomeConfirm = false;
+    this.isPauseOverlayOpen = false;
+    this.pauseOverlay.hide();
     this.touchGuideIdleTimer = 0;
     this.hasSeenMoveInput = false;
     this.touchGuideMode = 'intro';
@@ -336,22 +350,28 @@ export class StageScene implements Scene {
       this.isHomeConfirmOpen = false;
       this.shouldResumeAfterHomeConfirm = false;
       this.syncBoostInputLock();
+      this.syncPauseAvailability();
       this.sceneManager.requestTransition('title');
     });
     this.hud.setHomeConfirmOpenCallback(() => {
       this.shouldResumeAfterHomeConfirm = this.isPlaying();
       this.isHomeConfirmOpen = true;
       this.syncBoostInputLock();
+      this.syncPauseAvailability();
     });
     this.hud.setHomeConfirmCancelCallback(() => {
       const shouldResume = this.shouldResumeAfterHomeConfirm;
       this.isHomeConfirmOpen = false;
       this.shouldResumeAfterHomeConfirm = false;
+      this.syncPauseAvailability();
       if (shouldResume) {
         this.requestResumeCountdown();
         return;
       }
       this.syncBoostInputLock();
+    });
+    this.hud.setPauseCallback(() => {
+      this.requestManualPause();
     });
     this.hud.setMuteState(this.audioManager.isMuted());
     this.hud.setMuteCallback(() => {
@@ -364,6 +384,7 @@ export class StageScene implements Scene {
     this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
     this.hud.hideAssistMessage();
     this.touchGuide.show('intro');
+    this.syncPauseAvailability();
 
     // Companions
     const saveData = this.saveManager.load();
@@ -404,6 +425,7 @@ export class StageScene implements Scene {
   private startOpeningSequence(context: SceneContext): void {
     this.isStarting = true;
     this.syncBoostInputLock();
+    this.syncPauseAvailability();
 
     if (!this.shouldShowStageIntro(context)) {
       this.startCountdown();
@@ -426,10 +448,12 @@ export class StageScene implements Scene {
   private startCountdown(): void {
     this.isStarting = true;
     this.syncBoostInputLock();
+    this.syncPauseAvailability();
     if (this.shouldSkipCountdown()) {
       this.isStarting = false;
       this.countdownOverlay = null;
       this.syncBoostInputLock();
+      this.syncPauseAvailability();
       return;
     }
     this.countdownOverlay = new CountdownOverlay({
@@ -444,6 +468,7 @@ export class StageScene implements Scene {
       this.isStarting = false;
       this.countdownOverlay = null;
       this.syncBoostInputLock();
+      this.syncPauseAvailability();
     });
   }
 
@@ -456,11 +481,16 @@ export class StageScene implements Scene {
   }
 
   private syncBoostInputLock(): void {
-    const locked = this.isStarting || this.awaitingResume || this.isHomeConfirmOpen;
+    const locked =
+      this.isStarting || this.awaitingResume || this.isHomeConfirmOpen || this.isPauseOverlayOpen;
     this.hud.setBoostLocked(locked);
     if (locked) {
       this.inputSystem.setBoostPressed?.(false);
     }
+  }
+
+  private syncPauseAvailability(): void {
+    this.hud.setPauseEnabled(this.canPause());
   }
 
   private shouldSkipCountdown(): boolean {
@@ -486,9 +516,11 @@ export class StageScene implements Scene {
   isPlaying(): boolean {
     if (!this.stageConfig) return false;
     if (this.isCleared) return false;
+    if (this.isClearRewardOpen || this.isOpeningClearReward) return false;
     if (this.isStarting) return false;
     if (this.awaitingResume) return false;
     if (this.isHomeConfirmOpen) return false;
+    if (this.isPauseOverlayOpen) return false;
     return true;
   }
 
@@ -507,6 +539,7 @@ export class StageScene implements Scene {
 
     this.awaitingResume = true;
     this.syncBoostInputLock();
+    this.syncPauseAvailability();
     this.resumeCountdownOverlay = new CountdownOverlay({
       onTick: () => {
         this.audioManager.playSFX('countdownTick');
@@ -519,7 +552,52 @@ export class StageScene implements Scene {
       this.awaitingResume = false;
       this.resumeCountdownOverlay = null;
       this.syncBoostInputLock();
+      this.syncPauseAvailability();
     });
+  }
+
+  setPauseHandlers(handlers: StagePauseHandlers): void {
+    this.onPauseRequested = handlers.onPauseRequested ?? null;
+    this.onResumeRequested = handlers.onResumeRequested ?? null;
+    this.onExitHomeRequested = handlers.onExitHomeRequested ?? null;
+  }
+
+  isManuallyPaused(): boolean {
+    return this.isPauseOverlayOpen;
+  }
+
+  requestManualPause(): void {
+    if (!this.canPause()) return;
+
+    this.isPauseOverlayOpen = true;
+    this.syncBoostInputLock();
+    this.syncPauseAvailability();
+    this.pauseOverlay.show(
+      () => {
+        this.isPauseOverlayOpen = false;
+        this.syncBoostInputLock();
+        this.syncPauseAvailability();
+        this.onResumeRequested?.();
+      },
+      () => {
+        this.isPauseOverlayOpen = false;
+        this.syncBoostInputLock();
+        this.syncPauseAvailability();
+        this.onExitHomeRequested?.();
+      },
+    );
+    this.onPauseRequested?.();
+  }
+
+  private canPause(): boolean {
+    if (!this.stageConfig) return false;
+    if (this.isCleared) return false;
+    if (this.isClearRewardOpen || this.isOpeningClearReward) return false;
+    if (this.isStarting) return false;
+    if (this.awaitingResume) return false;
+    if (this.isHomeConfirmOpen) return false;
+    if (this.isPauseOverlayOpen) return false;
+    return true;
   }
 
   private createBackground(): void {
@@ -612,9 +690,9 @@ export class StageScene implements Scene {
     // countdown is showing, freeze input, spawning, and ship forward motion.
     // Only the destination planet's gentle spin and background-star centering
     // keep moving so the scene feels alive (Constitution I/IV).
-    if (this.isStarting || this.awaitingResume || this.isHomeConfirmOpen) {
+    if (this.isStarting || this.awaitingResume || this.isHomeConfirmOpen || this.isPauseOverlayOpen) {
       this.inputSystem.setBoostPressed?.(false);
-      if (!this.isHomeConfirmOpen) {
+      if (!this.isHomeConfirmOpen && !this.isPauseOverlayOpen) {
         const hadStageIntro = this.stageIntroOverlay?.isActive() ?? false;
         this.stageIntroOverlay?.tick(deltaTime);
         if (!hadStageIntro) {
@@ -1149,6 +1227,7 @@ export class StageScene implements Scene {
     this.hasHandledClearContinue = false;
     this.resetAssistNavigation();
     this.touchGuide.hide();
+    this.syncPauseAvailability();
     const isNewPlanetUnlock = this.saveManager.markStageCleared(this.stageNumber);
     this.audioManager.playSFX('stageClear');
     this.audioManager.stopBoostSFX();
@@ -1223,6 +1302,7 @@ export class StageScene implements Scene {
 
     const requestToken = this.clearRewardRequestToken;
     this.isOpeningClearReward = true;
+    this.syncPauseAvailability();
     if (this.clearRewardButton) {
       this.clearRewardButton.style.pointerEvents = 'none';
     }
@@ -1237,6 +1317,7 @@ export class StageScene implements Scene {
           return;
         }
         this.isClearRewardOpen = false;
+        this.syncPauseAvailability();
         this.restoreClearRewardButton();
       }, {
         bestStageStars: { [this.stageNumber]: starCount },
@@ -1248,6 +1329,7 @@ export class StageScene implements Scene {
         return;
       }
       this.isClearRewardOpen = true;
+      this.syncPauseAvailability();
     } catch {
       if (!this.isCurrentClearRewardRequest(requestToken)) {
         return;
@@ -1256,6 +1338,7 @@ export class StageScene implements Scene {
     } finally {
       if (this.clearRewardRequestToken === requestToken) {
         this.isOpeningClearReward = false;
+        this.syncPauseAvailability();
         if (!this.isClearRewardOpen) {
           this.restoreClearRewardButton();
         }
@@ -1759,6 +1842,7 @@ export class StageScene implements Scene {
     this.clearRewardButton = null;
     this.isClearRewardOpen = false;
     this.isOpeningClearReward = false;
+    this.pauseOverlay.hide();
     this.touchGuide.hide();
     this.hud.hide();
     this.scorePopupManager.dispose();
@@ -1780,6 +1864,7 @@ export class StageScene implements Scene {
     this.awaitingResume = false;
     this.isHomeConfirmOpen = false;
     this.shouldResumeAfterHomeConfirm = false;
+    this.isPauseOverlayOpen = false;
     this.boostFlameEffect.remove();
     this.boostLinesEffect.update(false, this.spaceship.position.x, this.spaceship.position.z);
     this.airShield.reset(this.spaceship.position.x, this.spaceship.position.y, this.spaceship.position.z);

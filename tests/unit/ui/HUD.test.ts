@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HUD } from '../../../src/ui/HUD';
 
 describe('HUD', () => {
@@ -173,6 +173,51 @@ describe('HUD', () => {
         backBtn.dispatchEvent(new Event('pointerup', { bubbles: true }));
         expect(called).toBe(1);
       });
+    });
+  });
+
+  describe('Pause Button', () => {
+    const getPauseBtn = (): HTMLButtonElement =>
+      Array.from(document.getElementById('hud')!.querySelectorAll('button')).find((button) =>
+        (button.textContent ?? '').includes('やすむ'),
+      ) as HTMLButtonElement;
+
+    it('creates a visible やすむ button in #hud', () => {
+      hud.show('Test');
+      const pauseBtn = getPauseBtn();
+      expect(pauseBtn).not.toBeNull();
+      expect(pauseBtn.textContent).toContain('やすむ');
+    });
+
+    it('invokes pause callback on release', () => {
+      const onPause = vi.fn();
+      hud.show('Test');
+      hud.setPauseCallback(onPause);
+
+      const pauseBtn = getPauseBtn();
+      pauseBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      pauseBtn.dispatchEvent(new Event('pointerup', { bubbles: true }));
+
+      expect(onPause).toHaveBeenCalledTimes(1);
+    });
+
+    it('setPauseEnabled(false) disables pause activation until re-enabled', () => {
+      const onPause = vi.fn();
+      hud.show('Test');
+      hud.setPauseCallback(onPause);
+
+      const pauseBtn = getPauseBtn();
+      hud.setPauseEnabled(false);
+      pauseBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      pauseBtn.dispatchEvent(new Event('pointerup', { bubbles: true }));
+      expect(onPause).not.toHaveBeenCalled();
+      expect(pauseBtn.getAttribute('aria-disabled')).toBe('true');
+
+      hud.setPauseEnabled(true);
+      pauseBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      pauseBtn.dispatchEvent(new Event('pointerup', { bubbles: true }));
+      expect(onPause).toHaveBeenCalledTimes(1);
+      expect(pauseBtn.getAttribute('aria-disabled')).toBe('false');
     });
   });
 

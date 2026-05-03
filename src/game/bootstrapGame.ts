@@ -47,6 +47,10 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
   let stageScene: StageScene | null = null;
   let hasScheduledStagePrefetch = false;
 
+  function isStageManuallyPaused(): boolean {
+    return (stageScene as (StageScene & { isManuallyPaused?: () => boolean }) | null)?.isManuallyPaused?.() === true;
+  }
+
   function applyRendererSize(width: number, height: number): void {
     if (width !== lastAppliedWidth || height !== lastAppliedHeight) {
       renderer.setSize(width, height);
@@ -161,6 +165,32 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
   sceneManager.registerSceneFactory('stage', async () => {
     const { StageScene } = await loadStageSceneModule();
     stageScene = new StageScene(sceneManager, inputSystem, audioManager, saveManager);
+    (stageScene as StageScene & {
+      setPauseHandlers?: (handlers: {
+        onPauseRequested?: () => void;
+        onResumeRequested?: () => void;
+        onExitHomeRequested?: () => void;
+      }) => void;
+    }).setPauseHandlers?.({
+      onPauseRequested: () => {
+        pendingBackgroundResume = false;
+        resumeOverlay.hide();
+        gameLoop.pause();
+        audioManager.suspend();
+      },
+      onResumeRequested: () => {
+        pendingBackgroundResume = false;
+        resumeOverlay.hide();
+        resumeGame();
+        stageScene?.requestResumeCountdown();
+      },
+      onExitHomeRequested: () => {
+        pendingBackgroundResume = false;
+        resumeOverlay.hide();
+        resumeGame();
+        void sceneManager.requestTransition('title');
+      },
+    });
     stageScene.setVisualQualityTier(currentVisualTier.value);
     return stageScene;
   });
@@ -273,6 +303,11 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
     if (isPortraitLocked) {
       return;
     }
+    if (isStageManuallyPaused()) {
+      resumeOverlay.hide();
+      pendingBackgroundResume = false;
+      return;
+    }
     if (shouldShowStageResumeOverlay()) {
       showStageResumeOverlay();
     } else {
@@ -284,7 +319,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
 
   createVisibilityPauseHandler({
     onHide: () => {
-      pendingBackgroundResume = true;
+      pendingBackgroundResume = !isStageManuallyPaused();
       gameLoop.pause();
       audioManager.suspend();
     },
@@ -305,6 +340,10 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
       isPortraitLocked = false;
       orientationHintOverlay.hide();
       refreshViewportAfterRestore();
+      if (isStageManuallyPaused()) {
+        pendingBackgroundResume = false;
+        return;
+      }
       if (pendingBackgroundResume && shouldShowStageResumeOverlay()) {
         showStageResumeOverlay();
       } else {
