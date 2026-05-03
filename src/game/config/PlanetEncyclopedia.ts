@@ -1,5 +1,10 @@
 import type { PlanetEncyclopediaEntry } from '../../types';
 
+export interface PlanetRewardPreview {
+  cardChipLabel: string;
+  companionChipLabel: string;
+}
+
 function createPlanetEncyclopediaEntry(
   entry: Omit<PlanetEncyclopediaEntry, 'encyclopediaLabel'>,
 ): PlanetEncyclopediaEntry {
@@ -121,4 +126,16 @@ export function getPlanetEncyclopediaEntry(stageNumber: number): PlanetEncyclope
 
 export function getNextPlanetEncyclopediaEntry(stageNumber: number): PlanetEncyclopediaEntry | undefined {
   return getPlanetEncyclopediaEntry(stageNumber + 1);
+}
+
+export function getPlanetRewardPreview(stageNumber: number): PlanetRewardPreview | undefined {
+  const entry = getPlanetEncyclopediaEntry(stageNumber);
+  if (!entry) {
+    return undefined;
+  }
+
+  return {
+    cardChipLabel: `📘 ${entry.emoji} ずかん`,
+    companionChipLabel: `👾 ${entry.emoji} なかま`,
+  };
 }

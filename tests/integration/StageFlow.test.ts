@@ -443,9 +443,11 @@ describe('Stage Flow Integration', () => {
 
     const card = document.querySelector('[data-next-adventure-card]') as HTMLDivElement | null;
     const hint = document.querySelector('[data-play-button-hint]') as HTMLDivElement | null;
+    const rewardPreview = document.querySelector('[data-next-reward-preview]') as HTMLDivElement | null;
     expect(card?.getAttribute('data-next-stage-number')).toBe('1');
     expect(card?.getAttribute('data-next-stage-destination')).toBe('つき');
-    expect(card?.textContent).toContain('ぜんぶ クリア');
+    expect(card?.textContent).toContain('ぜんぶ あつめたよ！');
+    expect(rewardPreview).toBeNull();
     expect(hint?.textContent).toContain('ステージ 1');
     expect(hint?.textContent).toContain('さいしょから');
   });

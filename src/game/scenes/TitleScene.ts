@@ -9,7 +9,7 @@ import { LoadFailureOverlay } from '../../ui/LoadFailureOverlay';
 import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButton';
 import { getStageConfig, TOTAL_STAGES } from '../config/StageConfig';
 import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
-import { getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
+import { getPlanetEncyclopediaEntry, getPlanetRewardPreview } from '../config/PlanetEncyclopedia';
 import { formatEncyclopediaLabel } from '../../ui/formatEncyclopediaLabel';
 import { getViewportSize } from '../utils/getViewportSize';
 import { attachReleaseConfirmButton } from '../../ui/attachReleaseConfirmButton';
@@ -106,6 +106,10 @@ interface NextAdventurePreview {
   statusLabel: string;
   destinationLabel: string;
   buttonHint: string;
+  rewardPreview?: {
+    cardChipLabel: string;
+    companionChipLabel: string;
+  };
 }
 
 function getUnlockedStageCount(unlockedPlanets: number[]): number {
@@ -131,7 +135,7 @@ function getNextAdventurePreview(saveData: SaveData): NextAdventurePreview {
       startStage,
       destination: stageConfig.destinationReading,
       emoji: stageConfig.emoji,
-      statusLabel: 'ぜんぶ クリア！',
+      statusLabel: 'ぜんぶ あつめたよ！',
       destinationLabel: `${stageConfig.destinationReading}へ さいしょから しゅっぱつ！`,
       buttonHint: `${stageConfig.emoji} ステージ ${startStage} から さいしょから あそぶ`,
     };
@@ -144,6 +148,7 @@ function getNextAdventurePreview(saveData: SaveData): NextAdventurePreview {
     statusLabel: saveData.clearedStage > 0 ? 'つづきから しゅっぱつ！' : 'はじめての しゅっぱつ！',
     destinationLabel: `${stageConfig.destinationReading}へ むかおう！`,
     buttonHint: `${stageConfig.emoji} ステージ ${startStage} から スタート`,
+    rewardPreview: getPlanetRewardPreview(startStage),
   };
 }
 
@@ -506,10 +511,67 @@ export class TitleScene implements Scene {
       color: rgba(255, 255, 255, 0.92);
     `;
 
+    const nextRewardPreview = nextAdventure.rewardPreview
+      ? document.createElement('div')
+      : null;
+    if (nextRewardPreview && nextAdventure.rewardPreview) {
+      nextRewardPreview.setAttribute('data-next-reward-preview', '');
+      nextRewardPreview.style.cssText = `
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: ${compact ? '0.35rem' : '0.45rem'};
+        margin-top: ${compact ? '0.45rem' : '0.6rem'};
+      `;
+
+      const nextRewardLabel = document.createElement('div');
+      nextRewardLabel.textContent = 'つぎにもらえる';
+      nextRewardLabel.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: ${compact ? '0.72rem' : '0.82rem'};
+        font-weight: 700;
+        color: #FFE66D;
+      `;
+
+      const nextRewardChips = document.createElement('div');
+      nextRewardChips.style.cssText = `
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: ${compact ? '0.35rem' : '0.45rem'};
+      `;
+
+      const createRewardChip = (label: string, type: 'card' | 'companion'): HTMLDivElement => {
+        const chip = document.createElement('div');
+        chip.setAttribute('data-next-reward-chip', type);
+        chip.textContent = label;
+        chip.style.cssText = `
+          font-family: 'Zen Maru Gothic', sans-serif;
+          font-size: ${compact ? '0.75rem' : '0.85rem'};
+          font-weight: 700;
+          color: #fff;
+          padding: ${compact ? '0.24rem 0.55rem' : '0.3rem 0.7rem'};
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.18);
+          box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+        `;
+        return chip;
+      };
+
+      nextRewardChips.append(
+        createRewardChip(nextAdventure.rewardPreview.cardChipLabel, 'card'),
+        createRewardChip(nextAdventure.rewardPreview.companionChipLabel, 'companion'),
+      );
+      nextRewardPreview.append(nextRewardLabel, nextRewardChips);
+    }
+
     nextAdventureCard.appendChild(nextAdventureHeading);
     nextAdventureCard.appendChild(nextAdventureStatus);
     nextAdventureCard.appendChild(nextAdventureStage);
     nextAdventureCard.appendChild(nextAdventureDestination);
+    if (nextRewardPreview) {
+      nextAdventureCard.appendChild(nextRewardPreview);
+    }
 
     const playArea = document.createElement('div');
     playArea.style.cssText = `
