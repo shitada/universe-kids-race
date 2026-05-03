@@ -1421,7 +1421,8 @@ export class StageScene implements Scene {
 
     this.clearOverlay.appendChild(score);
 
-    const nextEntry = getNextPlanetEncyclopediaEntry(this.stageNumber);
+    const showsNextPreview = this.launchSource === 'campaign';
+    const nextEntry = showsNextPreview ? getNextPlanetEncyclopediaEntry(this.stageNumber) : undefined;
     if (nextEntry) {
       const nextAdventureCard = document.createElement('section');
       nextAdventureCard.setAttribute('data-stage-clear-next-preview', '');
@@ -1610,7 +1611,11 @@ export class StageScene implements Scene {
     `;
 
     const continueButton = document.createElement('button');
-    const continueLabel = this.stageNumber >= TOTAL_STAGES ? 'おいわいへ' : 'つぎへ';
+    const continueLabel = this.launchSource === 'encyclopedia'
+      ? 'タイトルへ'
+      : this.stageNumber >= TOTAL_STAGES
+        ? 'おいわいへ'
+        : 'つぎへ';
     continueButton.setAttribute('data-stage-clear-continue', '');
     continueButton.setAttribute('aria-label', continueLabel);
     continueButton.textContent = continueLabel;

@@ -31,6 +31,7 @@ function createScene(options?: {
   stageNumber?: number;
   totalScore?: number;
   totalStarCount?: number;
+  launchSource?: 'campaign' | 'encyclopedia';
   saveData?: Partial<SaveData>;
   isNewPlanetUnlock?: boolean;
   earnedStars?: number;
@@ -89,6 +90,7 @@ function createScene(options?: {
     stageNumber,
     totalScore: options?.totalScore,
     totalStarCount: options?.totalStarCount,
+    launchSource: options?.launchSource,
     replayToken: 1,
   });
 
@@ -234,6 +236,29 @@ describe('StageScene clear CTA', () => {
     dispatchReleaseOutside(button);
 
     expect(sceneManager.requestTransition).not.toHaveBeenCalled();
+  });
+
+  it('ずかん起動ステージではCTAをタイトルへにし、つぎのぼうけんを表示しない', () => {
+    const { scene, sceneManager } = createScene({
+      stageNumber: 4,
+      launchSource: 'encyclopedia',
+      finalizeStageResult: { totalScore: 2400, totalStarCount: 14 },
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const button = getContinueButton();
+    expect(button.textContent).toBe('タイトルへ');
+    expect(button.getAttribute('aria-label')).toBe('タイトルへ');
+    expect(getNextPreviewCard()).toBeNull();
+    expect(document.querySelector('[data-stage-clear-next-title]')).toBeNull();
+
+    dispatchReleaseConfirm(button);
+
+    expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith('title');
   });
 
   it('通常ステージではつぎのわくせいプレビューを表示する', () => {

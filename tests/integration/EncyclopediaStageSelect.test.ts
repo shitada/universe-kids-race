@@ -12,6 +12,11 @@ import type { AudioManager } from '../../src/game/audio/AudioManager';
 import type { InputSystem } from '../../src/game/systems/InputSystem';
 import * as THREE from 'three';
 
+interface StageSceneInternals {
+  onStageClear(): void;
+  update(deltaTime: number): void;
+}
+
 function createTrackingScene(
   log: { type: SceneType; context: SceneContext }[],
   sceneType: SceneType,
@@ -39,6 +44,8 @@ function createMockSaveManager(): SaveManager {
     })),
     save: vi.fn(),
     clear: vi.fn(),
+    markStageCleared: vi.fn(() => false),
+    updateBestStageStars: vi.fn(),
     markTutorialShown: vi.fn(),
   } as unknown as SaveManager;
 }
@@ -72,11 +79,31 @@ function dispatchReleaseConfirm(button: HTMLElement): void {
   button.dispatchEvent(new Event('pointerup', { bubbles: true }));
 }
 
+function mockCanvasContext(): void {
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => {
+    return {
+      fillStyle: '',
+      strokeStyle: '',
+      lineWidth: 0,
+      fillRect: () => {},
+      clearRect: () => {},
+      beginPath: () => {},
+      arc: () => {},
+      fill: () => {},
+      stroke: () => {},
+      lineTo: () => {},
+      ellipse: () => {},
+    } as unknown as CanvasRenderingContext2D;
+  });
+}
+
 describe('Encyclopedia Stage Selection Integration', () => {
   let uiOverlay: HTMLDivElement;
   let hud: HTMLDivElement;
 
   beforeEach(() => {
+    vi.restoreAllMocks();
+    mockCanvasContext();
     uiOverlay = document.createElement('div');
     uiOverlay.id = 'ui-overlay';
     document.body.appendChild(uiOverlay);
@@ -455,5 +482,60 @@ describe('Encyclopedia Stage Selection Integration', () => {
 
     expect(stageInternal.scoreSystem.getTotalScore()).toBe(0);
     expect(stageInternal.scoreSystem.getTotalStarCount()).toBe(0);
+  });
+
+  it('ずかん起動ステージのクリア画面はタイトルへ表示で次プレビューを出さない', async () => {
+    const manager = new SceneManager();
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager();
+    const inputSystem = {
+      setBoostPressed: vi.fn(),
+      getState: vi.fn(() => ({ moveDirection: 0, boostPressed: false })),
+    } as unknown as InputSystem;
+    const titleScene = new TitleScene(manager, saveManager, audioManager, {
+      loadEncyclopediaOverlay: async () => ({ EncyclopediaOverlay }),
+    });
+    const stageScene = new StageScene(manager, inputSystem, audioManager, saveManager);
+    const stageInternal = stageScene as unknown as StageSceneInternals & {
+      countdownOverlay: { dispose(): void } | null;
+      isStarting: boolean;
+    };
+
+    manager.registerScene('title', titleScene);
+    manager.registerScene('stage', stageScene);
+
+    await manager.transitionTo('title');
+
+    const encyclopediaBtn = Array.from(uiOverlay.querySelectorAll('button')).find(
+      (button) => button.textContent?.includes('ずかん'),
+    ) as HTMLButtonElement;
+    dispatchReleaseConfirm(encyclopediaBtn);
+    await flushPromises();
+    await flushPromises();
+
+    const card = uiOverlay.querySelector('[data-card][data-stage="2"]') as HTMLElement;
+    card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+
+    const playButton = uiOverlay.querySelector('[data-detail-play]') as HTMLElement;
+    dispatchReleaseConfirm(playButton);
+    await flushPromises();
+
+    stageInternal.countdownOverlay?.dispose();
+    stageInternal.countdownOverlay = null;
+    stageInternal.isStarting = false;
+    stageInternal.onStageClear();
+    stageInternal.update(1);
+
+    const continueButton = document.querySelector('[data-stage-clear-continue]') as HTMLButtonElement | null;
+    expect(continueButton?.textContent).toBe('タイトルへ');
+    expect(document.querySelector('[data-stage-clear-next-preview]')).toBeNull();
+    expect(document.querySelector('[data-stage-clear-retry]')?.textContent).toBe('もういちど');
+    expect(document.querySelector('[data-stage-clear-overlay]')?.textContent).toContain('⭐');
+
+    dispatchReleaseConfirm(continueButton!);
+    await flushPromises();
+
+    expect(manager.getCurrentType()).toBe('title');
   });
 });
