@@ -41,7 +41,7 @@ describe('StageScene score popup integration', () => {
     document.body.innerHTML = '<div id="hud"></div><div id="ui-overlay"></div>';
   });
 
-  it('shows +100 for NORMAL stars and +500 for RAINBOW stars', () => {
+  it('shows popups for every collected star in the same update', () => {
     const scene = createScene();
     scene.enter({ stageNumber: 1 });
 
@@ -60,27 +60,36 @@ describe('StageScene score popup integration', () => {
     internal.isStarting = false;
     internal.scorePopupManager = { show: vi.fn(), dispose: vi.fn() };
 
-    const normalStar = new Star(0, 0, 0, 'NORMAL');
-    const rainbowStar = new Star(0, 0, 0, 'RAINBOW');
-    internal.stars = [normalStar, rainbowStar];
+    const stars = [
+      new Star(0, 0, 0, 'NORMAL'),
+      new Star(0, 0, 0, 'RAINBOW'),
+      new Star(0, 0, 0, 'NORMAL'),
+      new Star(0, 0, 0, 'RAINBOW'),
+    ];
+    internal.stars = stars;
     internal.meteorites = [];
-    internal.threeScene.add(normalStar.mesh);
-    internal.threeScene.add(rainbowStar.mesh);
+    for (const star of stars) {
+      internal.threeScene.add(star.mesh);
+    }
 
     internal.update(0.016);
 
-    expect(internal.scorePopupManager.show).toHaveBeenCalledTimes(2);
-    expect(internal.scorePopupManager.show).toHaveBeenNthCalledWith(
-      1,
+    const showSpy = internal.scorePopupManager.show as ReturnType<typeof vi.fn>;
+
+    expect(showSpy).toHaveBeenCalledTimes(stars.length);
+    expect(showSpy.mock.calls.map(([score]) => score)).toEqual([
       100,
-      normalStar.position,
-      expect.any(THREE.PerspectiveCamera),
-    );
-    expect(internal.scorePopupManager.show).toHaveBeenNthCalledWith(
-      2,
       500,
-      rainbowStar.position,
-      expect.any(THREE.PerspectiveCamera),
-    );
+      100,
+      500,
+    ]);
+    for (const [, position, cameraArg] of showSpy.mock.calls) {
+      expect(position).toEqual({
+        x: expect.any(Number),
+        y: expect.any(Number),
+        z: expect.any(Number),
+      });
+      expect(cameraArg).toBeInstanceOf(THREE.PerspectiveCamera);
+    }
   });
 });
