@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { StageScene } from '../../../src/game/scenes/StageScene';
+import { TOTAL_STAGES } from '../../../src/game/config/StageConfig';
 import type { SceneManager } from '../../../src/game/SceneManager';
 import type { InputSystem } from '../../../src/game/systems/InputSystem';
 import type { AudioManager } from '../../../src/game/audio/AudioManager';
@@ -25,12 +26,15 @@ function mockCanvasContext(): void {
   });
 }
 
-function createScene(): StageScene {
+function createScene(sceneManagerOverrides: Partial<SceneManager> = {}): StageScene {
   const inputState: { moveDirection: -1 | 0 | 1; boostPressed: boolean } = {
     moveDirection: 0,
     boostPressed: false,
   };
-  const sceneManager = { requestTransition: vi.fn() } as unknown as SceneManager;
+  const sceneManager = {
+    requestTransition: vi.fn(),
+    ...sceneManagerOverrides,
+  } as unknown as SceneManager;
   const inputSystem = {
     getState: () => inputState,
     setBoostPressed: (pressed: boolean) => {
@@ -144,5 +148,23 @@ describe('StageScene lazy initialization', () => {
     internal.countdownOverlay?.dispose();
     internal.countdownOverlay = null;
     internal.isStarting = false;
+  });
+
+  it('prefetches ending scene module from the penultimate stage', () => {
+    const prefetchSceneModule = vi.fn();
+    const scene = createScene({ prefetchSceneModule });
+
+    scene.enter({ stageNumber: TOTAL_STAGES - 1 });
+
+    expect(prefetchSceneModule).toHaveBeenCalledWith('ending');
+  });
+
+  it('does not prefetch ending scene module before the penultimate stage', () => {
+    const prefetchSceneModule = vi.fn();
+    const scene = createScene({ prefetchSceneModule });
+
+    scene.enter({ stageNumber: TOTAL_STAGES - 2 });
+
+    expect(prefetchSceneModule).not.toHaveBeenCalled();
   });
 });

@@ -1,15 +1,4 @@
-import {
-  AmbientLight,
-  BufferAttribute,
-  BufferGeometry,
-  Camera,
-  Color,
-  Group,
-  PerspectiveCamera,
-  Points,
-  PointsMaterial,
-  Scene as ThreeScene,
-} from 'three';
+import * as THREE from 'three';
 import type { SaveData, Scene, SceneContext } from '../../types';
 import type { SceneManager } from '../SceneManager';
 import type { SaveManager } from '../storage/SaveManager';
@@ -19,15 +8,17 @@ import { LoadingOverlay } from '../../ui/LoadingOverlay';
 import { LoadFailureOverlay } from '../../ui/LoadFailureOverlay';
 import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButton';
 import { getStageConfig, TOTAL_STAGES } from '../config/StageConfig';
-import { PLANET_ENCYCLOPEDIA, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
+import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
+import { getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { formatEncyclopediaLabel } from '../../ui/formatEncyclopediaLabel';
 import { getViewportSize } from '../utils/getViewportSize';
+import { prewarmStageVisualAssets } from './stageVisualAssets';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // SHARED background-star resources for TitleScene
 //
-// `enter()` は毎回 `Float32Array(3000)` の `BufferGeometry` と
-// `PointsMaterial` を新規生成していたが、対応する `exit()` で dispose されず
+// `enter()` は毎回 `Float32Array(3000)` の `THREE.BufferGeometry` と
+// `THREE.PointsMaterial` を新規生成していたが、対応する `exit()` で dispose されず
 // GPU バッファが滞留していた。HUD の 🏠 ボタンでタイトルへ何度も戻る構成のため
 // 再入場ごとに VBO アップロードと Math.random ループが走り、60fps 維持上の
 // 不利益となる。
@@ -38,25 +29,25 @@ import { getViewportSize } from '../utils/getViewportSize';
 // クリーンされた場合の安全網とする。
 // ──────────────────────────────────────────────────────────────────────────────
 
-let SHARED_TITLE_BG_STARS_GEOMETRY: BufferGeometry | null = null;
-let SHARED_TITLE_BG_STARS_MATERIAL: PointsMaterial | null = null;
+let SHARED_TITLE_BG_STARS_GEOMETRY: THREE.BufferGeometry | null = null;
+let SHARED_TITLE_BG_STARS_MATERIAL: THREE.PointsMaterial | null = null;
 
-function getTitleBgStarsGeometry(): BufferGeometry {
+function getTitleBgStarsGeometry(): THREE.BufferGeometry {
   if (!SHARED_TITLE_BG_STARS_GEOMETRY) {
-    const geo = new BufferGeometry();
+    const geo = new THREE.BufferGeometry();
     const positions = new Float32Array(3000);
     for (let i = 0; i < 3000; i++) {
       positions[i] = (Math.random() - 0.5) * 200;
     }
-    geo.setAttribute('position', new BufferAttribute(positions, 3));
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     SHARED_TITLE_BG_STARS_GEOMETRY = geo;
   }
   return SHARED_TITLE_BG_STARS_GEOMETRY;
 }
 
-function getTitleBgStarsMaterial(): PointsMaterial {
+function getTitleBgStarsMaterial(): THREE.PointsMaterial {
   if (!SHARED_TITLE_BG_STARS_MATERIAL) {
-    SHARED_TITLE_BG_STARS_MATERIAL = new PointsMaterial({
+    SHARED_TITLE_BG_STARS_MATERIAL = new THREE.PointsMaterial({
       color: 0xffffff,
       size: 0.3,
       sizeAttenuation: true,
@@ -78,8 +69,8 @@ export function __resetTitleSceneSharedAssetsForTest(): void {
  * テスト用フック: 内部キャッシュへ直接アクセスする。
  */
 export const __titleSceneSharedAssetsForTest = {
-  getBgStarsGeometry: (): BufferGeometry | null => SHARED_TITLE_BG_STARS_GEOMETRY,
-  getBgStarsMaterial: (): PointsMaterial | null => SHARED_TITLE_BG_STARS_MATERIAL,
+  getBgStarsGeometry: (): THREE.BufferGeometry | null => SHARED_TITLE_BG_STARS_GEOMETRY,
+  getBgStarsMaterial: (): THREE.PointsMaterial | null => SHARED_TITLE_BG_STARS_MATERIAL,
 };
 
 type EncyclopediaOverlayModule = typeof import('../../ui/EncyclopediaOverlay');
@@ -156,17 +147,17 @@ function getNextAdventurePreview(saveData: SaveData): NextAdventurePreview {
 }
 
 export class TitleScene implements Scene {
-  // Scene / AmbientLight はインスタンスで再利用し、🏠 ボタンによる再入場ごとの
+  // Scene / THREE.AmbientLight はインスタンスで再利用し、🏠 ボタンによる再入場ごとの
   // per-entry GPU/JS アロケーションを抑える。
-  private readonly threeScene: ThreeScene;
-  private readonly ambientLight: AmbientLight = new AmbientLight(0xffffff, 1);
-  private camera: PerspectiveCamera;
+  private readonly threeScene: THREE.Scene;
+  private readonly ambientLight: THREE.AmbientLight = new THREE.AmbientLight(0xffffff, 1);
+  private camera: THREE.PerspectiveCamera;
   private lastAspect = 0;
   private sceneManager: SceneManager;
   private saveManager: SaveManager;
   private audioManager: AudioManager;
-  private stars: Points | null = null;
-  private companionParade: Group | null = null;
+  private stars: THREE.Points | null = null;
+  private companionParade: THREE.Group | null = null;
   private overlay: HTMLDivElement | null = null;
   private muteHandle: MuteButtonHandle | null = null;
   private tutorialOverlay = new TutorialOverlay();
@@ -209,10 +200,10 @@ export class TitleScene implements Scene {
     this.loadTitleCompanionFactory =
       options.loadTitleCompanionFactory ??
       (() => import('../entities/CompanionMeshFactory'));
-    this.threeScene = new ThreeScene();
-    this.threeScene.background = new Color(0x000020);
+    this.threeScene = new THREE.Scene();
+    this.threeScene.background = new THREE.Color(0x000020);
     const { width: vw, height: vh } = getViewportSize();
-    this.camera = new PerspectiveCamera(
+    this.camera = new THREE.PerspectiveCamera(
       60,
       vw / vh,
       0.1,
@@ -228,7 +219,7 @@ export class TitleScene implements Scene {
     this.lastAspect = 0;
 
     // Starfield background (SHARED: 共有 geometry / material は dispose しない)
-    this.stars = new Points(getTitleBgStarsGeometry(), getTitleBgStarsMaterial());
+    this.stars = new THREE.Points(getTitleBgStarsGeometry(), getTitleBgStarsMaterial());
     this.stars.userData.sharedAssets = true;
     this.stars.rotation.set(0, 0, 0);
     this.threeScene.add(this.stars);
@@ -239,11 +230,12 @@ export class TitleScene implements Scene {
     }
 
     const saveData = this.saveManager.load();
-    this.scheduleCompanionParadeOnIdle(saveData.unlockedPlanets);
+    void this.createCompanionParade(saveData.unlockedPlanets);
 
     this.createOverlay();
     this.createMuteButton();
     this.prefetchEncyclopediaOnIdle();
+    this.prewarmNextAdventureOnIdle(getNextAdventurePreview(saveData).startStage);
 
     // タイトル BGM (BGM_0) を再生する。
     // - AudioContext が既に初期化済み（エンディング後・🏠 ボタン経由でタイトル
@@ -371,21 +363,16 @@ export class TitleScene implements Scene {
     });
   }
 
-  private isCurrentCompanionParadeRequest(requestToken: number): boolean {
-    return this.isActive && this.companionParadeRequestToken === requestToken;
-  }
-
-  private scheduleCompanionParadeOnIdle(unlockedPlanets: number[]): void {
-    if (unlockedPlanets.length === 0) {
+  private prewarmNextAdventureOnIdle(startStage: number): void {
+    if (startStage > TOTAL_STAGES) {
       return;
     }
-
-    const requestToken = this.companionParadeRequestToken;
+    const requestToken = this.encyclopediaRequestToken;
     this.scheduleIdleTask(() => {
-      if (!this.isCurrentCompanionParadeRequest(requestToken) || this.companionParade) {
+      if (!this.isCurrentEncyclopediaRequest(requestToken)) {
         return;
       }
-      void this.createCompanionParade(unlockedPlanets, requestToken);
+      prewarmStageVisualAssets(startStage);
     });
   }
 
@@ -590,6 +577,7 @@ export class TitleScene implements Scene {
       bottom: 2rem;
       right: 2rem;
     `;
+    tutorialBtn.style.position = 'absolute';
     tutorialBtn.style.bottom = '2rem';
     tutorialBtn.style.right = '2rem';
     tutorialBtn.addEventListener('pointerdown', (e) => {
@@ -623,6 +611,7 @@ export class TitleScene implements Scene {
       bottom: 2rem;
       left: 2rem;
     `;
+    encyclopediaBtn.style.position = 'absolute';
     encyclopediaBtn.style.bottom = '2rem';
     encyclopediaBtn.style.left = '2rem';
     this.encyclopediaBtn = encyclopediaBtn;
@@ -672,10 +661,9 @@ export class TitleScene implements Scene {
     );
   }
 
-  private async createCompanionParade(
-    unlockedPlanets: number[],
-    requestToken: number,
-  ): Promise<void> {
+  private async createCompanionParade(unlockedPlanets: number[]): Promise<void> {
+    this.clearCompanionParade();
+
     const unlockedEntries = [...new Set(unlockedPlanets)].reduce<Array<NonNullable<ReturnType<typeof getPlanetEncyclopediaEntry>>>>(
       (entries, stageNumber) => {
         const entry = getPlanetEncyclopediaEntry(stageNumber);
@@ -691,13 +679,13 @@ export class TitleScene implements Scene {
       return;
     }
 
+    const requestToken = this.encyclopediaRequestToken;
     const { createCompanionMesh } = await this.getTitleCompanionFactory();
-    if (!this.isCurrentCompanionParadeRequest(requestToken)) {
+    if (!this.isActive || this.encyclopediaRequestToken !== requestToken) {
       return;
     }
 
-    this.clearCompanionParade();
-    const group = new Group();
+    const group = new THREE.Group();
     group.name = 'title-companion-parade';
     group.position.set(0, 1.35, -1.2);
     group.rotation.x = -0.12;
@@ -761,6 +749,7 @@ export class TitleScene implements Scene {
       this.stars.parent?.remove(this.stars);
       this.stars = null;
     }
+    this.clearCompanionParade();
     if (this.overlay) {
       this.overlay.remove();
       this.overlay = null;
@@ -772,11 +761,11 @@ export class TitleScene implements Scene {
     }
   }
 
-  getThreeScene(): ThreeScene {
+  getThreeScene(): THREE.Scene {
     return this.threeScene;
   }
 
-  getCamera(): Camera {
+  getCamera(): THREE.Camera {
     const { width, height } = getViewportSize();
     const aspect = width / height;
     if (aspect !== this.lastAspect && Number.isFinite(aspect) && aspect > 0) {

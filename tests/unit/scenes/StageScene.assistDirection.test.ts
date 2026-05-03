@@ -1,20 +1,24 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { StageScene } from '../../../src/game/scenes/StageScene';
 import { Meteorite } from '../../../src/game/entities/Meteorite';
+import type { AssistDirection } from '../../../src/types';
 import type { SceneManager } from '../../../src/game/SceneManager';
 import type { InputSystem } from '../../../src/game/systems/InputSystem';
 import type { AudioManager } from '../../../src/game/audio/AudioManager';
 import type { SaveManager } from '../../../src/game/storage/SaveManager';
 
-function createScene() {
+interface StageSceneAssistInternals {
+  spaceship: { position: { x: number; y: number; z: number } };
+  meteorites: Meteorite[];
+  getSaferAssistDirection(): AssistDirection | null;
+}
+
+function createScene(): StageScene {
   const sceneManager = { requestTransition: vi.fn() } as unknown as SceneManager;
-  const inputState = { moveDirection: 0 as -1 | 0 | 1, boostPressed: false };
   const inputSystem = {
-    getState: () => inputState,
-    setBoostPressed: (pressed: boolean) => {
-      inputState.boostPressed = pressed;
-    },
+    getState: () => ({ moveDirection: 0, boostPressed: false }),
+    setBoostPressed: vi.fn(),
   } as unknown as InputSystem;
   const audioManager = {
     playBGM: vi.fn(),
@@ -38,85 +42,49 @@ function createScene() {
   return new StageScene(sceneManager, inputSystem, audioManager, saveManager);
 }
 
-function finishStartCountdown(scene: StageScene): void {
-  const internal = scene as unknown as { update(dt: number): void };
-  for (let i = 0; i < 4; i++) {
-    internal.update(1.0);
-  }
-}
-
-describe('StageScene assist direction', () => {
-  beforeEach(() => {
-    document.body.innerHTML = '<div id="hud"></div><div id="ui-overlay"></div>';
-  });
-
-  it('recommends moving right when the left lane is more dangerous', () => {
+describe('StageScene assist direction scoring', () => {
+  it('prefers the right side when closer meteorites cluster on the left', () => {
     const scene = createScene();
-    scene.enter({ stageNumber: 1 });
+    const internal = scene as unknown as StageSceneAssistInternals;
 
-    const internal = scene as unknown as {
-      meteorites: Meteorite[];
-      determineAssistTouchGuideMode(): 'assist-left' | 'assist-right' | null;
-    };
+    internal.spaceship = { position: { x: 0, y: 0, z: 0 } };
     internal.meteorites = [
-      new Meteorite(-6, 0, -12),
-      new Meteorite(-4.5, 0, -18),
-      new Meteorite(6.5, 0, -32),
+      new Meteorite(-5.5, 0, -10),
+      new Meteorite(-4.8, 0, -16),
+      new Meteorite(5.2, 0, -34),
     ];
 
-    expect(internal.determineAssistTouchGuideMode()).toBe('assist-right');
+    expect(internal.getSaferAssistDirection()).toBe('right');
   });
 
-  it('returns no recommendation when both sides are similarly dangerous', () => {
+  it('prefers the left side when closer meteorites cluster on the right', () => {
     const scene = createScene();
-    scene.enter({ stageNumber: 1 });
+    const internal = scene as unknown as StageSceneAssistInternals;
 
-    const internal = scene as unknown as {
-      meteorites: Meteorite[];
-      determineAssistTouchGuideMode(): 'assist-left' | 'assist-right' | null;
-    };
+    internal.spaceship = { position: { x: 0, y: 0, z: 0 } };
     internal.meteorites = [
-      new Meteorite(-5.5, 0, -14),
-      new Meteorite(5.5, 0, -14),
+      new Meteorite(4.5, 0, -9),
+      new Meteorite(5.8, 0, -15),
+      new Meteorite(-5.2, 0, -33),
     ];
 
-    expect(internal.determineAssistTouchGuideMode()).toBeNull();
+    expect(internal.getSaferAssistDirection()).toBe('left');
   });
 
-  it('shows an assist direction after two recent meteorite hits', () => {
+  it('returns null when the danger gap is too small after ignoring far or inactive meteorites', () => {
     const scene = createScene();
-    const internal = scene as unknown as {
-      collisionSystem: { check: () => { starCollisions: []; meteoriteCollision: boolean; meteoriteHit: Meteorite | null } };
-      meteorites: Meteorite[];
-      update(dt: number): void;
-    };
-    scene.enter({ stageNumber: 1 });
-    finishStartCountdown(scene);
+    const internal = scene as unknown as StageSceneAssistInternals;
+    const inactiveLeft = new Meteorite(-6, 0, -8);
+    inactiveLeft.isActive = false;
 
-    const hit1 = new Meteorite(0, 0, -10);
-    const hit2 = new Meteorite(0.5, 0, -11);
-    const hazard1 = new Meteorite(-6, 0, -12);
-    const hazard2 = new Meteorite(-4.5, 0, -18);
-    internal.meteorites = [hit1, hit2, hazard1, hazard2];
+    internal.spaceship = { position: { x: 0, y: 0, z: 0 } };
+    internal.meteorites = [
+      inactiveLeft,
+      new Meteorite(-4.2, 0, -18),
+      new Meteorite(4.1, 0, -18.5),
+      new Meteorite(6.5, 0, -80),
+    ];
 
-    let callCount = 0;
-    internal.collisionSystem = {
-      check: () => {
-        callCount += 1;
-        if (callCount === 1) {
-          return { starCollisions: [], meteoriteCollision: true, meteoriteHit: hit1 };
-        }
-        if (callCount === 2) {
-          internal.meteorites = [hit2, hazard1, hazard2];
-          return { starCollisions: [], meteoriteCollision: true, meteoriteHit: hit2 };
-        }
-        return { starCollisions: [], meteoriteCollision: false, meteoriteHit: null };
-      },
-    };
-
-    internal.update(0.016);
-    internal.update(0.2);
-
-    expect(document.querySelector('[data-touch-guide-overlay]')?.getAttribute('data-touch-guide-state')).toBe('assist-right');
+    expect(internal.getSaferAssistDirection()).toBeNull();
   });
 });

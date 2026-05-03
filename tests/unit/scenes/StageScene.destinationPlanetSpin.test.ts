@@ -1,10 +1,8 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as THREE from 'three';
-import {
-  StageScene,
-  __resetStageSceneSharedAssetCachesForTest,
-} from '../../../src/game/scenes/StageScene';
+import { StageScene } from '../../../src/game/scenes/StageScene';
+import { __resetStageSceneSharedAssetCachesForTest } from '../../../src/game/scenes/stageVisualAssets';
 import { TOTAL_STAGES } from '../../../src/game/config/StageConfig';
 import type { SceneManager } from '../../../src/game/SceneManager';
 import type { InputSystem } from '../../../src/game/systems/InputSystem';
@@ -76,11 +74,13 @@ function setupForStage(stageNumber: number): {
 }
 
 describe('StageScene destination planet self-rotation', () => {
+  let origGetContext: typeof HTMLCanvasElement.prototype.getContext;
+
   beforeEach(() => {
     document.body.innerHTML = '<div id="hud"></div><div id="ui-overlay"></div>';
     __resetStageSceneSharedAssetCachesForTest();
     // jsdom returns null for getContext('2d'); stub it for canvas-textured planets.
-    const origGetContext = HTMLCanvasElement.prototype.getContext;
+    origGetContext = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function patched(
       this: HTMLCanvasElement,
       type: string,
@@ -89,9 +89,10 @@ describe('StageScene destination planet self-rotation', () => {
       if (type === '2d') return makeFakeCtx();
       return (origGetContext as unknown as (...a: unknown[]) => unknown).call(this, type, ...rest);
     } as typeof HTMLCanvasElement.prototype.getContext;
-    return () => {
-      HTMLCanvasElement.prototype.getContext = origGetContext;
-    };
+  });
+
+  afterEach(() => {
+    HTMLCanvasElement.prototype.getContext = origGetContext;
   });
 
   for (let stageNumber = 1; stageNumber <= TOTAL_STAGES; stageNumber++) {

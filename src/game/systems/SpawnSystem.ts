@@ -56,6 +56,7 @@ export class SpawnSystem {
   private lastStarSpawnZ = 0;
   private meteoriteTimer = 0;
   private spawnAheadDistance = 80;
+  private meteoriteIntervalMultiplier = 1;
 
   // Reusable result buffer to avoid per-frame GC allocations on the hot path.
   // NOTE: The returned object (and its arrays) is owned by this instance and
@@ -148,8 +149,9 @@ export class SpawnSystem {
 
     // Spawn meteorites based on interval
     this.meteoriteTimer += deltaTime;
-    if (this.meteoriteTimer >= config.meteoriteInterval) {
-      this.meteoriteTimer -= config.meteoriteInterval;
+    const meteoriteInterval = config.meteoriteInterval * this.meteoriteIntervalMultiplier;
+    if (this.meteoriteTimer >= meteoriteInterval) {
+      this.meteoriteTimer -= meteoriteInterval;
       const z = spaceshipZ - this.spawnAheadDistance - Math.random() * 20;
       let x = (Math.random() - 0.5) * 14;
       let y = (Math.random() - 0.5) * 2 * SpawnSystem.METEORITE_SPAWN_Y_HALF_RANGE;
@@ -242,6 +244,7 @@ export class SpawnSystem {
   reset(): void {
     this.lastStarSpawnZ = 0;
     this.meteoriteTimer = 0;
+    this.meteoriteIntervalMultiplier = 1;
   }
 
   /**
@@ -283,5 +286,13 @@ export class SpawnSystem {
   /** Test/diagnostic helper: number of meteorites allocated by the pool. */
   getMeteoritePoolSize(): number {
     return this.meteoritePool.getPoolSize();
+  }
+
+  setMeteoriteIntervalMultiplier(multiplier: number): void {
+    this.meteoriteIntervalMultiplier = Number.isFinite(multiplier) && multiplier >= 1 ? multiplier : 1;
+  }
+
+  getMeteoriteIntervalMultiplier(): number {
+    return this.meteoriteIntervalMultiplier;
   }
 }

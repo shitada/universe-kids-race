@@ -4,11 +4,15 @@ import { SceneManager } from '../../src/game/SceneManager';
 import type { Scene, SceneContext, SceneType } from '../../src/types';
 import * as THREE from 'three';
 import { StageScene } from '../../src/game/scenes/StageScene';
+import { EndingScene } from '../../src/game/scenes/EndingScene';
 import { TitleScene } from '../../src/game/scenes/TitleScene';
 import { TOTAL_STAGES } from '../../src/game/config/StageConfig';
+import { getStageConfig } from '../../src/game/config/StageConfig';
+import { InputSystem as RuntimeInputSystem } from '../../src/game/systems/InputSystem';
 import type { InputSystem } from '../../src/game/systems/InputSystem';
 import type { AudioManager } from '../../src/game/audio/AudioManager';
 import type { SaveManager } from '../../src/game/storage/SaveManager';
+import type { SaveData } from '../../src/types';
 import { LoadingOverlay } from '../../src/ui/LoadingOverlay';
 import { LoadFailureOverlay } from '../../src/ui/LoadFailureOverlay';
 import { createSceneTransitionHandler } from '../../src/game/utils/createSceneTransitionHandler';
@@ -143,13 +147,173 @@ describe('Stage Flow Integration', () => {
     expect(manager.getCurrentType()).toBe('stage');
   });
 
-  it('keeps the title next-adventure preview aligned with the actual start stage', async () => {
+  it('retrying a cleared stage keeps cumulative totals at the stage-entry baseline until the replay is cleared', async () => {
+    const manager = new SceneManager();
+    const transitionLog: { type: SceneType; context: SceneContext }[] = [];
+    manager.setTransitionHandler((sceneType, context = {}) => {
+      transitionLog.push({ type: sceneType, context });
+      return manager.transitionTo(sceneType, context);
+    });
+
+    const inputSystem = {
+      setBoostPressed: vi.fn(),
+      getState: vi.fn(() => ({ moveDirection: 0, boostPressed: false })),
+      resetPointers: vi.fn(),
+    } as unknown as InputSystem;
+    const audioManager = {
+      playBGM: vi.fn(),
+      stopBGM: vi.fn(),
+      playSFX: vi.fn(),
+      stopBoostSFX: vi.fn(),
+      startBoostSFX: vi.fn(),
+      isMuted: vi.fn(() => false),
+      toggleMute: vi.fn(() => false),
+      setMuted: vi.fn(),
+      initFromInteraction: vi.fn(),
+    } as unknown as AudioManager;
+    const saveState = {
+      clearedStage: 0,
+      unlockedPlanets: [] as number[],
+      muted: false,
+      tutorialShown: true,
+      bestStageStars: {} as Record<number, number>,
+    };
+    const saveManager = {
+      load: vi.fn(() => ({
+        ...saveState,
+        unlockedPlanets: [...saveState.unlockedPlanets],
+        bestStageStars: { ...saveState.bestStageStars },
+      })),
+      save: vi.fn((nextData: SaveData) => {
+        saveState.clearedStage = nextData.clearedStage;
+        saveState.unlockedPlanets = [...nextData.unlockedPlanets];
+        saveState.muted = nextData.muted ?? false;
+        saveState.tutorialShown = nextData.tutorialShown ?? false;
+        saveState.bestStageStars = { ...(nextData.bestStageStars ?? {}) };
+      }),
+      clear: vi.fn(),
+      markStageCleared: vi.fn((stageNumber: number) => {
+        const wasUnlocked = saveState.unlockedPlanets.includes(stageNumber);
+        saveState.clearedStage = Math.max(saveState.clearedStage, stageNumber);
+        if (!wasUnlocked) {
+          saveState.unlockedPlanets = [...saveState.unlockedPlanets, stageNumber];
+          return true;
+        }
+        return false;
+      }),
+      updateBestStageStars: vi.fn((stageNumber: number, starCount: number) => {
+        const current = saveState.bestStageStars[stageNumber] ?? 0;
+        if (starCount > current) {
+          saveState.bestStageStars = {
+            ...saveState.bestStageStars,
+            [stageNumber]: starCount,
+          };
+        }
+      }),
+    } as unknown as SaveManager;
+
+    let stageScene: StageScene | null = null;
+    manager.registerSceneFactory('stage', async () => {
+      stageScene ??= new StageScene(manager, inputSystem, audioManager, saveManager);
+      return stageScene;
+    });
+
+    await manager.transitionTo('stage', { stageNumber: 3, totalScore: 1000, totalStarCount: 10 });
+
+    const internal = stageScene as unknown as {
+      countdownOverlay: { dispose(): void } | null;
+      isStarting: boolean;
+      scoreSystem: {
+        getStageScore(): number;
+        getStarCount(): number;
+        getTotalScore(): number;
+        getTotalStarCount(): number;
+        setTotalScore(score: number): void;
+        setTotalStarCount(count: number): void;
+        resetStage(): void;
+        finalizeStage(): { totalScore: number; totalStarCount: number };
+      };
+      onStageClear(): void;
+      update(deltaTime: number): void;
+    };
+    internal.countdownOverlay?.dispose();
+    internal.countdownOverlay = null;
+    internal.isStarting = false;
+
+    let stageScore = 400;
+    let starCount = 2;
+    let totalScore = 1000;
+    let totalStarCount = 10;
+    internal.scoreSystem = {
+      getStageScore: () => stageScore,
+      getStarCount: () => starCount,
+      getTotalScore: () => totalScore,
+      getTotalStarCount: () => totalStarCount,
+      setTotalScore: (score: number) => {
+        totalScore = score;
+      },
+      setTotalStarCount: (count: number) => {
+        totalStarCount = count;
+      },
+      resetStage: () => {
+        stageScore = 0;
+        starCount = 0;
+      },
+      finalizeStage: () => {
+        totalScore += stageScore;
+        totalStarCount += starCount;
+        const result = { totalScore, totalStarCount };
+        stageScore = 0;
+        starCount = 0;
+        return result;
+      },
+    };
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const retryButton = document.querySelector('[data-stage-clear-retry]') as HTMLButtonElement | null;
+    expect(retryButton).toBeTruthy();
+    retryButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+
+    expect(transitionLog.at(-1)).toEqual({
+      type: 'stage',
+      context: { stageNumber: 3, totalScore: 1000, totalStarCount: 10, replayToken: expect.any(Number) },
+    });
+    expect(totalScore).toBe(1000);
+    expect(totalStarCount).toBe(10);
+    expect(saveState.bestStageStars[3]).toBe(2);
+
+    internal.countdownOverlay?.dispose();
+    internal.countdownOverlay = null;
+    internal.isStarting = false;
+    stageScore = 500;
+    starCount = 5;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const continueButton = document.querySelector('[data-stage-clear-continue]') as HTMLButtonElement | null;
+    expect(continueButton).toBeTruthy();
+    continueButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+
+    expect(transitionLog.at(-1)).toEqual({
+      type: 'stage',
+      context: { stageNumber: 4, totalScore: 1500, totalStarCount: 15 },
+    });
+    expect(saveState.bestStageStars[3]).toBe(5);
+    expect(saveState.clearedStage).toBe(3);
+  });
+
+  it('matches the title next-adventure preview with the stage started by "あそぶ"', async () => {
     const log: { type: SceneType; context: SceneContext }[] = [];
     const manager = new SceneManager();
     const saveManager = {
       load: vi.fn(() => ({
         clearedStage: 4,
-        unlockedPlanets: [],
+        unlockedPlanets: [1, 2, 3, 4],
         muted: false,
         tutorialShown: true,
         bestStageStars: {},
@@ -159,45 +323,123 @@ describe('Stage Flow Integration', () => {
       markTutorialShown: vi.fn(),
     } as unknown as SaveManager;
     const audioManager = {
-      init: vi.fn(),
       initSync: vi.fn(),
       isInitialized: vi.fn(() => true),
       playBGM: vi.fn(),
       stopBGM: vi.fn(),
+      playSFX: vi.fn(),
+      stopBoostSFX: vi.fn(),
+      startBoostSFX: vi.fn(),
       isMuted: vi.fn(() => false),
       toggleMute: vi.fn(() => false),
       setMuted: vi.fn(),
-      playSFX: vi.fn(),
-      startBoostSFX: vi.fn(),
-      stopBoostSFX: vi.fn(),
       ensureResumed: vi.fn(),
       dispose: vi.fn(),
     } as unknown as AudioManager;
-    const titleScene = new TitleScene(manager, saveManager, audioManager);
 
-    manager.registerScene('title', titleScene);
+    manager.registerScene('title', new TitleScene(manager, saveManager, audioManager));
     manager.registerScene('stage', createTrackingScene(log, 'stage'));
 
     await manager.transitionTo('title');
 
-    const nextAdventureCard = document.querySelector('[data-next-adventure-card]') as HTMLDivElement | null;
-    const playButtonHint = document.querySelector('[data-play-button-hint]') as HTMLDivElement | null;
+    const card = document.querySelector('[data-next-adventure-card]') as HTMLDivElement | null;
+    expect(card).toBeTruthy();
+    expect(card?.getAttribute('data-next-stage-number')).toBe('5');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('木星');
+
     const playButton = Array.from(document.querySelectorAll('button')).find(
       (button) => button.textContent === 'あそぶ',
     ) as HTMLButtonElement | undefined;
-
-    expect(nextAdventureCard?.getAttribute('data-next-stage-number')).toBe('5');
-    expect(playButtonHint?.textContent).toContain('ステージ 5');
     expect(playButton).toBeTruthy();
 
     playButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     await flushPromises();
 
-    expect(manager.getCurrentType()).toBe('stage');
-    expect(log).toContainEqual({
-      type: 'stage',
-      context: { stageNumber: 5, totalScore: 0, totalStarCount: 0, launchSource: 'campaign' },
-    });
+    expect(log.at(-1)?.type).toBe('stage');
+    expect(log.at(-1)?.context.stageNumber).toBe(5);
+    expect(getStageConfig(log.at(-1)?.context.stageNumber ?? 0).destination).toBe(
+      card?.getAttribute('data-next-stage-destination'),
+    );
+  });
+
+  it('keeps the all-clear title preview after ending resets clearedStage to 0', async () => {
+    const manager = new SceneManager();
+    const saveState = {
+      clearedStage: TOTAL_STAGES,
+      unlockedPlanets: Array.from({ length: TOTAL_STAGES }, (_, index) => index + 1),
+      muted: false,
+      tutorialShown: true,
+      bestStageStars: {} as Record<number, number>,
+    };
+    const saveManager = {
+      load: vi.fn(() => ({
+        ...saveState,
+        unlockedPlanets: [...saveState.unlockedPlanets],
+        bestStageStars: { ...saveState.bestStageStars },
+      })),
+      save: vi.fn((nextData: SaveData) => {
+        saveState.clearedStage = nextData.clearedStage;
+        saveState.unlockedPlanets = [...nextData.unlockedPlanets];
+        saveState.muted = nextData.muted ?? false;
+        saveState.tutorialShown = nextData.tutorialShown ?? false;
+        saveState.bestStageStars = { ...(nextData.bestStageStars ?? {}) };
+      }),
+      clear: vi.fn(),
+      markTutorialShown: vi.fn(() => {
+        saveState.tutorialShown = true;
+      }),
+    } as unknown as SaveManager;
+    const audioManager = {
+      initSync: vi.fn(),
+      isInitialized: vi.fn(() => true),
+      playBGM: vi.fn(),
+      stopBGM: vi.fn(),
+      playSFX: vi.fn(),
+      stopBoostSFX: vi.fn(),
+      startBoostSFX: vi.fn(),
+      isMuted: vi.fn(() => false),
+      toggleMute: vi.fn(() => false),
+      setMuted: vi.fn(),
+      ensureResumed: vi.fn(),
+      dispose: vi.fn(),
+    } as unknown as AudioManager;
+
+    manager.registerScene(
+      'title',
+      new TitleScene(manager, saveManager, audioManager, {
+        scheduleIdleTask: () => {},
+        loadTitleCompanionFactory: async () => ({
+          createCompanionMesh: () => new THREE.Group(),
+        }),
+      }),
+    );
+    manager.registerScene('ending', new EndingScene(manager, saveManager, audioManager));
+
+    await manager.transitionTo('ending', { totalScore: 9000, totalStarCount: 72 });
+
+    expect(saveState.clearedStage).toBe(0);
+
+    for (let i = 0; i < 260; i++) {
+      manager.update(0.01);
+    }
+
+    const endingOverlay = document.querySelector('[data-ending-overlay]') as HTMLDivElement | null;
+    const exitCta = document.querySelector('[data-ending-exit-cta]') as HTMLDivElement | null;
+    expect(endingOverlay).toBeTruthy();
+    expect(exitCta?.textContent).toContain('どこでもタップでタイトルへ');
+
+    endingOverlay!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+
+    expect(manager.getCurrentType()).toBe('title');
+
+    const card = document.querySelector('[data-next-adventure-card]') as HTMLDivElement | null;
+    const hint = document.querySelector('[data-play-button-hint]') as HTMLDivElement | null;
+    expect(card?.getAttribute('data-next-stage-number')).toBe('1');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('月');
+    expect(card?.textContent).toContain('ぜんぶ クリア');
+    expect(hint?.textContent).toContain('ステージ 1');
+    expect(hint?.textContent).toContain('さいしょから');
   });
 
   it('keeps StageScene uncreated during title while module prefetch is in flight, then transitions successfully', async () => {
@@ -314,6 +556,78 @@ describe('Stage Flow Integration', () => {
     expect(firstSceneRef.children.filter((child) => child === firstCompanionGroupRef)).toHaveLength(1);
     expect(firstSceneRef.children.filter((child) => child.type === 'AmbientLight')).toHaveLength(1);
     expect(firstSceneRef.children.filter((child) => child.type === 'DirectionalLight')).toHaveLength(1);
+  });
+
+  it('does not carry a released keyboard boost into the title → stage transition', async () => {
+    const manager = new SceneManager();
+    const canvas = document.createElement('canvas');
+    Object.defineProperty(canvas, 'clientWidth', { value: 1024 });
+    document.body.appendChild(canvas);
+
+    const inputSystem = new RuntimeInputSystem();
+    inputSystem.setup(canvas);
+
+    const playSFX = vi.fn();
+    const audioManager = {
+      playBGM: vi.fn(),
+      stopBGM: vi.fn(),
+      playSFX,
+      stopBoostSFX: vi.fn(),
+      startBoostSFX: vi.fn(),
+      isMuted: vi.fn(() => false),
+      toggleMute: vi.fn(() => false),
+      setMuted: vi.fn(),
+      initFromInteraction: vi.fn(),
+    } as unknown as AudioManager;
+    const saveManager = {
+      load: vi.fn(() => ({
+        clearedStage: 0,
+        unlockedPlanets: [1],
+        muted: false,
+        tutorialShown: true,
+        bestStageStars: {},
+      })),
+      save: vi.fn(),
+      clear: vi.fn(),
+      markStageCleared: vi.fn(() => false),
+      updateBestStageStars: vi.fn(),
+    } as unknown as SaveManager;
+
+    manager.registerScene('title', createTrackingScene([], 'title'));
+
+    let stageScene: StageScene | null = null;
+    manager.registerSceneFactory('stage', async () => {
+      stageScene = new StageScene(manager, inputSystem, audioManager, saveManager);
+      return stageScene;
+    });
+
+    try {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+      window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+      expect(inputSystem.getState().boostPressed).toBe(false);
+
+      await manager.transitionTo('title');
+      await manager.transitionTo('stage', { stageNumber: 1 });
+      expect(inputSystem.getState().boostPressed).toBe(false);
+
+      const internal = stageScene as unknown as {
+        countdownOverlay: { dispose(): void } | null;
+        isStarting: boolean;
+        update(deltaTime: number): void;
+      };
+      internal.countdownOverlay?.dispose();
+      internal.countdownOverlay = null;
+      internal.isStarting = false;
+
+      playSFX.mockClear();
+      internal.update(0.016);
+      const sfxNames = playSFX.mock.calls.map((call) => call[0]);
+      expect(sfxNames).not.toContain('boost');
+      expect(sfxNames).not.toContain('boostDenied');
+    } finally {
+      inputSystem.dispose();
+      canvas.remove();
+    }
   });
 
   it('uses a prefetched StageScene cache from title without showing loading UI or visible side effects', async () => {
@@ -605,84 +919,7 @@ describe('Stage Flow Integration', () => {
     expect(manager.getCurrentType()).toBe('ending');
   });
 
-  it('uses the clear retry CTA to re-enter the same stage without adding clear totals twice', async () => {
-    const manager = new SceneManager();
-    const inputSystem = {
-      setBoostPressed: vi.fn(),
-      getState: vi.fn(() => ({ moveDirection: 0, boostPressed: false })),
-    } as unknown as InputSystem;
-    const audioManager = {
-      playBGM: vi.fn(),
-      stopBGM: vi.fn(),
-      playSFX: vi.fn(),
-      stopBoostSFX: vi.fn(),
-      startBoostSFX: vi.fn(),
-      isMuted: vi.fn(() => false),
-      toggleMute: vi.fn(() => false),
-      setMuted: vi.fn(),
-      initFromInteraction: vi.fn(),
-    } as unknown as AudioManager;
-    const saveManager = {
-      load: vi.fn(() => ({
-        clearedStage: 0,
-        unlockedPlanets: [],
-        muted: false,
-        tutorialShown: true,
-        bestStageStars: {},
-      })),
-      save: vi.fn(),
-      clear: vi.fn(),
-      markStageCleared: vi.fn(() => false),
-      updateBestStageStars: vi.fn(),
-    } as unknown as SaveManager;
-    let stageScene: StageScene | null = null;
-
-    manager.registerSceneFactory('stage', async () => {
-      stageScene = new StageScene(manager, inputSystem, audioManager, saveManager);
-      return stageScene;
-    });
-
-    await manager.transitionTo('stage', { stageNumber: 3, totalScore: 1500, totalStarCount: 7 });
-
-    const internal = stageScene as unknown as {
-      stageNumber: number;
-      scoreSystem: {
-        getStarCount(): number;
-        getTotalScore(): number;
-        getTotalStarCount(): number;
-        finalizeStage(): { totalScore: number; totalStarCount: number };
-      };
-      onStageClear(): void;
-      update(deltaTime: number): void;
-      enter(context: SceneContext): void;
-    };
-    const enterSpy = vi.spyOn(stageScene!, 'enter');
-    const finalizeStageMock = vi.fn(() => ({ totalScore: 2100, totalStarCount: 10 }));
-    internal.scoreSystem.getStarCount = () => 3;
-    internal.scoreSystem.finalizeStage = finalizeStageMock;
-
-    internal.onStageClear();
-    internal.update(1);
-
-    const retryButton = document.querySelector<HTMLButtonElement>('[data-stage-clear-retry]');
-    expect(retryButton?.textContent).toBe('もういちど');
-    retryButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-    await flushPromises();
-
-    expect(finalizeStageMock).not.toHaveBeenCalled();
-    expect(manager.getCurrentType()).toBe('stage');
-    expect(internal.stageNumber).toBe(3);
-    expect(internal.scoreSystem.getTotalScore()).toBe(1500);
-    expect(internal.scoreSystem.getTotalStarCount()).toBe(7);
-    expect(enterSpy).toHaveBeenCalledWith({
-      stageNumber: 3,
-      totalScore: 1500,
-      totalStarCount: 7,
-      replayToken: expect.any(Number),
-    });
-  });
-
-  it('starts ending module prefetch only after reaching the final stage', async () => {
+  it('starts ending module prefetch from the penultimate stage and reuses it on the final stage', async () => {
     const manager = new SceneManager();
     const inputSystem = {
       setBoostPressed: vi.fn(),
@@ -720,8 +957,12 @@ describe('Stage Flow Integration', () => {
     manager.registerSceneModulePrefetch('ending', endingModulePrefetcher);
     manager.registerSceneFactory('ending', endingFactory);
 
-    await manager.transitionTo('stage', { stageNumber: TOTAL_STAGES - 1 });
+    await manager.transitionTo('stage', { stageNumber: TOTAL_STAGES - 2 });
     expect(endingModulePrefetcher).not.toHaveBeenCalled();
+    expect(endingFactory).not.toHaveBeenCalled();
+
+    await manager.transitionTo('stage', { stageNumber: TOTAL_STAGES - 1 });
+    expect(endingModulePrefetcher).toHaveBeenCalledTimes(1);
     expect(endingFactory).not.toHaveBeenCalled();
 
     await manager.transitionTo('stage', { stageNumber: TOTAL_STAGES });
@@ -916,5 +1157,88 @@ describe('Stage Flow Integration', () => {
     expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to transition to ending', expect.any(Error));
 
     consoleErrorSpy.mockRestore();
+  });
+
+  it('keeps normal play unchanged and enables assist only after consecutive meteorite hits', () => {
+    const manager = new SceneManager();
+    const inputState = { moveDirection: 0, boostPressed: false };
+    const inputSystem = {
+      getState: vi.fn(() => inputState),
+      setBoostPressed: vi.fn((value: boolean) => {
+        inputState.boostPressed = value;
+      }),
+    } as unknown as InputSystem;
+    const audioManager = {
+      playBGM: vi.fn(),
+      stopBGM: vi.fn(),
+      playSFX: vi.fn(),
+      stopBoostSFX: vi.fn(),
+      startBoostSFX: vi.fn(),
+      isMuted: vi.fn(() => false),
+      toggleMute: vi.fn(() => false),
+      setMuted: vi.fn(),
+      initFromInteraction: vi.fn(),
+    } as unknown as AudioManager;
+    const saveManager = {
+      load: vi.fn(() => ({
+        clearedStage: 0,
+        unlockedPlanets: [],
+        muted: false,
+        tutorialShown: true,
+        bestStageStars: {},
+      })),
+      save: vi.fn(),
+      clear: vi.fn(),
+      markStageCleared: vi.fn(() => false),
+      updateBestStageStars: vi.fn(),
+    } as unknown as SaveManager;
+    const scene = new StageScene(manager, inputSystem, audioManager, saveManager);
+
+    scene.enter({ stageNumber: 9 });
+
+    const internal = scene as unknown as {
+      countdownOverlay: { dispose(): void } | null;
+      isStarting: boolean;
+      collisionSystem: { check: (...args: unknown[]) => unknown };
+      spawnSystem: { getMeteoriteIntervalMultiplier: () => number };
+      update: (dt: number) => void;
+    };
+    internal.countdownOverlay?.dispose();
+    internal.countdownOverlay = null;
+    internal.isStarting = false;
+
+    let checks = 0;
+    internal.collisionSystem = {
+      check: () => {
+        checks += 1;
+        if (checks === 2) {
+          return {
+            starCollisions: [],
+            meteoriteCollision: true,
+            meteoriteHit: { isActive: true, mesh: { visible: true }, position: { x: 0, y: 0, z: -30 } },
+          };
+        }
+        if (checks === 3) {
+          return {
+            starCollisions: [],
+            meteoriteCollision: true,
+            meteoriteHit: { isActive: true, mesh: { visible: true }, position: { x: 1, y: 0, z: -35 } },
+          };
+        }
+        return { starCollisions: [], meteoriteCollision: false, meteoriteHit: null };
+      },
+    };
+
+    internal.update(0.5);
+    expect(internal.spawnSystem.getMeteoriteIntervalMultiplier()).toBe(1);
+    expect((document.querySelector('[data-hud-assist-message]') as HTMLElement | null)?.style.display).toBe('none');
+
+    internal.update(0.016);
+    expect(internal.spawnSystem.getMeteoriteIntervalMultiplier()).toBe(1);
+    expect((document.querySelector('[data-hud-assist-message]') as HTMLElement | null)?.style.display).toBe('none');
+
+    internal.update(5.0);
+    expect(internal.spawnSystem.getMeteoriteIntervalMultiplier()).toBeGreaterThan(1);
+    expect(document.querySelector('[data-hud-assist-message]')?.textContent).toBe('だいじょうぶ！ ゆっくりいこう ✨');
   });
 });

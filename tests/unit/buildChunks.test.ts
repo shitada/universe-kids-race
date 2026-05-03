@@ -9,7 +9,7 @@ describe('build chunk設定', () => {
 
     const manualChunks = Array.isArray(output) ? undefined : output?.manualChunks;
     expect(manualChunks).toBeTypeOf('function');
-    expect(manualChunks?.('/project/node_modules/three/build/three.module.js')).toBe('three-vendor');
+    expect(manualChunks?.('/project/node_modules/three/build/three.module.js')).toBe('three');
     expect(manualChunks?.('/project/src/main.ts')).toBeUndefined();
   });
 });

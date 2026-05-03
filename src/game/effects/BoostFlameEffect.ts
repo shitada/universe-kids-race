@@ -10,6 +10,7 @@ import * as THREE from 'three';
  */
 export class BoostFlameEffect {
   static readonly MAX_PARTICLES = 150;
+  private static readonly VISUAL_QUALITY_SCALE_BY_TIER = [0.45, 0.7, 1];
   private static readonly FADE_START = 0.83;
   private static readonly BASE_SIZE = 0.5;
   private static readonly OFFSCREEN_Z = 99999;
@@ -27,6 +28,7 @@ export class BoostFlameEffect {
   private index = 0;
   private emitting = false;
   private maxAliveIndex = -1;
+  private qualityTier = BoostFlameEffect.VISUAL_QUALITY_SCALE_BY_TIER.length - 1;
 
   init(scene: THREE.Scene): void {
     if (this.points) return;
@@ -118,6 +120,10 @@ export class BoostFlameEffect {
     return this.emitting;
   }
 
+  setQualityTier(tier: number): void {
+    this.qualityTier = BoostFlameEffect.clampQualityTier(tier);
+  }
+
   /**
    * Emit a burst of particles for the current frame at `shipPos`.
    * `progress` is the BoostSystem duration progress in [0, 1]; emission
@@ -131,12 +137,15 @@ export class BoostFlameEffect {
     const emitCount = progress < FADE_START
       ? 8
       : Math.max(0, Math.round(8 * (1.0 - progress) / (1.0 - FADE_START)));
+    const scaledEmitCount = emitCount <= 0
+      ? 0
+      : Math.max(1, Math.round(emitCount * BoostFlameEffect.getQualityScale(this.qualityTier)));
     const sizeFraction = progress < FADE_START
       ? 1.0
       : (1.0 - progress) / (1.0 - FADE_START);
 
     let maxEmittedIdx = -1;
-    for (let p = 0; p < emitCount; p++) {
+    for (let p = 0; p < scaledEmitCount; p++) {
       const idx = this.index % MAX;
       const i3 = idx * 3;
       const i2 = idx * 2;
@@ -158,7 +167,7 @@ export class BoostFlameEffect {
       this.index++;
     }
 
-    if (emitCount > 0) {
+    if (scaledEmitCount > 0) {
       const newMax = Math.max(this.maxAliveIndex, maxEmittedIdx);
       this.maxAliveIndex = newMax;
       const uploadCount = (newMax + 1) * 3;
@@ -292,5 +301,14 @@ export class BoostFlameEffect {
     this.maxAliveIndex = -1;
     this.lastSize = -1;
     this.scene = null;
+  }
+
+  private static clampQualityTier(tier: number): number {
+    const maxTier = BoostFlameEffect.VISUAL_QUALITY_SCALE_BY_TIER.length - 1;
+    return Math.max(0, Math.min(maxTier, Math.round(tier)));
+  }
+
+  private static getQualityScale(tier: number): number {
+    return BoostFlameEffect.VISUAL_QUALITY_SCALE_BY_TIER[BoostFlameEffect.clampQualityTier(tier)];
   }
 }

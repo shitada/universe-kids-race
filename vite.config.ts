@@ -14,9 +14,20 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('/node_modules/three/')) {
-            return 'three-vendor';
+          const normalizedId = id.replace(/\\/g, '/');
+
+          if (normalizedId.includes('/node_modules/three/')) {
+            return 'three';
           }
+
+          if (normalizedId.includes('/src/game/scenes/')) {
+            return 'game-scenes';
+          }
+
+          if (normalizedId.includes('/src/game/')) {
+            return 'game-core';
+          }
+
           return undefined;
         },
       },

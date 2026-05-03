@@ -69,18 +69,20 @@ describe('Ending → Title all-clear persistence', () => {
         }),
       }),
     );
-    manager.registerScene('ending', new EndingScene(manager, saveManager, audioManager));
+    const endingScene = new EndingScene(manager, saveManager, audioManager);
+    manager.registerScene('ending', endingScene);
 
     await manager.transitionTo('ending', { totalScore: 9000, totalStarCount: 72 });
 
     expect(saveState.clearedStage).toBe(0);
 
-    const backButton = Array.from(document.querySelectorAll('button')).find(
-      (button) => button.textContent === 'タイトルに もどる',
-    ) as HTMLButtonElement | undefined;
-    expect(backButton).toBeTruthy();
+    const overlay = document.querySelector('[data-ending-overlay]') as HTMLDivElement | null;
+    expect(overlay).toBeTruthy();
 
-    backButton?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    // In HEAD's EndingScene, exit is triggered by tapping anywhere on the overlay
+    // once canExit is true (after animation completes).
+    (endingScene as unknown as { canExit: boolean }).canExit = true;
+    overlay?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     await flushPromises();
 
     expect(manager.getCurrentType()).toBe('title');

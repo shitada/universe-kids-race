@@ -58,12 +58,7 @@ function createMockSaveManager(initialData?: SaveData): {
 
 // Mock ui-overlay element for createOverlay
 beforeEach(() => {
-  const overlay = document.createElement('div');
-  overlay.id = 'ui-overlay';
-  document.body.appendChild(overlay);
-  return () => {
-    overlay.remove();
-  };
+  document.body.innerHTML = '<div id="ui-overlay"></div>';
 });
 
 describe('EndingScene', () => {
@@ -385,6 +380,89 @@ describe('EndingScene', () => {
       expect(group.children[0].scale.x).toBeLessThan(1);
       const lastIdx = PLANET_ENCYCLOPEDIA.length - 1;
       expect(group.children[lastIdx].scale.x).toBe(0);
+    });
+  });
+
+  describe('exit interaction', () => {
+    function createScene(): {
+      scene: EndingScene;
+      sceneManager: SceneManager;
+      audioManager: AudioManager;
+    } {
+      const sceneManager = createMockSceneManager();
+      const { mock: saveManager } = createMockSaveManager({
+        clearedStage: 11,
+        unlockedPlanets: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      });
+      const audioManager = createMockAudioManager();
+      const scene = new EndingScene(sceneManager, saveManager, audioManager);
+      scene.enter({ totalScore: 1000, totalStarCount: 50 });
+      return { scene, sceneManager, audioManager };
+    }
+
+    function advanceCelebration(scene: EndingScene, seconds: number): void {
+      const steps = Math.ceil(seconds / 0.01);
+      for (let i = 0; i < steps; i++) {
+        scene.update(0.01);
+      }
+    }
+
+    function getEndingOverlay(): HTMLDivElement {
+      const overlay = document.querySelector('[data-ending-overlay]') as HTMLDivElement | null;
+      if (!overlay) throw new Error('ending overlay not found');
+      return overlay;
+    }
+
+    it('does not transition to title when tapped before celebration completes', () => {
+      const { scene, sceneManager } = createScene();
+      const overlay = getEndingOverlay();
+
+      scene.update(0.5);
+      overlay.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+      expect(sceneManager.requestTransition).not.toHaveBeenCalled();
+    });
+
+    it('shows thank-you CTA and transitions to title after celebration completes', () => {
+      const { scene, sceneManager } = createScene();
+
+      advanceCelebration(scene, 2.6);
+
+      const overlay = getEndingOverlay();
+      const cta = overlay.querySelector('[data-ending-exit-cta]') as HTMLDivElement | null;
+
+      expect(overlay.textContent).toContain('みんな ありがとう！');
+      expect(cta?.textContent).toContain('どこでもタップでタイトルへ');
+
+      overlay.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+      expect(sceneManager.requestTransition).toHaveBeenCalledWith('title');
+    });
+
+    it('transitions only once even if tapped multiple times after celebration completes', () => {
+      const { scene, sceneManager } = createScene();
+      const overlay = getEndingOverlay();
+
+      advanceCelebration(scene, 2.6);
+
+      overlay.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      overlay.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+      expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not transition when the mute button is tapped after celebration completes', () => {
+      const { scene, sceneManager, audioManager } = createScene();
+
+      advanceCelebration(scene, 2.6);
+
+      const muteButton = document.querySelector('[data-mute-button]') as HTMLButtonElement | null;
+      expect(muteButton).not.toBeNull();
+
+      muteButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+      expect(audioManager.toggleMute).toHaveBeenCalled();
+      expect(sceneManager.requestTransition).not.toHaveBeenCalled();
     });
   });
 });

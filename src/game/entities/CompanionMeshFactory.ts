@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import type { PlanetEncyclopediaEntry } from '../../types';
 
+// Shared geometries for companion parts. All companion meshes reuse these to
+// reduce GC and GPU buffer setup cost on iPad Safari (Constitution IV: 60fps).
+// Do NOT dispose() these from instance dispose(); they live for the entire
+// process lifecycle (same policy as Star/Meteorite, commit 9626792).
 const SHARED_BODY_SPHERE_GEOM = new THREE.SphereGeometry(0.3, 6, 6);
 const SHARED_BODY_BUBBLE_SPHERE_GEOM = new THREE.SphereGeometry(0.3, 8, 8);
 const SHARED_BODY_ICOSAHEDRON_GEOM = new THREE.IcosahedronGeometry(0.3, 0);
@@ -12,8 +16,12 @@ const SHARED_BUBBLE_LARGE_GEOM = new THREE.SphereGeometry(0.1, 4, 4);
 const SHARED_BUBBLE_SMALL_GEOM = new THREE.SphereGeometry(0.08, 4, 4);
 const SHARED_EYE_GEOM = new THREE.SphereGeometry(0.06, 4, 4);
 
+// Shared eye material (uniform black for all companions).
 const SHARED_EYE_MATERIAL = new THREE.MeshToonMaterial({ color: 0x111111 });
 
+// Body material caches keyed by color. Different rendering modes
+// (opaque / transparent / DoubleSide for rings) are stored separately so the
+// renderer keeps consistent draw state per material.
 const OPAQUE_BODY_MATERIALS = new Map<number, THREE.MeshToonMaterial>();
 const TRANSPARENT_BODY_MATERIALS = new Map<number, THREE.MeshToonMaterial>();
 const RING_BODY_MATERIALS = new Map<number, THREE.MeshToonMaterial>();
@@ -45,6 +53,11 @@ function getRingBodyMaterial(color: number): THREE.MeshToonMaterial {
   return mat;
 }
 
+// All companion child Meshes use SHARED_* geometries and cached MeshToonMaterial
+// instances above. We tag every Mesh with userData.sharedAssets = true so that
+// disposeObject3D() (see src/game/utils/disposeObject3D.ts) skips dispose() of
+// the shared GPU resources. When adding a new companion shape or extra child
+// Mesh, ALWAYS create it via makeSharedMesh() to preserve this invariant.
 function makeSharedMesh(
   geometry: THREE.BufferGeometry,
   material: THREE.Material,

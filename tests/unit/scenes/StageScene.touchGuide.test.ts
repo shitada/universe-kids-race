@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { StageScene } from '../../../src/game/scenes/StageScene';
+import { Meteorite } from '../../../src/game/entities/Meteorite';
 import type { SceneManager } from '../../../src/game/SceneManager';
 import type { InputSystem } from '../../../src/game/systems/InputSystem';
 import type { AudioManager } from '../../../src/game/audio/AudioManager';
@@ -104,19 +105,17 @@ describe('StageScene touch guide overlay', () => {
   it('prioritizes assist directions over the normal touch guide state machine', () => {
     const { scene, inputState } = createScene();
     const internal = scene as unknown as {
-      assistElapsedTime: number;
-      assistNavigationUntil: number;
-      assistRecommendationMode: 'assist-left' | 'assist-right' | null;
-      assistReevaluateTimer: number;
+      assistTimer: number;
+      assistDirection: 'left' | 'right' | null;
+      assistDirectionRefreshTimer: number;
       update(dt: number): void;
     };
     scene.enter({ stageNumber: 1 });
     finishStartCountdown(scene);
 
-    internal.assistElapsedTime = 1;
-    internal.assistNavigationUntil = 10;
-    internal.assistRecommendationMode = 'assist-right';
-    internal.assistReevaluateTimer = 10;
+    internal.assistTimer = 10;
+    internal.assistDirection = 'right';
+    internal.assistDirectionRefreshTimer = 10;
     inputState.moveDirection = -1;
     internal.update(0.016);
 
@@ -131,5 +130,77 @@ describe('StageScene touch guide overlay', () => {
     scene.exit();
 
     expect(document.querySelector('[data-touch-guide-overlay]')).toBeNull();
+  });
+
+  it('prioritizes assist guidance over idle when repeated hits activate assist mode', () => {
+    const { scene, inputState } = createScene();
+    const internal = scene as unknown as {
+      update(dt: number): void;
+      playTime: number;
+      meteorites: Meteorite[];
+      spaceship: { position: { z: number } };
+      recordMeteoriteHit(): void;
+    };
+
+    scene.enter({ stageNumber: 1 });
+    finishStartCountdown(scene);
+
+    inputState.moveDirection = -1;
+    internal.update(0.016);
+    inputState.moveDirection = 0;
+    internal.update(3.1);
+    expect(document.querySelector('[data-touch-guide-overlay]')?.getAttribute('data-touch-guide-state')).toBe('idle');
+
+    const shipZ = internal.spaceship.position.z;
+    internal.meteorites = [
+      new Meteorite(-5.5, 0, shipZ - 10),
+      new Meteorite(-4.5, 0, shipZ - 16),
+      new Meteorite(5.4, 0, shipZ - 34),
+    ];
+    internal.recordMeteoriteHit();
+    internal.playTime = 2;
+    internal.recordMeteoriteHit();
+    internal.update(0.016);
+
+    const root = document.querySelector<HTMLElement>('[data-touch-guide-overlay]');
+    expect(root?.getAttribute('data-touch-guide-state')).toBe('assist-right');
+    expect(root?.getAttribute('data-touch-guide-active-side')).toBe('right');
+  });
+
+  it('returns to the normal touch guide flow after assist ends and does not carry assist state across re-entry', () => {
+    const { scene, inputState } = createScene();
+    const internal = scene as unknown as {
+      update(dt: number): void;
+      playTime: number;
+      meteorites: Meteorite[];
+      recordMeteoriteHit(): void;
+    };
+
+    scene.enter({ stageNumber: 1 });
+    finishStartCountdown(scene);
+    inputState.moveDirection = 1;
+    internal.update(0.016);
+    inputState.moveDirection = 0;
+    internal.meteorites = [
+      new Meteorite(5.2, 0, -10),
+      new Meteorite(4.6, 0, -15),
+      new Meteorite(-5.5, 0, -34),
+    ];
+    internal.recordMeteoriteHit();
+    internal.playTime = 1.5;
+    internal.recordMeteoriteHit();
+    internal.update(0.016);
+
+    expect(document.querySelector('[data-touch-guide-overlay]')?.getAttribute('data-touch-guide-state')).toBe('assist-left');
+
+    internal.update(5.1);
+    expect(document.querySelector('[data-touch-guide-overlay]')?.getAttribute('data-touch-guide-state')).toBe('idle');
+
+    scene.exit();
+    scene.enter({ stageNumber: 1 });
+
+    const root = document.querySelector<HTMLElement>('[data-touch-guide-overlay]');
+    expect(root?.getAttribute('data-touch-guide-state')).toBe('intro');
+    expect(root?.getAttribute('data-touch-guide-active-side')).toBe('both');
   });
 });

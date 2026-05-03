@@ -31,6 +31,8 @@ export interface InputState {
   boostPressed: boolean;
 }
 
+export type AssistDirection = 'left' | 'right';
+
 // Stage configuration
 export interface StageConfig {
   stageNumber: number;

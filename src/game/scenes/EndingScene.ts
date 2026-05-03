@@ -88,6 +88,9 @@ export class EndingScene implements Scene {
   private popinSettled: boolean[] = [];
   private celebrationElapsed = 0;
   private thankYouShown = false;
+  private canExit = false;
+  private exitTriggered = false;
+  private exitCta: HTMLDivElement | null = null;
 
   constructor(sceneManager: SceneManager, saveManager: SaveManager, audioManager: AudioManager) {
     this.sceneManager = sceneManager;
@@ -106,6 +109,9 @@ export class EndingScene implements Scene {
 
   enter(context: SceneContext): void {
     this.lastAspect = 0;
+    this.canExit = false;
+    this.exitTriggered = false;
+    this.exitCta = null;
     const totalScore = context.totalScore ?? 0;
     const totalStarCount = context.totalStarCount ?? 0;
 
@@ -155,6 +161,7 @@ export class EndingScene implements Scene {
     if (!uiOverlay) return;
 
     this.overlay = document.createElement('div');
+    this.overlay.setAttribute('data-ending-overlay', '');
     this.overlay.style.cssText = `
       display: flex;
       flex-direction: column;
@@ -164,6 +171,9 @@ export class EndingScene implements Scene {
       height: 100%;
       pointer-events: auto;
     `;
+    this.overlay.addEventListener('pointerdown', (event) => {
+      this.handleOverlayPointerDown(event);
+    });
 
     const title = document.createElement('div');
     title.textContent = 'うちゅうの たびは おしまい！';
@@ -196,31 +206,27 @@ export class EndingScene implements Scene {
       margin-bottom: 2rem;
     `;
 
-    const button = document.createElement('button');
-    button.textContent = 'タイトルに もどる';
-    button.style.cssText = `
+    this.exitCta = document.createElement('div');
+    this.exitCta.setAttribute('data-ending-exit-cta', '');
+    this.exitCta.textContent = 'どこでもタップでタイトルへ';
+    this.exitCta.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
       font-size: 1.5rem;
-      font-weight: 700;
-      padding: 0.8rem 2.5rem;
-      border: none;
-      border-radius: 2rem;
-      background: linear-gradient(135deg, #6B6BFF, #6DE6FF);
+      font-weight: 900;
       color: #fff;
-      cursor: pointer;
-      touch-action: manipulation;
-      box-shadow: 0 4px 15px rgba(107, 107, 255, 0.4);
+      background: rgba(107, 107, 255, 0.28);
+      border-radius: 999px;
+      padding: 0.8rem 2rem;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s ease-in;
+      box-shadow: 0 4px 15px rgba(107, 107, 255, 0.25);
     `;
-
-    button.addEventListener('pointerdown', (e) => {
-      e.stopPropagation();
-      this.sceneManager.requestTransition('title');
-    });
 
     this.overlay.appendChild(title);
     this.overlay.appendChild(scoreDiv);
     this.overlay.appendChild(starDiv);
-    this.overlay.appendChild(button);
+    this.overlay.appendChild(this.exitCta);
     uiOverlay.appendChild(this.overlay);
   }
 
@@ -240,6 +246,8 @@ export class EndingScene implements Scene {
     this.popinSettled.length = 0;
     this.celebrationElapsed = 0;
     this.thankYouShown = false;
+    this.canExit = false;
+    this.exitTriggered = false;
 
     for (let i = 0; i < PLANET_ENCYCLOPEDIA.length; i++) {
       const entry = PLANET_ENCYCLOPEDIA[i];
@@ -330,9 +338,10 @@ export class EndingScene implements Scene {
   }
 
   private showThankYouText(): void {
-    if (!this.overlay) return;
+    if (!this.overlay || !this.exitCta) return;
 
     const thankYou = document.createElement('div');
+    thankYou.setAttribute('data-ending-thank-you', '');
     thankYou.textContent = 'みんな ありがとう！';
     thankYou.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
@@ -345,16 +354,28 @@ export class EndingScene implements Scene {
       transition: opacity 0.5s ease-in;
     `;
 
-    const button = this.overlay.querySelector('button');
-    if (button) {
-      this.overlay.insertBefore(thankYou, button);
-    } else {
-      this.overlay.appendChild(thankYou);
-    }
+    this.overlay.insertBefore(thankYou, this.exitCta);
+    this.exitCta.style.visibility = 'visible';
+    this.canExit = true;
 
     requestAnimationFrame(() => {
       thankYou.style.opacity = '1';
+      if (this.exitCta) {
+        this.exitCta.style.opacity = '1';
+      }
     });
+  }
+
+  private handleOverlayPointerDown(event: PointerEvent | Event): void {
+    if (!this.canExit || this.exitTriggered) return;
+
+    const target = event.target;
+    if (target instanceof HTMLElement && target.closest('[data-mute-button]')) {
+      return;
+    }
+
+    this.exitTriggered = true;
+    this.sceneManager.requestTransition('title');
   }
 
   exit(): void {
@@ -378,6 +399,9 @@ export class EndingScene implements Scene {
       this.overlay.remove();
       this.overlay = null;
     }
+    this.exitCta = null;
+    this.canExit = false;
+    this.exitTriggered = false;
     if (this.muteHandle) {
       this.muteHandle.remove();
       this.muteHandle = null;

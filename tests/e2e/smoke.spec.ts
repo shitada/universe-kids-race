@@ -5,6 +5,9 @@ test.describe('スモークテスト', () => {
     await page.goto('/');
     const canvas = page.locator('canvas');
     await expect(canvas).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('[data-next-adventure-card]')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('[data-loading-overlay]')).toHaveCount(0);
+    await expect(page.locator('[data-load-failure-overlay]')).toHaveCount(0);
   });
 
   test('致命的な JavaScript エラーがない', async ({ page }) => {

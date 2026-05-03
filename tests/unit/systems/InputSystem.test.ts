@@ -13,8 +13,8 @@ function keyDown(key: string, opts?: KeyboardEventInit): void {
   window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...opts }));
 }
 
-function keyUp(key: string): void {
-  window.dispatchEvent(new KeyboardEvent('keyup', { key, bubbles: true }));
+function keyUp(key: string, opts?: KeyboardEventInit): void {
+  window.dispatchEvent(new KeyboardEvent('keyup', { key, bubbles: true, ...opts }));
 }
 
 function pointerDown(canvas: HTMLCanvasElement, clientX: number, pointerId = 1): void {
@@ -75,6 +75,17 @@ describe('InputSystem — keyboard', () => {
     expect(input.getState().boostPressed).toBe(true);
   });
 
+  it.each([
+    { key: ' ', label: 'space character' },
+    { key: 'Spacebar', label: 'legacy Spacebar key' },
+    { key: 'Unidentified', code: 'Space', label: 'Space code fallback' },
+  ])('Space-compatible keyup (%s) resets boostPressed to false', ({ key, code }) => {
+    keyDown(key, code ? { code } : undefined);
+    expect(input.getState().boostPressed).toBe(true);
+    keyUp(key, code ? { code } : undefined);
+    expect(input.getState().boostPressed).toBe(false);
+  });
+
   it('ArrowLeft keyup resets moveDirection to 0', () => {
     keyDown('ArrowLeft');
     expect(input.getState().moveDirection).toBe(-1);
@@ -109,6 +120,14 @@ describe('InputSystem — keyboard', () => {
     // Release pointer, only keyboard right remains
     pointerUp(canvas);
     expect(input.getState().moveDirection).toBe(1);
+  });
+
+  it('Space keyup clears boost without affecting ArrowRight movement', () => {
+    keyDown('ArrowRight');
+    keyDown(' ');
+    expect(input.getState()).toEqual({ moveDirection: 1, boostPressed: true });
+    keyUp(' ');
+    expect(input.getState()).toEqual({ moveDirection: 1, boostPressed: false });
   });
 });
 
@@ -385,6 +404,23 @@ describe('InputSystem — focus/visibility reset', () => {
     keyDown(' ');
     expect(input.getState().boostPressed).toBe(true);
     window.dispatchEvent(new Event('blur'));
+    expect(input.getState().boostPressed).toBe(false);
+  });
+
+  it('Space keyup stays cleared before and after blur / visibility resets', () => {
+    keyDown(' ');
+    keyUp(' ');
+    expect(input.getState().boostPressed).toBe(false);
+
+    window.dispatchEvent(new Event('blur'));
+    expect(input.getState().boostPressed).toBe(false);
+
+    keyDown('Spacebar');
+    keyUp('Spacebar');
+    expect(input.getState().boostPressed).toBe(false);
+
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+    document.dispatchEvent(new Event('visibilitychange'));
     expect(input.getState().boostPressed).toBe(false);
   });
 

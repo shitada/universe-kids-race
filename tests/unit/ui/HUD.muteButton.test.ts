@@ -48,12 +48,13 @@ describe('HUD mute button', () => {
     expect(btn.getAttribute('aria-label')).toBe('サウンド オフ');
   });
 
-  it('positions the button at top-right (absolute, top: 0.8rem)', () => {
+  it('positions the button at top-right with fixed margins', () => {
     hud.show('🌙');
     const btn = getMuteButton()!;
     expect(btn.style.position).toBe('absolute');
     expect(btn.style.top).toBe('0.8rem');
     expect(btn.style.right).toBe('1rem');
+    expect(btn.style.cssText).not.toContain('env(');
   });
 
   it('uses pointer-events:auto so taps reach the button', () => {

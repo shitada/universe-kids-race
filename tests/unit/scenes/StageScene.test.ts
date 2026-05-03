@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as THREE from 'three';
 import { StageScene } from '../../../src/game/scenes/StageScene';
+import { __resetStageSceneSharedAssetCachesForTest } from '../../../src/game/scenes/stageVisualAssets';
 import { Star } from '../../../src/game/entities/Star';
 import { Meteorite } from '../../../src/game/entities/Meteorite';
 import type { SceneManager } from '../../../src/game/SceneManager';
@@ -779,5 +780,91 @@ describe('StageScene cumulative totals on re-entry', () => {
       totalScore: 600,
       totalStarCount: 6,
     });
+  });
+});
+
+describe('StageScene visual quality tier', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '<div id="hud"></div><div id="ui-overlay"></div>';
+    __resetStageSceneSharedAssetCachesForTest();
+  });
+
+  function createEnterableStageScene(): StageScene {
+    const sceneManager = { requestTransition: vi.fn() } as unknown as SceneManager;
+    const inputSystem = {
+      setBoostPressed: vi.fn(),
+      getState: vi.fn(() => ({ moveDirection: 0, boostPressed: false })),
+      resetPointers: vi.fn(),
+    } as unknown as InputSystem;
+    const audioManager = {
+      playBGM: vi.fn(),
+      stopBGM: vi.fn(),
+      playSFX: vi.fn(),
+      stopBoostSFX: vi.fn(),
+      startBoostSFX: vi.fn(),
+      isMuted: vi.fn(() => false),
+      toggleMute: vi.fn(() => false),
+    } as unknown as AudioManager;
+    const saveManager = {
+      load: vi.fn(() => ({ clearedStage: 0, unlockedPlanets: [], tutorialShown: true })),
+      save: vi.fn(),
+      clear: vi.fn(),
+      markStageCleared: vi.fn(() => false),
+      updateBestStageStars: vi.fn(),
+    } as unknown as SaveManager;
+    return new StageScene(sceneManager, inputSystem, audioManager, saveManager);
+  }
+
+  function skipCountdown(scene: StageScene): void {
+    const internal = scene as unknown as {
+      countdownOverlay: { dispose(): void } | null;
+      isStarting: boolean;
+    };
+    internal.countdownOverlay?.dispose();
+    internal.countdownOverlay = null;
+    internal.isStarting = false;
+  }
+
+  it('shrinks background stars and VFX density without changing gameplay state', () => {
+    const scene = createEnterableStageScene();
+    const internal = scene as unknown as {
+      bgStars: THREE.Points | null;
+      boostLinesEffect: { getObject(): THREE.LineSegments | null };
+      scoreSystem: { getStageScore(): number; getStarCount(): number };
+      boostSystem: { isAvailable(): boolean };
+      stars: Star[];
+      meteorites: Meteorite[];
+      spaceship: { position: { x: number; y: number; z: number } };
+    };
+
+    scene.enter({ stageNumber: 1 });
+    skipCountdown(scene);
+
+    const bgStars = internal.bgStars;
+    const boostLines = internal.boostLinesEffect.getObject();
+    expect(bgStars).not.toBeNull();
+    expect(boostLines).not.toBeNull();
+    expect(bgStars!.geometry.drawRange.count).toBe(2000);
+    expect(boostLines!.geometry.drawRange.count).toBe(40);
+
+    const beforeState = {
+      stageScore: internal.scoreSystem.getStageScore(),
+      starCount: internal.scoreSystem.getStarCount(),
+      boostAvailable: internal.boostSystem.isAvailable(),
+      starsLength: internal.stars.length,
+      meteoritesLength: internal.meteorites.length,
+      shipPosition: { ...internal.spaceship.position },
+    };
+
+    scene.setVisualQualityTier(0);
+
+    expect(bgStars!.geometry.drawRange.count).toBe(900);
+    expect(boostLines!.geometry.drawRange.count).toBe(18);
+    expect(internal.scoreSystem.getStageScore()).toBe(beforeState.stageScore);
+    expect(internal.scoreSystem.getStarCount()).toBe(beforeState.starCount);
+    expect(internal.boostSystem.isAvailable()).toBe(beforeState.boostAvailable);
+    expect(internal.stars.length).toBe(beforeState.starsLength);
+    expect(internal.meteorites.length).toBe(beforeState.meteoritesLength);
+    expect(internal.spaceship.position).toEqual(beforeState.shipPosition);
   });
 });

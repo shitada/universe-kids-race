@@ -4,6 +4,7 @@ import { HomeConfirmOverlay } from './HomeConfirmOverlay';
 export class HUD {
   private container: HTMLDivElement | null = null;
   private stageNameEl: HTMLDivElement | null = null;
+  private assistMessageEl: HTMLDivElement | null = null;
   private scoreEl: HTMLSpanElement | null = null;
   private starCountEl: HTMLSpanElement | null = null;
   private bestStarContainerEl: HTMLSpanElement | null = null;
@@ -125,6 +126,27 @@ export class HUD {
       `;
       hudRoot.appendChild(this.stageNameEl);
     }
+
+    this.assistMessageEl = document.createElement('div');
+    this.assistMessageEl.setAttribute('data-hud-assist-message', '');
+    this.assistMessageEl.style.cssText = `
+      display: none;
+      margin: 0 auto 0.5rem;
+      width: fit-content;
+      max-width: min(88vw, 560px);
+      padding: 0.35rem 0.9rem;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.14);
+      color: #fff7bf;
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: clamp(0.95rem, 3.2vmin, 1.15rem);
+      font-weight: 700;
+      text-align: center;
+      pointer-events: none;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+    `;
+    hudRoot.appendChild(this.assistMessageEl);
 
     // Stage progress bar (🚀 ─── 🪐) under the stage name.
     this.createStageProgress(hudRoot, planetColor);
@@ -338,6 +360,9 @@ export class HUD {
       background: rgba(255, 255, 255, 0.2);
       pointer-events: none;
     `;
+    this.cooldownContainer.style.position = 'absolute';
+    this.cooldownContainer.style.bottom = '1rem';
+    this.cooldownContainer.style.right = '2rem';
 
     this.cooldownBar = document.createElement('div');
     this.cooldownBar.setAttribute('data-cooldown-bar', '');
@@ -443,6 +468,18 @@ export class HUD {
   setMuteState(muted: boolean): void {
     this.muted = muted;
     this.muteHandle?.setMuted(muted);
+  }
+
+  showAssistMessage(message: string): void {
+    if (!this.assistMessageEl) return;
+    this.assistMessageEl.textContent = message;
+    this.assistMessageEl.style.display = 'block';
+  }
+
+  hideAssistMessage(): void {
+    if (!this.assistMessageEl) return;
+    this.assistMessageEl.style.display = 'none';
+    this.assistMessageEl.textContent = '';
   }
 
   isMuted(): boolean {
@@ -665,6 +702,10 @@ export class HUD {
     if (this.stageNameEl) {
       this.stageNameEl.remove();
       this.stageNameEl = null;
+    }
+    if (this.assistMessageEl) {
+      this.assistMessageEl.remove();
+      this.assistMessageEl = null;
     }
     if (this.stageProgressContainer) {
       this.stageProgressContainer.remove();

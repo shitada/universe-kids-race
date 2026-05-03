@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as THREE from 'three';
+import { StageScene } from '../../../src/game/scenes/StageScene';
 import {
-  StageScene,
   __resetStageSceneSharedAssetCachesForTest,
   __stageSceneSharedAssetCachesForTest,
-} from '../../../src/game/scenes/StageScene';
+} from '../../../src/game/scenes/stageVisualAssets';
 import { getStageConfig } from '../../../src/game/config/StageConfig';
 import type { SceneManager } from '../../../src/game/SceneManager';
 import type { InputSystem } from '../../../src/game/systems/InputSystem';

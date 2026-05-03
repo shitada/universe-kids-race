@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Scene, SceneContext, StageConfig } from '../../types';
+import type { AssistDirection, Scene, SceneContext, StageConfig } from '../../types';
 import type { SceneManager } from '../SceneManager';
 import type { InputSystem } from '../systems/InputSystem';
 import type { AudioManager } from '../audio/AudioManager';
@@ -22,208 +22,61 @@ import { CompanionManager } from '../entities/CompanionManager';
 import { followCameraZ } from '../utils/followCameraZ';
 import { getViewportSize } from '../utils/getViewportSize';
 import { ScorePopupManager } from '../../ui/ScorePopupManager';
-import { EncyclopediaOverlay } from '../../ui/EncyclopediaOverlay';
 import { getNextPlanetEncyclopediaEntry, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { TouchGuideOverlay, type TouchGuideMode } from '../../ui/TouchGuideOverlay';
+import {
+  __resetStageSceneSharedAssetCachesForTest,
+  __stageSceneSharedAssetCachesForTest,
+  createDestinationPlanet as buildStageDestinationPlanet,
+  createStageBackground as buildStageBackground,
+  prewarmStageVisualAssets,
+} from './stageVisualAssets';
 
 const BG_STAR_PARALLAX = 1.0;
+const BG_STAR_COUNT = 2000;
 
-// ──────────────────────────────────────────────────────────────────────────────
-// SHARED destination-planet / background-star resources
-//
-// `createDestinationPlanet()` と `createBackground()` は、毎回ステージへ入場する
-// たびに Canvas 描画 / CanvasTexture 生成 / SphereGeometry 生成 / 6000 要素の
-// Float32 BufferAttribute 生成を行っており、再入場時の入場直後フレームで
-// 大きなスパイクの原因となっていた (#31 のずかん経由の頻繁な再入場で顕著)。
-//
-// ここでは Star / Meteorite と同じ「SHARED 資源は dispose しない」規約に従い、
-// stageNumber や planetColor をキーとしてモジュールレベルでキャッシュする。
-// 共有 Mesh には `mesh.userData.sharedAssets = true` を付与しており、
-// `disposeObject3D` は当該 Mesh の geometry / material を dispose しない。
-//
-// 結果として、Canvas の Math.random() 由来の模様は初回生成のもので固定される。
-// ステージ毎の見た目同一性はむしろ望ましく (子どもユーザーの混乱回避)、
-// PR / コミットに明記する。
-// ──────────────────────────────────────────────────────────────────────────────
-
-const planetTextureCache = new Map<string, THREE.CanvasTexture>();
-const planetGeometryCache = new Map<string, THREE.BufferGeometry>();
-const planetMaterialCache = new Map<string, THREE.Material>();
-
-let SHARED_BG_STARS_GEOMETRY: THREE.BufferGeometry | null = null;
-let SHARED_BG_STARS_MATERIAL: THREE.PointsMaterial | null = null;
-
-function getPlanetTexture(key: string, factory: () => THREE.CanvasTexture): THREE.CanvasTexture {
-  let tex = planetTextureCache.get(key);
-  if (!tex) {
-    tex = factory();
-    // Constitution IV（iPad Safari で 60fps 維持）対応:
-    // 手続き的に生成する惑星 CanvasTexture はミップマップ生成と
-    // LinearMipmapLinearFilter を無効化し、GPU 常駐サイズと
-    // ステージ初回入場時のテクスチャアップロード負荷を削減する。
-    // 目的地惑星はカメラから手前〜中距離で表示されるため、
-    // LinearFilter でも視覚的劣化はほぼ知覚されない。
-    tex.generateMipmaps = false;
-    tex.minFilter = THREE.LinearFilter;
-    tex.needsUpdate = true;
-    planetTextureCache.set(key, tex);
+function scheduleIdleTask(callback: () => void): void {
+  const requestIdle = (window as Window & {
+    requestIdleCallback?: (cb: () => void, options?: { timeout: number }) => number;
+  }).requestIdleCallback;
+  if (typeof requestIdle === 'function') {
+    requestIdle(callback, { timeout: 1500 });
+    return;
   }
-  return tex;
+  window.setTimeout(callback, 800);
 }
 
-function getPlanetGeometry<T extends THREE.BufferGeometry>(key: string, factory: () => T): T {
-  let geo = planetGeometryCache.get(key) as T | undefined;
-  if (!geo) {
-    geo = factory();
-    planetGeometryCache.set(key, geo);
-  }
-  return geo;
-}
-
-function getPlanetMaterial<T extends THREE.Material>(key: string, factory: () => T): T {
-  let mat = planetMaterialCache.get(key) as T | undefined;
-  if (!mat) {
-    mat = factory();
-    planetMaterialCache.set(key, mat);
-  }
-  return mat;
-}
-
-function makeSharedMesh(geometry: THREE.BufferGeometry, material: THREE.Material): THREE.Mesh {
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.userData.sharedAssets = true;
-  return mesh;
-}
-
-function buildMercuryTexture(): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 256;
-  const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#888888';
-  ctx.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 30; i++) {
-    const x = Math.random() * 256;
-    const y = Math.random() * 256;
-    const r = 3 + Math.random() * 12;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(60,60,60,${0.3 + Math.random() * 0.4})`;
-    ctx.fill();
-  }
-  return new THREE.CanvasTexture(canvas);
-}
-
-function buildVenusTexture(): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 256;
-  const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#ddaa44';
-  ctx.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 8; i++) {
-    ctx.beginPath();
-    const cx = 128 + (Math.random() - 0.5) * 100;
-    const cy = 128 + (Math.random() - 0.5) * 100;
-    ctx.strokeStyle = `rgba(200,150,60,${0.3 + Math.random() * 0.3})`;
-    ctx.lineWidth = 3 + Math.random() * 5;
-    for (let a = 0; a < Math.PI * 4; a += 0.1) {
-      const r = 10 + a * 8;
-      ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
-    }
-    ctx.stroke();
-  }
-  return new THREE.CanvasTexture(canvas);
-}
-
-function buildJupiterTexture(): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 256;
-  const ctx = canvas.getContext('2d')!;
-  const colors = ['#cc7733', '#dd9955', '#bb6622', '#eebb77', '#aa5511', '#ddaa66'];
-  for (let y = 0; y < 256; y++) {
-    const bandIdx = Math.floor(y / (256 / colors.length)) % colors.length;
-    ctx.fillStyle = colors[bandIdx];
-    ctx.fillRect(0, y, 256, 1);
-  }
-  return new THREE.CanvasTexture(canvas);
-}
-
-function buildEarthTexture(): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 256;
-  const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#2266aa';
-  ctx.fillRect(0, 0, 512, 256);
-  ctx.fillStyle = '#886644';
-  ctx.beginPath();
-  ctx.ellipse(300, 80, 80, 40, 0.2, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(280, 150, 30, 50, 0.1, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(100, 90, 25, 60, 0.3, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(110, 170, 20, 40, -0.2, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(420, 170, 25, 15, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#447733';
-  ctx.beginPath();
-  ctx.ellipse(290, 75, 40, 20, 0.3, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(95, 85, 15, 30, 0.2, 0, Math.PI * 2);
-  ctx.fill();
-  return new THREE.CanvasTexture(canvas);
-}
-
-function buildEarthCloudTexture(): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 256;
-  const ctx = canvas.getContext('2d')!;
-  ctx.clearRect(0, 0, 512, 256);
-  ctx.fillStyle = 'rgba(255,255,255,0.6)';
-  for (let i = 0; i < 20; i++) {
-    const x = Math.random() * 512;
-    const y = Math.random() * 256;
-    ctx.beginPath();
-    ctx.ellipse(x, y, 20 + Math.random() * 40, 8 + Math.random() * 15, Math.random() * Math.PI, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  return new THREE.CanvasTexture(canvas);
-}
-
-/**
- * テスト用フック: モジュールレベルキャッシュをクリアする。
- * 本番コードからは呼ばない。
- */
-export function __resetStageSceneSharedAssetCachesForTest(): void {
-  planetTextureCache.clear();
-  planetGeometryCache.clear();
-  planetMaterialCache.clear();
-  SHARED_BG_STARS_GEOMETRY = null;
-  SHARED_BG_STARS_MATERIAL = null;
-}
-
-/**
- * テスト用フック: 内部キャッシュへ直接アクセスする。
- */
-export const __stageSceneSharedAssetCachesForTest = {
-  planetTextureCache,
-  planetGeometryCache,
-  planetMaterialCache,
-  getBgStarsGeometry: (): THREE.BufferGeometry | null => SHARED_BG_STARS_GEOMETRY,
-  getBgStarsMaterial: (): THREE.PointsMaterial | null => SHARED_BG_STARS_MATERIAL,
+export {
+  __resetStageSceneSharedAssetCachesForTest,
+  __stageSceneSharedAssetCachesForTest,
+  prewarmStageVisualAssets,
 };
 
+type EncyclopediaOverlayModule = typeof import('../../ui/EncyclopediaOverlay');
+type EncyclopediaOverlayCtor = EncyclopediaOverlayModule['EncyclopediaOverlay'];
+type EncyclopediaOverlayInstance = InstanceType<EncyclopediaOverlayCtor>;
+
+interface StageSceneOptions {
+  scheduleIdleTask?: (callback: () => void) => void;
+  loadEncyclopediaOverlay?: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
+}
+
 export class StageScene implements Scene {
+  private static readonly VISUAL_QUALITY_SCALE_BY_TIER = [0.45, 0.7, 1];
+  private static readonly BG_STAR_COUNT = BG_STAR_COUNT;
+  private static readonly ASSIST_TRIGGER_HIT_WINDOW = 6;
+  private static readonly ASSIST_TRIGGER_HIT_COUNT = 2;
+  private static readonly ASSIST_DURATION = 5;
+  private static readonly ASSIST_MESSAGE_DURATION = 3;
+  private static readonly ASSIST_METEORITE_INTERVAL_MULTIPLIER = 1.7;
+  private static readonly ASSIST_MESSAGE = 'だいじょうぶ！ ゆっくりいこう ✨';
+  private static readonly ASSIST_DIRECTION_REFRESH_INTERVAL = 0.35;
+  private static readonly ASSIST_DIRECTION_LOOKAHEAD = 42;
+  private static readonly ASSIST_DIRECTION_SIDE_TARGET_X = 4.5;
+  private static readonly ASSIST_DIRECTION_SIDE_RANGE = 7.5;
+  private static readonly ASSIST_DIRECTION_DIFF_THRESHOLD = 1.1;
+  private static readonly ASSIST_DIRECTION_DIFF_RATIO = 0.28;
+
   private threeScene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private lastAspect = 0;
@@ -260,12 +113,29 @@ export class StageScene implements Scene {
   private isClearContinueEnabled = false;
   private hasHandledClearContinue = false;
   private isClearRewardOpen = false;
-  private clearRewardOverlay = new EncyclopediaOverlay();
+  private isOpeningClearReward = false;
+  private clearRewardOverlay: EncyclopediaOverlayInstance | null = null;
+  private clearRewardOverlayPromise: Promise<EncyclopediaOverlayInstance> | null = null;
   private static readonly CLEAR_CONTINUE_DELAY = 0.6;
+  private stageEntryTotalScore = 0;
+  private stageEntryTotalStarCount = 0;
+  private playTime = 0;
+  private meteoriteHitTimes: number[] = [];
+  private assistTimer = 0;
+  private assistMessageTimer = 0;
+  private assistDirection: AssistDirection | null = null;
+  private assistDirectionRefreshTimer = 0;
 
   // Damage animation
   private damageTimer = 0;
   private static readonly DAMAGE_FLASH_DURATION = 0.5;
+  private cameraShakeTimer = 0;
+  private cameraShakeElapsed = 0;
+  private readonly cameraShakeOffset = new THREE.Vector3();
+  private static readonly CAMERA_SHAKE_DURATION = 0.28;
+  private static readonly CAMERA_SHAKE_AMPLITUDE_X = 0.18;
+  private static readonly CAMERA_SHAKE_AMPLITUDE_Y = 0.12;
+  private static readonly CAMERA_SHAKE_FREQUENCY = 42;
 
   // Destination planet
   private destinationPlanet: THREE.Group | null = null;
@@ -311,25 +181,29 @@ export class StageScene implements Scene {
   private touchGuideMode: TouchGuideMode = 'intro';
   private touchGuideIdleTimer = 0;
   private hasSeenMoveInput = false;
+  private isActive = false;
+  private prewarmRequestToken = 0;
   private static readonly TOUCH_GUIDE_IDLE_DELAY = 3;
-  private assistElapsedTime = 0;
-  private recentMeteoriteHitTimes: number[] = [];
-  private assistNavigationUntil = 0;
-  private assistRecommendationMode: 'assist-left' | 'assist-right' | null = null;
-  private assistReevaluateTimer = 0;
-  private static readonly ASSIST_HIT_WINDOW = 8;
-  private static readonly ASSIST_NAV_DURATION = 4;
-  private static readonly ASSIST_REEVALUATE_INTERVAL = 0.4;
-  private static readonly ASSIST_LOOKAHEAD_DISTANCE = 28;
-  private static readonly ASSIST_TARGET_OFFSET = 4;
-  private static readonly ASSIST_LATERAL_RANGE = 7;
-  private static readonly ASSIST_SCORE_MARGIN = 0.2;
+  private visualQualityTier = StageScene.VISUAL_QUALITY_SCALE_BY_TIER.length - 1;
+  private readonly scheduleIdleTask: (callback: () => void) => void;
+  private readonly loadEncyclopediaOverlay: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
+  private clearRewardRequestToken = 0;
 
-  constructor(sceneManager: SceneManager, inputSystem: InputSystem, audioManager: AudioManager, saveManager: SaveManager) {
+  constructor(
+    sceneManager: SceneManager,
+    inputSystem: InputSystem,
+    audioManager: AudioManager,
+    saveManager: SaveManager,
+    options: StageSceneOptions = {},
+  ) {
     this.sceneManager = sceneManager;
     this.inputSystem = inputSystem;
     this.audioManager = audioManager;
     this.saveManager = saveManager;
+    this.scheduleIdleTask = options.scheduleIdleTask ?? scheduleIdleTask;
+    this.loadEncyclopediaOverlay =
+      options.loadEncyclopediaOverlay ??
+      (() => import('../../ui/EncyclopediaOverlay'));
     this.threeScene = new THREE.Scene();
     this.threeScene.background = new THREE.Color(0x000020);
     const { width: vw, height: vh } = getViewportSize();
@@ -369,10 +243,19 @@ export class StageScene implements Scene {
 
     this.hud = new HUD();
     this.initialized = true;
+    this.applyVisualQualityTier();
+  }
+
+  setVisualQualityTier(tier: number): void {
+    this.visualQualityTier = StageScene.clampVisualQualityTier(tier);
+    this.applyVisualQualityTier();
   }
 
   enter(context: SceneContext): void {
     this.ensureInitialized();
+    this.isActive = true;
+    this.prewarmRequestToken += 1;
+    this.clearRewardRequestToken += 1;
     this.lastAspect = 0;
     this.stageNumber = context.stageNumber ?? 1;
     this.launchSource = context.launchSource ?? 'campaign';
@@ -383,6 +266,7 @@ export class StageScene implements Scene {
     this.isClearContinueEnabled = false;
     this.hasHandledClearContinue = false;
     this.isClearRewardOpen = false;
+    this.isOpeningClearReward = false;
     this.damageTimer = 0;
     this.elapsedTime = 0;
     this.destinationPlanetSpinTarget = null;
@@ -391,10 +275,17 @@ export class StageScene implements Scene {
     this.touchGuideIdleTimer = 0;
     this.hasSeenMoveInput = false;
     this.touchGuideMode = 'intro';
-    this.resetAssistNavigation();
+    this.playTime = 0;
+    this.meteoriteHitTimes.length = 0;
+    this.assistTimer = 0;
+    this.assistMessageTimer = 0;
+    this.assistDirection = null;
+    this.assistDirectionRefreshTimer = 0;
 
     const totalScore = context.totalScore ?? 0;
     const totalStarCount = context.totalStarCount ?? 0;
+    this.stageEntryTotalScore = totalScore;
+    this.stageEntryTotalStarCount = totalStarCount;
     this.scoreSystem.setTotalScore(totalScore);
     this.scoreSystem.setTotalStarCount(totalStarCount);
 
@@ -410,6 +301,7 @@ export class StageScene implements Scene {
     this.boostFlameEffect.remove();
     this.companionManager?.resetUnlockedPlanets([]);
     this.createBackground();
+    this.applyVisualQualityTier();
 
     // Camera behind spaceship
     this.camera.position.set(0, 5, 10);
@@ -417,11 +309,13 @@ export class StageScene implements Scene {
 
     // Destination planet
     this.createDestinationPlanet();
+    this.scheduleNextStageVisualPrewarm();
 
     // Clear systems
     this.stars.length = 0;
     this.meteorites.length = 0;
     this.spawnSystem.reset();
+    this.spawnSystem.setMeteoriteIntervalMultiplier(1);
     this.boostSystem.reset();
     this.scoreSystem.resetStage();
 
@@ -464,6 +358,7 @@ export class StageScene implements Scene {
       this.saveManager.save(data);
     });
     this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
+    this.hud.hideAssistMessage();
     this.touchGuide.show('intro');
 
     // Companions
@@ -488,7 +383,7 @@ export class StageScene implements Scene {
   }
 
   private prefetchEndingSceneModuleIfNeeded(): void {
-    if (this.stageNumber < TOTAL_STAGES) {
+    if (this.stageNumber < TOTAL_STAGES - 1) {
       return;
     }
 
@@ -593,180 +488,35 @@ export class StageScene implements Scene {
 
   private createBackground(): void {
     if (this.bgStars) return;
-    // SHARED: BufferGeometry / PointsMaterial / position attribute はモジュール
-    // レベルで 1 度だけ生成し、再入場時は同じ参照を使い回す。Points (mesh) のみ
-    // per-instance だが、`userData.sharedAssets = true` を付与して dispose 経路で
-    // geometry/material を破棄しないようにする。
-    if (!SHARED_BG_STARS_GEOMETRY) {
-      const geo = new THREE.BufferGeometry();
-      const positions = new Float32Array(6000);
-      for (let i = 0; i < 6000; i += 3) {
-        positions[i] = (Math.random() - 0.5) * 200;
-        positions[i + 1] = (Math.random() - 0.5) * 200;
-        positions[i + 2] = (Math.random() - 0.5) * 400;
-      }
-      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      SHARED_BG_STARS_GEOMETRY = geo;
-    }
-    if (!SHARED_BG_STARS_MATERIAL) {
-      SHARED_BG_STARS_MATERIAL = new THREE.PointsMaterial({
-        color: 0xffffff,
-        size: 0.2,
-        sizeAttenuation: true,
-      });
-    }
-    this.bgStars = new THREE.Points(SHARED_BG_STARS_GEOMETRY, SHARED_BG_STARS_MATERIAL);
-    this.bgStars.userData.sharedAssets = true;
+    this.bgStars = buildStageBackground(this.getBackgroundStarDrawCount());
     this.threeScene.add(this.bgStars);
   }
 
   private createDestinationPlanet(): void {
     this.removeDestinationPlanet();
-    this.destinationPlanet = new THREE.Group();
     const goalZ = -(this.stageConfig.stageLength + 50);
-
-    switch (this.stageNumber) {
-      case 2: {
-        // Mercury — small gray sphere with crater canvas texture
-        const tex = getPlanetTexture('mercury', buildMercuryTexture);
-        const geo = getPlanetGeometry('mercury:sphere', () => new THREE.SphereGeometry(10, 24, 24));
-        const mat = getPlanetMaterial('mercury:mat', () => new THREE.MeshToonMaterial({ map: tex }));
-        const mesh = makeSharedMesh(geo, mat);
-        this.destinationPlanet.add(mesh);
-        this.destinationPlanetSpinTarget = mesh;
-        break;
-      }
-      case 3: {
-        // Venus — yellow-orange sphere with swirl canvas texture
-        const tex = getPlanetTexture('venus', buildVenusTexture);
-        const geo = getPlanetGeometry('venus:sphere', () => new THREE.SphereGeometry(14, 24, 24));
-        const mat = getPlanetMaterial('venus:mat', () => new THREE.MeshToonMaterial({ map: tex }));
-        const mesh = makeSharedMesh(geo, mat);
-        this.destinationPlanet.add(mesh);
-        this.destinationPlanetSpinTarget = mesh;
-        break;
-      }
-      case 5: {
-        // Jupiter — large sphere with horizontal stripe bands canvas texture
-        const tex = getPlanetTexture('jupiter', buildJupiterTexture);
-        const geo = getPlanetGeometry('jupiter:sphere', () => new THREE.SphereGeometry(20, 24, 24));
-        const mat = getPlanetMaterial('jupiter:mat', () => new THREE.MeshToonMaterial({ map: tex }));
-        const mesh = makeSharedMesh(geo, mat);
-        this.destinationPlanet.add(mesh);
-        this.destinationPlanetSpinTarget = mesh;
-        break;
-      }
-      case 6: {
-        // Saturn — sphere with tilted ring
-        const sphereGeo = getPlanetGeometry('saturn:sphere', () => new THREE.SphereGeometry(15, 24, 24));
-        const sphereColor = this.stageConfig.planetColor;
-        const sphereMat = getPlanetMaterial(
-          `saturn:mat:${sphereColor}`,
-          () => new THREE.MeshToonMaterial({ color: sphereColor }),
-        );
-        const sphere = makeSharedMesh(sphereGeo, sphereMat);
-        this.destinationPlanet.add(sphere);
-        const ringGeo = getPlanetGeometry('saturn:ring', () => new THREE.RingGeometry(20, 30, 48));
-        const ringMat = getPlanetMaterial(
-          'saturn:ringMat',
-          () => new THREE.MeshToonMaterial({ color: 0xeebb66, side: THREE.DoubleSide }),
-        );
-        const ring = makeSharedMesh(ringGeo, ringMat);
-        ring.rotation.x = Math.PI / 3;
-        this.destinationPlanet.add(ring);
-        // Spin only the sphere body so the ring keeps its tilt.
-        this.destinationPlanetSpinTarget = sphere;
-        break;
-      }
-      case 7: {
-        // Uranus — cyan sphere with sideways ring (rotation.z = PI/2)
-        const sphereGeo = getPlanetGeometry('uranus:sphere', () => new THREE.SphereGeometry(16, 24, 24));
-        const sphereMat = getPlanetMaterial(
-          'uranus:mat',
-          () => new THREE.MeshToonMaterial({ color: 0x66ccdd }),
-        );
-        const sphere = makeSharedMesh(sphereGeo, sphereMat);
-        this.destinationPlanet.add(sphere);
-        const ringGeo = getPlanetGeometry('uranus:ring', () => new THREE.RingGeometry(21, 28, 48));
-        const ringMat = getPlanetMaterial(
-          'uranus:ringMat',
-          () => new THREE.MeshToonMaterial({ color: 0x99ddee, side: THREE.DoubleSide }),
-        );
-        const ring = makeSharedMesh(ringGeo, ringMat);
-        ring.rotation.z = Math.PI / 2;
-        this.destinationPlanet.add(ring);
-        // Spin only the sphere body so the sideways ring stays sideways.
-        this.destinationPlanetSpinTarget = sphere;
-        break;
-      }
-      case 9: {
-        // Pluto — small sphere
-        const geo = getPlanetGeometry('pluto:sphere', () => new THREE.SphereGeometry(8, 24, 24));
-        const mat = getPlanetMaterial('pluto:mat', () => new THREE.MeshToonMaterial({ color: 0xbbaaaa }));
-        const mesh = makeSharedMesh(geo, mat);
-        this.destinationPlanet.add(mesh);
-        this.destinationPlanetSpinTarget = mesh;
-        break;
-      }
-      case 10: {
-        // Sun — gold sphere with emissive, PointLight, pulse animation in update()
-        const geo = getPlanetGeometry('sun:sphere', () => new THREE.SphereGeometry(25, 24, 24));
-        const mat = getPlanetMaterial(
-          'sun:mat',
-          () => new THREE.MeshToonMaterial({ color: 0xffcc00, emissive: 0xffaa00, emissiveIntensity: 0.5 }),
-        );
-        const mesh = makeSharedMesh(geo, mat);
-        this.destinationPlanet.add(mesh);
-        // PointLight は per-instance (light は dispose 不要、GC で解放)
-        const sunLight = new THREE.PointLight(0xffcc00, 2, 200);
-        this.destinationPlanet.add(sunLight);
-        // Spin the sphere; pulse continues to scale the parent group.
-        this.destinationPlanetSpinTarget = mesh;
-        break;
-      }
-      case 11: {
-        // Earth — stage ID 11 (happens to equal TOTAL_STAGES). This is a per-stage
-        // visual branch keyed by stage number, not a "last stage" check.
-        // blue ocean + brown continents canvas texture + cloud layer
-        const tex = getPlanetTexture('earth', buildEarthTexture);
-        const geo = getPlanetGeometry('earth:sphere', () => new THREE.SphereGeometry(15, 32, 32));
-        const mat = getPlanetMaterial('earth:mat', () => new THREE.MeshToonMaterial({ map: tex }));
-
-        // Cloud layer
-        const cloudTex = getPlanetTexture('earth:cloud', buildEarthCloudTexture);
-        const cloudGeo = getPlanetGeometry('earth:cloudSphere', () => new THREE.SphereGeometry(15.5, 32, 32));
-        const cloudMat = getPlanetMaterial(
-          'earth:cloudMat',
-          () => new THREE.MeshToonMaterial({ map: cloudTex, transparent: true, opacity: 0.3 }),
-        );
-
-        // Wrap sphere + clouds in a sub-group so they spin together.
-        const earthSpin = new THREE.Group();
-        earthSpin.add(makeSharedMesh(geo, mat));
-        earthSpin.add(makeSharedMesh(cloudGeo, cloudMat));
-        this.destinationPlanet.add(earthSpin);
-        this.destinationPlanetSpinTarget = earthSpin;
-        break;
-      }
-      default: {
-        // Moon(1), Mars(4), Neptune(8), and any other — simple colored sphere.
-        // 同一 (radius, segments) のジオメトリは全 default ステージで共有。
-        // material のみ planetColor をキーに分離する。
-        const sphereGeo = getPlanetGeometry('default:sphere', () => new THREE.SphereGeometry(15, 24, 24));
-        const color = this.stageConfig.planetColor;
-        const sphereMat = getPlanetMaterial(
-          `default:mat:${color}`,
-          () => new THREE.MeshToonMaterial({ color }),
-        );
-        const mesh = makeSharedMesh(sphereGeo, sphereMat);
-        this.destinationPlanet.add(mesh);
-        this.destinationPlanetSpinTarget = mesh;
-        break;
-      }
-    }
-
-    this.destinationPlanet.position.set(0, 0, goalZ);
+    const { planet, spinTarget } = buildStageDestinationPlanet(
+      this.stageNumber,
+      this.stageConfig,
+      goalZ,
+    );
+    this.destinationPlanet = planet;
+    this.destinationPlanetSpinTarget = spinTarget;
     this.threeScene.add(this.destinationPlanet);
+  }
+
+  private scheduleNextStageVisualPrewarm(): void {
+    const nextStageNumber = this.stageNumber + 1;
+    if (nextStageNumber > TOTAL_STAGES) {
+      return;
+    }
+    const requestToken = this.prewarmRequestToken;
+    this.scheduleIdleTask(() => {
+      if (!this.isActive || this.prewarmRequestToken !== requestToken) {
+        return;
+      }
+      prewarmStageVisualAssets(nextStageNumber);
+    });
   }
 
   private removeDestinationPlanet(): void {
@@ -777,7 +527,7 @@ export class StageScene implements Scene {
   }
 
   private resetStageObjects(): void {
-    this.clearRewardOverlay.hide();
+    this.clearRewardOverlay?.hide();
     if (this.clearOverlay) {
       this.clearOverlay.remove();
       this.clearOverlay = null;
@@ -788,11 +538,15 @@ export class StageScene implements Scene {
     this.isClearContinueEnabled = false;
     this.hasHandledClearContinue = false;
     this.isClearRewardOpen = false;
+    this.isOpeningClearReward = false;
     this.removeDestinationPlanet();
+    this.resetCameraShake();
     this.particleBurstManager.clear(this.threeScene);
     this.spawnSystem.recycleAll();
+    this.spawnSystem.setMeteoriteIntervalMultiplier(1);
     this.stars.length = 0;
     this.meteorites.length = 0;
+    this.hud?.hideAssistMessage();
   }
 
 
@@ -809,7 +563,7 @@ export class StageScene implements Scene {
         this.spaceship.position.y,
         this.spaceship.position.z,
       );
-      this.revealClearContinueButtonIfReady();
+      this.revealClearActionButtonsIfReady();
       return;
     }
 
@@ -841,8 +595,8 @@ export class StageScene implements Scene {
     }
 
     const input = this.inputSystem.getState();
-    this.assistElapsedTime += deltaTime;
-    this.updateAssistNavigation(deltaTime);
+    this.playTime += deltaTime;
+    this.updateAssistTimers(deltaTime);
     this.updateTouchGuide(input.moveDirection, deltaTime);
 
     // Capture boost state before changes
@@ -990,9 +744,10 @@ export class StageScene implements Scene {
         );
       }
       this.spaceship.onMeteoriteHit();
-      this.registerMeteoriteHitForAssist();
+      this.recordMeteoriteHit();
       this.boostSystem.cancel();
       this.damageTimer = StageScene.DAMAGE_FLASH_DURATION;
+      this.startCameraShake();
       this.audioManager.playSFX('meteoriteHit');
       this.audioManager.stopBoostSFX();
       this.boostFlameEffect.remove();
@@ -1005,16 +760,7 @@ export class StageScene implements Scene {
     this.cleanupPassedObjects(deltaTime);
 
     // Camera follow
-    this.camera.position.set(
-      this.spaceship.position.x * 0.3,
-      5,
-      this.spaceship.position.z + 12,
-    );
-    this.camera.lookAt(
-      this.spaceship.position.x * 0.5,
-      0,
-      this.spaceship.position.z - 20,
-    );
+    this.updateCameraFollow(deltaTime);
 
     for (const star of collisionResult.starCollisions) {
       this.scorePopupManager.show(star.scoreValue, star.position, this.camera);
@@ -1090,8 +836,8 @@ export class StageScene implements Scene {
   }
 
   private updateTouchGuide(moveDirection: number, deltaTime: number): void {
-    if (this.isAssistNavigationActive() && this.assistRecommendationMode) {
-      this.setTouchGuideMode(this.assistRecommendationMode);
+    if (this.assistTimer > 0) {
+      this.setTouchGuideMode(this.getAssistTouchGuideMode());
       return;
     }
 
@@ -1123,87 +869,109 @@ export class StageScene implements Scene {
   }
 
   private resetAssistNavigation(): void {
-    this.assistElapsedTime = 0;
-    this.recentMeteoriteHitTimes.length = 0;
-    this.assistNavigationUntil = 0;
-    this.assistRecommendationMode = null;
-    this.assistReevaluateTimer = 0;
+    this.meteoriteHitTimes.length = 0;
+    this.assistTimer = 0;
+    this.assistMessageTimer = 0;
+    this.assistDirection = null;
+    this.assistDirectionRefreshTimer = 0;
   }
 
-  private isAssistNavigationActive(): boolean {
-    return this.assistNavigationUntil > this.assistElapsedTime;
+  private updateAssistTimers(deltaTime: number): void {
+    if (this.assistTimer > 0) {
+      this.assistDirectionRefreshTimer = Math.max(0, this.assistDirectionRefreshTimer - deltaTime);
+      if (this.assistDirectionRefreshTimer === 0) {
+        this.refreshAssistDirection();
+      }
+      this.assistTimer = Math.max(0, this.assistTimer - deltaTime);
+      if (this.assistTimer === 0) {
+        this.spawnSystem.setMeteoriteIntervalMultiplier(1);
+        this.assistDirection = null;
+        this.assistDirectionRefreshTimer = 0;
+      }
+    }
+
+    if (this.assistMessageTimer > 0) {
+      this.assistMessageTimer = Math.max(0, this.assistMessageTimer - deltaTime);
+      if (this.assistMessageTimer === 0) {
+        this.hud.hideAssistMessage();
+      }
+    }
   }
 
-  private updateAssistNavigation(deltaTime: number): void {
-    if (!this.isAssistNavigationActive()) {
-      this.assistRecommendationMode = null;
-      this.assistReevaluateTimer = 0;
+  private recordMeteoriteHit(): void {
+    const now = this.playTime;
+    this.meteoriteHitTimes.push(now);
+    while (
+      this.meteoriteHitTimes.length > 0 &&
+      now - this.meteoriteHitTimes[0] > StageScene.ASSIST_TRIGGER_HIT_WINDOW
+    ) {
+      this.meteoriteHitTimes.shift();
+    }
+
+    if (this.assistTimer > 0) {
+      return;
+    }
+    if (this.meteoriteHitTimes.length < StageScene.ASSIST_TRIGGER_HIT_COUNT) {
       return;
     }
 
-    this.assistReevaluateTimer -= deltaTime;
-    if (this.assistReevaluateTimer <= 0) {
-      this.refreshAssistRecommendation();
-    }
+    this.activateAssistMode();
   }
 
-  private registerMeteoriteHitForAssist(): void {
-    const now = this.assistElapsedTime;
-    this.recentMeteoriteHitTimes.push(now);
-    this.recentMeteoriteHitTimes = this.recentMeteoriteHitTimes.filter((time) => now - time <= StageScene.ASSIST_HIT_WINDOW);
-    if (this.recentMeteoriteHitTimes.length < 2) {
-      return;
-    }
-
-    this.assistNavigationUntil = now + StageScene.ASSIST_NAV_DURATION;
-    this.refreshAssistRecommendation();
-    if (this.assistRecommendationMode) {
-      this.setTouchGuideMode(this.assistRecommendationMode);
-    }
+  private activateAssistMode(): void {
+    this.assistTimer = StageScene.ASSIST_DURATION;
+    this.assistMessageTimer = StageScene.ASSIST_MESSAGE_DURATION;
+    this.assistDirectionRefreshTimer = 0;
+    this.refreshAssistDirection();
+    this.spawnSystem.setMeteoriteIntervalMultiplier(StageScene.ASSIST_METEORITE_INTERVAL_MULTIPLIER);
+    this.hud.showAssistMessage(StageScene.ASSIST_MESSAGE);
+    this.meteoriteHitTimes.length = 0;
   }
 
-  private refreshAssistRecommendation(): void {
-    this.assistRecommendationMode = this.determineAssistTouchGuideMode();
-    this.assistReevaluateTimer = StageScene.ASSIST_REEVALUATE_INTERVAL;
+  private refreshAssistDirection(): void {
+    this.assistDirection = this.getSaferAssistDirection();
+    this.assistDirectionRefreshTimer = StageScene.ASSIST_DIRECTION_REFRESH_INTERVAL;
   }
 
-  private determineAssistTouchGuideMode(): 'assist-left' | 'assist-right' | null {
-    const leftDanger = this.getAssistDangerScore(-1);
-    const rightDanger = this.getAssistDangerScore(1);
-    const dangerGap = Math.abs(leftDanger - rightDanger);
-    if (dangerGap < StageScene.ASSIST_SCORE_MARGIN) {
-      return null;
-    }
-    return leftDanger < rightDanger ? 'assist-left' : 'assist-right';
+  private getAssistTouchGuideMode(): TouchGuideMode {
+    if (this.assistDirection === 'left') return 'assist-left';
+    if (this.assistDirection === 'right') return 'assist-right';
+    return 'hidden';
   }
 
-  private getAssistDangerScore(direction: -1 | 1): number {
-    const targetX = THREE.MathUtils.clamp(
-      this.spaceship.position.x + direction * StageScene.ASSIST_TARGET_OFFSET,
-      this.spaceship.boundaryMin,
-      this.spaceship.boundaryMax,
-    );
-    let score = 0;
+  private getSaferAssistDirection(): AssistDirection | null {
+    const shipX = this.spaceship.position.x;
+    const shipZ = this.spaceship.position.z;
+    const leftTargetX = Math.min(shipX - 2.5, -StageScene.ASSIST_DIRECTION_SIDE_TARGET_X);
+    const rightTargetX = Math.max(shipX + 2.5, StageScene.ASSIST_DIRECTION_SIDE_TARGET_X);
+    let leftDanger = 0;
+    let rightDanger = 0;
 
     for (const meteorite of this.meteorites) {
       if (!meteorite.isActive) continue;
+      const aheadDistance = shipZ - meteorite.position.z;
+      if (aheadDistance < 0 || aheadDistance > StageScene.ASSIST_DIRECTION_LOOKAHEAD) continue;
 
-      const forwardDistance = this.spaceship.position.z - meteorite.position.z;
-      if (forwardDistance <= 0 || forwardDistance > StageScene.ASSIST_LOOKAHEAD_DISTANCE) {
-        continue;
-      }
+      const proximityWeight = 1 + (StageScene.ASSIST_DIRECTION_LOOKAHEAD - aheadDistance) / 7;
+      const leftDistance = Math.abs(meteorite.position.x - leftTargetX);
+      const rightDistance = Math.abs(meteorite.position.x - rightTargetX);
+      const leftWeight = Math.max(0, 1 - leftDistance / StageScene.ASSIST_DIRECTION_SIDE_RANGE);
+      const rightWeight = Math.max(0, 1 - rightDistance / StageScene.ASSIST_DIRECTION_SIDE_RANGE);
 
-      const lateralDistance = Math.abs(meteorite.position.x - targetX);
-      if (lateralDistance >= StageScene.ASSIST_LATERAL_RANGE) {
-        continue;
-      }
-
-      const forwardWeight = 0.35 + (1 - (forwardDistance / StageScene.ASSIST_LOOKAHEAD_DISTANCE)) * 0.65;
-      const lateralWeight = 1 - (lateralDistance / StageScene.ASSIST_LATERAL_RANGE);
-      score += forwardWeight * lateralWeight * lateralWeight;
+      leftDanger += proximityWeight * leftWeight;
+      rightDanger += proximityWeight * rightWeight;
     }
 
-    return score;
+    const diff = Math.abs(leftDanger - rightDanger);
+    const maxDanger = Math.max(leftDanger, rightDanger);
+    if (diff < StageScene.ASSIST_DIRECTION_DIFF_THRESHOLD) {
+      return null;
+    }
+    if (maxDanger > 0 && diff < maxDanger * StageScene.ASSIST_DIRECTION_DIFF_RATIO) {
+      return null;
+    }
+
+    return leftDanger < rightDanger ? 'left' : 'right';
   }
 
   private updateDamageEffect(deltaTime: number): void {
@@ -1229,6 +997,54 @@ export class StageScene implements Scene {
       // Bank rotations are managed by Spaceship.update(); only ensure visibility.
       this.spaceship.mesh.visible = true;
     }
+  }
+
+  private resetCameraShake(): void {
+    this.cameraShakeTimer = 0;
+    this.cameraShakeElapsed = 0;
+    this.cameraShakeOffset.set(0, 0, 0);
+  }
+
+  private startCameraShake(): void {
+    this.cameraShakeTimer = StageScene.CAMERA_SHAKE_DURATION;
+    this.cameraShakeElapsed = 0;
+  }
+
+  private updateCameraShake(deltaTime: number): void {
+    if (this.cameraShakeTimer <= 0) {
+      this.cameraShakeOffset.set(0, 0, 0);
+      return;
+    }
+
+    this.cameraShakeElapsed += deltaTime;
+    this.cameraShakeTimer = Math.max(0, this.cameraShakeTimer - deltaTime);
+
+    if (this.cameraShakeTimer === 0) {
+      this.cameraShakeOffset.set(0, 0, 0);
+      return;
+    }
+
+    const decay = this.cameraShakeTimer / StageScene.CAMERA_SHAKE_DURATION;
+    const phase = this.cameraShakeElapsed * StageScene.CAMERA_SHAKE_FREQUENCY;
+    this.cameraShakeOffset.set(
+      Math.sin(phase) * StageScene.CAMERA_SHAKE_AMPLITUDE_X * decay,
+      Math.cos(phase * 0.8) * StageScene.CAMERA_SHAKE_AMPLITUDE_Y * decay,
+      0,
+    );
+  }
+
+  private updateCameraFollow(deltaTime: number): void {
+    this.updateCameraShake(deltaTime);
+    this.camera.position.set(
+      this.spaceship.position.x * 0.3 + this.cameraShakeOffset.x,
+      5 + this.cameraShakeOffset.y,
+      this.spaceship.position.z + 12,
+    );
+    this.camera.lookAt(
+      this.spaceship.position.x * 0.5,
+      0,
+      this.spaceship.position.z - 20,
+    );
   }
 
   private cleanupPassedObjects(deltaTime: number): void {
@@ -1312,6 +1128,93 @@ export class StageScene implements Scene {
 
     if (isBestUpdated) {
       this.audioManager.playSFX('rainbowCollect');
+    }
+  }
+
+  private getClearRewardOverlay(): Promise<EncyclopediaOverlayInstance> {
+    if (this.clearRewardOverlay) {
+      return Promise.resolve(this.clearRewardOverlay);
+    }
+    if (this.clearRewardOverlayPromise) {
+      return this.clearRewardOverlayPromise;
+    }
+
+    this.clearRewardOverlayPromise = this.loadEncyclopediaOverlay()
+      .then(({ EncyclopediaOverlay: EncyclopediaOverlayClass }) => {
+        const overlay = new EncyclopediaOverlayClass();
+        this.clearRewardOverlay = overlay;
+        return overlay;
+      })
+      .finally(() => {
+        this.clearRewardOverlayPromise = null;
+      });
+
+    return this.clearRewardOverlayPromise;
+  }
+
+  private isCurrentClearRewardRequest(requestToken: number): boolean {
+    return this.isActive && this.clearRewardRequestToken === requestToken;
+  }
+
+  private restoreClearRewardButton(): void {
+    if (!this.clearRewardButton) {
+      return;
+    }
+    this.clearRewardButton.style.pointerEvents = 'auto';
+    this.clearRewardButton.style.transform = 'scale(1)';
+  }
+
+  private prefetchClearRewardOverlay(): void {
+    if (this.clearRewardOverlay || this.clearRewardOverlayPromise) {
+      return;
+    }
+    void this.getClearRewardOverlay().catch(() => {});
+  }
+
+  private async openClearRewardOverlay(starCount: number): Promise<void> {
+    if (this.isClearRewardOpen || this.isOpeningClearReward) {
+      return;
+    }
+
+    const requestToken = this.clearRewardRequestToken;
+    this.isOpeningClearReward = true;
+    if (this.clearRewardButton) {
+      this.clearRewardButton.style.pointerEvents = 'none';
+    }
+
+    try {
+      const overlay = this.clearRewardOverlay ?? await this.getClearRewardOverlay();
+      if (!this.isCurrentClearRewardRequest(requestToken)) {
+        return;
+      }
+      const didOpen = overlay.showStageDetail(this.stageNumber, () => {
+        if (!this.isCurrentClearRewardRequest(requestToken)) {
+          return;
+        }
+        this.isClearRewardOpen = false;
+        this.restoreClearRewardButton();
+      }, {
+        bestStageStars: { [this.stageNumber]: starCount },
+        backLabel: 'クリアへ もどる',
+        zIndex: 50,
+      });
+      if (!didOpen) {
+        this.restoreClearRewardButton();
+        return;
+      }
+      this.isClearRewardOpen = true;
+    } catch {
+      if (!this.isCurrentClearRewardRequest(requestToken)) {
+        return;
+      }
+      this.restoreClearRewardButton();
+    } finally {
+      if (this.clearRewardRequestToken === requestToken) {
+        this.isOpeningClearReward = false;
+        if (!this.isClearRewardOpen) {
+          this.restoreClearRewardButton();
+        }
+      }
     }
   }
 
@@ -1470,6 +1373,7 @@ export class StageScene implements Scene {
 
     // Card acquisition notification for newly unlocked planets
     if (isNewPlanetUnlock) {
+      this.prefetchClearRewardOverlay();
       const entry = getPlanetEncyclopediaEntry(this.stageNumber);
       if (entry) {
         const cardMsg = document.createElement('div');
@@ -1532,26 +1436,9 @@ export class StageScene implements Scene {
         rewardButton.addEventListener('pointerdown', (event) => {
           event.preventDefault();
           event.stopPropagation();
-          if (this.isClearRewardOpen) return;
+          if (this.isClearRewardOpen || this.isOpeningClearReward) return;
           rewardButton.style.transform = 'scale(0.96)';
-          rewardButton.style.pointerEvents = 'none';
-          const didOpen = this.clearRewardOverlay.showStageDetail(this.stageNumber, () => {
-            this.isClearRewardOpen = false;
-            if (this.clearRewardButton) {
-              this.clearRewardButton.style.pointerEvents = 'auto';
-              this.clearRewardButton.style.transform = 'scale(1)';
-            }
-          }, {
-            bestStageStars: { [this.stageNumber]: starCount },
-            backLabel: 'クリアへ もどる',
-            zIndex: 50,
-          });
-          if (!didOpen) {
-            rewardButton.style.pointerEvents = 'auto';
-            rewardButton.style.transform = 'scale(1)';
-            return;
-          }
-          this.isClearRewardOpen = true;
+          void this.openClearRewardOverlay(starCount);
         });
         rewardButton.addEventListener('pointerup', releaseRewardButton);
         rewardButton.addEventListener('pointercancel', releaseRewardButton);
@@ -1571,7 +1458,38 @@ export class StageScene implements Scene {
       margin-top: 1.4rem;
     `;
 
-    const clearActionButtonStyle = `
+    const retryButton = document.createElement('button');
+    retryButton.setAttribute('data-stage-clear-retry', '');
+    retryButton.setAttribute('aria-label', 'もういちど');
+    retryButton.textContent = 'もういちど';
+    retryButton.disabled = true;
+    retryButton.style.cssText = `
+      min-width: min(72vw, 300px);
+      min-height: 88px;
+      padding: 0.95rem 1.7rem;
+      border: none;
+      border-radius: 999px;
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: clamp(1.35rem, 4.6vmin, 1.9rem);
+      font-weight: 900;
+      color: #fff;
+      background: rgba(255, 255, 255, 0.2);
+      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.26);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      touch-action: manipulation;
+      transform: scale(1);
+      transition: opacity 0.18s ease-out, transform 0.08s ease-out;
+    `;
+
+    const continueButton = document.createElement('button');
+    const continueLabel = this.stageNumber >= TOTAL_STAGES ? 'おいわいへ' : 'つぎへ';
+    continueButton.setAttribute('data-stage-clear-continue', '');
+    continueButton.setAttribute('aria-label', continueLabel);
+    continueButton.textContent = continueLabel;
+    continueButton.disabled = true;
+    continueButton.style.cssText = `
       min-width: min(78vw, 320px);
       min-height: 88px;
       padding: 1rem 1.8rem;
@@ -1589,39 +1507,62 @@ export class StageScene implements Scene {
       transition: opacity 0.18s ease-out, transform 0.08s ease-out;
     `;
 
-    const retryButton = document.createElement('button');
-    retryButton.setAttribute('data-stage-clear-retry', '');
-    retryButton.setAttribute('aria-label', 'もういちど');
-    retryButton.textContent = 'もういちど';
-    retryButton.disabled = true;
-    retryButton.style.cssText = `
-      ${clearActionButtonStyle}
-      color: #ffffff;
-      background: linear-gradient(135deg, #5fd3ff, #4b7bff);
-    `;
-
-    const continueLabel = this.launchSource === 'encyclopedia'
-      ? 'タイトルへ'
-      : this.stageNumber >= TOTAL_STAGES
-        ? 'おいわいへ'
-        : 'つぎへ';
-    const continueButton = document.createElement('button');
-    continueButton.setAttribute('data-stage-clear-continue', '');
-    continueButton.setAttribute('aria-label', continueLabel);
-    continueButton.textContent = continueLabel;
-    continueButton.disabled = true;
-    continueButton.style.cssText = `
-      ${clearActionButtonStyle}
-      color: #00163a;
-      background: linear-gradient(135deg, #ffe66d, #ffb347);
-    `;
-
-    this.bindClearActionButton(retryButton, () => {
-      this.handleStageReplay();
+    const activate = (
+      event: Event,
+      button: HTMLButtonElement,
+      onActivate: () => void,
+    ): void => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (this.isClearRewardOpen) return;
+      if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
+      this.hasHandledClearContinue = true;
+      for (const actionButton of [this.clearRetryButton, this.clearContinueButton]) {
+        if (!actionButton) continue;
+        actionButton.disabled = true;
+        actionButton.style.pointerEvents = 'none';
+        actionButton.style.transform = 'scale(1)';
+      }
+      button.style.transform = 'scale(1)';
+      onActivate();
+    };
+    const release = (button: HTMLButtonElement | null): void => {
+      if (button) {
+        button.style.transform = 'scale(1)';
+      }
+    };
+    retryButton.addEventListener('pointerdown', (event) => {
+      if (this.isClearRewardOpen) return;
+      if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
+      retryButton.style.transform = 'scale(0.96)';
+      activate(event, retryButton, () => {
+        this.handleStageRetry();
+      });
     });
-    this.bindClearActionButton(continueButton, () => {
-      this.handleStageComplete();
+    retryButton.addEventListener('click', (event) => {
+      activate(event, retryButton, () => {
+        this.handleStageRetry();
+      });
     });
+    retryButton.addEventListener('pointerup', () => release(this.clearRetryButton));
+    retryButton.addEventListener('pointercancel', () => release(this.clearRetryButton));
+    retryButton.addEventListener('pointerleave', () => release(this.clearRetryButton));
+    continueButton.addEventListener('pointerdown', (event) => {
+      if (this.isClearRewardOpen) return;
+      if (!this.isClearContinueEnabled || this.hasHandledClearContinue) return;
+      continueButton.style.transform = 'scale(0.96)';
+      activate(event, continueButton, () => {
+        this.handleStageComplete();
+      });
+    });
+    continueButton.addEventListener('click', (event) => {
+      activate(event, continueButton, () => {
+        this.handleStageComplete();
+      });
+    });
+    continueButton.addEventListener('pointerup', () => release(this.clearContinueButton));
+    continueButton.addEventListener('pointercancel', () => release(this.clearContinueButton));
+    continueButton.addEventListener('pointerleave', () => release(this.clearContinueButton));
     this.clearRetryButton = retryButton;
     this.clearContinueButton = continueButton;
     actionButtons.appendChild(retryButton);
@@ -1685,57 +1626,17 @@ export class StageScene implements Scene {
     this.clearOverlay.appendChild(burstLayer);
   }
 
-  private revealClearContinueButtonIfReady(): void {
+  private revealClearActionButtonsIfReady(): void {
     if (this.isClearContinueEnabled) return;
     if (this.clearTimer < StageScene.CLEAR_CONTINUE_DELAY) return;
     if (!this.clearContinueButton || !this.clearRetryButton) return;
 
     this.isClearContinueEnabled = true;
-    this.revealClearActionButton(this.clearRetryButton);
-    this.revealClearActionButton(this.clearContinueButton);
-  }
-
-  private bindClearActionButton(button: HTMLButtonElement, onActivate: () => void): void {
-    const activate = (event: Event): void => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (!this.canActivateClearAction()) return;
-      this.hasHandledClearContinue = true;
-      this.lockClearActionButtons();
-      onActivate();
-    };
-    const release = (): void => {
-      button.style.transform = 'scale(1)';
-    };
-    button.addEventListener('pointerdown', (event) => {
-      if (!this.canActivateClearAction()) return;
-      button.style.transform = 'scale(0.96)';
-      activate(event);
-    });
-    button.addEventListener('click', activate);
-    button.addEventListener('pointerup', release);
-    button.addEventListener('pointercancel', release);
-    button.addEventListener('pointerleave', release);
-  }
-
-  private canActivateClearAction(): boolean {
-    return !this.isClearRewardOpen && this.isClearContinueEnabled && !this.hasHandledClearContinue;
-  }
-
-  private revealClearActionButton(button: HTMLButtonElement | null): void {
-    if (!button) return;
-    button.disabled = false;
-    button.style.opacity = '1';
-    button.style.visibility = 'visible';
-    button.style.pointerEvents = 'auto';
-  }
-
-  private lockClearActionButtons(): void {
     for (const button of [this.clearRetryButton, this.clearContinueButton]) {
-      if (!button) continue;
-      button.disabled = true;
-      button.style.pointerEvents = 'none';
-      button.style.transform = 'scale(1)';
+      button.disabled = false;
+      button.style.opacity = '1';
+      button.style.visibility = 'visible';
+      button.style.pointerEvents = 'auto';
     }
   }
 
@@ -1803,11 +1704,11 @@ export class StageScene implements Scene {
     }
   }
 
-  private handleStageReplay(): void {
+  private handleStageRetry(): void {
     this.sceneManager.requestTransition('stage', {
       stageNumber: this.stageNumber,
-      totalScore: this.scoreSystem.getTotalScore(),
-      totalStarCount: this.scoreSystem.getTotalStarCount(),
+      totalScore: this.stageEntryTotalScore,
+      totalStarCount: this.stageEntryTotalStarCount,
       replayToken: Date.now() + Math.random(),
     });
   }
@@ -1816,12 +1717,13 @@ export class StageScene implements Scene {
     if (!this.initialized) {
       return;
     }
-    this.clearRewardOverlay.hide();
-    this.clearContinueButton = null;
-    this.clearRetryButton = null;
+    this.isActive = false;
+    this.prewarmRequestToken += 1;
+    this.clearRewardRequestToken += 1;
+    this.clearRewardOverlay?.hide();
     this.clearRewardButton = null;
     this.isClearRewardOpen = false;
-    this.resetAssistNavigation();
+    this.isOpeningClearReward = false;
     this.touchGuide.hide();
     this.hud.hide();
     this.scorePopupManager.dispose();
@@ -1862,5 +1764,37 @@ export class StageScene implements Scene {
       this.lastAspect = aspect;
     }
     return this.camera;
+  }
+
+  private applyVisualQualityTier(): void {
+    const clampedTier = StageScene.clampVisualQualityTier(this.visualQualityTier);
+    this.particleBurstManager.setQualityTier(clampedTier);
+    if (!this.initialized) {
+      if (this.bgStars) {
+        this.bgStars.geometry.setDrawRange(0, this.getBackgroundStarDrawCount());
+      }
+      return;
+    }
+    this.boostLinesEffect.setQualityTier(clampedTier);
+    this.boostFlameEffect.setQualityTier(clampedTier);
+    if (this.bgStars) {
+      this.bgStars.geometry.setDrawRange(0, this.getBackgroundStarDrawCount());
+    }
+  }
+
+  private getBackgroundStarDrawCount(): number {
+    return Math.max(
+      1,
+      Math.round(StageScene.BG_STAR_COUNT * StageScene.getVisualQualityScale(this.visualQualityTier)),
+    );
+  }
+
+  private static clampVisualQualityTier(tier: number): number {
+    const maxTier = StageScene.VISUAL_QUALITY_SCALE_BY_TIER.length - 1;
+    return Math.max(0, Math.min(maxTier, Math.round(tier)));
+  }
+
+  private static getVisualQualityScale(tier: number): number {
+    return StageScene.VISUAL_QUALITY_SCALE_BY_TIER[StageScene.clampVisualQualityTier(tier)];
   }
 }

@@ -16,21 +16,37 @@ import { createOrientationHintHandler } from '../../src/game/utils/createOrienta
 interface FakeWindowHandles {
   win: Window;
   setSize: (w: number, h: number) => void;
+  setVisualViewportSize: (w: number, h: number) => void;
   fireResize: () => void;
   fireOrientationChange: () => void;
+  fireVisualViewportResize: () => void;
+  fireVisualViewportScroll: () => void;
   flushTimers: () => void;
   setMatchMedia: (matches: boolean) => void;
 }
 
 function makeFakeWindow(initial: { width: number; height: number }): FakeWindowHandles {
   const listeners = new Map<string, Set<() => void>>();
+  const visualViewportListeners = new Map<string, Set<() => void>>();
   let mqlMatches = initial.height > initial.width;
   const mqlListeners: Array<() => void> = [];
   let nextHandle = 1;
   const timers = new Map<number, () => void>();
+  const visualViewport = {
+    width: initial.width,
+    height: initial.height,
+    addEventListener: (event: string, cb: () => void) => {
+      if (!visualViewportListeners.has(event)) visualViewportListeners.set(event, new Set());
+      visualViewportListeners.get(event)!.add(cb);
+    },
+    removeEventListener: (event: string, cb: () => void) => {
+      visualViewportListeners.get(event)?.delete(cb);
+    },
+  };
   const win = {
     innerWidth: initial.width,
     innerHeight: initial.height,
+    visualViewport,
     matchMedia: () =>
       ({
         get matches() {
@@ -62,11 +78,21 @@ function makeFakeWindow(initial: { width: number; height: number }): FakeWindowH
     setSize: (w, h) => {
       (win as { innerWidth: number; innerHeight: number }).innerWidth = w;
       (win as { innerWidth: number; innerHeight: number }).innerHeight = h;
+      visualViewport.width = w;
+      visualViewport.height = h;
       mqlMatches = h > w;
+    },
+    setVisualViewportSize: (w, h) => {
+      visualViewport.width = w;
+      visualViewport.height = h;
     },
     fireResize: () => listeners.get('resize')?.forEach((cb) => cb()),
     fireOrientationChange: () =>
       listeners.get('orientationchange')?.forEach((cb) => cb()),
+    fireVisualViewportResize: () =>
+      visualViewportListeners.get('resize')?.forEach((cb) => cb()),
+    fireVisualViewportScroll: () =>
+      visualViewportListeners.get('scroll')?.forEach((cb) => cb()),
     flushTimers: () => {
       const pending = Array.from(timers.values());
       timers.clear();
@@ -222,6 +248,42 @@ describe('orientation hint integration', () => {
     expect(w.pause).toHaveBeenCalledTimes(1);
     expect(w.resume).toHaveBeenCalledTimes(1);
     expect(w.showResume).not.toHaveBeenCalled();
+    w.dispose();
+  });
+
+  it('does not show the overlay when only inner size and matchMedia are stale portrait', () => {
+    const w = setupWiring({ width: 1024, height: 768 });
+
+    w.fake.setSize(768, 1024);
+    w.fake.setMatchMedia(true);
+    w.fake.setVisualViewportSize(1024, 768);
+    w.fake.fireVisualViewportResize();
+    w.fake.flushTimers();
+
+    expect(w.overlay.isVisible()).toBe(false);
+    expect(w.pause).not.toHaveBeenCalled();
+    expect(w.isPortraitLocked()).toBe(false);
+    w.dispose();
+  });
+
+  it('shows in portrait and resumes once when visualViewport returns to landscape', () => {
+    const w = setupWiring({ width: 1024, height: 768 });
+
+    w.fake.setVisualViewportSize(768, 1024);
+    w.fake.fireVisualViewportResize();
+    w.fake.flushTimers();
+
+    expect(w.overlay.isVisible()).toBe(true);
+    expect(w.pause).toHaveBeenCalledTimes(1);
+
+    w.fake.setVisualViewportSize(1024, 768);
+    w.fake.fireVisualViewportScroll();
+    w.fake.fireVisualViewportResize();
+    w.fake.flushTimers();
+
+    expect(w.overlay.isVisible()).toBe(false);
+    expect(w.resume).toHaveBeenCalledTimes(1);
+    expect(w.refreshViewport).toHaveBeenCalledTimes(1);
     w.dispose();
   });
 
