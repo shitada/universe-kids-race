@@ -3,6 +3,7 @@ import { HomeConfirmOverlay } from './HomeConfirmOverlay';
 import { attachReleaseConfirmButton } from './attachReleaseConfirmButton';
 
 export class HUD {
+  private pendingTimeouts = new Set<number>();
   private container: HTMLDivElement | null = null;
   private stageNameEl: HTMLDivElement | null = null;
   private assistMessageEl: HTMLDivElement | null = null;
@@ -372,26 +373,23 @@ export class HUD {
 
     this.boostButton.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
-      if (!this.boostButton) return;
+      const boostButton = this.boostButton;
+      if (!boostButton) return;
       if (this.boostLocked) return;
 
       if (this.lastCooldownProgress < 1.0) {
-        if (this.boostButton.hasAttribute('data-boost-shake')) return;
-        this.boostButton.setAttribute('data-boost-shake', '');
-        setTimeout(() => {
-          if (this.boostButton) {
-            this.boostButton.removeAttribute('data-boost-shake');
-          }
+        if (boostButton.hasAttribute('data-boost-shake')) return;
+        boostButton.setAttribute('data-boost-shake', '');
+        this.registerTimeout(() => {
+          boostButton.removeAttribute('data-boost-shake');
         }, 250);
         this.onBoostDeniedCallback?.();
         return;
       }
 
-      this.boostButton.style.transform = 'scale(0.9)';
-      setTimeout(() => {
-        if (this.boostButton) {
-          this.boostButton.style.transform = 'scale(1.0)';
-        }
+      boostButton.style.transform = 'scale(0.9)';
+      this.registerTimeout(() => {
+        boostButton.style.transform = 'scale(1.0)';
       }, 150);
       this.onBoostCallback?.();
     });
@@ -617,7 +615,24 @@ export class HUD {
       cleanup();
     };
     el.addEventListener('animationend', onEnd);
-    setTimeout(cleanup, 500);
+    this.registerTimeout(cleanup, 500);
+  }
+
+  private registerTimeout(callback: () => void, delayMs: number): number {
+    let timeoutId = 0;
+    timeoutId = window.setTimeout(() => {
+      this.pendingTimeouts.delete(timeoutId);
+      callback();
+    }, delayMs);
+    this.pendingTimeouts.add(timeoutId);
+    return timeoutId;
+  }
+
+  private clearPendingTimeouts(): void {
+    for (const timeoutId of this.pendingTimeouts) {
+      window.clearTimeout(timeoutId);
+    }
+    this.pendingTimeouts.clear();
   }
 
   updateCooldown(progress: number): void {
@@ -685,7 +700,7 @@ export class HUD {
       cleanup();
     };
     goal.addEventListener('animationend', onEnd);
-    setTimeout(cleanup, 500);
+    this.registerTimeout(cleanup, 500);
   }
 
   /**
@@ -722,7 +737,7 @@ export class HUD {
     // Fallback for iPad Safari where animationend may not fire (e.g., tab
     // switch interrupts the CSS animation). Slightly longer than the
     // 0.45s keyframe to allow the natural event to win when present.
-    setTimeout(cleanup, 500);
+    this.registerTimeout(cleanup, 500);
   }
 
   private clearBoostReadyFlash(): void {
@@ -757,6 +772,7 @@ export class HUD {
   }
 
   hide(): void {
+    this.clearPendingTimeouts();
     this.homeConfirmOverlay.hide();
     if (this.homeButton) {
       this.homeButton.remove();

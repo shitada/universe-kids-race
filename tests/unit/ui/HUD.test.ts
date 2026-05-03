@@ -456,6 +456,62 @@ describe('HUD', () => {
     });
   });
 
+  describe('Boost Button re-entry timer safety', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('clears pending boost timers on hide()', () => {
+      hud.show('Test');
+      const boostBtn = document.getElementById('ui-overlay')!.querySelector('button') as HTMLButtonElement;
+
+      hud.updateCooldown(1.0);
+      boostBtn.dispatchEvent(new Event('pointerdown'));
+      hud.updateCooldown(0.5);
+      boostBtn.dispatchEvent(new Event('pointerdown'));
+      hud.updateCooldown(1.0);
+      hud.flashBoostReady();
+
+      expect(vi.getTimerCount()).toBe(3);
+
+      hud.hide();
+
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('does not let old boost timers mutate the next HUD boost button after re-entry', () => {
+      hud.show('Test');
+      const oldBoostBtn = document.getElementById('ui-overlay')!.querySelector('button') as HTMLButtonElement;
+
+      hud.updateCooldown(1.0);
+      oldBoostBtn.dispatchEvent(new Event('pointerdown'));
+      hud.updateCooldown(0.5);
+      oldBoostBtn.dispatchEvent(new Event('pointerdown'));
+      hud.updateCooldown(1.0);
+      hud.flashBoostReady();
+
+      expect(oldBoostBtn.style.transform).toBe('scale(0.9)');
+      expect(oldBoostBtn.hasAttribute('data-boost-shake')).toBe(true);
+      expect(oldBoostBtn.hasAttribute('data-boost-ready-flash')).toBe(true);
+
+      hud.hide();
+      hud.show('Test');
+
+      const newBoostBtn = document.getElementById('ui-overlay')!.querySelector('button') as HTMLButtonElement;
+      expect(newBoostBtn).not.toBe(oldBoostBtn);
+
+      vi.advanceTimersByTime(600);
+
+      expect(newBoostBtn.style.transform).toBe('');
+      expect(newBoostBtn.hasAttribute('data-boost-shake')).toBe(false);
+      expect(newBoostBtn.hasAttribute('data-boost-ready-flash')).toBe(false);
+    });
+  });
+
   describe('updateCooldown differential writes (perf)', () => {
     function spyStyleSetter(el: HTMLElement, prop: string): { count: number; values: string[] } {
       const tracker = { count: 0, values: [] as string[] };

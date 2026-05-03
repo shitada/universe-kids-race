@@ -86,6 +86,24 @@ describe('HUD.flashBoostReady', () => {
     expect(btn.hasAttribute('data-boost-ready-flash')).toBe(false);
   });
 
+  it('does not let a hidden HUD flash timeout touch the next boost button after re-entry', () => {
+    const oldBtn = getBoostButton();
+    hud.flashBoostReady();
+    expect(oldBtn.hasAttribute('data-boost-ready-flash')).toBe(true);
+    expect(vi.getTimerCount()).toBe(1);
+
+    hud.hide();
+    hud.show('test');
+
+    const newBtn = getBoostButton();
+    expect(newBtn).not.toBe(oldBtn);
+
+    vi.advanceTimersByTime(500);
+
+    expect(newBtn.hasAttribute('data-boost-ready-flash')).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('clears flash attribute when cooldown restarts (updateCooldown -> not ready)', () => {
     const btn = getBoostButton();
     // Start in ready state then trigger flash, then restart cooldown
