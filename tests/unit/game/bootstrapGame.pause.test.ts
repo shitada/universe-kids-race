@@ -26,11 +26,29 @@ interface SetupResult {
     } | null;
     manuallyPaused: boolean;
     requestResumeCountdown: ReturnType<typeof vi.fn>;
+    setVisualQualityTier: ReturnType<typeof vi.fn>;
   };
   visibilityCallbacks: { onHide: () => void; onShow: () => void };
+  contextLossCallbacks: { onLost: () => void; onRestored: () => void };
+  orientationCallbacks: { onPortrait: () => void; onLandscape: () => void };
   viewportResizeCallback: (() => void) | null;
   viewportSize: { width: number; height: number };
   canvasMetrics: { left: number; width: number };
+  pixelRatioControllerInstance: {
+    notifyResume: ReturnType<typeof vi.fn>;
+    resetToTier: ReturnType<typeof vi.fn>;
+  };
+  resizeCoalescerInstance: {
+    flush: ReturnType<typeof vi.fn>;
+  };
+  contextLossOverlayInstance: {
+    show: ReturnType<typeof vi.fn>;
+    hide: ReturnType<typeof vi.fn>;
+  };
+  resumeOverlayInstance: {
+    show: ReturnType<typeof vi.fn>;
+    hide: ReturnType<typeof vi.fn>;
+  };
 }
 
 async function setup(
@@ -75,7 +93,13 @@ async function setup(
   let audioManagerInstance: SetupResult['audioManagerInstance'] | null = null;
   let stageSceneInstance: SetupResult['stageSceneInstance'] | null = null;
   let visibilityCallbacks: SetupResult['visibilityCallbacks'] | null = null;
+  let contextLossCallbacks: SetupResult['contextLossCallbacks'] | null = null;
+  let orientationCallbacks: SetupResult['orientationCallbacks'] | null = null;
   let viewportResizeCallback: SetupResult['viewportResizeCallback'] = null;
+  let pixelRatioControllerInstance: SetupResult['pixelRatioControllerInstance'] | null = null;
+  let resizeCoalescerInstance: SetupResult['resizeCoalescerInstance'] | null = null;
+  let contextLossOverlayInstance: SetupResult['contextLossOverlayInstance'] | null = null;
+  let resumeOverlayInstance: SetupResult['resumeOverlayInstance'] | null = null;
 
   class MockSceneManager {
     private factories = new Map<string, () => Promise<unknown> | unknown>();
@@ -184,7 +208,9 @@ async function setup(
 
   vi.doMock('../../../src/game/utils/AdaptivePixelRatioController', () => ({
     AdaptivePixelRatioController: class {
-      constructor() {}
+      constructor() {
+        pixelRatioControllerInstance = this as unknown as SetupResult['pixelRatioControllerInstance'];
+      }
       sample = vi.fn();
       notifyResume = vi.fn();
       resetToTier = vi.fn();
@@ -192,10 +218,14 @@ async function setup(
   }));
 
   vi.doMock('../../../src/game/utils/ResizeCoalescer', () => ({
-    createResizeCoalescer: (callback: (width: number, height: number) => void) => ({
-      schedule: (width: number, height: number) => callback(width, height),
-      flush: vi.fn(),
-    }),
+    createResizeCoalescer: (callback: (width: number, height: number) => void) => {
+      const instance = {
+        schedule: (width: number, height: number) => callback(width, height),
+        flush: vi.fn(),
+      };
+      resizeCoalescerInstance = instance;
+      return instance;
+    },
   }));
 
   vi.doMock('../../../src/game/utils/createSceneTransitionHandler', () => ({
@@ -203,7 +233,9 @@ async function setup(
   }));
 
   vi.doMock('../../../src/game/utils/createWebGLContextLossHandler', () => ({
-    createWebGLContextLossHandler: vi.fn(),
+    createWebGLContextLossHandler: vi.fn((_canvas: HTMLCanvasElement, callbacks: SetupResult['contextLossCallbacks']) => {
+      contextLossCallbacks = callbacks;
+    }),
   }));
 
   vi.doMock('../../../src/game/utils/createVisibilityPauseHandler', () => ({
@@ -237,6 +269,9 @@ async function setup(
     ContextLossOverlay: class {
       show = vi.fn();
       hide = vi.fn();
+      constructor() {
+        contextLossOverlayInstance = this as unknown as SetupResult['contextLossOverlayInstance'];
+      }
     },
   }));
 
@@ -244,6 +279,9 @@ async function setup(
     ResumeOverlay: class {
       show = vi.fn();
       hide = vi.fn();
+      constructor() {
+        resumeOverlayInstance = this as unknown as SetupResult['resumeOverlayInstance'];
+      }
     },
   }));
 
@@ -269,9 +307,12 @@ async function setup(
   }));
 
   vi.doMock('../../../src/game/utils/createOrientationHintHandler', () => ({
-    createOrientationHintHandler: () => ({
+    createOrientationHintHandler: (callbacks: SetupResult['orientationCallbacks']) => {
+      orientationCallbacks = callbacks;
+      return {
       evaluate: vi.fn(),
-    }),
+      };
+    },
   }));
 
   vi.doMock('../../../src/game/utils/createRetryableModuleLoader', () => ({
@@ -345,9 +386,15 @@ async function setup(
     audioManagerInstance: audioManagerInstance!,
     stageSceneInstance: stageSceneInstance!,
     visibilityCallbacks: visibilityCallbacks!,
+    contextLossCallbacks: contextLossCallbacks!,
+    orientationCallbacks: orientationCallbacks!,
     viewportResizeCallback,
     viewportSize,
     canvasMetrics,
+    pixelRatioControllerInstance: pixelRatioControllerInstance!,
+    resizeCoalescerInstance: resizeCoalescerInstance!,
+    contextLossOverlayInstance: contextLossOverlayInstance!,
+    resumeOverlayInstance: resumeOverlayInstance!,
   };
 }
 
@@ -409,5 +456,86 @@ describe('bootstrapGame manual pause wiring', () => {
     expect(gameLoopInstance.resume).not.toHaveBeenCalled();
     expect(audioManagerInstance.ensureResumed).not.toHaveBeenCalled();
     expect(stageSceneInstance.requestResumeCountdown).not.toHaveBeenCalled();
+  });
+
+  it('uses the shared context restore order and shows the stage resume overlay after resize flush', async () => {
+    const {
+      contextLossCallbacks,
+      contextLossOverlayInstance,
+      pixelRatioControllerInstance,
+      resizeCoalescerInstance,
+      resumeOverlayInstance,
+      stageSceneInstance,
+    } = await setup();
+
+    contextLossCallbacks.onLost();
+    contextLossOverlayInstance.hide.mockClear();
+    pixelRatioControllerInstance.resetToTier.mockClear();
+    pixelRatioControllerInstance.notifyResume.mockClear();
+    stageSceneInstance.setVisualQualityTier.mockClear();
+    resizeCoalescerInstance.flush.mockClear();
+    resumeOverlayInstance.show.mockClear();
+
+    contextLossCallbacks.onRestored();
+
+    expect(contextLossOverlayInstance.hide).toHaveBeenCalledTimes(1);
+    expect(pixelRatioControllerInstance.resetToTier).toHaveBeenCalledWith(0);
+    expect(stageSceneInstance.setVisualQualityTier).toHaveBeenCalledWith(0);
+    expect(resumeOverlayInstance.show).toHaveBeenCalledTimes(1);
+
+    const orders = [
+      contextLossOverlayInstance.hide.mock.invocationCallOrder[0],
+      pixelRatioControllerInstance.resetToTier.mock.invocationCallOrder[0],
+      stageSceneInstance.setVisualQualityTier.mock.invocationCallOrder[0],
+      resizeCoalescerInstance.flush.mock.invocationCallOrder[0],
+      resumeOverlayInstance.show.mock.invocationCallOrder[0],
+      pixelRatioControllerInstance.notifyResume.mock.invocationCallOrder[0],
+    ];
+    expect(orders).toEqual([...orders].sort((a, b) => a - b));
+  });
+
+  it('does not auto-resume after context restore while manual pause is active', async () => {
+    const {
+      contextLossCallbacks,
+      gameLoopInstance,
+      audioManagerInstance,
+      stageSceneInstance,
+      resumeOverlayInstance,
+    } = await setup();
+    stageSceneInstance.manuallyPaused = true;
+
+    contextLossCallbacks.onLost();
+    gameLoopInstance.resume.mockClear();
+    audioManagerInstance.ensureResumed.mockClear();
+    stageSceneInstance.requestResumeCountdown.mockClear();
+    resumeOverlayInstance.show.mockClear();
+
+    contextLossCallbacks.onRestored();
+
+    expect(gameLoopInstance.resume).not.toHaveBeenCalled();
+    expect(audioManagerInstance.ensureResumed).not.toHaveBeenCalled();
+    expect(stageSceneInstance.requestResumeCountdown).not.toHaveBeenCalled();
+    expect(resumeOverlayInstance.show).not.toHaveBeenCalled();
+  });
+
+  it('does not auto-resume after context restore while portrait lock is active', async () => {
+    const {
+      contextLossCallbacks,
+      orientationCallbacks,
+      gameLoopInstance,
+      audioManagerInstance,
+      resumeOverlayInstance,
+    } = await setup();
+
+    orientationCallbacks.onPortrait();
+    gameLoopInstance.resume.mockClear();
+    audioManagerInstance.ensureResumed.mockClear();
+    resumeOverlayInstance.show.mockClear();
+
+    contextLossCallbacks.onRestored();
+
+    expect(gameLoopInstance.resume).not.toHaveBeenCalled();
+    expect(audioManagerInstance.ensureResumed).not.toHaveBeenCalled();
+    expect(resumeOverlayInstance.show).not.toHaveBeenCalled();
   });
 });

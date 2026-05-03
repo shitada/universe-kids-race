@@ -9,6 +9,7 @@ import { AdaptivePixelRatioController } from './utils/AdaptivePixelRatioControll
 import { createResizeCoalescer } from './utils/ResizeCoalescer';
 import { createSceneTransitionHandler } from './utils/createSceneTransitionHandler';
 import { createWebGLContextLossHandler } from './utils/createWebGLContextLossHandler';
+import { createWebGLContextRestoredHandler } from './utils/createWebGLContextRestoredHandler';
 import { createVisibilityPauseHandler } from './utils/createVisibilityPauseHandler';
 import { createRenderer } from './utils/createRenderer';
 import { getViewportSize, subscribeViewportResize, updateViewportSizeCache } from './utils/getViewportSize';
@@ -99,15 +100,18 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
   applyPixelRatioTier(initialPixelTier);
 
   const currentVisualTier = { value: initialPixelTier };
+  function syncVisualQualityTier(tier: number): void {
+    currentVisualTier.value = tier;
+    stageScene?.setVisualQualityTier(tier);
+  }
   const pixelRatioController = new AdaptivePixelRatioController(
     maxTier,
     (newTier: number) => {
       applyPixelRatioTier(newTier);
-      stageScene?.setVisualQualityTier(newTier);
       if (newTier < currentVisualTier.value) {
         saveManager.saveLastStablePixelTier(newTier);
       }
-      currentVisualTier.value = newTier;
+      syncVisualQualityTier(newTier);
     },
     {},
     initialPixelTier,
@@ -280,7 +284,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
     audioManager.ensureResumed();
   }
 
-  function refreshViewportAfterRestore(): void {
+  function restoreViewportAfterPause(): void {
     pixelRatioController.notifyResume(performance.now());
     const { width, height } = updateViewportSizeCache();
     resizeCoalescer.schedule(width, height);
@@ -307,8 +311,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
     );
   }
 
-  function handleVisibilityRestore(): void {
-    refreshViewportAfterRestore();
+  function handleResumeAfterRestore(): void {
     if (isPortraitLocked) {
       return;
     }
@@ -324,6 +327,11 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
       pendingBackgroundResume = false;
       resumeGame();
     }
+  }
+
+  function handleVisibilityRestore(): void {
+    restoreViewportAfterPause();
+    handleResumeAfterRestore();
   }
 
   createVisibilityPauseHandler({
@@ -348,7 +356,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
       if (!isPortraitLocked) return;
       isPortraitLocked = false;
       orientationHintOverlay.hide();
-      refreshViewportAfterRestore();
+      restoreViewportAfterPause();
       if (isStageManuallyPaused()) {
         pendingBackgroundResume = false;
         return;
@@ -372,15 +380,26 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
         window.location.reload();
       });
     },
-    onRestored: () => {
-      const restoreTier = currentVisualTier.value ?? initialPixelTier;
-      contextLossOverlay.hide();
-      pixelRatioController.resetToTier(restoreTier);
-      applyPixelRatioTier(restoreTier);
-      currentVisualTier.value = restoreTier;
-      stageScene?.setVisualQualityTier(restoreTier);
-      handleVisibilityRestore();
-    },
+    onRestored: createWebGLContextRestoredHandler({
+      pixelRatioController,
+      applyPixelRatioTier,
+      maxTier,
+      getRestoreTier: () => currentVisualTier.value ?? initialPixelTier,
+      syncVisualQualityTier,
+      getViewportSize: updateViewportSizeCache,
+      scheduleResize: (width, height) => {
+        resizeCoalescer.schedule(width, height);
+      },
+      flushResize: () => {
+        resizeCoalescer.flush();
+      },
+      gameLoopResume: handleResumeAfterRestore,
+      audioEnsureResumed: () => {},
+      hideOverlay: () => {
+        contextLossOverlay.hide();
+      },
+      now: () => performance.now(),
+    }),
   });
 
   await sceneManager.requestTransition('title');
