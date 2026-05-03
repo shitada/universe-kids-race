@@ -27,7 +27,7 @@ describe('Ending → Title all-clear persistence', () => {
       unlockedPlanets: Array.from({ length: TOTAL_STAGES }, (_, index) => index + 1),
       muted: false,
       tutorialShown: true,
-      bestStageStars: {},
+      bestStageStars: { 1: 3, [TOTAL_STAGES]: 2 },
     };
     const saveManager = {
       load: vi.fn(() => ({
@@ -75,6 +75,8 @@ describe('Ending → Title all-clear persistence', () => {
     await manager.transitionTo('ending', { totalScore: 9000, totalStarCount: 72 });
 
     expect(saveState.clearedStage).toBe(0);
+    expect(saveState.unlockedPlanets).toEqual(Array.from({ length: TOTAL_STAGES }, (_, index) => index + 1));
+    expect(saveState.bestStageStars).toEqual({ 1: 3, [TOTAL_STAGES]: 2 });
 
     const overlay = document.querySelector('[data-ending-overlay]') as HTMLDivElement | null;
     expect(overlay).toBeTruthy();

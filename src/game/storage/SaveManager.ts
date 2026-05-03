@@ -5,6 +5,8 @@ const STORAGE_KEY = 'universe-kids-race-save';
 const SESSION_KEY = 'universe-kids-race-session';
 const DEFAULT_DATA: SaveData = { clearedStage: 0, unlockedPlanets: [], muted: false, bestStageStars: {}, tutorialShown: false };
 
+export type SessionState = 'fresh' | 'existing' | 'unavailable';
+
 function defaults(): SaveData {
   return { ...DEFAULT_DATA, unlockedPlanets: [], bestStageStars: {}, tutorialShown: false };
 }
@@ -22,8 +24,6 @@ function cloneSaveData(src: SaveData): SaveData {
 }
 
 export class SaveManager {
-  private static sessionFallbackActive = false;
-
   // In-memory cache of the validated SaveData. Populated lazily on the first
   // load() call and invalidated on save()/clear()/reset paths. This avoids
   // the per-call cost of localStorage.getItem + JSON.parse + full revalidation
@@ -251,25 +251,22 @@ export class SaveManager {
     }
   }
 
-  // Returns true if this is a fresh session (no session flag yet).
-  // Safe against sessionStorage exceptions (iPad Safari private mode etc.).
-  // Also marks the session as active as a side-effect.
-  isFreshSession(): boolean {
+  // Returns whether this launch is a fresh session, an existing live session,
+  // or a sessionStorage-unavailable fallback case. Also marks the session as
+  // active when sessionStorage is fully usable.
+  getSessionState(): SessionState {
     try {
-      const fresh = !sessionStorage.getItem(SESSION_KEY) && !SaveManager.sessionFallbackActive;
+      const fresh = !sessionStorage.getItem(SESSION_KEY);
       try {
         sessionStorage.setItem(SESSION_KEY, 'active');
-        SaveManager.sessionFallbackActive = false;
       } catch (e) {
-        SaveManager.sessionFallbackActive = true;
-        console.warn('SaveManager.isFreshSession setItem failed:', e);
+        console.warn('SaveManager.getSessionState setItem failed:', e);
+        return 'unavailable';
       }
-      return fresh;
+      return fresh ? 'fresh' : 'existing';
     } catch (e) {
-      const fresh = !SaveManager.sessionFallbackActive;
-      SaveManager.sessionFallbackActive = true;
-      console.warn('SaveManager.isFreshSession getItem failed:', e);
-      return fresh;
+      console.warn('SaveManager.getSessionState getItem failed:', e);
+      return 'unavailable';
     }
   }
 }

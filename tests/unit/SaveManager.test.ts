@@ -28,12 +28,17 @@ const sessionStorageMock = {
 
 vi.stubGlobal('sessionStorage', sessionStorageMock);
 
+function runBootstrapSessionCheck(saveManager: SaveManager): void {
+  if (saveManager.getSessionState() === 'fresh') {
+    saveManager.resetSessionDataPreservingMuted();
+  }
+}
+
 describe('SaveManager', () => {
   beforeEach(() => {
     storage.clear();
     sessionStore.clear();
     vi.clearAllMocks();
-    (SaveManager as unknown as { sessionFallbackActive: boolean }).sessionFallbackActive = false;
   });
 
   it('returns default data when no save exists', () => {
@@ -246,10 +251,7 @@ describe('SaveManager', () => {
     const SESSION_KEY = 'universe-kids-race-session';
 
     function runSessionCheck(saveManager: SaveManager): void {
-      if (!sessionStorage.getItem(SESSION_KEY)) {
-        saveManager.clear();
-      }
-      sessionStorage.setItem(SESSION_KEY, 'active');
+      runBootstrapSessionCheck(saveManager);
     }
 
     it('clears save data when sessionStorage flag is absent and localStorage has data', () => {
@@ -303,7 +305,7 @@ describe('SaveManager', () => {
         muted: true,
       });
 
-      expect(manager.isFreshSession()).toBe(true);
+      expect(manager.getSessionState()).toBe('fresh');
       manager.resetSessionDataPreservingMuted();
 
       expect(manager.load()).toEqual({
@@ -353,49 +355,97 @@ describe('SaveManager', () => {
       expect(data.unlockedPlanets).toEqual([]);
     });
 
-    it('isFreshSession() does not throw when sessionStorage.getItem throws', () => {
+    it('getSessionState() does not throw when sessionStorage.getItem throws', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       sessionStorageMock.getItem.mockImplementationOnce(() => {
         throw new Error('SecurityError');
       });
       const manager = new SaveManager();
-      let result: boolean | undefined;
+      let result: string | undefined;
       expect(() => {
-        result = manager.isFreshSession();
+        result = manager.getSessionState();
       }).not.toThrow();
-      expect(result).toBe(true);
+      expect(result).toBe('unavailable');
       expect(warnSpy).toHaveBeenCalled();
       warnSpy.mockRestore();
     });
 
-    it('isFreshSession() returns false after the first fallback read failure in the same runtime', () => {
+    it('getSessionState() stays unavailable after repeated sessionStorage.getItem failures', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       sessionStorageMock.getItem.mockImplementation(() => {
         throw new Error('SecurityError');
       });
       const manager = new SaveManager();
-      expect(manager.isFreshSession()).toBe(true);
-      expect(manager.isFreshSession()).toBe(false);
+      expect(manager.getSessionState()).toBe('unavailable');
+      expect(manager.getSessionState()).toBe('unavailable');
       expect(warnSpy).toHaveBeenCalledTimes(2);
       warnSpy.mockRestore();
     });
 
-    it('isFreshSession() falls back to memory when sessionStorage.setItem throws', () => {
+    it('getSessionState() returns unavailable when sessionStorage.setItem throws', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       sessionStorageMock.setItem.mockImplementation(() => {
         throw new Error('QuotaExceededError');
       });
       const manager = new SaveManager();
-      expect(manager.isFreshSession()).toBe(true);
-      expect(manager.isFreshSession()).toBe(false);
+      expect(manager.getSessionState()).toBe('unavailable');
+      expect(manager.getSessionState()).toBe('unavailable');
       expect(warnSpy).toHaveBeenCalledTimes(2);
       warnSpy.mockRestore();
     });
 
-    it('isFreshSession() returns true on first call and false on subsequent calls', () => {
+    it('getSessionState() returns fresh on first call and existing on subsequent calls', () => {
       const manager = new SaveManager();
-      expect(manager.isFreshSession()).toBe(true);
-      expect(manager.isFreshSession()).toBe(false);
+      expect(manager.getSessionState()).toBe('fresh');
+      expect(manager.getSessionState()).toBe('existing');
+    });
+
+    it('preserves localStorage progress across restart when sessionStorage.getItem throws', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const initialData = {
+        clearedStage: 3,
+        unlockedPlanets: [1, 2, 3],
+        bestStageStars: { 1: 3, 3: 2 },
+        muted: true,
+        tutorialShown: true,
+      };
+      const manager = new SaveManager();
+      manager.save(initialData);
+      sessionStorageMock.getItem.mockImplementation(() => {
+        throw new Error('SecurityError');
+      });
+
+      runBootstrapSessionCheck(manager);
+      const restartedManager = new SaveManager();
+      runBootstrapSessionCheck(restartedManager);
+
+      expect(restartedManager.load()).toEqual(initialData);
+      expect(warnSpy).toHaveBeenCalledTimes(2);
+      warnSpy.mockRestore();
+    });
+
+    it('preserves localStorage progress across restart when sessionStorage.setItem throws', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const initialData = {
+        clearedStage: 4,
+        unlockedPlanets: [1, 2, 3, 4],
+        bestStageStars: { 2: 1, 4: 3 },
+        muted: false,
+        tutorialShown: true,
+      };
+      const manager = new SaveManager();
+      manager.save(initialData);
+      sessionStorageMock.setItem.mockImplementation(() => {
+        throw new Error('QuotaExceededError');
+      });
+
+      runBootstrapSessionCheck(manager);
+      const restartedManager = new SaveManager();
+      runBootstrapSessionCheck(restartedManager);
+
+      expect(restartedManager.load()).toEqual(initialData);
+      expect(warnSpy).toHaveBeenCalledTimes(2);
+      warnSpy.mockRestore();
     });
   });
 

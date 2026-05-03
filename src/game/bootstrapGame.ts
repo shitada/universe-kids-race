@@ -74,7 +74,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
     applyRendererSize(width, height);
   }
 
-  if (saveManager.isFreshSession()) {
+  if (saveManager.getSessionState() === 'fresh') {
     saveManager.resetSessionDataPreservingMuted();
   }
 

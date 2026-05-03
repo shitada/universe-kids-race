@@ -85,8 +85,8 @@ async function bootMain(
 
   vi.doMock('../../src/game/storage/SaveManager', () => ({
     SaveManager: class {
-      isFreshSession(): boolean {
-        return false;
+      getSessionState(): string {
+        return 'existing';
       }
 
       resetSessionDataPreservingMuted = vi.fn();
