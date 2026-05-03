@@ -90,6 +90,10 @@ function findNextAdventureCard(): HTMLDivElement | null {
   return document.querySelector('[data-next-adventure-card]');
 }
 
+function findNextAdventureMedalDisplay(): HTMLDivElement | null {
+  return document.querySelector('[data-stage-medal-display][data-stage-medal-scope="title-next-adventure"]');
+}
+
 describe('TitleScene (T009)', () => {
   it('overlay pointerdown calls initSync() and starts BGM_0 when not initialized', () => {
     const sceneManager = createMockSceneManager();
@@ -585,19 +589,42 @@ describe('TitleScene (T009)', () => {
   it('shows stage 5 as the next adventure after clearing stage 4', () => {
     const scene = new TitleScene(
       createMockSceneManager(),
-      createMockSaveManager({ clearedStage: 4, unlockedPlanets: [1, 2, 3, 4] }),
+      createMockSaveManager({
+        clearedStage: 4,
+        unlockedPlanets: [1, 2, 3, 4],
+        bestStageStars: { 5: 11 },
+      }),
       createMockAudioManager(true),
     );
 
     scene.enter({});
 
     const card = findNextAdventureCard();
+    const medalDisplay = findNextAdventureMedalDisplay();
     expect(card?.getAttribute('data-next-stage-number')).toBe('5');
     expect(card?.getAttribute('data-next-stage-destination')).toBe('木星');
     expect(card?.textContent).toContain('🟠');
     expect(card?.textContent).toContain('ステージ 5');
     expect(card?.textContent).toContain('木星');
+    expect(medalDisplay?.getAttribute('data-stage-medal-earned')).toBe('2');
+    expect(medalDisplay?.textContent).toContain('つぎ ⭐ 15');
     expect(document.querySelector('[data-play-button-hint]')?.textContent).toContain('ステージ 5');
+
+    scene.exit();
+  });
+
+  it('shows empty medal progress on a fresh save next-adventure card', () => {
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager({ clearedStage: 0, unlockedPlanets: [], bestStageStars: {} }),
+      createMockAudioManager(true),
+    );
+
+    scene.enter({});
+
+    const medalDisplay = findNextAdventureMedalDisplay();
+    expect(medalDisplay?.getAttribute('data-stage-medal-earned')).toBe('0');
+    expect(medalDisplay?.textContent).toContain('つぎ ⭐ 2');
 
     scene.exit();
   });

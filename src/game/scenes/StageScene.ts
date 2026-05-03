@@ -24,6 +24,7 @@ import { getViewportSize } from '../utils/getViewportSize';
 import { ScorePopupManager } from '../../ui/ScorePopupManager';
 import { getNextPlanetEncyclopediaEntry, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { TouchGuideOverlay, type TouchGuideMode } from '../../ui/TouchGuideOverlay';
+import { createStageMedalDisplay } from '../../ui/stageMedalDisplay';
 import {
   __resetStageSceneSharedAssetCachesForTest,
   __stageSceneSharedAssetCachesForTest,
@@ -1148,6 +1149,7 @@ export class StageScene implements Scene {
     // Persist best (highest) star count for this stage.
     this.saveManager.updateBestStageStars(this.stageNumber, earnedStars);
 
+    const bestStarCount = Math.max(previousBest, earnedStars);
     const isBestUpdated = earnedStars > previousBest;
 
     // Add companion if this is a new planet unlock
@@ -1155,7 +1157,7 @@ export class StageScene implements Scene {
       this.companionManager?.addCompanion(this.stageNumber);
     }
 
-    this.showClearMessage(isBestUpdated, earnedStars, isNewPlanetUnlock);
+    this.showClearMessage(isBestUpdated, earnedStars, isNewPlanetUnlock, bestStarCount);
 
     if (isBestUpdated) {
       this.audioManager.playSFX('rainbowCollect');
@@ -1249,7 +1251,12 @@ export class StageScene implements Scene {
     }
   }
 
-  private showClearMessage(isBestUpdated = false, _earnedStars?: number, isNewPlanetUnlock = false): void {
+  private showClearMessage(
+    isBestUpdated = false,
+    _earnedStars?: number,
+    isNewPlanetUnlock = false,
+    bestStars?: number,
+  ): void {
     const uiOverlay = document.getElementById('ui-overlay');
     if (!uiOverlay) return;
 
@@ -1322,6 +1329,45 @@ export class StageScene implements Scene {
     }
 
     this.clearOverlay.appendChild(score);
+
+    const bestStarCount = bestStars ?? starCount;
+    const medalSummary = document.createElement('div');
+    medalSummary.setAttribute('data-stage-clear-medals', '');
+    medalSummary.style.cssText = `
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      gap: 0.8rem;
+      flex-wrap: wrap;
+      margin-top: 0.9rem;
+    `;
+
+    const currentMedal = createStageMedalDisplay(this.stageNumber, starCount, {
+      label: 'こんかい',
+      hint: `⭐ ${starCount}`,
+      size: 'hero',
+      scope: 'stage-clear-current',
+    });
+    currentMedal.style.minWidth = '150px';
+    currentMedal.style.padding = '0.75rem 0.9rem';
+    currentMedal.style.borderRadius = '20px';
+    currentMedal.style.background = 'rgba(255, 255, 255, 0.12)';
+
+    const bestMedal = createStageMedalDisplay(this.stageNumber, bestStarCount, {
+      label: 'ベスト',
+      hint: `⭐ ${bestStarCount}`,
+      size: 'hero',
+      scope: 'stage-clear-best',
+    });
+    bestMedal.style.minWidth = '150px';
+    bestMedal.style.padding = '0.75rem 0.9rem';
+    bestMedal.style.borderRadius = '20px';
+    bestMedal.style.background = 'rgba(255, 255, 255, 0.12)';
+
+    medalSummary.append(currentMedal, bestMedal);
+    this.clearOverlay.appendChild(medalSummary);
 
     const nextEntry = getNextPlanetEncyclopediaEntry(this.stageNumber);
     if (nextEntry) {

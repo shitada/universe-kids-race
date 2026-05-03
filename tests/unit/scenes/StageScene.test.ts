@@ -458,6 +458,54 @@ describe('StageScene best-stage-stars-update feedback on clear', () => {
     expect(sfxCalls).not.toContain('rainbowCollect');
   });
 
+  it('shows current and best medal progress on the clear overlay', () => {
+    const { scene } = setupClearScene({
+      stageNumber: 2,
+      earnedStars: 4,
+      previousBest: 9,
+      alreadyUnlocked: true,
+    });
+
+    (scene as unknown as { onStageClear(): void }).onStageClear();
+
+    const currentMedal = document.querySelector(
+      '[data-stage-medal-display][data-stage-medal-scope="stage-clear-current"]',
+    ) as HTMLElement | null;
+    const bestMedal = document.querySelector(
+      '[data-stage-medal-display][data-stage-medal-scope="stage-clear-best"]',
+    ) as HTMLElement | null;
+
+    expect(currentMedal).not.toBeNull();
+    expect(currentMedal?.getAttribute('data-stage-medal-earned')).toBe('1');
+    expect(currentMedal?.textContent).toContain('⭐ 4');
+
+    expect(bestMedal).not.toBeNull();
+    expect(bestMedal?.getAttribute('data-stage-medal-earned')).toBe('2');
+    expect(bestMedal?.textContent).toContain('⭐ 9');
+  });
+
+  it('upgrades both current and best medal progress after a new personal best', () => {
+    const { scene } = setupClearScene({
+      stageNumber: 1,
+      earnedStars: 8,
+      previousBest: 5,
+      alreadyUnlocked: true,
+    });
+
+    (scene as unknown as { onStageClear(): void }).onStageClear();
+
+    const currentMedal = document.querySelector(
+      '[data-stage-medal-display][data-stage-medal-scope="stage-clear-current"]',
+    ) as HTMLElement | null;
+    const bestMedal = document.querySelector(
+      '[data-stage-medal-display][data-stage-medal-scope="stage-clear-best"]',
+    ) as HTMLElement | null;
+
+    expect(currentMedal?.getAttribute('data-stage-medal-earned')).toBe('3');
+    expect(bestMedal?.getAttribute('data-stage-medal-earned')).toBe('3');
+    expect(bestMedal?.textContent).toContain('⭐ 8');
+  });
+
   it('inserts the best-update line between "やったね" and "⭐ N こ" lines', () => {
     const { scene } = setupClearScene({
       stageNumber: 2,

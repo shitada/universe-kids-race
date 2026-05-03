@@ -40,9 +40,31 @@ export interface StageConfig {
   stageLength: number;
   meteoriteInterval: number;
   starDensity: number;
+  medalThresholds: readonly [number, number, number];
   emoji: string;
   displayName: string;
   planetColor: number;
+}
+
+export type StageMedalTier = 'none' | 'bronze' | 'silver' | 'gold';
+export type StageMedalGoalTier = Exclude<StageMedalTier, 'none'>;
+
+export interface StageMedalSlot {
+  tier: StageMedalGoalTier;
+  icon: string;
+  threshold: number;
+  reached: boolean;
+}
+
+export interface StageMedalStatus {
+  tier: StageMedalTier;
+  icon: string;
+  stars: number;
+  earnedCount: 0 | 1 | 2 | 3;
+  thresholds: readonly [number, number, number];
+  slots: readonly StageMedalSlot[];
+  nextTier: StageMedalGoalTier | null;
+  nextThreshold: number | null;
 }
 
 // Sound effects

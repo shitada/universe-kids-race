@@ -7,11 +7,12 @@ import { TutorialOverlay } from '../../ui/TutorialOverlay';
 import { LoadingOverlay } from '../../ui/LoadingOverlay';
 import { LoadFailureOverlay } from '../../ui/LoadFailureOverlay';
 import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButton';
-import { getStageConfig, TOTAL_STAGES } from '../config/StageConfig';
+import { getStageConfig, getStageMedalStatus, TOTAL_STAGES } from '../config/StageConfig';
 import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
 import { getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { formatEncyclopediaLabel } from '../../ui/formatEncyclopediaLabel';
 import { getViewportSize } from '../utils/getViewportSize';
+import { createStageMedalDisplay } from '../../ui/stageMedalDisplay';
 import { prewarmStageVisualAssets } from './stageVisualAssets';
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -105,6 +106,7 @@ interface NextAdventurePreview {
   statusLabel: string;
   destinationLabel: string;
   buttonHint: string;
+  bestStars: number;
 }
 
 function getUnlockedStageCount(unlockedPlanets: number[]): number {
@@ -124,6 +126,7 @@ function getNextAdventurePreview(saveData: SaveData): NextAdventurePreview {
   const isAllClear = isAllStagesUnlocked(saveData.unlockedPlanets);
   const startStage = isAllClear ? 1 : Math.min(saveData.clearedStage + 1, TOTAL_STAGES);
   const stageConfig = getStageConfig(startStage);
+  const bestStars = saveData.bestStageStars?.[startStage] ?? 0;
 
   if (isAllClear) {
     return {
@@ -133,6 +136,7 @@ function getNextAdventurePreview(saveData: SaveData): NextAdventurePreview {
       statusLabel: 'ぜんぶ クリア！',
       destinationLabel: `${stageConfig.destination}へ さいしょから しゅっぱつ！`,
       buttonHint: `${stageConfig.emoji} ステージ ${startStage} から さいしょから あそぶ`,
+      bestStars,
     };
   }
 
@@ -143,6 +147,7 @@ function getNextAdventurePreview(saveData: SaveData): NextAdventurePreview {
     statusLabel: saveData.clearedStage > 0 ? 'つづきから しゅっぱつ！' : 'はじめての しゅっぱつ！',
     destinationLabel: `${stageConfig.destination}へ むかおう！`,
     buttonHint: `${stageConfig.emoji} ステージ ${startStage} から スタート`,
+    bestStars,
   };
 }
 
@@ -502,10 +507,22 @@ export class TitleScene implements Scene {
       color: rgba(255, 255, 255, 0.92);
     `;
 
+    const medalStatus = getStageMedalStatus(nextAdventure.startStage, nextAdventure.bestStars);
+    const medalDisplay = createStageMedalDisplay(nextAdventure.startStage, nextAdventure.bestStars, {
+      label: 'メダル',
+      hint: medalStatus.nextThreshold === null
+        ? 'かんぺき！'
+        : `${medalStatus.icon} いま ・ つぎ ⭐ ${medalStatus.nextThreshold}`,
+      size: 'regular',
+      scope: 'title-next-adventure',
+    });
+    medalDisplay.style.marginTop = '0.7rem';
+
     nextAdventureCard.appendChild(nextAdventureHeading);
     nextAdventureCard.appendChild(nextAdventureStatus);
     nextAdventureCard.appendChild(nextAdventureStage);
     nextAdventureCard.appendChild(nextAdventureDestination);
+    nextAdventureCard.appendChild(medalDisplay);
 
     const playArea = document.createElement('div');
     playArea.style.cssText = `
