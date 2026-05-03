@@ -70,6 +70,11 @@ create_pr_and_exit() {
     HAS_COMMITS=true
   fi
 
+  # coder がセッション内でコミット済みの変更も検出する
+  if [ "$(git rev-parse main 2>/dev/null)" != "$(git rev-parse HEAD 2>/dev/null)" ]; then
+    HAS_COMMITS=true
+  fi
+
   # main との差分がない場合はブランチを削除して終了
   if [[ "${HAS_COMMITS}" != "true" ]]; then
     warn "変更がないため、ブランチを削除して終了します"
@@ -313,13 +318,18 @@ $(cat "${log_dir}/copilot-output.log")
 MDEOF
   rm -f "${log_dir}/copilot-output.log"
 
-  # 変更があればコミット & プッシュ
+  # 未コミットの変更があればコミット
   if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
-    info "変更をコミット & プッシュ中..."
+    info "未コミットの変更をコミット中..."
     git add -A
     git commit -m "feat: auto-improve iteration #${iteration_num}
 
 Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>" --quiet 2>/dev/null || true
+  fi
+
+  # コミット済み変更（coder が copilot セッション内でコミットした分を含む）を検出してプッシュ
+  if [ "$(git rev-parse main 2>/dev/null)" != "$(git rev-parse HEAD 2>/dev/null)" ]; then
+    info "変更をプッシュ中..."
     git push origin "${BRANCH_NAME}" --quiet 2>/dev/null || true
     HAS_COMMITS=true
     ok "プッシュ完了 → プレビューが自動デプロイされます"
