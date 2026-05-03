@@ -128,13 +128,12 @@ export class SaveManager {
     }
   }
 
-  // Resets only session progress data (clearedStage, unlockedPlanets,
-  // bestStageStars) while preserving stable preferences and onboarding state
-  // needed across Safari swipe-to-close on shared iPads.
-  // Used on Safari new-session detection so that mute preference, tutorial
-  // read-state, and adaptive pixel-ratio hint survive while gameplay progress
-  // returns to its first-run defaults.
-  resetSessionDataPreservingMuted(): void {
+  // Resets only gameplay progress (clearedStage, unlockedPlanets,
+  // bestStageStars) while preserving stable settings and onboarding state.
+  // Used both by the title-screen "さいしょから" flow and by Safari
+  // new-session detection so mute preference, tutorial read-state, and the
+  // adaptive pixel-ratio hint survive while progress returns to defaults.
+  resetProgressPreservingSettings(): void {
     try {
       const prev = this.load();
       const muted = prev.muted === true;
@@ -159,8 +158,13 @@ export class SaveManager {
       // Conservatively drop the cache so the next load() re-reads from
       // storage (which may be in an unknown intermediate state).
       this.cached = null;
-      console.warn('SaveManager.resetSessionDataPreservingMuted failed:', e);
+      console.warn('SaveManager.resetProgressPreservingSettings failed:', e);
     }
+  }
+
+  // Backward-compatible alias for the Safari session-reset path.
+  resetSessionDataPreservingMuted(): void {
+    this.resetProgressPreservingSettings();
   }
 
   // Updates the best (highest) star count for the given stage. Only persists

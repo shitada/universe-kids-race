@@ -532,6 +532,45 @@ describe('SaveManager', () => {
     });
   });
 
+  describe('resetProgressPreservingSettings', () => {
+    it('resets progress while preserving stable settings and onboarding state', () => {
+      const manager = new SaveManager();
+      manager.save({
+        clearedStage: 6,
+        unlockedPlanets: [1, 2, 3, 4, 5, 6],
+        muted: true,
+        tutorialShown: true,
+        bestStageStars: { 1: 3, 6: 2 },
+        lastStablePixelTier: 2,
+      });
+
+      manager.resetProgressPreservingSettings();
+
+      expect(manager.load()).toEqual({
+        clearedStage: 0,
+        unlockedPlanets: [],
+        muted: true,
+        tutorialShown: true,
+        bestStageStars: {},
+        lastStablePixelTier: 2,
+      });
+    });
+
+    it('keeps default settings when resetting a save without progress', () => {
+      const manager = new SaveManager();
+
+      manager.resetProgressPreservingSettings();
+
+      expect(manager.load()).toEqual({
+        clearedStage: 0,
+        unlockedPlanets: [],
+        muted: false,
+        tutorialShown: false,
+        bestStageStars: {},
+      });
+    });
+  });
+
   describe('bestStageStars', () => {
     it('defaults to empty object when no save exists', () => {
       const manager = new SaveManager();

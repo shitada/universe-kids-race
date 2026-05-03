@@ -43,6 +43,7 @@ describe('Ending → Title all-clear persistence', () => {
         saveState.bestStageStars = { ...(nextData.bestStageStars ?? {}) };
       }),
       clear: vi.fn(),
+      resetProgressPreservingSettings: vi.fn(),
       markTutorialShown: vi.fn(),
     } as unknown as SaveManager;
     const audioManager = {
@@ -95,6 +96,7 @@ describe('Ending → Title all-clear persistence', () => {
     expect(card?.getAttribute('data-next-stage-destination')).toBe('月');
     expect(card?.textContent).toContain('ぜんぶ クリア！');
     expect(hint?.textContent).toContain('ステージ 1');
-    expect(hint?.textContent).toContain('さいしょから');
+    expect(hint?.textContent).toContain('もういちど');
+    expect(document.querySelector('[data-reset-progress-button]')?.textContent).toBe('さいしょから');
   });
 });

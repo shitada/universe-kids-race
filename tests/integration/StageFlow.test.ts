@@ -385,6 +385,7 @@ describe('Stage Flow Integration', () => {
         saveState.bestStageStars = { ...(nextData.bestStageStars ?? {}) };
       }),
       clear: vi.fn(),
+      resetProgressPreservingSettings: vi.fn(),
       markTutorialShown: vi.fn(() => {
         saveState.tutorialShown = true;
       }),
@@ -439,7 +440,8 @@ describe('Stage Flow Integration', () => {
     expect(card?.getAttribute('data-next-stage-destination')).toBe('月');
     expect(card?.textContent).toContain('ぜんぶ クリア');
     expect(hint?.textContent).toContain('ステージ 1');
-    expect(hint?.textContent).toContain('さいしょから');
+    expect(hint?.textContent).toContain('もういちど');
+    expect(document.querySelector('[data-reset-progress-button]')?.textContent).toBe('さいしょから');
   });
 
   it('keeps StageScene uncreated during title while module prefetch is in flight, then transitions successfully', async () => {

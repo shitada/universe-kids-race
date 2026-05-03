@@ -6,6 +6,7 @@ import type { AudioManager } from '../audio/AudioManager';
 import { TutorialOverlay } from '../../ui/TutorialOverlay';
 import { LoadingOverlay } from '../../ui/LoadingOverlay';
 import { LoadFailureOverlay } from '../../ui/LoadFailureOverlay';
+import { TitleResetConfirmOverlay } from '../../ui/TitleResetConfirmOverlay';
 import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButton';
 import { getStageConfig, getStageMedalStatus, TOTAL_STAGES } from '../config/StageConfig';
 import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
@@ -134,8 +135,8 @@ function getNextAdventurePreview(saveData: SaveData): NextAdventurePreview {
       destination: stageConfig.destination,
       emoji: stageConfig.emoji,
       statusLabel: 'ぜんぶ クリア！',
-      destinationLabel: `${stageConfig.destination}へ さいしょから しゅっぱつ！`,
-      buttonHint: `${stageConfig.emoji} ステージ ${startStage} から さいしょから あそぶ`,
+      destinationLabel: `${stageConfig.destination}へ もういちど しゅっぱつ！`,
+      buttonHint: `${stageConfig.emoji} ステージ ${startStage} から もういちど あそぶ`,
       bestStars,
     };
   }
@@ -149,6 +150,14 @@ function getNextAdventurePreview(saveData: SaveData): NextAdventurePreview {
     buttonHint: `${stageConfig.emoji} ステージ ${startStage} から スタート`,
     bestStars,
   };
+}
+
+function hasSavedProgress(saveData: SaveData): boolean {
+  return (
+    saveData.clearedStage > 0 ||
+    getUnlockedStageCount(saveData.unlockedPlanets) > 0 ||
+    Object.keys(saveData.bestStageStars ?? {}).length > 0
+  );
 }
 
 export class TitleScene implements Scene {
@@ -166,6 +175,7 @@ export class TitleScene implements Scene {
   private overlay: HTMLDivElement | null = null;
   private muteHandle: MuteButtonHandle | null = null;
   private tutorialOverlay = new TutorialOverlay();
+  private readonly titleResetConfirmOverlay = new TitleResetConfirmOverlay();
   private encyclopediaOverlay: EncyclopediaOverlayInstance | null = null;
   private encyclopediaOverlayPromise: Promise<EncyclopediaOverlayInstance> | null = null;
   private companionFactory: TitleCompanionFactory | null = null;
@@ -556,13 +566,7 @@ export class TitleScene implements Scene {
       // するため、タイトル BGM は実質的に再生されない無駄な処理になっていた。
       this.ensureTitleAudioInitialized(false);
       const saveData = this.saveManager.load();
-      const startStage = getNextAdventurePreview(saveData).startStage;
-      this.sceneManager.requestTransition('stage', {
-        stageNumber: startStage,
-        totalScore: 0,
-        totalStarCount: 0,
-        launchSource: 'campaign',
-      });
+      this.startCampaign(getNextAdventurePreview(saveData).startStage);
     });
 
     const playButtonHint = document.createElement('div');
@@ -641,6 +645,37 @@ export class TitleScene implements Scene {
     playArea.appendChild(button);
     playArea.appendChild(playButtonHint);
 
+    if (hasSavedProgress(initialSaveData)) {
+      const resetButton = document.createElement('button');
+      resetButton.setAttribute('data-reset-progress-button', '');
+      resetButton.textContent = 'さいしょから';
+      resetButton.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: 1.15rem;
+        font-weight: 900;
+        padding: 0.8rem 1.8rem;
+        border: 2px solid rgba(255, 230, 109, 0.65);
+        border-radius: 1.5rem;
+        background: rgba(0, 0, 64, 0.32);
+        color: #fff;
+        cursor: pointer;
+        touch-action: manipulation;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.24);
+      `;
+      resetButton.addEventListener('pointerdown', (event) => {
+        event.stopPropagation();
+        this.ensureTitleAudioInitialized(true);
+        this.titleResetConfirmOverlay.show(
+          () => {
+            this.saveManager.resetProgressPreservingSettings();
+            this.startCampaign(1);
+          },
+          () => {},
+        );
+      });
+      playArea.appendChild(resetButton);
+    }
+
     this.overlay.appendChild(title);
     this.overlay.appendChild(nextAdventureCard);
     this.overlay.appendChild(playArea);
@@ -667,6 +702,15 @@ export class TitleScene implements Scene {
       this.audioManager.playBGM(0);
     }
     this.bgmPending = false;
+  }
+
+  private startCampaign(stageNumber: number): void {
+    this.sceneManager.requestTransition('stage', {
+      stageNumber,
+      totalScore: 0,
+      totalStarCount: 0,
+      launchSource: 'campaign',
+    });
   }
 
   private refreshEncyclopediaButtonLabel(): void {
@@ -751,6 +795,7 @@ export class TitleScene implements Scene {
     this.companionParadeRequestToken += 1;
     this.isOpeningEncyclopedia = false;
     this.tutorialOverlay.hide();
+    this.titleResetConfirmOverlay.hide();
     this.encyclopediaOverlay?.hide();
     this.loadingOverlay.hide();
     this.loadFailureOverlay.hide();
