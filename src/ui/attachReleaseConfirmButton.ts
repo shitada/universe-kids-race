@@ -2,18 +2,26 @@ export interface ReleaseConfirmButtonOptions {
   onActivate: () => void;
   onPressChange?: (pressed: boolean) => void;
   canActivate?: () => boolean;
+  moveTolerancePx?: number;
   preventDefaultOnPointerDown?: boolean;
   preventDefaultOnClick?: boolean;
   stopPropagation?: boolean;
   documentTarget?: Document;
 }
 
+interface PointerCoordinates {
+  x: number;
+  y: number;
+}
+
 export function attachReleaseConfirmButton(
-  button: HTMLButtonElement,
+  button: HTMLElement,
   options: ReleaseConfirmButtonOptions,
 ): () => void {
   let pointerActive = false;
   let suppressNextClick = false;
+  let activePointerId: number | null = null;
+  let startCoordinates: PointerCoordinates | null = null;
   const documentTarget = options.documentTarget ?? document;
   const stopPropagation = options.stopPropagation ?? true;
 
@@ -26,15 +34,59 @@ export function attachReleaseConfirmButton(
     options.onPressChange?.(pressed);
   };
 
+  const getPointerCoordinates = (event: Event): PointerCoordinates | null => {
+    const pointerEvent = event as Event & {
+      clientX?: unknown;
+      clientY?: unknown;
+    };
+    return typeof pointerEvent.clientX === 'number' && typeof pointerEvent.clientY === 'number'
+      ? { x: pointerEvent.clientX, y: pointerEvent.clientY }
+      : null;
+  };
+
+  const getPointerId = (event: Event): number | null => {
+    const pointerEvent = event as Event & { pointerId?: unknown };
+    return typeof pointerEvent.pointerId === 'number' ? pointerEvent.pointerId : null;
+  };
+
+  const isActivePointerEvent = (event: Event): boolean => {
+    const pointerId = getPointerId(event);
+    return activePointerId === null || pointerId === null || pointerId === activePointerId;
+  };
+
+  const hasExceededMoveTolerance = (event: Event): boolean => {
+    if (!pointerActive || startCoordinates === null || options.moveTolerancePx === undefined) {
+      return false;
+    }
+    const currentCoordinates = getPointerCoordinates(event);
+    if (currentCoordinates === null) {
+      return false;
+    }
+    return Math.hypot(
+      currentCoordinates.x - startCoordinates.x,
+      currentCoordinates.y - startCoordinates.y,
+    ) > options.moveTolerancePx;
+  };
+
   const clearPointerState = (suppressClick: boolean): void => {
     pointerActive = false;
     suppressNextClick = suppressClick;
+    activePointerId = null;
+    startCoordinates = null;
     setPressed(false);
+    documentTarget.removeEventListener('pointermove', handleDocumentPointerMove, true);
     documentTarget.removeEventListener('pointerup', handleDocumentPointerUp, true);
     documentTarget.removeEventListener('pointercancel', handleDocumentPointerCancel, true);
   };
 
   const handleDocumentPointerUp = (event: Event): void => {
+    if (!pointerActive || !isActivePointerEvent(event)) {
+      return;
+    }
+    if (hasExceededMoveTolerance(event)) {
+      clearPointerState(true);
+      return;
+    }
     const target = event.target;
     const releasedOnButton =
       target === button || (target instanceof Node && button.contains(target));
@@ -49,6 +101,15 @@ export function attachReleaseConfirmButton(
     clearPointerState(true);
   };
 
+  const handleDocumentPointerMove = (event: Event): void => {
+    if (!pointerActive || !isActivePointerEvent(event)) {
+      return;
+    }
+    if (hasExceededMoveTolerance(event)) {
+      clearPointerState(true);
+    }
+  };
+
   const handlePointerDown = (event: Event): void => {
     if (options.canActivate?.() === false) return;
     if (options.preventDefaultOnPointerDown ?? false) {
@@ -59,7 +120,12 @@ export function attachReleaseConfirmButton(
     }
     pointerActive = true;
     suppressNextClick = false;
+    activePointerId = getPointerId(event);
+    startCoordinates = getPointerCoordinates(event);
     setPressed(true);
+    if (options.moveTolerancePx !== undefined) {
+      documentTarget.addEventListener('pointermove', handleDocumentPointerMove, true);
+    }
     documentTarget.addEventListener('pointerup', handleDocumentPointerUp, true);
     documentTarget.addEventListener('pointercancel', handleDocumentPointerCancel, true);
   };

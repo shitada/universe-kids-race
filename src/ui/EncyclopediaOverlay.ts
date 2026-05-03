@@ -1,6 +1,7 @@
 import type { PlanetEncyclopediaEntry } from '../types';
 import { getPlanetEncyclopediaEntry, PLANET_ENCYCLOPEDIA } from '../game/config/PlanetEncyclopedia';
 import { createCompanionPreviewController, type CompanionPreviewController } from './CompanionPreview';
+import { attachReleaseConfirmButton } from './attachReleaseConfirmButton';
 
 interface DetailOverlayOptions {
   bestStageStars?: Record<number, number>;
@@ -13,6 +14,7 @@ interface EncyclopediaOverlayDependencies {
 }
 
 export class EncyclopediaOverlay {
+  private static readonly RELEASE_CONFIRM_MOVE_TOLERANCE_PX = 12;
   private overlayEl: HTMLDivElement | null = null;
   private detailEl: HTMLDivElement | null = null;
   private isShowingDetail = false;
@@ -21,6 +23,8 @@ export class EncyclopediaOverlay {
   private detailBackLabel = 'もどる';
   private detailPreviewController: CompanionPreviewController | null = null;
   private readonly createPreviewController: () => CompanionPreviewController;
+  private readonly galleryActionCleanups = new Set<() => void>();
+  private readonly detailActionCleanups = new Set<() => void>();
   private static readonly COMPACT_HEIGHT_THRESHOLD = 720;
 
   constructor(dependencies: EncyclopediaOverlayDependencies = {}) {
@@ -107,12 +111,19 @@ export class EncyclopediaOverlay {
       color: #fff;
       cursor: pointer;
       touch-action: manipulation;
+      transform: scale(1);
+      transition: transform 0.08s ease-out;
     `;
-    backBtn.addEventListener('pointerdown', (e) => {
-      e.stopPropagation();
-      this.hide();
-      onClose();
-    });
+    this.galleryActionCleanups.add(attachReleaseConfirmButton(backBtn, {
+      onActivate: () => {
+        this.hide();
+        onClose();
+      },
+      onPressChange: (pressed) => {
+        backBtn.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+      },
+      moveTolerancePx: EncyclopediaOverlay.RELEASE_CONFIRM_MOVE_TOLERANCE_PX,
+    }));
     content.appendChild(backBtn);
 
     this.overlayEl.appendChild(content);
@@ -156,6 +167,8 @@ export class EncyclopediaOverlay {
   }
 
   hide(): void {
+    this.cleanupActionCleanups(this.detailActionCleanups);
+    this.cleanupActionCleanups(this.galleryActionCleanups);
     this.hideDetailPreview();
     if (this.detailEl) {
       this.detailEl.remove();
@@ -188,6 +201,7 @@ export class EncyclopediaOverlay {
       max-width: ${isCompactHeight ? '150px' : '180px'};
       box-shadow: 0 4px 12px rgba(0,0,0,0.3);
       transition: transform 0.12s ease-out;
+      transform: scale(1);
       box-sizing: border-box;
     `;
 
@@ -227,17 +241,15 @@ export class EncyclopediaOverlay {
         card.appendChild(best);
       }
 
-      card.addEventListener('pointerdown', (e) => {
-        e.stopPropagation();
-        card.style.transform = 'scale(0.95)';
-        this.showDetail(entry);
-      });
-      const resetScale = () => {
-        card.style.transform = '';
-      };
-      card.addEventListener('pointerup', resetScale);
-      card.addEventListener('pointerleave', resetScale);
-      card.addEventListener('pointercancel', resetScale);
+      this.galleryActionCleanups.add(attachReleaseConfirmButton(card, {
+        onActivate: () => {
+          this.showDetail(entry);
+        },
+        onPressChange: (pressed) => {
+          card.style.transform = pressed ? 'scale(0.95)' : 'scale(1)';
+        },
+        moveTolerancePx: EncyclopediaOverlay.RELEASE_CONFIRM_MOVE_TOLERANCE_PX,
+      }));
     } else {
       card.style.background = '#444';
       card.style.opacity = '0.6';
@@ -261,6 +273,7 @@ export class EncyclopediaOverlay {
     if (this.isShowingDetail) return;
     if (!this.overlayEl) return;
     this.isShowingDetail = true;
+    this.cleanupActionCleanups(this.detailActionCleanups);
     const isCompactHeight = this.isCompactHeight();
 
     this.detailEl = document.createElement('div');
@@ -403,15 +416,22 @@ export class EncyclopediaOverlay {
         color: #333;
         cursor: pointer;
         touch-action: manipulation;
+        transform: scale(1);
+        transition: transform 0.08s ease-out;
       `;
-      playBtn.addEventListener('pointerdown', (e) => {
-        e.stopPropagation();
-        const cb = this.onSelectStage;
-        if (!cb) return;
-        const stageNumber = entry.stageNumber;
-        this.hide();
-        cb(stageNumber);
-      });
+      this.detailActionCleanups.add(attachReleaseConfirmButton(playBtn, {
+        onActivate: () => {
+          const cb = this.onSelectStage;
+          if (!cb) return;
+          const stageNumber = entry.stageNumber;
+          this.hide();
+          cb(stageNumber);
+        },
+        onPressChange: (pressed) => {
+          playBtn.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+        },
+        moveTolerancePx: EncyclopediaOverlay.RELEASE_CONFIRM_MOVE_TOLERANCE_PX,
+      }));
       detailCard.appendChild(playBtn);
     }
 
@@ -433,16 +453,23 @@ export class EncyclopediaOverlay {
       color: #fff;
       cursor: pointer;
       touch-action: manipulation;
+      transform: scale(1);
+      transition: transform 0.08s ease-out;
     `;
-    backBtn.addEventListener('pointerdown', (e) => {
-      e.stopPropagation();
-      if (onBack) {
-        this.hide();
-        onBack();
-        return;
-      }
-      this.hideDetail();
-    });
+    this.detailActionCleanups.add(attachReleaseConfirmButton(backBtn, {
+      onActivate: () => {
+        if (onBack) {
+          this.hide();
+          onBack();
+          return;
+        }
+        this.hideDetail();
+      },
+      onPressChange: (pressed) => {
+        backBtn.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+      },
+      moveTolerancePx: EncyclopediaOverlay.RELEASE_CONFIRM_MOVE_TOLERANCE_PX,
+    }));
     detailContent.appendChild(backBtn);
 
     this.detailEl.appendChild(detailContent);
@@ -450,6 +477,7 @@ export class EncyclopediaOverlay {
   }
 
   private hideDetail(): void {
+    this.cleanupActionCleanups(this.detailActionCleanups);
     this.hideDetailPreview();
     if (this.detailEl) {
       this.detailEl.remove();
@@ -472,6 +500,13 @@ export class EncyclopediaOverlay {
   private disposeDetailPreview(): void {
     this.detailPreviewController?.dispose();
     this.detailPreviewController = null;
+  }
+
+  private cleanupActionCleanups(cleanups: Set<() => void>): void {
+    for (const cleanup of cleanups) {
+      cleanup();
+    }
+    cleanups.clear();
   }
 
   private isCompactHeight(): boolean {

@@ -70,8 +70,8 @@ function flushPromises(): Promise<void> {
 }
 
 function dispatchReleaseConfirm(button: HTMLElement): void {
-  button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-  button.dispatchEvent(new Event('pointerup', { bubbles: true }));
+  button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+  button.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
 }
 
 describe('TitleScene encyclopedia button label', () => {
@@ -140,7 +140,7 @@ describe('TitleScene encyclopedia button label', () => {
       (b) => b.textContent === 'もどる',
     );
     expect(closeBtn).toBeTruthy();
-    closeBtn!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(closeBtn!);
 
     expect(btn?.textContent).toBe(`ずかん 2 / ${PLANET_ENCYCLOPEDIA.length}`);
     scene.exit();

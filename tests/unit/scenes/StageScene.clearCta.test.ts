@@ -547,7 +547,7 @@ describe('StageScene clear CTA', () => {
 
     const backButton = document.querySelector('[data-detail-back]') as HTMLElement | null;
     expect(backButton?.textContent).toBe('クリアへ もどる');
-    backButton?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    backButton && dispatchReleaseConfirm(backButton);
 
     expect(document.querySelector('[data-encyclopedia-detail-overlay]')).toBeNull();
     expect(document.querySelector('[data-stage-clear-overlay]')).not.toBeNull();
@@ -673,7 +673,7 @@ describe('StageScene clear CTA', () => {
     expect(sceneManager.requestTransition).not.toHaveBeenCalled();
 
     const backButton = document.querySelector('[data-detail-back]') as HTMLElement | null;
-    backButton?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    backButton && dispatchReleaseConfirm(backButton);
 
     dispatchReleaseConfirm(retryButton);
     retryButton.dispatchEvent(new Event('click', { bubbles: true }));

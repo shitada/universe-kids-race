@@ -3,6 +3,25 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EncyclopediaOverlay } from '../../../src/ui/EncyclopediaOverlay';
 import type { CompanionPreviewController } from '../../../src/ui/CompanionPreview';
 
+function createPointerEvent(type: string, init: PointerEventInit = {}): PointerEvent {
+  return new PointerEvent(type, { bubbles: true, ...init });
+}
+
+function dispatchReleaseConfirm(element: HTMLElement, init: PointerEventInit = {}): void {
+  element.dispatchEvent(createPointerEvent('pointerdown', init));
+  element.dispatchEvent(createPointerEvent('pointerup', init));
+}
+
+function dispatchCancelledReleaseConfirm(
+  element: HTMLElement,
+  moveInit: PointerEventInit,
+  startInit: PointerEventInit = {},
+): void {
+  element.dispatchEvent(createPointerEvent('pointerdown', startInit));
+  document.dispatchEvent(createPointerEvent('pointermove', { ...startInit, ...moveInit }));
+  element.dispatchEvent(createPointerEvent('pointerup', { ...startInit, ...moveInit }));
+}
+
 describe('EncyclopediaOverlay', () => {
   let overlay: EncyclopediaOverlay;
   let uiOverlay: HTMLDivElement;
@@ -84,16 +103,40 @@ describe('EncyclopediaOverlay', () => {
     overlay.show([1], () => {});
     const cards = uiOverlay.querySelectorAll('[data-card]');
     const firstCard = cards[0] as HTMLElement;
-    firstCard.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(firstCard);
     const detail = uiOverlay.querySelector('[data-detail]') as HTMLElement;
     expect(detail).not.toBeNull();
     expect(detail.textContent).toContain('つきは ちきゅうの まわりを まわっているよ');
   });
 
+  it('unlocked card does not open detail until pointer release', () => {
+    overlay.show([1], () => {});
+    const firstCard = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
+
+    firstCard.dispatchEvent(createPointerEvent('pointerdown', { clientX: 10, clientY: 10 }));
+    expect(uiOverlay.querySelector('[data-detail]')).toBeNull();
+
+    firstCard.dispatchEvent(createPointerEvent('pointerup', { clientX: 10, clientY: 10 }));
+    expect(uiOverlay.querySelector('[data-detail]')).not.toBeNull();
+  });
+
+  it('unlocked card does not open detail after scroll-like movement beyond tolerance', () => {
+    overlay.show([1], () => {});
+    const firstCard = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
+
+    dispatchCancelledReleaseConfirm(
+      firstCard,
+      { clientX: 24, clientY: 10 },
+      { clientX: 10, clientY: 10 },
+    );
+
+    expect(uiOverlay.querySelector('[data-detail]')).toBeNull();
+  });
+
   it('detail modal includes a companion preview area', () => {
     overlay.show([1], () => {});
     const firstCard = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
-    firstCard.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(firstCard);
 
     const preview = uiOverlay.querySelector('[data-detail-companion-preview]') as HTMLElement | null;
     expect(preview).not.toBeNull();
@@ -105,12 +148,12 @@ describe('EncyclopediaOverlay', () => {
     overlay.show([1, 2], () => {});
 
     const firstCard = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
-    firstCard.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(firstCard);
     const firstBackBtn = uiOverlay.querySelector('[data-detail-back]') as HTMLElement;
-    firstBackBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(firstBackBtn);
 
     const secondCard = uiOverlay.querySelector('[data-card][data-stage="2"]') as HTMLElement;
-    secondCard.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(secondCard);
 
     expect(createPreviewController).toHaveBeenCalledTimes(1);
     expect(previewShow).toHaveBeenCalledTimes(2);
@@ -121,10 +164,10 @@ describe('EncyclopediaOverlay', () => {
   it('hides preview on detail close but disposes it only when overlay closes', () => {
     overlay.show([1], () => {});
     const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
-    card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(card);
 
     const backBtn = uiOverlay.querySelector('[data-detail-back]') as HTMLElement;
-    backBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(backBtn);
 
     expect(previewHide).toHaveBeenCalledTimes(1);
     expect(previewDispose).not.toHaveBeenCalled();
@@ -137,11 +180,11 @@ describe('EncyclopediaOverlay', () => {
     overlay.show([1], () => {});
     const cards = uiOverlay.querySelectorAll('[data-card]');
     const firstCard = cards[0] as HTMLElement;
-    firstCard.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(firstCard);
     // Click back button in detail
     const backBtn = uiOverlay.querySelector('[data-detail-back]') as HTMLElement;
     expect(backBtn).not.toBeNull();
-    backBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(backBtn);
     const detail = uiOverlay.querySelector('[data-detail]');
     expect(detail).toBeNull();
   });
@@ -167,7 +210,7 @@ describe('EncyclopediaOverlay', () => {
 
     const backBtn = uiOverlay.querySelector('[data-detail-back]') as HTMLElement;
     expect(backBtn.textContent).toBe('クリアへ もどる');
-    backBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(backBtn);
 
     expect(closed).toBe(true);
     expect(uiOverlay.querySelector('[data-encyclopedia-detail-overlay]')).toBeNull();
@@ -191,7 +234,7 @@ describe('EncyclopediaOverlay', () => {
     overlay.show([], () => { closed = true; });
     const backBtn = uiOverlay.querySelector('[data-gallery-back]') as HTMLElement;
     expect(backBtn).not.toBeNull();
-    backBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(backBtn);
     expect(closed).toBe(true);
   });
 
@@ -209,7 +252,7 @@ describe('EncyclopediaOverlay', () => {
     }, { 2: 4 });
     const card = uiOverlay.querySelector('[data-card][data-stage="2"]') as HTMLElement;
     expect(card).not.toBeNull();
-    card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(card);
     expect(selected).toEqual([]);
     const detail = uiOverlay.querySelector('[data-detail]') as HTMLElement | null;
     expect(detail).not.toBeNull();
@@ -225,12 +268,38 @@ describe('EncyclopediaOverlay', () => {
     });
     expect(uiOverlay.children.length).toBe(1);
     const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
-    card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(card);
     const playButton = uiOverlay.querySelector('[data-detail-play]') as HTMLElement | null;
     expect(playButton).not.toBeNull();
-    playButton?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    playButton && dispatchReleaseConfirm(playButton);
     expect(selected).toEqual([1]);
     expect(uiOverlay.children.length).toBe(0);
+  });
+
+  it('detail play and back buttons activate only on release', () => {
+    const selected: number[] = [];
+    overlay.show([1], () => {}, (stageNumber) => {
+      selected.push(stageNumber);
+    });
+    const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
+    dispatchReleaseConfirm(card);
+
+    const playButton = uiOverlay.querySelector('[data-detail-play]') as HTMLElement;
+    playButton.dispatchEvent(createPointerEvent('pointerdown', { clientX: 40, clientY: 40 }));
+    expect(selected).toEqual([]);
+    expect(uiOverlay.children.length).toBe(1);
+    playButton.dispatchEvent(createPointerEvent('pointerup', { clientX: 40, clientY: 40 }));
+
+    expect(selected).toEqual([1]);
+    expect(uiOverlay.children.length).toBe(0);
+
+    overlay.show([1], () => {}, () => {});
+    dispatchReleaseConfirm(uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement);
+    const backButton = uiOverlay.querySelector('[data-detail-back]') as HTMLElement;
+    backButton.dispatchEvent(createPointerEvent('pointerdown', { clientX: 12, clientY: 12 }));
+    expect(uiOverlay.querySelector('[data-detail]')).not.toBeNull();
+    backButton.dispatchEvent(createPointerEvent('pointerup', { clientX: 12, clientY: 12 }));
+    expect(uiOverlay.querySelector('[data-detail]')).toBeNull();
   });
 
   it('locked card does not invoke onSelectStage', () => {
@@ -238,7 +307,7 @@ describe('EncyclopediaOverlay', () => {
     overlay.show([], () => {}, () => { called = true; });
     const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
     // Locked cards have pointer-events: none, but verify no listener side-effect
-    card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    card.dispatchEvent(createPointerEvent('pointerdown'));
     expect(called).toBe(false);
     expect(card.style.pointerEvents).toBe('none');
   });
@@ -246,7 +315,7 @@ describe('EncyclopediaOverlay', () => {
   it('without onSelectStage, unlocked card still opens detail (backward compat)', () => {
     overlay.show([1], () => {});
     const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
-    card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(card);
     const detail = uiOverlay.querySelector('[data-detail]');
     expect(detail).not.toBeNull();
   });
@@ -272,7 +341,7 @@ describe('EncyclopediaOverlay', () => {
 
     overlay.show([1], () => {}, () => {});
     const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
-    card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(card);
 
     const detailContent = uiOverlay.querySelector('[data-detail-content]') as HTMLElement | null;
     const detailCard = uiOverlay.querySelector('[data-detail-card]') as HTMLElement | null;
@@ -323,7 +392,7 @@ describe('EncyclopediaOverlay', () => {
     it('shows "⭐ ベスト N" inside detail view when a record exists', () => {
       overlay.show([1], () => {}, undefined, { 1: 4 });
       const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
-      card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      dispatchReleaseConfirm(card);
       const detailBest = uiOverlay.querySelector('[data-detail-best]') as HTMLElement | null;
       expect(detailBest).not.toBeNull();
       expect(detailBest!.textContent).toBe('⭐ ベスト 4');
@@ -332,7 +401,7 @@ describe('EncyclopediaOverlay', () => {
     it('does not show best label inside detail when no record exists', () => {
       overlay.show([1], () => {}, undefined, {});
       const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
-      card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      dispatchReleaseConfirm(card);
       expect(uiOverlay.querySelector('[data-detail-best]')).toBeNull();
     });
 

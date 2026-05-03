@@ -261,11 +261,18 @@ describe('Title → Stage BGM transition (bugfix: BGM_0 plays during title)', ()
     expect(calls).toEqual([{ kind: 'play', arg: 0 }]);
 
     const card = document.querySelector('[data-card][data-stage="2"]') as HTMLDivElement;
-    card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    card.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
     expect(sceneManager.requestTransition).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-detail-play]')).toBeNull();
+
+    card.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
     const playButton = document.querySelector('[data-detail-play]') as HTMLButtonElement | null;
     expect(playButton).not.toBeNull();
-    playButton?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    playButton?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+
+    expect(sceneManager.requestTransition).not.toHaveBeenCalled();
+
+    playButton?.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
 
     expect(sceneManager.requestTransition).toHaveBeenCalledWith(
       'stage',
