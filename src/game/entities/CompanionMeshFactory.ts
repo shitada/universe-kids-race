@@ -84,6 +84,17 @@ export function createCompanionMesh(entry: PlanetEncyclopediaEntry): THREE.Group
   }
 }
 
+export function createCompanionPreviewMesh(entry: PlanetEncyclopediaEntry): THREE.Group {
+  const previewRoot = new THREE.Group();
+  const companion = createCompanionMesh(entry);
+  companion.position.y = -0.08;
+  companion.rotation.x = -0.18;
+  companion.rotation.y = Math.PI * 0.12;
+  companion.scale.setScalar(1.35);
+  previewRoot.add(companion);
+  return previewRoot;
+}
+
 function createBasic(color: number): THREE.Group {
   const group = new THREE.Group();
   const mat = getOpaqueBodyMaterial(color);

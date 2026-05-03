@@ -61,6 +61,17 @@ describe('EncyclopediaOverlay', () => {
     expect(detail.textContent).toContain('つきは ちきゅうの まわりを まわっているよ');
   });
 
+  it('detail modal includes a companion preview area', () => {
+    overlay.show([1], () => {});
+    const firstCard = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
+    firstCard.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    const preview = uiOverlay.querySelector('[data-detail-companion-preview]') as HTMLElement | null;
+    expect(preview).not.toBeNull();
+    expect(preview?.children.length).toBeGreaterThan(0);
+    expect(uiOverlay.textContent).toContain('うちゅうの なかま');
+  });
+
   it('hideDetail returns to gallery', () => {
     overlay.show([1], () => {});
     const cards = uiOverlay.querySelectorAll('[data-card]');

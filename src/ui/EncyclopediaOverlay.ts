@@ -1,5 +1,6 @@
 import type { PlanetEncyclopediaEntry } from '../types';
 import { getPlanetEncyclopediaEntry, PLANET_ENCYCLOPEDIA } from '../game/config/PlanetEncyclopedia';
+import { mountCompanionPreview, type CompanionPreviewHandle } from './CompanionPreview';
 
 interface DetailOverlayOptions {
   bestStageStars?: Record<number, number>;
@@ -14,6 +15,7 @@ export class EncyclopediaOverlay {
   private onSelectStage: ((stageNumber: number) => void) | null = null;
   private bestStageStars: Record<number, number> = {};
   private detailBackLabel = 'もどる';
+  private detailPreview: CompanionPreviewHandle | null = null;
 
   show(
     unlockedPlanets: number[],
@@ -125,6 +127,7 @@ export class EncyclopediaOverlay {
   }
 
   hide(): void {
+    this.disposeDetailPreview();
     if (this.detailEl) {
       this.detailEl.remove();
       this.detailEl = null;
@@ -270,6 +273,41 @@ export class EncyclopediaOverlay {
     `;
     detailCard.appendChild(name);
 
+    const companionSection = document.createElement('div');
+    companionSection.setAttribute('data-detail-companion', '');
+    companionSection.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.6rem;
+      margin-top: 0.4rem;
+    `;
+
+    const companionLabel = document.createElement('div');
+    companionLabel.textContent = 'うちゅうの なかま';
+    companionLabel.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.04em;
+    `;
+    companionSection.appendChild(companionLabel);
+
+    const companionPreview = document.createElement('div');
+    companionPreview.setAttribute('data-detail-companion-preview', '');
+    companionPreview.style.cssText = `
+      width: 120px;
+      height: 120px;
+      border-radius: 20px;
+      overflow: hidden;
+      background: radial-gradient(circle at top, rgba(255,255,255,0.22), rgba(0,0,0,0.16));
+      box-shadow: inset 0 0 18px rgba(255,255,255,0.12), 0 10px 20px rgba(0,0,0,0.22);
+    `;
+    companionSection.appendChild(companionPreview);
+    this.detailPreview = mountCompanionPreview(companionPreview, entry);
+    detailCard.appendChild(companionSection);
+
     const trivia = document.createElement('div');
     trivia.textContent = entry.trivia;
     trivia.style.cssText = `
@@ -359,10 +397,16 @@ export class EncyclopediaOverlay {
   }
 
   private hideDetail(): void {
+    this.disposeDetailPreview();
     if (this.detailEl) {
       this.detailEl.remove();
       this.detailEl = null;
     }
     this.isShowingDetail = false;
+  }
+
+  private disposeDetailPreview(): void {
+    this.detailPreview?.dispose();
+    this.detailPreview = null;
   }
 }
