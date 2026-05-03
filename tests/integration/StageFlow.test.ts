@@ -419,12 +419,16 @@ describe('Stage Flow Integration', () => {
 
     expect(saveState.clearedStage).toBe(0);
 
-    const backButton = Array.from(document.querySelectorAll('button')).find(
-      (button) => button.textContent === 'タイトルに もどる',
-    ) as HTMLButtonElement | undefined;
-    expect(backButton).toBeTruthy();
+    for (let i = 0; i < 260; i++) {
+      manager.update(0.01);
+    }
 
-    backButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    const endingOverlay = document.querySelector('[data-ending-overlay]') as HTMLDivElement | null;
+    const exitCta = document.querySelector('[data-ending-exit-cta]') as HTMLDivElement | null;
+    expect(endingOverlay).toBeTruthy();
+    expect(exitCta?.textContent).toContain('どこでもタップでタイトルへ');
+
+    endingOverlay!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     await flushPromises();
 
     expect(manager.getCurrentType()).toBe('title');
