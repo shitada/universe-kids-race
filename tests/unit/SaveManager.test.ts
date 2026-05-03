@@ -293,7 +293,7 @@ describe('SaveManager', () => {
       expect(sessionStore.get(SESSION_KEY)).toBe('active');
     });
 
-    it('fresh session restart can reset progress while keeping tutorialShown=true', () => {
+    it('fresh session restart resets progress and tutorialShown for the next player', () => {
       const manager = new SaveManager();
       manager.save({
         clearedStage: 5,
@@ -310,7 +310,7 @@ describe('SaveManager', () => {
         clearedStage: 0,
         unlockedPlanets: [],
         bestStageStars: {},
-        tutorialShown: true,
+        tutorialShown: false,
         muted: true,
       });
     });
@@ -420,7 +420,7 @@ describe('SaveManager', () => {
       expect(data.muted).toBe(false);
     });
 
-    it('preserves tutorialShown=true while resetting session progress data', () => {
+    it('resets tutorialShown to false while resetting session progress data', () => {
       const manager = new SaveManager();
       manager.save({
         clearedStage: 7,
@@ -436,7 +436,7 @@ describe('SaveManager', () => {
         clearedStage: 0,
         unlockedPlanets: [],
         muted: true,
-        tutorialShown: true,
+        tutorialShown: false,
         bestStageStars: {},
       });
     });
@@ -869,7 +869,7 @@ describe('SaveManager', () => {
       expect(loaded.clearedStage).toBe(0);
       expect(loaded.unlockedPlanets).toEqual([]);
       expect(loaded.bestStageStars).toEqual({});
-      expect(loaded.tutorialShown).toBe(true);
+      expect(loaded.tutorialShown).toBe(false);
     });
 
     it('invalidates the cache when save() throws so the next load() re-reads storage', () => {

@@ -24,7 +24,17 @@ type LoaderBehavior = () => Promise<void>;
 
 async function bootMain(
   titleBehaviors: LoaderBehavior[],
-  options: { initialPixelTier?: number } = {},
+  options: {
+    initialPixelTier?: number;
+    freshSession?: boolean;
+    initialSaveData?: {
+      muted?: boolean;
+      clearedStage?: number;
+      unlockedPlanets?: number[];
+      lastStablePixelTier?: number | null;
+      tutorialShown?: boolean;
+    };
+  } = {},
 ) {
   vi.resetModules();
   document.body.innerHTML = '<canvas id="game-canvas"></canvas><div id="hud"></div><div id="ui-overlay"></div>';
@@ -37,6 +47,13 @@ async function bootMain(
   };
   let loaderIndex = 0;
   const initialPixelTier = options.initialPixelTier ?? 0;
+  const saveState = {
+    muted: options.initialSaveData?.muted ?? false,
+    clearedStage: options.initialSaveData?.clearedStage ?? 0,
+    unlockedPlanets: options.initialSaveData?.unlockedPlanets ?? [1],
+    lastStablePixelTier: options.initialSaveData?.lastStablePixelTier ?? null,
+    tutorialShown: options.initialSaveData?.tutorialShown ?? true,
+  };
   const adaptiveState: {
     onTierChange: ((tier: number) => void) | null;
     resetToTier: ReturnType<typeof vi.fn> | null;
@@ -86,17 +103,22 @@ async function bootMain(
   vi.doMock('../../src/game/storage/SaveManager', () => ({
     SaveManager: class {
       isFreshSession(): boolean {
-        return false;
+        return options.freshSession ?? false;
       }
 
-      resetSessionDataPreservingMuted = vi.fn();
+      resetSessionDataPreservingMuted = vi.fn(() => {
+        saveState.clearedStage = 0;
+        saveState.unlockedPlanets = [];
+        saveState.tutorialShown = false;
+      });
 
       load() {
         return {
-          muted: false,
-          clearedStage: 0,
-          unlockedPlanets: [1],
-          lastStablePixelTier: null,
+          muted: saveState.muted,
+          clearedStage: saveState.clearedStage,
+          unlockedPlanets: [...saveState.unlockedPlanets],
+          lastStablePixelTier: saveState.lastStablePixelTier,
+          tutorialShown: saveState.tutorialShown,
         };
       }
 
@@ -229,17 +251,32 @@ async function bootMain(
   vi.doMock('../../src/game/scenes/TitleScene', () => ({
     TitleScene: class extends MockScene {
       private overlay: HTMLDivElement | null = null;
+      private tutorialOverlay: HTMLDivElement | null = null;
+
+      constructor(
+        _sceneManager: unknown,
+        private readonly saveManager: { load: () => { tutorialShown?: boolean } },
+      ) {
+        super();
+      }
 
       override enter(): void {
         this.overlay = document.createElement('div');
         this.overlay.setAttribute('data-next-adventure-card', '');
         this.overlay.textContent = 'title ready';
         document.getElementById('ui-overlay')?.appendChild(this.overlay);
+        if (!this.saveManager.load().tutorialShown) {
+          this.tutorialOverlay = document.createElement('div');
+          this.tutorialOverlay.setAttribute('data-tutorial-overlay', '');
+          document.getElementById('ui-overlay')?.appendChild(this.tutorialOverlay);
+        }
       }
 
       override exit(): void {
         this.overlay?.remove();
         this.overlay = null;
+        this.tutorialOverlay?.remove();
+        this.tutorialOverlay = null;
       }
     },
   }));
@@ -387,5 +424,19 @@ describe('Main lazy title bootstrap', () => {
     contextLossState.callbacks?.onRestored();
 
     expect(adaptiveState.resetToTier).toHaveBeenCalledWith(1);
+  });
+
+  it('re-shows the tutorial after a fresh Safari session resets tutorialShown', async () => {
+    await bootMain([async () => {}], {
+      freshSession: true,
+      initialSaveData: {
+        tutorialShown: true,
+        clearedStage: 4,
+        unlockedPlanets: [1, 2, 3, 4],
+      },
+    });
+
+    expect(document.querySelector('[data-next-adventure-card]')).not.toBeNull();
+    expect(document.querySelector('[data-tutorial-overlay]')).not.toBeNull();
   });
 });
