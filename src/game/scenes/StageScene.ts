@@ -355,6 +355,7 @@ export class StageScene implements Scene {
     });
     this.hud.setHomeConfirmOpenCallback(() => {
       this.shouldResumeAfterHomeConfirm = this.isPlaying();
+      this.clearBlockedGameplayInput();
       this.isHomeConfirmOpen = true;
       this.syncBoostInputLock();
       this.syncPauseAvailability();
@@ -489,6 +490,11 @@ export class StageScene implements Scene {
     }
   }
 
+  private clearBlockedGameplayInput(): void {
+    this.inputSystem.resetPointers?.();
+    this.inputSystem.setBoostPressed?.(false);
+  }
+
   private syncPauseAvailability(): void {
     this.hud.setPauseEnabled(this.canPause());
   }
@@ -537,6 +543,7 @@ export class StageScene implements Scene {
     if (this.resumeCountdownOverlay) return;
     if (this.shouldSkipCountdown()) return;
 
+    this.clearBlockedGameplayInput();
     this.awaitingResume = true;
     this.syncBoostInputLock();
     this.syncPauseAvailability();
@@ -569,6 +576,7 @@ export class StageScene implements Scene {
   requestManualPause(): void {
     if (!this.canPause()) return;
 
+    this.clearBlockedGameplayInput();
     this.isPauseOverlayOpen = true;
     this.syncBoostInputLock();
     this.syncPauseAvailability();

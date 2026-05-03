@@ -10,6 +10,7 @@ interface CreatedScene {
   scene: StageScene;
   sceneManager: { requestTransition: ReturnType<typeof vi.fn> };
   inputState: { moveDirection: -1 | 0 | 1; boostPressed: boolean };
+  input: { resetPointers: ReturnType<typeof vi.fn> };
 }
 
 function createScene(): CreatedScene {
@@ -23,6 +24,9 @@ function createScene(): CreatedScene {
     setBoostPressed: (value: boolean) => {
       inputState.boostPressed = value;
     },
+    resetPointers: vi.fn(() => {
+      inputState.moveDirection = 0;
+    }),
   } as unknown as InputSystem;
   const audioManager = {
     playBGM: vi.fn(),
@@ -50,6 +54,7 @@ function createScene(): CreatedScene {
     ),
     sceneManager,
     inputState,
+    input: inputSystem as unknown as { resetPointers: ReturnType<typeof vi.fn> },
   };
 }
 
@@ -154,5 +159,20 @@ describe('StageScene manual pause', () => {
 
     expect(document.querySelector('[data-home-confirm-overlay]')).not.toBeNull();
     expect(document.querySelector('[data-pause-overlay]')).toBeNull();
+  });
+
+  it('やすむ開始時に pointer 入力をクリアして queued boost も消す', () => {
+    const { scene, inputState, input } = createScene();
+    scene.enter({ stageNumber: 1 });
+    finishStartCountdown(scene);
+    input.resetPointers.mockClear();
+    inputState.moveDirection = -1;
+    inputState.boostPressed = true;
+
+    tapPauseButton();
+
+    expect(input.resetPointers).toHaveBeenCalledTimes(1);
+    expect(inputState.moveDirection).toBe(0);
+    expect(inputState.boostPressed).toBe(false);
   });
 });

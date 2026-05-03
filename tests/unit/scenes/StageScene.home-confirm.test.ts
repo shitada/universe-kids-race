@@ -10,6 +10,7 @@ interface CreatedScene {
   scene: StageScene;
   sceneManager: { requestTransition: ReturnType<typeof vi.fn> };
   inputState: { moveDirection: -1 | 0 | 1; boostPressed: boolean };
+  input: { resetPointers: ReturnType<typeof vi.fn> };
 }
 
 function createScene(): CreatedScene {
@@ -23,6 +24,9 @@ function createScene(): CreatedScene {
     setBoostPressed: (v: boolean) => {
       inputState.boostPressed = v;
     },
+    resetPointers: vi.fn(() => {
+      inputState.moveDirection = 0;
+    }),
   } as unknown as InputSystem;
   const audioManager = {
     playBGM: vi.fn(),
@@ -50,6 +54,7 @@ function createScene(): CreatedScene {
     ),
     sceneManager,
     inputState,
+    input: inputSystem as unknown as { resetPointers: ReturnType<typeof vi.fn> },
   };
 }
 
@@ -204,5 +209,35 @@ describe('StageScene home confirm pause', () => {
 
     for (let i = 0; i < 4; i++) internal.update(1.0);
     expect(boostButton.getAttribute('aria-disabled')).toBe('false');
+  });
+
+  it('ホーム確認を開く直前に pointer 入力をクリアし、復帰後も自動移動しない', () => {
+    const { scene, inputState, input } = createScene();
+    scene.enter({ stageNumber: 1 });
+    finishStartCountdown(scene);
+    input.resetPointers.mockClear();
+    inputState.moveDirection = 1;
+    inputState.boostPressed = true;
+
+    tapHomeButton();
+
+    expect(input.resetPointers).toHaveBeenCalledTimes(1);
+    expect(inputState.moveDirection).toBe(0);
+    expect(inputState.boostPressed).toBe(false);
+
+    const continueButton = document.querySelector<HTMLButtonElement>(
+      '[data-home-confirm-continue]',
+    )!;
+    confirmOverlayButtonTap(continueButton);
+
+    const internal = scene as unknown as {
+      spaceship: { position: { x: number } };
+      update(dt: number): void;
+    };
+    for (let i = 0; i < 4; i++) internal.update(1.0);
+    const x0 = internal.spaceship.position.x;
+    internal.update(0.1);
+
+    expect(internal.spaceship.position.x).toBe(x0);
   });
 });

@@ -47,6 +47,18 @@ function pointerUp(canvas: HTMLCanvasElement, pointerId = 1): void {
   );
 }
 
+function windowPointerUp(pointerId = 1): void {
+  window.dispatchEvent(
+    new PointerEvent('pointerup', { pointerId, bubbles: true }),
+  );
+}
+
+function documentPointerCancel(pointerId = 1): void {
+  document.dispatchEvent(
+    new PointerEvent('pointercancel', { pointerId, bubbles: true }),
+  );
+}
+
 function pointerMove(canvas: HTMLCanvasElement, clientX: number, pointerId = 1): void {
   canvas.dispatchEvent(
     new PointerEvent('pointermove', { clientX, pointerId, bubbles: true }),
@@ -576,6 +588,24 @@ describe('InputSystem — pointer capture', () => {
       new PointerEvent('lostpointercapture', { pointerId: 999, bubbles: true }),
     );
     expect(input.getState().moveDirection).toBe(-1);
+  });
+
+  it('window pointerup clears a tracked pointer that ended outside the canvas', () => {
+    pointerDown(canvas, 900, 7);
+    expect(input.getState().moveDirection).toBe(1);
+
+    windowPointerUp(7);
+
+    expect(input.getState().moveDirection).toBe(0);
+  });
+
+  it('document pointercancel clears a tracked pointer that was intercepted by an overlay', () => {
+    pointerDown(canvas, 100, 8);
+    expect(input.getState().moveDirection).toBe(-1);
+
+    documentPointerCancel(8);
+
+    expect(input.getState().moveDirection).toBe(0);
   });
 });
 

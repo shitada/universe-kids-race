@@ -89,27 +89,35 @@ export class InputSystem {
     this.updateDirection();
   };
 
+  private releasePointer(pointerId: number): void {
+    this.pendingPointers.delete(pointerId);
+    this.activePointers.delete(pointerId);
+    this.updateDirection();
+  }
+
   private onPointerUp = (e: PointerEvent): void => {
     e.preventDefault();
-    this.pendingPointers.delete(e.pointerId);
-    this.activePointers.delete(e.pointerId);
-    this.updateDirection();
+    this.releasePointer(e.pointerId);
   };
 
   private onPointerCancel = (e: PointerEvent): void => {
-    this.pendingPointers.delete(e.pointerId);
-    this.activePointers.delete(e.pointerId);
-    this.updateDirection();
+    this.releasePointer(e.pointerId);
+  };
+
+  private onGlobalPointerUp = (e: PointerEvent): void => {
+    this.releasePointer(e.pointerId);
+  };
+
+  private onGlobalPointerCancel = (e: PointerEvent): void => {
+    this.releasePointer(e.pointerId);
   };
 
   // Fallback for older WebKit versions where setPointerCapture may be lost
   // unexpectedly. If capture is lost while the pointer is still tracked,
   // clean it up so the direction doesn't stay stuck.
   private onLostPointerCapture = (e: PointerEvent): void => {
-    this.pendingPointers.delete(e.pointerId);
-    if (this.activePointers.has(e.pointerId)) {
-      this.activePointers.delete(e.pointerId);
-      this.updateDirection();
+    if (this.pendingPointers.has(e.pointerId) || this.activePointers.has(e.pointerId)) {
+      this.releasePointer(e.pointerId);
     }
   };
 
@@ -194,6 +202,10 @@ export class InputSystem {
     canvas.addEventListener('pointercancel', this.onPointerCancel);
     canvas.addEventListener('pointerleave', this.onPointerUp);
     canvas.addEventListener('lostpointercapture', this.onLostPointerCapture);
+    window.addEventListener('pointerup', this.onGlobalPointerUp);
+    window.addEventListener('pointercancel', this.onGlobalPointerCancel);
+    document.addEventListener('pointerup', this.onGlobalPointerUp);
+    document.addEventListener('pointercancel', this.onGlobalPointerCancel);
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onLoseFocus);
@@ -244,6 +256,10 @@ export class InputSystem {
       this.canvasLeft = 0;
       this.canvasWidth = 0;
     }
+    window.removeEventListener('pointerup', this.onGlobalPointerUp);
+    window.removeEventListener('pointercancel', this.onGlobalPointerCancel);
+    document.removeEventListener('pointerup', this.onGlobalPointerUp);
+    document.removeEventListener('pointercancel', this.onGlobalPointerCancel);
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('blur', this.onLoseFocus);

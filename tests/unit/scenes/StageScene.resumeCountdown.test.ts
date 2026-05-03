@@ -10,6 +10,7 @@ interface CreatedScene {
   scene: StageScene;
   inputState: { moveDirection: -1 | 0 | 1; boostPressed: boolean };
   audio: { playSFX: ReturnType<typeof vi.fn> };
+  input: { resetPointers: ReturnType<typeof vi.fn> };
 }
 
 function createScene(): CreatedScene {
@@ -23,6 +24,9 @@ function createScene(): CreatedScene {
     setBoostPressed: (v: boolean) => {
       inputState.boostPressed = v;
     },
+    resetPointers: vi.fn(() => {
+      inputState.moveDirection = 0;
+    }),
   } as unknown as InputSystem;
   const audioManager = {
     playBGM: vi.fn(),
@@ -45,6 +49,7 @@ function createScene(): CreatedScene {
     scene,
     inputState,
     audio: audioManager as unknown as { playSFX: ReturnType<typeof vi.fn> },
+    input: inputSystem as unknown as { resetPointers: ReturnType<typeof vi.fn> },
   };
 }
 
@@ -80,17 +85,23 @@ describe('StageScene background-resume countdown', () => {
   });
 
   it('requestResumeCountdown() shows a fresh CountdownOverlay during gameplay', () => {
-    const { scene } = createScene();
+    const { scene, inputState, input } = createScene();
     scene.enter({ stageNumber: 1 });
     finishStartCountdown(scene);
+    input.resetPointers.mockClear();
     // Start countdown DOM is gone now.
     expect(document.querySelector('[data-countdown-overlay]')).toBeNull();
+    inputState.moveDirection = 1;
+    inputState.boostPressed = true;
 
     scene.requestResumeCountdown();
 
     expect(document.querySelector('[data-countdown-overlay]')).not.toBeNull();
     const internal = scene as unknown as { awaitingResume: boolean };
     expect(internal.awaitingResume).toBe(true);
+    expect(input.resetPointers).toHaveBeenCalledTimes(1);
+    expect(inputState.moveDirection).toBe(0);
+    expect(inputState.boostPressed).toBe(false);
   });
 
   it('requestResumeCountdown() is a no-op while the start countdown is still running (no double overlay)', () => {
@@ -203,6 +214,25 @@ describe('StageScene background-resume countdown', () => {
     expect(internal.awaitingResume).toBe(false);
     expect(document.querySelector('[data-countdown-overlay]')).toBeNull();
     expect(scene.isPlaying()).toBe(true);
+  });
+
+  it('does not drift sideways after the resume countdown finishes until a new input arrives', () => {
+    const { scene, inputState } = createScene();
+    scene.enter({ stageNumber: 1 });
+    finishStartCountdown(scene);
+    inputState.moveDirection = -1;
+
+    scene.requestResumeCountdown();
+
+    const internal = scene as unknown as {
+      spaceship: { position: { x: number } };
+      update(dt: number): void;
+    };
+    for (let i = 0; i < 4; i++) internal.update(1.0);
+    const x0 = internal.spaceship.position.x;
+    internal.update(0.1);
+
+    expect(internal.spaceship.position.x).toBe(x0);
   });
 
   it('exit() disposes any in-flight resume countdown overlay', () => {
