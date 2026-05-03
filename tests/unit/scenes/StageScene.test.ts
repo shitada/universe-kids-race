@@ -195,7 +195,7 @@ describe('StageScene cleanupPassedObjects', () => {
   });
 });
 
-describe('StageScene boost activation SFX feedback (PC keyboard parity with HUD)', () => {
+describe('StageScene boost activation SFX feedback (HUD/touch boost)', () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="hud"></div><div id="ui-overlay"></div>';
   });
@@ -258,7 +258,7 @@ describe('StageScene boost activation SFX feedback (PC keyboard parity with HUD)
 
     audioManager.playSFX.mockClear();
 
-    // Simulate PC keyboard Space press during cooldown.
+    // Simulate the HUD boost button press during cooldown.
     inputState.boostPressed = true;
     internal.update(0.016);
 
