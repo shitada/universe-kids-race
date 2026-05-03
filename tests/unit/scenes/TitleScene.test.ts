@@ -5,6 +5,7 @@ import { TitleScene } from '../../../src/game/scenes/TitleScene';
 import type { SceneManager } from '../../../src/game/SceneManager';
 import type { SaveManager } from '../../../src/game/storage/SaveManager';
 import type { AudioManager } from '../../../src/game/audio/AudioManager';
+import { TOTAL_STAGES } from '../../../src/game/config/StageConfig';
 import { EncyclopediaOverlay } from '../../../src/ui/EncyclopediaOverlay';
 import type { LoadFailureOverlayOptions } from '../../../src/ui/LoadFailureOverlay';
 
@@ -39,9 +40,17 @@ function createMockAudioManager(initialized = false): AudioManager {
   } as unknown as AudioManager;
 }
 
-function createMockSaveManager(): SaveManager {
+function createMockSaveManager(overrides: Record<string, unknown> = {}): SaveManager {
+  const saveData = {
+    clearedStage: 0,
+    unlockedPlanets: [],
+    tutorialShown: true,
+    bestStageStars: {},
+    muted: false,
+    ...overrides,
+  };
   return {
-    load: vi.fn(() => ({ clearedStage: 0, unlockedPlanets: [], tutorialShown: true })),
+    load: vi.fn(() => ({ ...saveData, unlockedPlanets: [...(saveData.unlockedPlanets as number[])] })),
     save: vi.fn(),
     clear: vi.fn(),
     markTutorialShown: vi.fn(),
@@ -67,6 +76,27 @@ function findButtonByText(text: string): HTMLButtonElement | undefined {
   return Array.from(document.querySelectorAll('button')).find(
     (button) => button.textContent === text,
   ) as HTMLButtonElement | undefined;
+}
+
+function findNextAdventureCard(): HTMLDivElement | null {
+  return document.querySelector('[data-next-adventure-card]') as HTMLDivElement | null;
+}
+
+function findCompanionParade(scene: TitleScene): THREE.Group | undefined {
+  return scene.getThreeScene().children.find(
+    (child) => child instanceof THREE.Group && child.name === 'title-companion-parade',
+  ) as THREE.Group | undefined;
+}
+
+function createIdleTaskHarness(): {
+  idleCallbacks: Array<() => void>;
+  scheduleIdleTask: (callback: () => void) => void;
+} {
+  const idleCallbacks: Array<() => void> = [];
+  return {
+    idleCallbacks,
+    scheduleIdleTask: (callback) => idleCallbacks.push(callback),
+  };
 }
 
 describe('TitleScene (T009)', () => {
@@ -180,6 +210,88 @@ describe('TitleScene (T009)', () => {
         totalStarCount: 0,
       }),
     );
+
+    scene.exit();
+  });
+
+  it('shows the first stage preview when every planet is unlocked but clearedStage is reset', () => {
+    const sceneManager = createMockSceneManager();
+    const scene = new TitleScene(
+      sceneManager,
+      createMockSaveManager({
+        clearedStage: 0,
+        unlockedPlanets: Array.from({ length: TOTAL_STAGES }, (_, index) => index + 1),
+      }),
+      createMockAudioManager(true),
+    );
+
+    scene.enter({});
+
+    const card = findNextAdventureCard();
+    const hint = document.querySelector('[data-play-button-hint]') as HTMLDivElement | null;
+    expect(card?.getAttribute('data-next-stage-number')).toBe('1');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('月');
+    expect(card?.textContent).toContain('ぜんぶ クリア！');
+    expect(card?.textContent).toContain('🌙');
+    expect(hint?.textContent).toContain('ステージ 1');
+    expect(hint?.textContent).toContain('さいしょから');
+
+    findButtonByText('あそぶ')?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith(
+      'stage',
+      expect.objectContaining({
+        stageNumber: 1,
+        totalScore: 0,
+        totalStarCount: 0,
+      }),
+    );
+
+    scene.exit();
+  });
+
+  it('keeps the next-stage preview for in-progress saves', () => {
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager({
+        clearedStage: 3,
+        unlockedPlanets: [1, 2, 3],
+      }),
+      createMockAudioManager(true),
+    );
+
+    scene.enter({});
+
+    const card = findNextAdventureCard();
+    const hint = document.querySelector('[data-play-button-hint]') as HTMLDivElement | null;
+    expect(card?.getAttribute('data-next-stage-number')).toBe('4');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('火星');
+    expect(card?.textContent).toContain('つづきから しゅっぱつ！');
+    expect(hint?.textContent).toContain('ステージ 4');
+    expect(hint?.textContent).not.toContain('さいしょから');
+
+    scene.exit();
+  });
+
+  it('shows the first-start preview for a brand-new save', () => {
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager({
+        clearedStage: 0,
+        unlockedPlanets: [],
+      }),
+      createMockAudioManager(true),
+    );
+
+    scene.enter({});
+
+    const card = findNextAdventureCard();
+    const hint = document.querySelector('[data-play-button-hint]') as HTMLDivElement | null;
+    expect(card?.getAttribute('data-next-stage-number')).toBe('1');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('月');
+    expect(card?.textContent).toContain('はじめての しゅっぱつ！');
+    expect(hint?.textContent).toContain('ステージ 1');
+    expect(hint?.textContent).not.toContain('さいしょから');
 
     scene.exit();
   });
@@ -399,6 +511,27 @@ describe('TitleScene (T009)', () => {
     scene.exit();
   });
 
+  it('positions title bottom buttons with overlay-local spacing only', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager(true);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager);
+    scene.enter({});
+
+    const tutorialButton = findButtonByText('あそびかた');
+    const encyclopediaButton = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent?.startsWith('ずかん'),
+    ) as HTMLButtonElement | undefined;
+
+    expect(tutorialButton?.getAttribute('style')).toContain('bottom: 2rem;');
+    expect(tutorialButton?.getAttribute('style')).toContain('right: 2rem;');
+    expect(encyclopediaButton?.getAttribute('style')).toContain('bottom: 2rem;');
+    expect(encyclopediaButton?.getAttribute('style')).toContain('left: 2rem;');
+
+    scene.exit();
+  });
+
   it('reuses the same THREE.Scene instance across enter/exit cycles', () => {
     const scene = new TitleScene(
       createMockSceneManager(),
@@ -464,6 +597,155 @@ describe('TitleScene (T009)', () => {
     expect(points.length).toBeGreaterThanOrEqual(1);
 
     scene.exit();
+  });
+
+  it('does not load companion factory when no planets are unlocked', async () => {
+    const { idleCallbacks, scheduleIdleTask } = createIdleTaskHarness();
+    const loadTitleCompanionFactory = vi.fn(async () => ({
+      createCompanionMesh: vi.fn(() => new THREE.Group()),
+    }));
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager({ unlockedPlanets: [] }),
+      createMockAudioManager(),
+      { loadTitleCompanionFactory, scheduleIdleTask },
+    );
+
+    scene.enter({});
+    await flushPromises();
+
+    expect(idleCallbacks).toHaveLength(1);
+    expect(loadTitleCompanionFactory).not.toHaveBeenCalled();
+    expect(findCompanionParade(scene)).toBeUndefined();
+
+    scene.exit();
+  });
+
+  it('does not show companion parade when no planets are unlocked', () => {
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager({ unlockedPlanets: [] }),
+      createMockAudioManager(),
+    );
+
+    scene.enter({});
+
+    expect(findCompanionParade(scene)).toBeUndefined();
+
+    scene.exit();
+  });
+
+  it('creates the companion parade only after the idle callback runs', async () => {
+    const { idleCallbacks, scheduleIdleTask } = createIdleTaskHarness();
+    const loadTitleCompanionFactory = vi.fn(async () => ({
+      createCompanionMesh: vi.fn(() => new THREE.Group()),
+    }));
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager({ unlockedPlanets: [1, 2, 3] }),
+      createMockAudioManager(),
+      { loadTitleCompanionFactory, scheduleIdleTask },
+    );
+
+    scene.enter({});
+
+    expect(idleCallbacks).toHaveLength(2);
+    expect(loadTitleCompanionFactory).not.toHaveBeenCalled();
+    expect(findCompanionParade(scene)).toBeUndefined();
+
+    idleCallbacks[0]?.();
+    await flushPromises();
+
+    const parade = findCompanionParade(scene);
+    expect(parade).toBeTruthy();
+    expect(parade?.children).toHaveLength(3);
+
+    scene.exit();
+  });
+
+  it('loads companion factory once and reuses it across re-entry', async () => {
+    const { idleCallbacks, scheduleIdleTask } = createIdleTaskHarness();
+    const createCompanionMesh = vi.fn(() => new THREE.Group());
+    const loadTitleCompanionFactory = vi.fn(async () => ({
+      createCompanionMesh,
+    }));
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager({ unlockedPlanets: [1, 2] }),
+      createMockAudioManager(),
+      { loadTitleCompanionFactory, scheduleIdleTask },
+    );
+
+    scene.enter({});
+    expect(idleCallbacks).toHaveLength(2);
+    idleCallbacks[0]?.();
+    await flushPromises();
+    expect(loadTitleCompanionFactory).toHaveBeenCalledTimes(1);
+    expect(findCompanionParade(scene)?.children).toHaveLength(2);
+
+    scene.exit();
+    scene.enter({});
+    expect(idleCallbacks).toHaveLength(4);
+    idleCallbacks[2]?.();
+    await flushPromises();
+
+    expect(loadTitleCompanionFactory).toHaveBeenCalledTimes(1);
+    expect(createCompanionMesh).toHaveBeenCalledTimes(4);
+    expect(findCompanionParade(scene)?.children).toHaveLength(2);
+
+    scene.exit();
+  });
+
+  it('does not create the companion parade after exit even if the idle callback fires', async () => {
+    const { idleCallbacks, scheduleIdleTask } = createIdleTaskHarness();
+    const loadTitleCompanionFactory = vi.fn(async () => ({
+      createCompanionMesh: vi.fn(() => new THREE.Group()),
+    }));
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager({ unlockedPlanets: [1, 2] }),
+      createMockAudioManager(),
+      { loadTitleCompanionFactory, scheduleIdleTask },
+    );
+
+    scene.enter({});
+    expect(idleCallbacks).toHaveLength(2);
+
+    scene.exit();
+    idleCallbacks[0]?.();
+    await flushPromises();
+
+    expect(loadTitleCompanionFactory).not.toHaveBeenCalled();
+    expect(findCompanionParade(scene)).toBeUndefined();
+  });
+
+  it('does not attach the companion parade after exit when async loading resolves later', async () => {
+    const { idleCallbacks, scheduleIdleTask } = createIdleTaskHarness();
+    let resolveFactory: ((factory: { createCompanionMesh: () => THREE.Group }) => void) | null = null;
+    const loadTitleCompanionFactory = vi.fn(
+      () =>
+        new Promise<{ createCompanionMesh: () => THREE.Group }>((resolve) => {
+          resolveFactory = resolve;
+        }),
+    );
+    const scene = new TitleScene(
+      createMockSceneManager(),
+      createMockSaveManager({ unlockedPlanets: [1, 2] }),
+      createMockAudioManager(),
+      { loadTitleCompanionFactory, scheduleIdleTask },
+    );
+
+    scene.enter({});
+    idleCallbacks[0]?.();
+    await flushPromises();
+    expect(loadTitleCompanionFactory).toHaveBeenCalledTimes(1);
+
+    scene.exit();
+    resolveFactory?.({ createCompanionMesh: vi.fn(() => new THREE.Group()) });
+    await flushPromises();
+    await flushPromises();
+
+    expect(findCompanionParade(scene)).toBeUndefined();
   });
 });
 

@@ -31,7 +31,7 @@ export function createMuteButton(opts: MuteButtonOptions): MuteButtonHandle {
   button.setAttribute('data-mute-button', '');
   button.style.position = 'absolute';
   button.style.top = `${topRem}rem`;
-  button.style.right = 'max(1rem, calc(env(safe-area-inset-right, 0px) + 0.5rem))';
+  button.style.right = '1rem';
   button.style.fontSize = 'clamp(1.4rem, 4vmin, 1.8rem)';
   button.style.background = 'rgba(255, 255, 255, 0.15)';
   button.style.border = 'none';

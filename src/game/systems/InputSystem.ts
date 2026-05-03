@@ -4,6 +4,7 @@ export class InputSystem {
   private state: InputState = { moveDirection: 0, boostPressed: false };
   private canvas: HTMLCanvasElement | null = null;
   private activePointers = new Map<number, 'left' | 'right'>();
+  private pendingPointers = new Set<number>();
   private pressedKeys = new Set<string>();
   // Cached canvas client width to avoid forced reflow on every pointer event
   // (Constitution III/IV: iPad Safari touch latency / 60fps). Updated via
@@ -44,31 +45,61 @@ export class InputSystem {
   private onPointerDown = (e: PointerEvent): void => {
     e.preventDefault();
     if (!this.canvas) return;
-    const side = this.sideOf(e.clientX) ?? (e.clientX < this.getCanvasWidth() / 2 ? 'left' : 'right');
+    // Capture the pointer so that pointerup always fires on the canvas even
+    // when a DOM overlay (stage-clear, home-confirm, etc.) appears on top
+    // while the finger is still down. Without this, the pointerup fires on
+    // the overlay and this.activePointers retains a ghost entry that causes
+    // permanent directional drift. Guarded because jsdom (tests) does not
+    // implement setPointerCapture.
+    this.canvas.setPointerCapture?.(e.pointerId);
+    const side = this.sideOf(e.clientX);
+    if (side === null) {
+      this.pendingPointers.add(e.pointerId);
+      return;
+    }
     this.activePointers.set(e.pointerId, side);
     this.updateDirection();
   };
 
   private onPointerMove = (e: PointerEvent): void => {
     if (!this.canvas) return;
-    if (!this.activePointers.has(e.pointerId)) return;
     const side = this.sideOf(e.clientX);
-    if (side === null) return;
-    const current = this.activePointers.get(e.pointerId);
-    if (current === side) return;
+    if (this.activePointers.has(e.pointerId)) {
+      if (side === null) return;
+      const current = this.activePointers.get(e.pointerId);
+      if (current === side) return;
+      this.activePointers.set(e.pointerId, side);
+      this.updateDirection();
+      return;
+    }
+    if (!this.pendingPointers.has(e.pointerId) || side === null) return;
+    this.pendingPointers.delete(e.pointerId);
     this.activePointers.set(e.pointerId, side);
     this.updateDirection();
   };
 
   private onPointerUp = (e: PointerEvent): void => {
     e.preventDefault();
+    this.pendingPointers.delete(e.pointerId);
     this.activePointers.delete(e.pointerId);
     this.updateDirection();
   };
 
   private onPointerCancel = (e: PointerEvent): void => {
+    this.pendingPointers.delete(e.pointerId);
     this.activePointers.delete(e.pointerId);
     this.updateDirection();
+  };
+
+  // Fallback for older WebKit versions where setPointerCapture may be lost
+  // unexpectedly. If capture is lost while the pointer is still tracked,
+  // clean it up so the direction doesn't stay stuck.
+  private onLostPointerCapture = (e: PointerEvent): void => {
+    this.pendingPointers.delete(e.pointerId);
+    if (this.activePointers.has(e.pointerId)) {
+      this.activePointers.delete(e.pointerId);
+      this.updateDirection();
+    }
   };
 
   private onKeyDown = (e: KeyboardEvent): void => {
@@ -101,6 +132,7 @@ export class InputSystem {
 
   private resetInputs(): void {
     this.activePointers.clear();
+    this.pendingPointers.clear();
     this.pressedKeys.clear();
     this.state.boostPressed = false;
     this.updateDirection();
@@ -145,6 +177,7 @@ export class InputSystem {
     canvas.addEventListener('pointerup', this.onPointerUp);
     canvas.addEventListener('pointercancel', this.onPointerCancel);
     canvas.addEventListener('pointerleave', this.onPointerUp);
+    canvas.addEventListener('lostpointercapture', this.onLostPointerCapture);
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onLoseFocus);
@@ -171,6 +204,17 @@ export class InputSystem {
     }
   }
 
+  /**
+   * Clear all active pointer state without touching keyboard state.
+   * Called on stage transitions to prevent ghost pointers from surviving
+   * across stages (e.g. when a DOM overlay intercepts pointerup).
+   */
+  resetPointers(): void {
+    this.activePointers.clear();
+    this.pendingPointers.clear();
+    this.updateDirection();
+  }
+
   dispose(): void {
     if (this.canvas) {
       this.canvas.removeEventListener('pointerdown', this.onPointerDown);
@@ -178,6 +222,7 @@ export class InputSystem {
       this.canvas.removeEventListener('pointerup', this.onPointerUp);
       this.canvas.removeEventListener('pointercancel', this.onPointerCancel);
       this.canvas.removeEventListener('pointerleave', this.onPointerUp);
+      this.canvas.removeEventListener('lostpointercapture', this.onLostPointerCapture);
       this.canvas = null;
       this.canvasWidth = 0;
     }
@@ -187,6 +232,7 @@ export class InputSystem {
     window.removeEventListener('pagehide', this.onLoseFocus);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
     this.activePointers.clear();
+    this.pendingPointers.clear();
     this.pressedKeys.clear();
     this.state = { moveDirection: 0, boostPressed: false };
   }

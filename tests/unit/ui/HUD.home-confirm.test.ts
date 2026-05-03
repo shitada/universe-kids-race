@@ -64,6 +64,7 @@ describe('HUD ↔ HomeConfirmOverlay 連携', () => {
       '[data-home-confirm-back]',
     )!;
     backBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    backBtn.dispatchEvent(new Event('pointerup', { bubbles: true }));
     expect(cb).toHaveBeenCalledTimes(1);
     expect(document.querySelector('[data-home-confirm-overlay]')).toBeNull();
   });
@@ -79,6 +80,7 @@ describe('HUD ↔ HomeConfirmOverlay 連携', () => {
       '[data-home-confirm-continue]',
     )!;
     continueBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    continueBtn.dispatchEvent(new Event('pointerup', { bubbles: true }));
     expect(cb).not.toHaveBeenCalled();
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(document.querySelector('[data-home-confirm-overlay]')).toBeNull();

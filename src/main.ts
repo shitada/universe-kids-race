@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import { PerspectiveCamera } from 'three';
 import { GameLoop } from './game/GameLoop';
 import { SceneManager } from './game/SceneManager';
 import { InputSystem } from './game/systems/InputSystem';
@@ -21,6 +21,7 @@ import { OrientationHintOverlay } from './ui/OrientationHintOverlay';
 import { LoadingOverlay } from './ui/LoadingOverlay';
 import { LoadFailureOverlay } from './ui/LoadFailureOverlay';
 import { createOrientationHintHandler } from './game/utils/createOrientationHintHandler';
+import { createRetryableModuleLoader } from './game/utils/createRetryableModuleLoader';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 
@@ -55,7 +56,7 @@ function applyRendererSize(width: number, height: number): void {
     inputSystem.notifyResize(canvas.clientWidth);
   }
   const camera = sceneManager.getCurrentCamera();
-  if (camera instanceof THREE.PerspectiveCamera) {
+  if (camera instanceof PerspectiveCamera) {
     const aspect = width / height;
     if (camera.aspect !== aspect) {
       camera.aspect = aspect;
@@ -132,18 +133,8 @@ let stageScene: StageScene | null = null;
 audioManager.setMuted(saveManager.load().muted === true);
 
 const titleScene = new TitleScene(sceneManager, saveManager, audioManager);
-let stageSceneModulePromise: Promise<typeof import('./game/scenes/StageScene')> | null = null;
-let endingSceneModulePromise: Promise<typeof import('./game/scenes/EndingScene')> | null = null;
-
-const loadStageSceneModule = (): Promise<typeof import('./game/scenes/StageScene')> => {
-  stageSceneModulePromise ??= import('./game/scenes/StageScene');
-  return stageSceneModulePromise;
-};
-
-const loadEndingSceneModule = (): Promise<typeof import('./game/scenes/EndingScene')> => {
-  endingSceneModulePromise ??= import('./game/scenes/EndingScene');
-  return endingSceneModulePromise;
-};
+const loadStageSceneModule = createRetryableModuleLoader(() => import('./game/scenes/StageScene'));
+const loadEndingSceneModule = createRetryableModuleLoader(() => import('./game/scenes/EndingScene'));
 
 sceneManager.registerScene('title', titleScene);
 sceneManager.registerSceneModulePrefetch('stage', loadStageSceneModule);
@@ -197,8 +188,6 @@ sceneManager.setTransitionHandler(
   createSceneTransitionHandler({
     sceneManager,
     pixelRatioController,
-    applyPixelRatioTier,
-    maxTier: MAX_TIER,
     now: () => performance.now(),
   }),
 );

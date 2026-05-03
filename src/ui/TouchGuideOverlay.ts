@@ -68,10 +68,10 @@ export class TouchGuideOverlay {
     guide.style.opacity = '0';
 
     if (side === 'left') {
-      guide.style.left = 'max(0.8rem, calc(env(safe-area-inset-left, 0px) + 0.4rem))';
+      guide.style.left = '0.8rem';
       guide.style.textAlign = 'left';
     } else {
-      guide.style.right = 'max(0.8rem, calc(env(safe-area-inset-right, 0px) + 0.4rem))';
+      guide.style.right = '0.8rem';
       guide.style.textAlign = 'right';
     }
 

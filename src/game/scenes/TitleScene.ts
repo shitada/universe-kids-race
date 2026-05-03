@@ -1,5 +1,16 @@
-import * as THREE from 'three';
-import type { Scene, SceneContext } from '../../types';
+import {
+  AmbientLight,
+  BufferAttribute,
+  BufferGeometry,
+  Camera,
+  Color,
+  Group,
+  PerspectiveCamera,
+  Points,
+  PointsMaterial,
+  Scene as ThreeScene,
+} from 'three';
+import type { SaveData, Scene, SceneContext } from '../../types';
 import type { SceneManager } from '../SceneManager';
 import type { SaveManager } from '../storage/SaveManager';
 import type { AudioManager } from '../audio/AudioManager';
@@ -7,8 +18,8 @@ import { TutorialOverlay } from '../../ui/TutorialOverlay';
 import { LoadingOverlay } from '../../ui/LoadingOverlay';
 import { LoadFailureOverlay } from '../../ui/LoadFailureOverlay';
 import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButton';
-import { TOTAL_STAGES } from '../config/StageConfig';
-import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
+import { getStageConfig, TOTAL_STAGES } from '../config/StageConfig';
+import { PLANET_ENCYCLOPEDIA, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { formatEncyclopediaLabel } from '../../ui/formatEncyclopediaLabel';
 import { getViewportSize } from '../utils/getViewportSize';
 
@@ -27,25 +38,25 @@ import { getViewportSize } from '../utils/getViewportSize';
 // クリーンされた場合の安全網とする。
 // ──────────────────────────────────────────────────────────────────────────────
 
-let SHARED_TITLE_BG_STARS_GEOMETRY: THREE.BufferGeometry | null = null;
-let SHARED_TITLE_BG_STARS_MATERIAL: THREE.PointsMaterial | null = null;
+let SHARED_TITLE_BG_STARS_GEOMETRY: BufferGeometry | null = null;
+let SHARED_TITLE_BG_STARS_MATERIAL: PointsMaterial | null = null;
 
-function getTitleBgStarsGeometry(): THREE.BufferGeometry {
+function getTitleBgStarsGeometry(): BufferGeometry {
   if (!SHARED_TITLE_BG_STARS_GEOMETRY) {
-    const geo = new THREE.BufferGeometry();
+    const geo = new BufferGeometry();
     const positions = new Float32Array(3000);
     for (let i = 0; i < 3000; i++) {
       positions[i] = (Math.random() - 0.5) * 200;
     }
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('position', new BufferAttribute(positions, 3));
     SHARED_TITLE_BG_STARS_GEOMETRY = geo;
   }
   return SHARED_TITLE_BG_STARS_GEOMETRY;
 }
 
-function getTitleBgStarsMaterial(): THREE.PointsMaterial {
+function getTitleBgStarsMaterial(): PointsMaterial {
   if (!SHARED_TITLE_BG_STARS_MATERIAL) {
-    SHARED_TITLE_BG_STARS_MATERIAL = new THREE.PointsMaterial({
+    SHARED_TITLE_BG_STARS_MATERIAL = new PointsMaterial({
       color: 0xffffff,
       size: 0.3,
       sizeAttenuation: true,
@@ -67,18 +78,21 @@ export function __resetTitleSceneSharedAssetsForTest(): void {
  * テスト用フック: 内部キャッシュへ直接アクセスする。
  */
 export const __titleSceneSharedAssetsForTest = {
-  getBgStarsGeometry: (): THREE.BufferGeometry | null => SHARED_TITLE_BG_STARS_GEOMETRY,
-  getBgStarsMaterial: (): THREE.PointsMaterial | null => SHARED_TITLE_BG_STARS_MATERIAL,
+  getBgStarsGeometry: (): BufferGeometry | null => SHARED_TITLE_BG_STARS_GEOMETRY,
+  getBgStarsMaterial: (): PointsMaterial | null => SHARED_TITLE_BG_STARS_MATERIAL,
 };
 
 type EncyclopediaOverlayModule = typeof import('../../ui/EncyclopediaOverlay');
 type EncyclopediaOverlayCtor = EncyclopediaOverlayModule['EncyclopediaOverlay'];
 type EncyclopediaOverlayInstance = InstanceType<EncyclopediaOverlayCtor>;
+type TitleCompanionFactoryModule = typeof import('../entities/CompanionMeshFactory');
+type TitleCompanionFactory = Pick<TitleCompanionFactoryModule, 'createCompanionMesh'>;
 
 interface TitleSceneOptions {
   loadingOverlay?: Pick<LoadingOverlay, 'show' | 'hide'>;
   loadFailureOverlay?: Pick<LoadFailureOverlay, 'show' | 'hide'>;
   loadEncyclopediaOverlay?: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
+  loadTitleCompanionFactory?: () => Promise<TitleCompanionFactory>;
   scheduleIdleTask?: (callback: () => void) => void;
 }
 
@@ -93,23 +107,75 @@ function scheduleIdleTask(callback: () => void): void {
   window.setTimeout(callback, 800);
 }
 
+interface NextAdventurePreview {
+  startStage: number;
+  destination: string;
+  emoji: string;
+  statusLabel: string;
+  destinationLabel: string;
+  buttonHint: string;
+}
+
+function getUnlockedStageCount(unlockedPlanets: number[]): number {
+  return new Set(
+    unlockedPlanets.filter(
+      (stageNumber) =>
+        Number.isInteger(stageNumber) && stageNumber >= 1 && stageNumber <= TOTAL_STAGES,
+    ),
+  ).size;
+}
+
+function isAllStagesUnlocked(unlockedPlanets: number[]): boolean {
+  return getUnlockedStageCount(unlockedPlanets) >= TOTAL_STAGES;
+}
+
+function getNextAdventurePreview(saveData: SaveData): NextAdventurePreview {
+  const isAllClear = isAllStagesUnlocked(saveData.unlockedPlanets);
+  const startStage = isAllClear ? 1 : Math.min(saveData.clearedStage + 1, TOTAL_STAGES);
+  const stageConfig = getStageConfig(startStage);
+
+  if (isAllClear) {
+    return {
+      startStage,
+      destination: stageConfig.destination,
+      emoji: stageConfig.emoji,
+      statusLabel: 'ぜんぶ クリア！',
+      destinationLabel: `${stageConfig.destination}へ さいしょから しゅっぱつ！`,
+      buttonHint: `${stageConfig.emoji} ステージ ${startStage} から さいしょから あそぶ`,
+    };
+  }
+
+  return {
+    startStage,
+    destination: stageConfig.destination,
+    emoji: stageConfig.emoji,
+    statusLabel: saveData.clearedStage > 0 ? 'つづきから しゅっぱつ！' : 'はじめての しゅっぱつ！',
+    destinationLabel: `${stageConfig.destination}へ むかおう！`,
+    buttonHint: `${stageConfig.emoji} ステージ ${startStage} から スタート`,
+  };
+}
+
 export class TitleScene implements Scene {
   // Scene / AmbientLight はインスタンスで再利用し、🏠 ボタンによる再入場ごとの
   // per-entry GPU/JS アロケーションを抑える。
-  private readonly threeScene: THREE.Scene;
-  private readonly ambientLight: THREE.AmbientLight = new THREE.AmbientLight(0xffffff, 1);
-  private camera: THREE.PerspectiveCamera;
+  private readonly threeScene: ThreeScene;
+  private readonly ambientLight: AmbientLight = new AmbientLight(0xffffff, 1);
+  private camera: PerspectiveCamera;
   private lastAspect = 0;
   private sceneManager: SceneManager;
   private saveManager: SaveManager;
   private audioManager: AudioManager;
-  private stars: THREE.Points | null = null;
+  private stars: Points | null = null;
+  private companionParade: Group | null = null;
   private overlay: HTMLDivElement | null = null;
   private muteHandle: MuteButtonHandle | null = null;
   private tutorialOverlay = new TutorialOverlay();
   private encyclopediaOverlay: EncyclopediaOverlayInstance | null = null;
   private encyclopediaOverlayPromise: Promise<EncyclopediaOverlayInstance> | null = null;
+  private companionFactory: TitleCompanionFactory | null = null;
+  private companionFactoryPromise: Promise<TitleCompanionFactory> | null = null;
   private readonly loadEncyclopediaOverlay: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
+  private readonly loadTitleCompanionFactory: () => Promise<TitleCompanionFactory>;
   private readonly loadingOverlay: Pick<LoadingOverlay, 'show' | 'hide'>;
   private readonly loadFailureOverlay: Pick<LoadFailureOverlay, 'show' | 'hide'>;
   private readonly scheduleIdleTask: (callback: () => void) => void;
@@ -117,6 +183,7 @@ export class TitleScene implements Scene {
   private isOpeningEncyclopedia = false;
   private isActive = false;
   private encyclopediaRequestToken = 0;
+  private companionParadeRequestToken = 0;
   // タイトル滞在中、初回 user gesture（AudioContext 初期化）を待つフラグ。
   // iPad Safari の AudioContext は user gesture 必須のため、enter() 直後の
   // 即時 playBGM(0) は AudioManager が既に初期化済みのとき（再訪問時）のみ
@@ -139,10 +206,13 @@ export class TitleScene implements Scene {
     this.loadEncyclopediaOverlay =
       options.loadEncyclopediaOverlay ??
       (() => import('../../ui/EncyclopediaOverlay'));
-    this.threeScene = new THREE.Scene();
-    this.threeScene.background = new THREE.Color(0x000020);
+    this.loadTitleCompanionFactory =
+      options.loadTitleCompanionFactory ??
+      (() => import('../entities/CompanionMeshFactory'));
+    this.threeScene = new ThreeScene();
+    this.threeScene.background = new Color(0x000020);
     const { width: vw, height: vh } = getViewportSize();
-    this.camera = new THREE.PerspectiveCamera(
+    this.camera = new PerspectiveCamera(
       60,
       vw / vh,
       0.1,
@@ -154,10 +224,11 @@ export class TitleScene implements Scene {
   enter(_context: SceneContext): void {
     this.isActive = true;
     this.encyclopediaRequestToken += 1;
+    this.companionParadeRequestToken += 1;
     this.lastAspect = 0;
 
     // Starfield background (SHARED: 共有 geometry / material は dispose しない)
-    this.stars = new THREE.Points(getTitleBgStarsGeometry(), getTitleBgStarsMaterial());
+    this.stars = new Points(getTitleBgStarsGeometry(), getTitleBgStarsMaterial());
     this.stars.userData.sharedAssets = true;
     this.stars.rotation.set(0, 0, 0);
     this.threeScene.add(this.stars);
@@ -166,6 +237,9 @@ export class TitleScene implements Scene {
     if (!this.ambientLight.parent) {
       this.threeScene.add(this.ambientLight);
     }
+
+    const saveData = this.saveManager.load();
+    this.scheduleCompanionParadeOnIdle(saveData.unlockedPlanets);
 
     this.createOverlay();
     this.createMuteButton();
@@ -193,7 +267,6 @@ export class TitleScene implements Scene {
     // overlay's pointerdown for AudioContext init ({once: true}) is attached
     // by createOverlay() above, so the close-tap on the tutorial does not
     // consume it (the tutorial overlay is a separate DOM subtree).
-    const saveData = this.saveManager.load();
     if (!saveData.tutorialShown) {
       this.tutorialOverlay.show(() => {
         this.ensureTitleAudioInitialized(true);
@@ -241,6 +314,26 @@ export class TitleScene implements Scene {
     return this.encyclopediaOverlayPromise;
   }
 
+  private getTitleCompanionFactory(): Promise<TitleCompanionFactory> {
+    if (this.companionFactory) {
+      return Promise.resolve(this.companionFactory);
+    }
+    if (this.companionFactoryPromise) {
+      return this.companionFactoryPromise;
+    }
+
+    this.companionFactoryPromise = this.loadTitleCompanionFactory()
+      .then((factory) => {
+        this.companionFactory = factory;
+        return factory;
+      })
+      .finally(() => {
+        this.companionFactoryPromise = null;
+      });
+
+    return this.companionFactoryPromise;
+  }
+
   private showEncyclopedia(): void {
     if (!this.isActive || !this.encyclopediaOverlay) return;
     const saveData = this.saveManager.load();
@@ -253,6 +346,7 @@ export class TitleScene implements Scene {
           stageNumber,
           totalScore: 0,
           totalStarCount: 0,
+          launchSource: 'encyclopedia',
         });
       },
       saveData.bestStageStars ?? {},
@@ -274,6 +368,24 @@ export class TitleScene implements Scene {
         return;
       }
       void this.getEncyclopediaOverlay().catch(() => {});
+    });
+  }
+
+  private isCurrentCompanionParadeRequest(requestToken: number): boolean {
+    return this.isActive && this.companionParadeRequestToken === requestToken;
+  }
+
+  private scheduleCompanionParadeOnIdle(unlockedPlanets: number[]): void {
+    if (unlockedPlanets.length === 0) {
+      return;
+    }
+
+    const requestToken = this.companionParadeRequestToken;
+    this.scheduleIdleTask(() => {
+      if (!this.isCurrentCompanionParadeRequest(requestToken) || this.companionParade) {
+        return;
+      }
+      void this.createCompanionParade(unlockedPlanets, requestToken);
     });
   }
 
@@ -325,6 +437,8 @@ export class TitleScene implements Scene {
   private createOverlay(): void {
     const uiOverlay = document.getElementById('ui-overlay');
     if (!uiOverlay) return;
+    const initialSaveData = this.saveManager.load();
+    const nextAdventure = getNextAdventurePreview(initialSaveData);
 
     this.overlay = document.createElement('div');
     this.overlay.style.cssText = `
@@ -346,6 +460,72 @@ export class TitleScene implements Scene {
       color: #FFD700;
       text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
       margin-bottom: 2rem;
+    `;
+
+    const nextAdventureCard = document.createElement('div');
+    nextAdventureCard.setAttribute('data-next-adventure-card', '');
+    nextAdventureCard.setAttribute('data-next-stage-number', String(nextAdventure.startStage));
+    nextAdventureCard.setAttribute('data-next-stage-destination', nextAdventure.destination);
+    nextAdventureCard.style.cssText = `
+      width: min(70vw, 26rem);
+      padding: 1rem 1.4rem;
+      margin-bottom: 1.25rem;
+      border-radius: 1.5rem;
+      background: rgba(255, 255, 255, 0.14);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+      backdrop-filter: blur(6px);
+      text-align: center;
+      color: #fff;
+    `;
+
+    const nextAdventureHeading = document.createElement('div');
+    nextAdventureHeading.textContent = 'つぎの ぼうけん';
+    nextAdventureHeading.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #FFE66D;
+      margin-bottom: 0.35rem;
+    `;
+
+    const nextAdventureStatus = document.createElement('div');
+    nextAdventureStatus.textContent = nextAdventure.statusLabel;
+    nextAdventureStatus.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: 1.25rem;
+      font-weight: 900;
+      margin-bottom: 0.35rem;
+    `;
+
+    const nextAdventureStage = document.createElement('div');
+    nextAdventureStage.textContent = `${nextAdventure.emoji} ステージ ${nextAdventure.startStage} ・ ${nextAdventure.destination}`;
+    nextAdventureStage.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: 1.35rem;
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+    `;
+
+    const nextAdventureDestination = document.createElement('div');
+    nextAdventureDestination.textContent = nextAdventure.destinationLabel;
+    nextAdventureDestination.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.92);
+    `;
+
+    nextAdventureCard.appendChild(nextAdventureHeading);
+    nextAdventureCard.appendChild(nextAdventureStatus);
+    nextAdventureCard.appendChild(nextAdventureStage);
+    nextAdventureCard.appendChild(nextAdventureDestination);
+
+    const playArea = document.createElement('div');
+    playArea.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.65rem;
     `;
 
     const button = document.createElement('button');
@@ -372,13 +552,25 @@ export class TitleScene implements Scene {
       // するため、タイトル BGM は実質的に再生されない無駄な処理になっていた。
       this.ensureTitleAudioInitialized(false);
       const saveData = this.saveManager.load();
-      const startStage = Math.min(saveData.clearedStage + 1, TOTAL_STAGES);
+      const startStage = getNextAdventurePreview(saveData).startStage;
       this.sceneManager.requestTransition('stage', {
         stageNumber: startStage,
         totalScore: 0,
         totalStarCount: 0,
+        launchSource: 'campaign',
       });
     });
+
+    const playButtonHint = document.createElement('div');
+    playButtonHint.setAttribute('data-play-button-hint', '');
+    playButtonHint.textContent = nextAdventure.buttonHint;
+    playButtonHint.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.88);
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+    `;
 
     // Tutorial button
     const tutorialBtn = document.createElement('button');
@@ -395,9 +587,11 @@ export class TitleScene implements Scene {
       cursor: pointer;
       touch-action: manipulation;
       position: absolute;
-      bottom: max(2rem, calc(env(safe-area-inset-bottom, 0px) + 1rem));
-      right: max(2rem, calc(env(safe-area-inset-right, 0px) + 1rem));
+      bottom: 2rem;
+      right: 2rem;
     `;
+    tutorialBtn.style.bottom = '2rem';
+    tutorialBtn.style.right = '2rem';
     tutorialBtn.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
       this.ensureTitleAudioInitialized(true);
@@ -409,7 +603,6 @@ export class TitleScene implements Scene {
 
     // Encyclopedia button
     const encyclopediaBtn = document.createElement('button');
-    const initialSaveData = this.saveManager.load();
     encyclopediaBtn.textContent = formatEncyclopediaLabel(
       initialSaveData.unlockedPlanets.length,
       PLANET_ENCYCLOPEDIA.length,
@@ -427,9 +620,11 @@ export class TitleScene implements Scene {
       touch-action: manipulation;
       white-space: nowrap;
       position: absolute;
-      bottom: max(2rem, calc(env(safe-area-inset-bottom, 0px) + 1rem));
-      left: max(2rem, calc(env(safe-area-inset-left, 0px) + 1rem));
+      bottom: 2rem;
+      left: 2rem;
     `;
+    encyclopediaBtn.style.bottom = '2rem';
+    encyclopediaBtn.style.left = '2rem';
     this.encyclopediaBtn = encyclopediaBtn;
     encyclopediaBtn.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
@@ -437,8 +632,12 @@ export class TitleScene implements Scene {
       void this.openEncyclopedia();
     });
 
+    playArea.appendChild(button);
+    playArea.appendChild(playButtonHint);
+
     this.overlay.appendChild(title);
-    this.overlay.appendChild(button);
+    this.overlay.appendChild(nextAdventureCard);
+    this.overlay.appendChild(playArea);
     this.overlay.appendChild(tutorialBtn);
     this.overlay.appendChild(encyclopediaBtn);
     uiOverlay.appendChild(this.overlay);
@@ -473,16 +672,78 @@ export class TitleScene implements Scene {
     );
   }
 
+  private async createCompanionParade(
+    unlockedPlanets: number[],
+    requestToken: number,
+  ): Promise<void> {
+    const unlockedEntries = [...new Set(unlockedPlanets)].reduce<Array<NonNullable<ReturnType<typeof getPlanetEncyclopediaEntry>>>>(
+      (entries, stageNumber) => {
+        const entry = getPlanetEncyclopediaEntry(stageNumber);
+        if (entry) {
+          entries.push(entry);
+        }
+        return entries;
+      },
+      [],
+    );
+
+    if (unlockedEntries.length === 0) {
+      return;
+    }
+
+    const { createCompanionMesh } = await this.getTitleCompanionFactory();
+    if (!this.isCurrentCompanionParadeRequest(requestToken)) {
+      return;
+    }
+
+    this.clearCompanionParade();
+    const group = new Group();
+    group.name = 'title-companion-parade';
+    group.position.set(0, 1.35, -1.2);
+    group.rotation.x = -0.12;
+
+    const radius = Math.min(2.1, 1.1 + unlockedEntries.length * 0.18);
+    const verticalAmplitude = Math.min(0.45, 0.18 + unlockedEntries.length * 0.02);
+
+    unlockedEntries.forEach((entry, index) => {
+      const mesh = createCompanionMesh(entry);
+      const angle = (index / unlockedEntries.length) * Math.PI * 2;
+      mesh.position.set(
+        Math.cos(angle) * radius,
+        Math.sin(angle) * verticalAmplitude,
+        Math.sin(angle) * radius * 0.45,
+      );
+      mesh.rotation.y = Math.PI * 0.15 - angle;
+      mesh.scale.setScalar(0.6);
+      group.add(mesh);
+    });
+
+    this.companionParade = group;
+    this.threeScene.add(group);
+  }
+
+  private clearCompanionParade(): void {
+    if (!this.companionParade) {
+      return;
+    }
+    this.companionParade.parent?.remove(this.companionParade);
+    this.companionParade = null;
+  }
+
   update(deltaTime: number): void {
     // Rotate starfield slowly
     if (this.stars) {
       this.stars.rotation.y += deltaTime * 0.05;
+    }
+    if (this.companionParade) {
+      this.companionParade.rotation.y += deltaTime * 0.35;
     }
   }
 
   exit(): void {
     this.isActive = false;
     this.encyclopediaRequestToken += 1;
+    this.companionParadeRequestToken += 1;
     this.isOpeningEncyclopedia = false;
     this.tutorialOverlay.hide();
     this.encyclopediaOverlay?.hide();
@@ -494,6 +755,7 @@ export class TitleScene implements Scene {
     // 「タイトル BGM がステージ突入後にうっすら残る」可能性を断つ。
     this.audioManager.stopBGM();
     this.bgmPending = false;
+    this.clearCompanionParade();
     if (this.stars) {
       // SHARED: geometry / material はモジュールキャッシュで使い回すため dispose しない。
       this.stars.parent?.remove(this.stars);
@@ -510,11 +772,11 @@ export class TitleScene implements Scene {
     }
   }
 
-  getThreeScene(): THREE.Scene {
+  getThreeScene(): ThreeScene {
     return this.threeScene;
   }
 
-  getCamera(): THREE.Camera {
+  getCamera(): Camera {
     const { width, height } = getViewportSize();
     const aspect = width / height;
     if (aspect !== this.lastAspect && Number.isFinite(aspect) && aspect > 0) {

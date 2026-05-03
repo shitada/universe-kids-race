@@ -157,6 +157,39 @@ describe('InputSystem — pointermove tracking', () => {
     expect(input.getState().moveDirection).toBe(1);
   });
 
+  it('pointerdown in center dead zone does not move until pointer leaves center', () => {
+    pointerDown(canvas, 512);
+    expect(input.getState().moveDirection).toBe(0);
+
+    pointerMove(canvas, 500);
+    expect(input.getState().moveDirection).toBe(0);
+
+    pointerMove(canvas, 100);
+    expect(input.getState().moveDirection).toBe(-1);
+
+    pointerUp(canvas);
+    expect(input.getState().moveDirection).toBe(0);
+  });
+
+  it('center-start pointer can resolve to right on pointermove', () => {
+    pointerDown(canvas, 512);
+    expect(input.getState().moveDirection).toBe(0);
+
+    pointerMove(canvas, 900);
+    expect(input.getState().moveDirection).toBe(1);
+  });
+
+  it('pointerup after center dead zone tap keeps moveDirection at 0', () => {
+    pointerDown(canvas, 512);
+    expect(input.getState().moveDirection).toBe(0);
+
+    pointerUp(canvas);
+    expect(input.getState().moveDirection).toBe(0);
+
+    pointerMove(canvas, 100);
+    expect(input.getState().moveDirection).toBe(0);
+  });
+
   it('two pointers: moving one across center does not affect the other', () => {
     // Pointer 1 on left, pointer 2 on right → both active → moveDirection 0
     pointerDown(canvas, 100, 1);
@@ -200,7 +233,7 @@ describe('InputSystem — pointermove tracking', () => {
     document.body.appendChild(zeroCanvas);
     input = new InputSystem();
     input.setup(zeroCanvas);
-    // pointerdown still registers (fallback) — but pointermove with width 0 must not crash and not change side
+    // pointer events with width 0 must not crash or change direction
     zeroCanvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 0, pointerId: 1, bubbles: true }));
     const before = input.getState().moveDirection;
     zeroCanvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 100, pointerId: 1, bubbles: true }));
@@ -390,5 +423,92 @@ describe('InputSystem — focus/visibility reset', () => {
     input = new InputSystem();
     canvas = createCanvas();
     input.setup(canvas);
+  });
+});
+
+describe('InputSystem — pointer capture', () => {
+  let input: InputSystem;
+  let canvas: HTMLCanvasElement;
+
+  beforeEach(() => {
+    input = new InputSystem();
+    canvas = createCanvas();
+    // Provide setPointerCapture stub (jsdom does not implement it)
+    canvas.setPointerCapture = canvas.setPointerCapture ?? (() => {});
+    input.setup(canvas);
+  });
+
+  afterEach(() => {
+    input.dispose();
+    canvas.remove();
+  });
+
+  it('calls setPointerCapture on pointerdown', () => {
+    const captured: number[] = [];
+    canvas.setPointerCapture = (id: number) => { captured.push(id); };
+    pointerDown(canvas, 100, 42);
+    expect(captured).toContain(42);
+  });
+
+  it('lostpointercapture cleans up ghost pointer', () => {
+    pointerDown(canvas, 900, 10);
+    expect(input.getState().moveDirection).toBe(1);
+    // Simulate capture loss without pointerup
+    canvas.dispatchEvent(
+      new PointerEvent('lostpointercapture', { pointerId: 10, bubbles: true }),
+    );
+    expect(input.getState().moveDirection).toBe(0);
+  });
+
+  it('lostpointercapture for unknown pointer is a no-op', () => {
+    pointerDown(canvas, 100, 1);
+    expect(input.getState().moveDirection).toBe(-1);
+    // lostpointercapture for a different pointer ID — should not affect state
+    canvas.dispatchEvent(
+      new PointerEvent('lostpointercapture', { pointerId: 999, bubbles: true }),
+    );
+    expect(input.getState().moveDirection).toBe(-1);
+  });
+});
+
+describe('InputSystem — resetPointers', () => {
+  let input: InputSystem;
+  let canvas: HTMLCanvasElement;
+
+  beforeEach(() => {
+    input = new InputSystem();
+    canvas = createCanvas();
+    canvas.setPointerCapture = canvas.setPointerCapture ?? (() => {});
+    input.setup(canvas);
+  });
+
+  afterEach(() => {
+    input.dispose();
+    canvas.remove();
+  });
+
+  it('clears active pointers and resets moveDirection', () => {
+    pointerDown(canvas, 900, 1);
+    expect(input.getState().moveDirection).toBe(1);
+    input.resetPointers();
+    expect(input.getState().moveDirection).toBe(0);
+  });
+
+  it('does not clear keyboard state', () => {
+    keyDown('ArrowLeft');
+    pointerDown(canvas, 900, 1);
+    // left + right → 0
+    expect(input.getState().moveDirection).toBe(0);
+    // resetPointers clears only pointers; ArrowLeft key remains
+    input.resetPointers();
+    expect(input.getState().moveDirection).toBe(-1);
+  });
+
+  it('subsequent pointerup after resetPointers is a no-op', () => {
+    pointerDown(canvas, 900, 1);
+    input.resetPointers();
+    expect(input.getState().moveDirection).toBe(0);
+    pointerUp(canvas, 1);
+    expect(input.getState().moveDirection).toBe(0);
   });
 });

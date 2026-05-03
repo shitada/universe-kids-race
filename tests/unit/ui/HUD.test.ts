@@ -39,6 +39,7 @@ describe('HUD', () => {
       const hudRoot = document.getElementById('hud')!;
       const stageNameEl = hudRoot.children[1] as HTMLElement;
       expect(stageNameEl.style.cssText).toContain('1.5rem');
+      expect(stageNameEl.style.padding).toBe('0.5rem');
     });
 
     it('applies text-shadow for contrast', () => {
@@ -64,12 +65,13 @@ describe('HUD', () => {
       expect(homeBtn!.textContent).toBe('🏠');
     });
 
-    it('positions home button at top-left with safe area inset', () => {
+    it('positions home button at top-left with HUD-local spacing only', () => {
       hud.show('🌙 つきを めざせ！');
       const hudRoot = document.getElementById('hud')!;
       const homeBtn = hudRoot.querySelector('button') as HTMLButtonElement;
       expect(homeBtn.style.position).toBe('absolute');
       expect(homeBtn.style.top).toBe('0.8rem');
+      expect(homeBtn.style.left).toBe('1rem');
     });
 
     it('sets pointer-events auto on home button', () => {
@@ -93,6 +95,7 @@ describe('HUD', () => {
       )!;
       expect(backBtn).not.toBeNull();
       backBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      backBtn.dispatchEvent(new Event('pointerup', { bubbles: true }));
       expect(called).toBe(true);
     });
 
@@ -158,6 +161,7 @@ describe('HUD', () => {
           '[data-home-confirm-back]',
         )!;
         backBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+        backBtn.dispatchEvent(new Event('pointerup', { bubbles: true }));
         expect(called).toBe(1);
       });
     });
@@ -254,6 +258,14 @@ describe('HUD', () => {
       const uiOverlay = document.getElementById('ui-overlay')!;
       const boostBtn = uiOverlay.querySelector('button') as HTMLButtonElement;
       expect(boostBtn.style.borderRadius).toBe('2rem');
+    });
+
+    it('positions boost button with overlay-local spacing only', () => {
+      hud.show('Test');
+      const uiOverlay = document.getElementById('ui-overlay')!;
+      const boostBtn = uiOverlay.querySelector('button') as HTMLButtonElement;
+      expect(boostBtn.style.bottom).toBe('2rem');
+      expect(boostBtn.style.right).toBe('2rem');
     });
 
     it('applies press animation class on pointerdown', () => {

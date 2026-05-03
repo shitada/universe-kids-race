@@ -11,6 +11,7 @@ import type { SaveManager } from '../../src/game/storage/SaveManager';
 import { LoadingOverlay } from '../../src/ui/LoadingOverlay';
 import { LoadFailureOverlay } from '../../src/ui/LoadFailureOverlay';
 import { createSceneTransitionHandler } from '../../src/game/utils/createSceneTransitionHandler';
+import { createRetryableModuleLoader } from '../../src/game/utils/createRetryableModuleLoader';
 
 function createTrackingScene(transitionLog: { type: SceneType; context: SceneContext }[], sceneType: SceneType): Scene {
   const threeScene = new THREE.Scene();
@@ -418,6 +419,72 @@ describe('Stage Flow Integration', () => {
     expect(internal.stageNumber).toBe(2);
   });
 
+  it('uses the retry CTA to replay the same stage', async () => {
+    const manager = new SceneManager();
+    const inputSystem = {
+      setBoostPressed: vi.fn(),
+      getState: vi.fn(() => ({ moveDirection: 0, boostPressed: false })),
+    } as unknown as InputSystem;
+    const audioManager = {
+      playBGM: vi.fn(),
+      stopBGM: vi.fn(),
+      playSFX: vi.fn(),
+      stopBoostSFX: vi.fn(),
+      startBoostSFX: vi.fn(),
+      isMuted: vi.fn(() => false),
+      toggleMute: vi.fn(() => false),
+      setMuted: vi.fn(),
+      initFromInteraction: vi.fn(),
+    } as unknown as AudioManager;
+    const saveManager = {
+      load: vi.fn(() => ({
+        clearedStage: 0,
+        unlockedPlanets: [],
+        muted: false,
+        tutorialShown: true,
+        bestStageStars: {},
+      })),
+      save: vi.fn(),
+      clear: vi.fn(),
+      markStageCleared: vi.fn(() => false),
+      updateBestStageStars: vi.fn(),
+    } as unknown as SaveManager;
+    let stageScene: StageScene | null = null;
+
+    manager.registerSceneFactory('stage', async () => {
+      stageScene = new StageScene(manager, inputSystem, audioManager, saveManager);
+      return stageScene;
+    });
+    manager.registerScene('ending', createTrackingScene([], 'ending'));
+
+    await manager.transitionTo('stage', { stageNumber: 3, totalScore: 500, totalStarCount: 4 });
+
+    const internal = stageScene as unknown as {
+      stageNumber: number;
+      scoreSystem: {
+        getStarCount(): number;
+        finalizeStage(): { totalScore: number; totalStarCount: number };
+      };
+      onStageClear(): void;
+      update(deltaTime: number): void;
+    };
+    internal.scoreSystem.getStarCount = () => 3;
+    internal.scoreSystem.finalizeStage = () => ({ totalScore: 1200, totalStarCount: 9 });
+
+    internal.onStageClear();
+    internal.update(30);
+    expect(internal.stageNumber).toBe(3);
+
+    const retryButton = document.querySelector<HTMLButtonElement>('[data-stage-clear-retry]');
+    expect(retryButton?.textContent).toBe('このステージを もういちど');
+    retryButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(manager.getCurrentType()).toBe('stage');
+    expect(internal.stageNumber).toBe(3);
+  });
+
   it('uses the clear CTA to move from the last stage to ending', async () => {
     const manager = new SceneManager();
     const inputSystem = {
@@ -550,7 +617,7 @@ describe('Stage Flow Integration', () => {
     expect(endingModulePrefetcher).toHaveBeenCalledTimes(1);
   });
 
-  it('shows retry UI after stage lazy-load failure and can return to title', async () => {
+  it('shows retry UI after stage lazy-load failure and retries successfully on "もういちど"', async () => {
     const log: { type: SceneType; context: SceneContext }[] = [];
     const manager = new SceneManager();
     const loadingOverlay = new LoadingOverlay();
@@ -560,11 +627,17 @@ describe('Stage Flow Integration', () => {
       reset: vi.fn(),
       notifyResume: vi.fn(),
     };
-    const applyPixelRatioTier = vi.fn();
+
+    const loadStageModule = createRetryableModuleLoader(
+      vi.fn<() => Promise<{ StageScene: typeof StageScene }>>()
+        .mockRejectedValueOnce(new Error('stage chunk failed'))
+        .mockResolvedValueOnce({ StageScene }),
+    );
 
     manager.registerScene('title', createTrackingScene(log, 'title'));
     manager.registerSceneFactory('stage', async () => {
-      throw new Error('stage chunk failed');
+      await loadStageModule();
+      return createTrackingScene(log, 'stage');
     });
     manager.setLoadStateHandler((isLoading, sceneType) => {
       if (isLoading) {
@@ -598,8 +671,6 @@ describe('Stage Flow Integration', () => {
       createSceneTransitionHandler({
         sceneManager: manager,
         pixelRatioController,
-        applyPixelRatioTier,
-        maxTier: 2,
         now: () => 0,
       }),
     );
@@ -612,14 +683,102 @@ describe('Stage Flow Integration', () => {
     expect(document.querySelector('[data-loading-overlay]')).toBeNull();
     expect(document.querySelector('[data-load-failure-overlay]')).not.toBeNull();
 
-    const titleButton = document.querySelector('[data-load-failure-secondary]') as HTMLButtonElement;
-    titleButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    const retryButton = document.querySelector('[data-load-failure-primary]') as HTMLButtonElement;
+    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
     await flushPromises();
 
     expect(document.querySelector('[data-load-failure-overlay]')).toBeNull();
-    expect(log.filter((entry) => entry.type === 'title')).toHaveLength(1);
-    expect(manager.getCurrentType()).toBe('title');
+    expect(log).toEqual([
+      { type: 'title', context: {} },
+      { type: 'stage', context: { stageNumber: 1, totalScore: 0, totalStarCount: 0 } },
+    ]);
+    expect(manager.getCurrentType()).toBe('stage');
     expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to transition to stage', expect.any(Error));
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('shows retry UI after ending lazy-load failure and retries successfully on "もういちど"', async () => {
+    const log: { type: SceneType; context: SceneContext }[] = [];
+    const manager = new SceneManager();
+    const loadingOverlay = new LoadingOverlay();
+    const loadFailureOverlay = new LoadFailureOverlay();
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const pixelRatioController = {
+      reset: vi.fn(),
+      notifyResume: vi.fn(),
+    };
+    const loadEndingModule = createRetryableModuleLoader(
+      vi.fn<() => Promise<{ EndingScene: string }>>()
+        .mockRejectedValueOnce(new Error('ending chunk failed'))
+        .mockResolvedValueOnce({ EndingScene: 'loaded' }),
+    );
+
+    manager.registerScene('title', createTrackingScene(log, 'title'));
+    manager.registerScene('stage', createTrackingScene(log, 'stage'));
+    manager.registerSceneFactory('ending', async () => {
+      await loadEndingModule();
+      return createTrackingScene(log, 'ending');
+    });
+    manager.setLoadStateHandler((isLoading, sceneType) => {
+      if (isLoading) {
+        loadingOverlay.show(
+          sceneType === 'ending'
+            ? 'さいごの じゅんび ちゅう...'
+            : 'たびの じゅんび ちゅう...',
+        );
+        return;
+      }
+      loadingOverlay.hide();
+    });
+    manager.setTransitionErrorHandler((error, sceneType, context) => {
+      console.error(`Failed to transition to ${sceneType}`, error);
+      loadingOverlay.hide();
+      if (sceneType !== 'stage' && sceneType !== 'ending') {
+        return;
+      }
+      loadFailureOverlay.show({
+        primaryAction: {
+          label: 'もういちど',
+          onSelect: () => manager.requestTransition(sceneType, context),
+        },
+        secondaryAction: {
+          label: 'タイトルへ',
+          onSelect: () => manager.requestTransition('title'),
+        },
+      });
+    });
+    manager.setTransitionHandler(
+      createSceneTransitionHandler({
+        sceneManager: manager,
+        pixelRatioController,
+        now: () => 0,
+      }),
+    );
+
+    await manager.requestTransition('title');
+    await manager.requestTransition('stage', { stageNumber: TOTAL_STAGES, totalScore: 9000, totalStarCount: 72 });
+    await manager.requestTransition('ending', { totalScore: 9000, totalStarCount: 72 });
+    await flushPromises();
+    await flushPromises();
+
+    expect(document.querySelector('[data-loading-overlay]')).toBeNull();
+    expect(document.querySelector('[data-load-failure-overlay]')).not.toBeNull();
+
+    const retryButton = document.querySelector('[data-load-failure-primary]') as HTMLButtonElement;
+    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushPromises();
+    await flushPromises();
+
+    expect(document.querySelector('[data-load-failure-overlay]')).toBeNull();
+    expect(log).toEqual([
+      { type: 'title', context: {} },
+      { type: 'stage', context: { stageNumber: TOTAL_STAGES, totalScore: 9000, totalStarCount: 72 } },
+      { type: 'ending', context: { totalScore: 9000, totalStarCount: 72 } },
+    ]);
+    expect(manager.getCurrentType()).toBe('ending');
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to transition to ending', expect.any(Error));
 
     consoleErrorSpy.mockRestore();
   });
