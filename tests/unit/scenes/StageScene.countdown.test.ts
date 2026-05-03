@@ -157,4 +157,51 @@ describe('StageScene start countdown', () => {
     expect(internal.isStarting).toBe(false);
     expect(internal.countdownOverlay).toBeNull();
   });
+
+  it('shows a planet intro card before the countdown on campaign transitions', () => {
+    const { scene } = createScene();
+    scene.enter({
+      stageNumber: 2,
+      totalScore: 0,
+      totalStarCount: 0,
+      launchSource: 'campaign',
+    });
+    const internal = scene as unknown as { update(dt: number): void };
+
+    expect(document.querySelector('[data-stage-intro-overlay]')).not.toBeNull();
+    expect(document.querySelector('[data-stage-intro-name]')?.textContent).toBe('すいせい');
+    expect(document.querySelector('[data-countdown-overlay]')).toBeNull();
+
+    internal.update(1.8);
+
+    expect(document.querySelector('[data-stage-intro-overlay]')).toBeNull();
+    expect(document.querySelector('[data-countdown-overlay]')).not.toBeNull();
+  });
+
+  it('skips the planet intro card on retry and starts the countdown immediately', () => {
+    const { scene } = createScene();
+    scene.enter({
+      stageNumber: 2,
+      totalScore: 0,
+      totalStarCount: 0,
+      launchSource: 'campaign',
+      replayToken: 1,
+    });
+
+    expect(document.querySelector('[data-stage-intro-overlay]')).toBeNull();
+    expect(document.querySelector('[data-countdown-overlay]')).not.toBeNull();
+  });
+
+  it('skips the planet intro card for encyclopedia launches', () => {
+    const { scene } = createScene();
+    scene.enter({
+      stageNumber: 2,
+      totalScore: 0,
+      totalStarCount: 0,
+      launchSource: 'encyclopedia',
+    });
+
+    expect(document.querySelector('[data-stage-intro-overlay]')).toBeNull();
+    expect(document.querySelector('[data-countdown-overlay]')).not.toBeNull();
+  });
 });

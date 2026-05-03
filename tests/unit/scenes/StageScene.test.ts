@@ -615,9 +615,12 @@ describe('StageScene cumulative totals on re-entry', () => {
 
   function skipCountdown(scene: StageScene): void {
     const internal = scene as unknown as {
+      stageIntroOverlay: { dispose(): void } | null;
       countdownOverlay: { dispose(): void } | null;
       isStarting: boolean;
     };
+    internal.stageIntroOverlay?.dispose();
+    internal.stageIntroOverlay = null;
     internal.countdownOverlay?.dispose();
     internal.countdownOverlay = null;
     internal.isStarting = false;
@@ -817,9 +820,12 @@ describe('StageScene visual quality tier', () => {
 
   function skipCountdown(scene: StageScene): void {
     const internal = scene as unknown as {
+      stageIntroOverlay: { dispose(): void } | null;
       countdownOverlay: { dispose(): void } | null;
       isStarting: boolean;
     };
+    internal.stageIntroOverlay?.dispose();
+    internal.stageIntroOverlay = null;
     internal.countdownOverlay?.dispose();
     internal.countdownOverlay = null;
     internal.isStarting = false;

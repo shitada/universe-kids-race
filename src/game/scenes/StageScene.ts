@@ -13,6 +13,7 @@ import { SpawnSystem } from '../systems/SpawnSystem';
 import { BoostSystem } from '../systems/BoostSystem';
 import { HUD } from '../../ui/HUD';
 import { CountdownOverlay } from '../../ui/CountdownOverlay';
+import { StageIntroOverlay } from '../../ui/StageIntroOverlay';
 import { getStageConfig, TOTAL_STAGES } from '../config/StageConfig';
 import { ParticleBurstManager } from '../effects/ParticleBurst';
 import { AirShield } from '../effects/AirShield';
@@ -166,6 +167,7 @@ export class StageScene implements Scene {
   // child can mentally prepare. Background stars and the destination planet
   // continue to rotate gently for a calm waiting state.
   private isStarting = false;
+  private stageIntroOverlay: StageIntroOverlay | null = null;
   private countdownOverlay: CountdownOverlay | null = null;
 
   // Background-resume countdown ("3 → 2 → 1 → スタート！" after Safari
@@ -375,11 +377,13 @@ export class StageScene implements Scene {
     // BGM
     this.audioManager.playBGM(this.stageNumber);
 
-    // Stage start countdown. Locks input/spawn/forward motion until the
-    // child sees "3 → 2 → 1 → スタート！". Honors `?nocount=1` query string
-    // for E2E / smoke tests so existing assertions about immediate forward
-    // motion are not broken.
-    this.startCountdown();
+    this.stageIntroOverlay?.dispose();
+    this.stageIntroOverlay = null;
+
+    // Stage start flow. Campaign transitions can show a short planet intro
+    // card before the existing countdown; retries / encyclopedia launches keep
+    // the existing tempo.
+    this.startOpeningSequence(context);
   }
 
   private prefetchEndingSceneModuleIfNeeded(): void {
@@ -393,6 +397,28 @@ export class StageScene implements Scene {
 
     const prefetchPromise = prefetchSceneModule?.call(this.sceneManager, 'ending');
     void prefetchPromise?.catch(() => {});
+  }
+
+  private startOpeningSequence(context: SceneContext): void {
+    this.isStarting = true;
+    this.syncBoostInputLock();
+
+    if (!this.shouldShowStageIntro(context)) {
+      this.startCountdown();
+      return;
+    }
+
+    const entry = getPlanetEncyclopediaEntry(this.stageNumber);
+    if (!entry) {
+      this.startCountdown();
+      return;
+    }
+
+    this.stageIntroOverlay = new StageIntroOverlay(entry);
+    this.stageIntroOverlay.show(() => {
+      this.stageIntroOverlay = null;
+      this.startCountdown();
+    });
   }
 
   private startCountdown(): void {
@@ -417,6 +443,14 @@ export class StageScene implements Scene {
       this.countdownOverlay = null;
       this.syncBoostInputLock();
     });
+  }
+
+  private shouldShowStageIntro(context: SceneContext): boolean {
+    if (this.shouldSkipCountdown()) return false;
+    if (this.launchSource !== 'campaign') return false;
+    if (context.replayToken !== undefined) return false;
+    if (context.totalScore === undefined || context.totalStarCount === undefined) return false;
+    return getPlanetEncyclopediaEntry(this.stageNumber) !== undefined;
   }
 
   private syncBoostInputLock(): void {
@@ -574,7 +608,11 @@ export class StageScene implements Scene {
     if (this.isStarting || this.awaitingResume || this.isHomeConfirmOpen) {
       this.inputSystem.setBoostPressed?.(false);
       if (!this.isHomeConfirmOpen) {
-        this.countdownOverlay?.tick(deltaTime);
+        const hadStageIntro = this.stageIntroOverlay?.isActive() ?? false;
+        this.stageIntroOverlay?.tick(deltaTime);
+        if (!hadStageIntro) {
+          this.countdownOverlay?.tick(deltaTime);
+        }
         this.resumeCountdownOverlay?.tick(deltaTime);
       }
       if (this.destinationPlanetSpinTarget) {
@@ -1735,6 +1773,10 @@ export class StageScene implements Scene {
     this.scorePopupManager.dispose();
     this.audioManager.stopBGM();
     this.audioManager.stopBoostSFX();
+    if (this.stageIntroOverlay) {
+      this.stageIntroOverlay.dispose();
+      this.stageIntroOverlay = null;
+    }
     if (this.countdownOverlay) {
       this.countdownOverlay.dispose();
       this.countdownOverlay = null;

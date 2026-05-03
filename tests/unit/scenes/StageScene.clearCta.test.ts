@@ -89,6 +89,7 @@ function createScene(options?: {
     stageNumber,
     totalScore: options?.totalScore,
     totalStarCount: options?.totalStarCount,
+    replayToken: 1,
   });
 
   const internal = scene as unknown as StageSceneInternals;

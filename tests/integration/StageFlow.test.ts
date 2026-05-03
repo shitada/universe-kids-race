@@ -221,6 +221,7 @@ describe('Stage Flow Integration', () => {
     await manager.transitionTo('stage', { stageNumber: 3, totalScore: 1000, totalStarCount: 10 });
 
     const internal = stageScene as unknown as {
+      stageIntroOverlay: { dispose(): void } | null;
       countdownOverlay: { dispose(): void } | null;
       isStarting: boolean;
       scoreSystem: {
@@ -236,6 +237,8 @@ describe('Stage Flow Integration', () => {
       onStageClear(): void;
       update(deltaTime: number): void;
     };
+    internal.stageIntroOverlay?.dispose();
+    internal.stageIntroOverlay = null;
     internal.countdownOverlay?.dispose();
     internal.countdownOverlay = null;
     internal.isStarting = false;
