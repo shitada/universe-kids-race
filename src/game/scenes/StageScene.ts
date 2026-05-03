@@ -146,6 +146,10 @@ export class StageScene implements Scene {
   // composes cleanly with this rotation.
   private destinationPlanetSpinTarget: THREE.Object3D | null = null;
   private static readonly DESTINATION_PLANET_SPIN_SPEED = 0.2;
+  private static readonly BOOST_HINT_INITIAL_DELAY = 3.5;
+  private static readonly BOOST_HINT_REPEAT_DELAY = 12;
+  private static readonly BOOST_HINT_DURATION = 2.4;
+  private static readonly BOOST_HINT_MESSAGE = '🚀 いまだよ！';
 
   // Background stars
   private bgStars: THREE.Points | null = null;
@@ -185,6 +189,9 @@ export class StageScene implements Scene {
   private touchGuideIdleTimer = 0;
   private hasSeenMoveInput = false;
   private isActive = false;
+  private boostHintReadyTimer = 0;
+  private boostHintDisplayTimer = 0;
+  private boostHintNextTrigger = StageScene.BOOST_HINT_INITIAL_DELAY;
   private prewarmRequestToken = 0;
   private static readonly TOUCH_GUIDE_IDLE_DELAY = 3;
   private visualQualityTier = StageScene.VISUAL_QUALITY_SCALE_BY_TIER.length - 1;
@@ -286,6 +293,7 @@ export class StageScene implements Scene {
     this.assistMessageTimer = 0;
     this.assistDirection = null;
     this.assistDirectionRefreshTimer = 0;
+    this.resetBoostHintState();
 
     const totalScore = context.totalScore ?? 0;
     const totalStarCount = context.totalStarCount ?? 0;
@@ -453,6 +461,7 @@ export class StageScene implements Scene {
     const locked = this.isStarting || this.awaitingResume || this.isHomeConfirmOpen || this.isPauseOpen;
     this.hud.setBoostLocked(locked);
     if (locked) {
+      this.resetBoostHintState();
       this.inputSystem.setBoostPressed?.(false);
     }
   }
@@ -579,6 +588,7 @@ export class StageScene implements Scene {
     this.stars.length = 0;
     this.meteorites.length = 0;
     this.hud?.hideAssistMessage();
+    this.resetBoostHintState();
   }
 
 
@@ -587,6 +597,7 @@ export class StageScene implements Scene {
       return;
     }
     if (this.isCleared) {
+      this.resetBoostHintState();
       this.clearTimer += deltaTime;
       // Keep companion entrance animation progressing during clear screen
       this.companionManager?.update(
@@ -604,6 +615,7 @@ export class StageScene implements Scene {
     // Only the destination planet's gentle spin and background-star centering
     // keep moving so the scene feels alive (Constitution I/IV).
     if (this.isStarting || this.awaitingResume || this.isHomeConfirmOpen || this.isPauseOpen) {
+      this.resetBoostHintState();
       this.inputSystem.setBoostPressed?.(false);
       if (!this.isHomeConfirmOpen && !this.isPauseOpen) {
         this.countdownOverlay?.tick(deltaTime);
@@ -659,6 +671,8 @@ export class StageScene implements Scene {
       this.audioManager.playSFX('boostReady');
       this.hud.flashBoostReady();
     }
+
+    this.updateBoostHint(deltaTime);
 
     // Apply boost state to spaceship
     if (this.boostSystem.isActive() && this.spaceship.speedState !== 'BOOST') {
@@ -930,6 +944,38 @@ export class StageScene implements Scene {
     }
   }
 
+  private resetBoostHintState(): void {
+    this.boostHintReadyTimer = 0;
+    this.boostHintDisplayTimer = 0;
+    this.boostHintNextTrigger = StageScene.BOOST_HINT_INITIAL_DELAY;
+    this.hud?.hideBoostHint();
+  }
+
+  private updateBoostHint(deltaTime: number): void {
+    const boostReady = this.boostSystem.isAvailable() && !this.boostSystem.isActive();
+    if (!boostReady) {
+      this.resetBoostHintState();
+      return;
+    }
+
+    if (this.boostHintDisplayTimer > 0) {
+      this.boostHintDisplayTimer = Math.max(0, this.boostHintDisplayTimer - deltaTime);
+      if (this.boostHintDisplayTimer === 0) {
+        this.hud.hideBoostHint();
+      }
+    }
+
+    this.boostHintReadyTimer += deltaTime;
+    if (this.boostHintReadyTimer < this.boostHintNextTrigger) {
+      return;
+    }
+
+    this.hud.showBoostHint(StageScene.BOOST_HINT_MESSAGE);
+    this.boostHintDisplayTimer = StageScene.BOOST_HINT_DURATION;
+    this.boostHintReadyTimer = 0;
+    this.boostHintNextTrigger = StageScene.BOOST_HINT_REPEAT_DELAY;
+  }
+
   private recordMeteoriteHit(): void {
     const now = this.playTime;
     this.meteoriteHitTimes.push(now);
@@ -1135,6 +1181,7 @@ export class StageScene implements Scene {
     this.isClearContinueEnabled = false;
     this.hasHandledClearContinue = false;
     this.resetAssistNavigation();
+    this.resetBoostHintState();
     this.touchGuide.hide();
     const isNewPlanetUnlock = this.saveManager.markStageCleared(this.stageNumber);
     this.audioManager.playSFX('stageClear');

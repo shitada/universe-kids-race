@@ -11,6 +11,7 @@ export class HUD {
   private bestStarContainerEl: HTMLSpanElement | null = null;
   private bestStarCountEl: HTMLSpanElement | null = null;
   private boostButton: HTMLButtonElement | null = null;
+  private boostHintEl: HTMLDivElement | null = null;
   private homeButton: HTMLButtonElement | null = null;
   private pauseButton: HTMLButtonElement | null = null;
   private homeConfirmOverlay: HomeConfirmOverlay = new HomeConfirmOverlay();
@@ -406,6 +407,32 @@ export class HUD {
 
     uiOverlay.appendChild(this.boostButton);
 
+    this.boostHintEl = document.createElement('div');
+    this.boostHintEl.setAttribute('data-boost-hint', '');
+    this.boostHintEl.setAttribute('aria-hidden', 'true');
+    this.boostHintEl.style.cssText = `
+      position: absolute;
+      right: 2rem;
+      bottom: 6.25rem;
+      display: none;
+      max-width: min(54vw, 240px);
+      padding: 0.45rem 0.85rem;
+      border-radius: 999px;
+      background: rgba(14, 20, 60, 0.9);
+      border: 2px solid rgba(255, 217, 61, 0.9);
+      color: #fff7bf;
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: clamp(0.95rem, 3.2vmin, 1.12rem);
+      font-weight: 700;
+      text-align: center;
+      pointer-events: none;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+      transform-origin: right bottom;
+      z-index: 12;
+      white-space: nowrap;
+    `;
+    uiOverlay.appendChild(this.boostHintEl);
+
     // Cooldown indicator below boost button
     this.cooldownContainer = document.createElement('div');
     this.cooldownContainer.setAttribute('data-cooldown-container', '');
@@ -466,6 +493,22 @@ export class HUD {
       }
       button[data-boost-ready-flash] {
         animation: boostBtnReadyFlash 0.45s ease-out 1 !important;
+      }
+      @keyframes boostHintBob {
+        0%, 100% { transform: translateY(0) scale(1); }
+        50% { transform: translateY(-4px) scale(1.04); }
+      }
+      [data-boost-hint][data-boost-hint-visible] {
+        animation: boostHintBob 0.9s ease-in-out infinite;
+      }
+      button[data-boost-hint-active] {
+        box-shadow:
+          0 0 0 6px rgba(255, 217, 61, 0.18),
+          0 10px 28px rgba(255, 107, 107, 0.62);
+        transform: scale(1.08);
+      }
+      div[data-cooldown-container][data-boost-hint-active] {
+        box-shadow: 0 0 14px rgba(255, 217, 61, 0.9);
       }
       @keyframes stageGoalFlash {
         0%   { transform: scale(1.0); }
@@ -547,6 +590,27 @@ export class HUD {
     if (!this.assistMessageEl) return;
     this.assistMessageEl.style.display = 'none';
     this.assistMessageEl.textContent = '';
+  }
+
+  showBoostHint(message: string): void {
+    if (!this.boostHintEl || !this.boostButton || !this.cooldownContainer) return;
+    this.boostHintEl.textContent = message;
+    this.boostHintEl.style.display = 'block';
+    this.boostHintEl.setAttribute('data-boost-hint-visible', '');
+    this.boostHintEl.setAttribute('aria-hidden', 'false');
+    this.boostButton.setAttribute('data-boost-hint-active', '');
+    this.cooldownContainer.setAttribute('data-boost-hint-active', '');
+  }
+
+  hideBoostHint(): void {
+    if (this.boostHintEl) {
+      this.boostHintEl.style.display = 'none';
+      this.boostHintEl.textContent = '';
+      this.boostHintEl.removeAttribute('data-boost-hint-visible');
+      this.boostHintEl.setAttribute('aria-hidden', 'true');
+    }
+    this.boostButton?.removeAttribute('data-boost-hint-active');
+    this.cooldownContainer?.removeAttribute('data-boost-hint-active');
   }
 
   isMuted(): boolean {
@@ -752,6 +816,7 @@ export class HUD {
 
     if (!enabled) {
       this.clearBoostReadyFlash();
+      this.hideBoostHint();
     }
   }
 
@@ -792,6 +857,10 @@ export class HUD {
     if (this.boostButton) {
       this.boostButton.remove();
       this.boostButton = null;
+    }
+    if (this.boostHintEl) {
+      this.boostHintEl.remove();
+      this.boostHintEl = null;
     }
     if (this.cooldownContainer) {
       this.cooldownContainer.remove();
