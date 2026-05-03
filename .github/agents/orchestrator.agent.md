@@ -20,23 +20,19 @@ agents: ["proposer", "coder", "tester", "evaluator"]
 | 1 | Proposer | `gpt-5.4` | `general-purpose` | コード分析 → 改善提案 |
 | 2 | Coder | `gpt-5.4` | `general-purpose` | 実装 + テスト + コミット |
 | 3 | Tester | `gpt-5.4` | `general-purpose` | テスト実行 + 結果報告 |
-| 4 | Evaluator | `gpt-5.4` | `general-purpose` | レビュー + 品質ゲート + PR |
+| 4 | Evaluator | `gpt-5.4` | `general-purpose` | レビュー + 品質ゲート |
 
 ---
 
 ## 処理フロー
 
-### ステップ 0: 環境準備
+### ステップ 0: 環境確認
 
 1. 現在の作業ディレクトリとブランチを確認する
-2. ログディレクトリを作成する:
-   ```
-   logs/auto-improve/YYYYMMDD_HHMMSS/
-   ```
-3. `main` ブランチから新しいブランチを作成する:
-   ```
-   improve/YYYYMMDD-HHMMSS
-   ```
+2. ログディレクトリを作成する（指定された場合）
+
+**ブランチの作成や切り替えは行わない。**
+auto-improve.sh が事前に作成したブランチ上でそのまま作業する。
 
 ### ステップ 1: Proposer 呼び出し
 
@@ -105,14 +101,20 @@ Tester の失敗レポートを Coder へのリトライプロンプトに含め
 - Coder の実装レポート
 - Tester のテスト結果
 - ブランチ名
-- **種別に応じたマージ指示**:
-  - `bugfix` / `performance` → 「ハードゲート全通過後に自動マージしてください」
-  - `feature` → 「人間のレビューを待ってください」
+
+**重要: PR 作成やマージの指示は行わない。** Evaluator にはレビューと keep/discard 判定のみを依頼する。
 
 **結果の検証:**
 - 判定結果（keep / discard）を確認
-- keep の場合: PR 番号を記録
-- discard の場合: 理由を記録
+- keep の場合: ログに記録
+- discard の場合:
+  1. 理由をログに記録（`04-evaluator.md` に差分と却下理由が含まれる）
+  2. **コミットを巻き戻す:**
+     ```bash
+     git reset --hard HEAD~1
+     ```
+     これにより、discard された変更はブランチに残らず、最終的な PR には含まれない。
+     差分と却下理由はログファイルで確認できる。
 
 ### ステップ 5: サマリー作成
 
@@ -153,7 +155,7 @@ logs/auto-improve/YYYYMMDD_HHMMSS/
 ## 使用ツール
 
 - `task`: サブエージェント呼び出し（`model` パラメータで LLM を指定）
-- `bash`: ログディレクトリ作成、git ブランチ操作、状態確認
+- `bash`: ログディレクトリ作成、状態確認
 - `create` / `edit`: ログファイル作成・更新
 
 ---
@@ -164,3 +166,7 @@ logs/auto-improve/YYYYMMDD_HHMMSS/
 - サブエージェントの結果を **そのまま信頼せず検証** する
 - 全てのやりとりと判断を **日本語** で記録する
 - 1 回の実行で **1 件の改善** のみ行う
+- **新しいブランチを作成してはならない**（ブランチは auto-improve.sh が管理する）
+- **`git checkout main` や `git switch main` を実行してはならない**
+- **`gh pr create` や `gh pr merge` を実行してはならない**
+- **`git push` を実行してはならない**（push も auto-improve.sh が管理する）

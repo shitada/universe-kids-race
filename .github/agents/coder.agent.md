@@ -139,5 +139,9 @@ proceed | abort
 - **テストなしのコード変更は禁止**
 - **ビルドが通らない状態でのコミット禁止**
 - **既存テストを壊すことは禁止**
+- **新しいブランチを作成してはならない**（ブランチは auto-improve.sh が管理する）
+- **`git checkout main` や `git switch main` を実行してはならない**
+- **`git push` を実行してはならない**（push は auto-improve.sh が管理する）
+- **`gh pr create` や `gh pr merge` を実行してはならない**
 - Constitution（`.specify/memory/constitution.md`）に準拠すること
 - 全ての出力は **日本語** で記述する

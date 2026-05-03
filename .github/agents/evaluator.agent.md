@@ -1,5 +1,5 @@
 ---
-description: coder の変更と tester の結果をレビューし、品質ゲート判定と PR 作成を行う評価エージェント。
+description: coder の変更と tester の結果をレビューし、品質ゲート判定を行う評価エージェント。
 model: "gpt-5.4"
 tools: ["execute", "read", "search"]
 ---
@@ -16,9 +16,9 @@ coder の変更と tester の結果を徹底的にレビューし、
 
 - coder の実装と tester のテスト結果をレビューする
 - ハードゲート（客観的な品質基準）で合否を判定する
-- 合格した場合、GitHub 上で PR を作成する
 - 不合格の場合、理由を記録して却下する
 - **レビューと最終判断** の責務を負う
+- **PR の作成やマージは行わない**（シェルスクリプトが一括管理する）
 
 ---
 
@@ -61,57 +61,12 @@ git --no-pager diff main...HEAD
 
 ### 4-A. keep（承認）の場合
 
-1. ブランチをリモートにプッシュする:
-   ```bash
-   git push origin [ブランチ名]
-   ```
-
-2. PR を作成する:
-   ```bash
-   gh pr create \
-     --title "[提案タイトル]" \
-     --body "[PR 本文]" \
-     --base main \
-     --head [ブランチ名]
-   ```
-
-3. PR 本文に以下を含める:
-   ```markdown
-   ## 概要
-   [提案の概要]
-
-   ## 種別
-   bugfix | performance | feature
-
-   ## 変更内容
-   [変更ファイル一覧と説明]
-
-   ## テスト結果
-   - 単体テスト: ✅ X/Y passed
-   - 結合テスト: ✅ X/Y passed
-   - E2E テスト: ✅ X/Y passed | スキップ
-
-   ## レビュー所見
-   [evaluator のコメント]
-
-   ---
-   🤖 この PR は自動改善システムによって作成されました。
-   ```
-
-4. **種別に応じたマージ制御:**
-
-   - **`bugfix` / `performance`** の場合 → PR を自動マージする:
-     ```bash
-     gh pr merge [PR番号] --squash --delete-branch
-     ```
-     PR 本文の末尾に `✅ 自動マージ済み` を追記する。
-
-   - **`feature`** の場合 → 自動マージしない:
-     PR 本文の末尾に `⏳ 人間のレビューとマージ承認をお願いします。` を追記する。
+変更はそのままブランチに残す。
+PR 作成やマージは **行わない**（auto-improve.sh の Ctrl+C ハンドラが一括で PR を作成する）。
 
 ### 4-B. discard（却下）の場合
 
-変更は破棄せず、ブランチはローカルに残す（デバッグ用）。
+変更は破棄せず、ブランチに残す（デバッグ用）。
 却下理由を詳細に記録する。
 
 ---
@@ -131,11 +86,6 @@ git --no-pager diff main...HEAD
 
 ### 判定
 keep | discard
-
-### PR（keep の場合）
-PR #[番号]: [タイトル]
-URL: [PR の URL]
-マージ: 自動マージ済み | 人間レビュー待ち
 
 ### 却下理由（discard の場合）
 [詳細な理由]
@@ -158,8 +108,6 @@ complete
   - `git --no-pager diff` — 変更差分の確認
   - `npm run build` — ビルド再検証
   - `npm test` — テスト再検証
-  - `git push` — ブランチのプッシュ
-  - `gh pr create` — PR 作成
 - `view` / `grep`: コード品質確認、constitution 参照
 
 ---
@@ -168,7 +116,8 @@ complete
 
 - **ハードゲートは例外なく適用する**（主観的な判断で通過させない）
 - **コードの修正は行わない**（レビューと判定のみ）
-- **`feature` の PR は自動マージしない**（人間の承認を待つ）
-- **`bugfix` / `performance` の PR はハードゲート全通過後に自動マージする**
-- `gh` CLI が認証済みであることを確認してから PR 操作を行う
+- **PR の作成・マージは絶対に行わない**（auto-improve.sh が管理する）
+- **`gh pr create` や `gh pr merge` を実行してはならない**
+- **`git push` を実行してはならない**（push も auto-improve.sh が管理する）
+- **新しいブランチを作成してはならない**（ブランチは auto-improve.sh が管理する）
 - 全ての出力は **日本語** で記述する
