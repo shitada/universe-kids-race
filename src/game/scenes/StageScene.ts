@@ -1410,14 +1410,14 @@ export class StageScene implements Scene {
         rewardButton.style.cssText = `
           position: relative;
           z-index: 1;
-          margin-top: 1rem;
-          min-width: min(72vw, 280px);
-          min-height: 72px;
-          padding: 0.9rem 1.6rem;
+          flex: 1;
+          min-width: 0;
+          min-height: 56px;
+          padding: 0.7rem 0.8rem;
           border: none;
           border-radius: 999px;
           font-family: 'Zen Maru Gothic', sans-serif;
-          font-size: clamp(1.3rem, 4.4vmin, 1.7rem);
+          font-size: clamp(1rem, 3.2vmin, 1.35rem);
           font-weight: 900;
           color: #fff;
           background: rgba(255, 255, 255, 0.18);
@@ -1444,16 +1444,16 @@ export class StageScene implements Scene {
         rewardButton.addEventListener('pointercancel', releaseRewardButton);
         rewardButton.addEventListener('pointerleave', releaseRewardButton);
         this.clearRewardButton = rewardButton;
-        this.clearOverlay.appendChild(rewardButton);
       }
     }
 
     const actionButtons = document.createElement('div');
     actionButtons.style.cssText = `
       display: flex;
-      flex-direction: column;
+      flex-direction: row;
+      justify-content: center;
       align-items: center;
-      gap: 0.9rem;
+      gap: 0.7rem;
       width: 100%;
       margin-top: 1.4rem;
     `;
@@ -1464,13 +1464,14 @@ export class StageScene implements Scene {
     retryButton.textContent = 'もういちど';
     retryButton.disabled = true;
     retryButton.style.cssText = `
-      min-width: min(72vw, 300px);
-      min-height: 88px;
-      padding: 0.95rem 1.7rem;
+      flex: 1;
+      min-width: 0;
+      min-height: 56px;
+      padding: 0.7rem 0.8rem;
       border: none;
       border-radius: 999px;
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: clamp(1.35rem, 4.6vmin, 1.9rem);
+      font-size: clamp(1rem, 3.2vmin, 1.35rem);
       font-weight: 900;
       color: #fff;
       background: rgba(255, 255, 255, 0.2);
@@ -1490,13 +1491,14 @@ export class StageScene implements Scene {
     continueButton.textContent = continueLabel;
     continueButton.disabled = true;
     continueButton.style.cssText = `
-      min-width: min(78vw, 320px);
-      min-height: 88px;
-      padding: 1rem 1.8rem;
+      flex: 1;
+      min-width: 0;
+      min-height: 56px;
+      padding: 0.7rem 0.8rem;
       border: none;
       border-radius: 999px;
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: clamp(1.5rem, 5vmin, 2.1rem);
+      font-size: clamp(1rem, 3.2vmin, 1.35rem);
       font-weight: 900;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
       opacity: 0;
@@ -1565,6 +1567,9 @@ export class StageScene implements Scene {
     continueButton.addEventListener('pointerleave', () => release(this.clearContinueButton));
     this.clearRetryButton = retryButton;
     this.clearContinueButton = continueButton;
+    if (this.clearRewardButton) {
+      actionButtons.appendChild(this.clearRewardButton);
+    }
     actionButtons.appendChild(retryButton);
     actionButtons.appendChild(continueButton);
     this.clearOverlay.appendChild(actionButtons);
