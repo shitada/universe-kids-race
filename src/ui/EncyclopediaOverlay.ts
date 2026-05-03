@@ -1,11 +1,15 @@
 import type { PlanetEncyclopediaEntry } from '../types';
 import { getPlanetEncyclopediaEntry, PLANET_ENCYCLOPEDIA } from '../game/config/PlanetEncyclopedia';
-import { mountCompanionPreview, type CompanionPreviewHandle } from './CompanionPreview';
+import { createCompanionPreviewController, type CompanionPreviewController } from './CompanionPreview';
 
 interface DetailOverlayOptions {
   bestStageStars?: Record<number, number>;
   backLabel?: string;
   zIndex?: number;
+}
+
+interface EncyclopediaOverlayDependencies {
+  createPreviewController?: () => CompanionPreviewController;
 }
 
 export class EncyclopediaOverlay {
@@ -15,8 +19,13 @@ export class EncyclopediaOverlay {
   private onSelectStage: ((stageNumber: number) => void) | null = null;
   private bestStageStars: Record<number, number> = {};
   private detailBackLabel = 'もどる';
-  private detailPreview: CompanionPreviewHandle | null = null;
+  private detailPreviewController: CompanionPreviewController | null = null;
+  private readonly createPreviewController: () => CompanionPreviewController;
   private static readonly COMPACT_HEIGHT_THRESHOLD = 720;
+
+  constructor(dependencies: EncyclopediaOverlayDependencies = {}) {
+    this.createPreviewController = dependencies.createPreviewController ?? createCompanionPreviewController;
+  }
 
   show(
     unlockedPlanets: number[],
@@ -147,7 +156,7 @@ export class EncyclopediaOverlay {
   }
 
   hide(): void {
-    this.disposeDetailPreview();
+    this.hideDetailPreview();
     if (this.detailEl) {
       this.detailEl.remove();
       this.detailEl = null;
@@ -160,6 +169,7 @@ export class EncyclopediaOverlay {
     this.onSelectStage = null;
     this.bestStageStars = {};
     this.detailBackLabel = 'もどる';
+    this.disposeDetailPreview();
   }
 
   private createCard(entry: PlanetEncyclopediaEntry, isUnlocked: boolean, isCompactHeight: boolean): HTMLDivElement {
@@ -347,7 +357,7 @@ export class EncyclopediaOverlay {
       box-shadow: inset 0 0 18px rgba(255,255,255,0.12), 0 10px 20px rgba(0,0,0,0.22);
     `;
     companionSection.appendChild(companionPreview);
-    this.detailPreview = mountCompanionPreview(companionPreview, entry);
+    this.getDetailPreviewController().show(entry, companionPreview);
     detailCard.appendChild(companionSection);
 
     const trivia = document.createElement('div');
@@ -440,7 +450,7 @@ export class EncyclopediaOverlay {
   }
 
   private hideDetail(): void {
-    this.disposeDetailPreview();
+    this.hideDetailPreview();
     if (this.detailEl) {
       this.detailEl.remove();
       this.detailEl = null;
@@ -448,9 +458,20 @@ export class EncyclopediaOverlay {
     this.isShowingDetail = false;
   }
 
+  private getDetailPreviewController(): CompanionPreviewController {
+    if (!this.detailPreviewController) {
+      this.detailPreviewController = this.createPreviewController();
+    }
+    return this.detailPreviewController;
+  }
+
+  private hideDetailPreview(): void {
+    this.detailPreviewController?.hide();
+  }
+
   private disposeDetailPreview(): void {
-    this.detailPreview?.dispose();
-    this.detailPreview = null;
+    this.detailPreviewController?.dispose();
+    this.detailPreviewController = null;
   }
 
   private isCompactHeight(): boolean {

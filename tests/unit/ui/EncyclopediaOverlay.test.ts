@@ -1,11 +1,17 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EncyclopediaOverlay } from '../../../src/ui/EncyclopediaOverlay';
+import type { CompanionPreviewController } from '../../../src/ui/CompanionPreview';
 
 describe('EncyclopediaOverlay', () => {
   let overlay: EncyclopediaOverlay;
   let uiOverlay: HTMLDivElement;
   const originalInnerHeight = window.innerHeight;
+  let previewController: CompanionPreviewController;
+  let createPreviewController: ReturnType<typeof vi.fn>;
+  let previewShow: ReturnType<typeof vi.fn>;
+  let previewHide: ReturnType<typeof vi.fn>;
+  let previewDispose: ReturnType<typeof vi.fn>;
 
   const setViewportHeight = (height: number) => {
     Object.defineProperty(window, 'innerHeight', {
@@ -19,7 +25,20 @@ describe('EncyclopediaOverlay', () => {
     uiOverlay = document.createElement('div');
     uiOverlay.id = 'ui-overlay';
     document.body.appendChild(uiOverlay);
-    overlay = new EncyclopediaOverlay();
+    previewShow = vi.fn((entry, container: HTMLElement) => {
+      const previewNode = document.createElement('div');
+      previewNode.setAttribute('data-preview-stage', String(entry.stageNumber));
+      container.replaceChildren(previewNode);
+    });
+    previewHide = vi.fn();
+    previewDispose = vi.fn();
+    previewController = {
+      show: previewShow,
+      hide: previewHide,
+      dispose: previewDispose,
+    };
+    createPreviewController = vi.fn(() => previewController);
+    overlay = new EncyclopediaOverlay({ createPreviewController });
   });
 
   afterEach(() => {
@@ -80,6 +99,38 @@ describe('EncyclopediaOverlay', () => {
     expect(preview).not.toBeNull();
     expect(preview?.children.length).toBeGreaterThan(0);
     expect(uiOverlay.textContent).toContain('うちゅうの なかま');
+  });
+
+  it('reuses one preview controller across sequential detail opens', () => {
+    overlay.show([1, 2], () => {});
+
+    const firstCard = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
+    firstCard.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    const firstBackBtn = uiOverlay.querySelector('[data-detail-back]') as HTMLElement;
+    firstBackBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    const secondCard = uiOverlay.querySelector('[data-card][data-stage="2"]') as HTMLElement;
+    secondCard.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(createPreviewController).toHaveBeenCalledTimes(1);
+    expect(previewShow).toHaveBeenCalledTimes(2);
+    expect(previewHide).toHaveBeenCalledTimes(1);
+    expect(previewDispose).not.toHaveBeenCalled();
+  });
+
+  it('hides preview on detail close but disposes it only when overlay closes', () => {
+    overlay.show([1], () => {});
+    const card = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement;
+    card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    const backBtn = uiOverlay.querySelector('[data-detail-back]') as HTMLElement;
+    backBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(previewHide).toHaveBeenCalledTimes(1);
+    expect(previewDispose).not.toHaveBeenCalled();
+
+    overlay.hide();
+    expect(previewDispose).toHaveBeenCalledTimes(1);
   });
 
   it('hideDetail returns to gallery', () => {
