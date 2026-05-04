@@ -471,6 +471,10 @@ export class AudioManager {
         case 'cometCollect':
           this.playArpeggio([392, 587, 880, 1175, 1568], 'sine', 0.07, 0.22);
           break;
+        case 'meteorShowerStart':
+          this.playArpeggio([523, 784, 1175, 1568], 'triangle', 0.06, 0.18);
+          this.playSweep('sine', 780, 1760, 0.26, 0.12);
+          break;
         case 'meteoriteHit':
           this.playSweep('sawtooth', 200, 80, 0.3, 0.18);
           break;
