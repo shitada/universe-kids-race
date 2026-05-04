@@ -5,6 +5,7 @@ import {
   type SaveData,
   type SpaceshipColorKey,
   type SpaceshipCustomization,
+  type VibrationIntensity,
 } from '../../types';
 import { TOTAL_STAGES } from '../config/StageConfig';
 
@@ -24,6 +25,7 @@ const DEFAULT_DATA: SaveData = {
   clearedStage: 0,
   unlockedPlanets: [],
   muted: false,
+  vibrationSettings: { intensity: 'medium' },
   bestStageStars: {},
   gameplayStats: createDefaultGameplayStats(),
   tutorialShown: false,
@@ -114,6 +116,17 @@ function normalizeGameplayStats(value: unknown): GameplayStats {
   return normalized;
 }
 
+function normalizeVibrationIntensity(value: unknown): VibrationIntensity {
+  switch (value) {
+    case 'off':
+    case 'weak':
+    case 'strong':
+      return value;
+    default:
+      return 'medium';
+  }
+}
+
 function sanitizeSaveData(data: SaveData): SaveData {
   const sanitized: SaveData = {
     clearedStage: Number.isInteger(data.clearedStage) && data.clearedStage >= 0 && data.clearedStage <= TOTAL_STAGES
@@ -129,6 +142,9 @@ function sanitizeSaveData(data: SaveData): SaveData {
     gameplayStats: normalizeGameplayStats(data.gameplayStats),
     tutorialShown: data.tutorialShown === true,
     spaceshipCustomization: normalizeSpaceshipCustomization(data.spaceshipCustomization),
+    vibrationSettings: {
+      intensity: normalizeVibrationIntensity(data.vibrationSettings?.intensity),
+    },
   };
 
   const discoveredConstellations = Array.isArray(data.discoveredConstellations)
@@ -184,6 +200,9 @@ export class SaveManager {
 
       data.muted = data.muted === true;
       data.tutorialShown = data.tutorialShown === true;
+      data.vibrationSettings = {
+        intensity: normalizeVibrationIntensity((data as { vibrationSettings?: { intensity?: unknown } }).vibrationSettings?.intensity),
+      };
 
       const rawColorAccessibility = (data as { colorAccessibility?: unknown }).colorAccessibility;
       if (rawColorAccessibility && typeof rawColorAccessibility === 'object' && !Array.isArray(rawColorAccessibility)) {
@@ -283,6 +302,9 @@ export class SaveManager {
     try {
       const prev = this.load();
       const muted = prev.muted === true;
+      const vibrationSettings = {
+        intensity: normalizeVibrationIntensity(prev.vibrationSettings?.intensity),
+      };
       const lastStablePixelTier = prev.lastStablePixelTier;
       const tutorialShown = prev.tutorialShown === true;
       const colorAccessibility = prev.colorAccessibility?.highContrast === true
@@ -295,6 +317,7 @@ export class SaveManager {
         clearedStage: 0,
         unlockedPlanets: [],
         muted,
+        vibrationSettings,
         bestStageStars: {},
         gameplayStats,
         tutorialShown,
@@ -318,6 +341,9 @@ export class SaveManager {
     try {
       const prev = this.load();
       const muted = prev.muted === true;
+      const vibrationSettings = {
+        intensity: normalizeVibrationIntensity(prev.vibrationSettings?.intensity),
+      };
       const lastStablePixelTier = prev.lastStablePixelTier;
       const colorAccessibility = prev.colorAccessibility?.highContrast === true
         ? { highContrast: true as const }
@@ -329,6 +355,7 @@ export class SaveManager {
         clearedStage: 0,
         unlockedPlanets: [],
         muted,
+        vibrationSettings,
         bestStageStars: {},
         gameplayStats,
         tutorialShown: false,

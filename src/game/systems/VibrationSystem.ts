@@ -1,4 +1,4 @@
-import type { VibrationPattern } from '../../types';
+import type { VibrationIntensity, VibrationPattern } from '../../types';
 
 export type VibrationEvent =
   | 'starCollect'
@@ -21,11 +21,29 @@ const VIBRATION_EVENT_CONFIGS: Record<VibrationEvent, VibrationEventConfig> = {
 };
 
 type VibrationNavigator = Pick<Navigator, 'vibrate'> | null | undefined;
+type VibrationFallbackHandler = ((event: VibrationEvent) => void) | null;
+
+const VIBRATION_INTENSITY_MULTIPLIERS: Record<Exclude<VibrationIntensity, 'off'>, number> = {
+  weak: 0.45,
+  medium: 0.75,
+  strong: 1,
+};
+
+function scalePattern(pattern: VibrationPattern, intensity: VibrationIntensity): VibrationPattern {
+  if (intensity === 'off') {
+    return 0;
+  }
+  const multiplier = VIBRATION_INTENSITY_MULTIPLIERS[intensity];
+  const scaleValue = (value: number): number => Math.max(1, Math.round(value * multiplier));
+  return Array.isArray(pattern) ? pattern.map(scaleValue) : scaleValue(pattern);
+}
 
 export class VibrationSystem {
   private enabled = true;
+  private intensity: VibrationIntensity = 'strong';
   private lastTriggeredAt = -Infinity;
   private lastPriority = 0;
+  private fallbackHandler: VibrationFallbackHandler = null;
 
   constructor(
     private readonly navigatorRef: VibrationNavigator = globalThis.navigator,
@@ -45,20 +63,36 @@ export class VibrationSystem {
   }
 
   isEnabled(): boolean {
-    return this.enabled;
+    return this.enabled && this.intensity !== 'off';
   }
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
   }
 
-  trigger(event: VibrationEvent): boolean {
-    const config = VIBRATION_EVENT_CONFIGS[event];
-    return this.vibrate(config.pattern, config.priority);
+  getIntensity(): VibrationIntensity {
+    return this.intensity;
   }
 
-  vibrate(pattern: VibrationPattern, priority = 0): boolean {
-    if (!this.enabled || !this.isSupported()) {
+  setIntensity(intensity: VibrationIntensity): void {
+    this.intensity = intensity;
+    this.enabled = intensity !== 'off';
+    if (intensity === 'off') {
+      this.lastPriority = 0;
+    }
+  }
+
+  setFallbackHandler(handler: VibrationFallbackHandler): void {
+    this.fallbackHandler = handler;
+  }
+
+  trigger(event: VibrationEvent): boolean {
+    const config = VIBRATION_EVENT_CONFIGS[event];
+    return this.vibrate(config.pattern, config.priority, event);
+  }
+
+  vibrate(pattern: VibrationPattern, priority = 0, event?: VibrationEvent): boolean {
+    if (!this.enabled || this.intensity === 'off') {
       return false;
     }
 
@@ -67,9 +101,33 @@ export class VibrationSystem {
       return false;
     }
 
-    this.lastTriggeredAt = now;
-    this.lastPriority = priority;
-    return this.navigatorRef!.vibrate(pattern);
+    const commitTrigger = (): void => {
+      this.lastTriggeredAt = now;
+      this.lastPriority = priority;
+    };
+
+    if (!this.isSupported()) {
+      if (event && this.fallbackHandler) {
+        commitTrigger();
+        this.fallbackHandler(event);
+        return true;
+      }
+      return false;
+    }
+
+    const didVibrate = this.navigatorRef!.vibrate(scalePattern(pattern, this.intensity));
+    if (didVibrate) {
+      commitTrigger();
+      return true;
+    }
+
+    if (event && this.fallbackHandler) {
+      commitTrigger();
+      this.fallbackHandler(event);
+      return true;
+    }
+
+    return false;
   }
 
   cancel(): boolean {
@@ -97,6 +155,14 @@ export function triggerSharedVibration(event: VibrationEvent): boolean {
 
 export function setSharedVibrationEnabled(enabled: boolean): void {
   getSharedVibrationSystem().setEnabled(enabled);
+}
+
+export function setSharedVibrationIntensity(intensity: VibrationIntensity): void {
+  getSharedVibrationSystem().setIntensity(intensity);
+}
+
+export function setSharedVibrationFallbackHandler(handler: VibrationFallbackHandler): void {
+  getSharedVibrationSystem().setFallbackHandler(handler);
 }
 
 export function __setSharedVibrationSystemForTest(system: VibrationSystem | null): void {

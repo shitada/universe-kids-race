@@ -17,6 +17,7 @@ import { resolveInitialPixelTier } from './utils/resolveInitialPixelTier';
 import { MemoryHealthMonitor, type MemoryHealthAlert } from './utils/MemoryHealthMonitor';
 import { GameStateBackup } from './storage/GameStateBackup';
 import { InterruptionSystem } from './systems/InterruptionSystem';
+import { setSharedVibrationIntensity } from './systems/VibrationSystem';
 import { ContextLossOverlay } from '../ui/ContextLossOverlay';
 import { ResumeOverlay } from '../ui/ResumeOverlay';
 import { ResumeGentlyOverlay } from '../ui/ResumeGentlyOverlay';
@@ -139,6 +140,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   );
 
   applyPixelRatioTier(initialPixelTier);
+  setSharedVibrationIntensity(saveManager.load().vibrationSettings?.intensity ?? 'medium');
 
   const currentVisualTier = { value: initialPixelTier };
   function syncVisualQualityTier(tier: number): void {

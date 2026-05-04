@@ -23,7 +23,12 @@ import { LODSystem } from '../systems/LODSystem';
 import { AdaptiveTutorialSystem, type AdaptiveTutorialEvent } from '../systems/AdaptiveTutorialSystem';
 import { MeteoShowerEventSystem } from '../systems/MeteoShowerEventSystem';
 import { StageSpecialEventSystem } from '../systems/StageSpecialEventSystem';
-import { triggerSharedVibration } from '../systems/VibrationSystem';
+import {
+  setSharedVibrationFallbackHandler,
+  setSharedVibrationIntensity,
+  triggerSharedVibration,
+  type VibrationEvent,
+} from '../systems/VibrationSystem';
 import { HUD } from '../../ui/HUD';
 import { AdaptiveTutorialHint } from '../../ui/AdaptiveTutorialHint';
 import { CountdownOverlay } from '../../ui/CountdownOverlay';
@@ -60,6 +65,21 @@ import {
 
 const BG_STAR_PARALLAX = 1.0;
 const BG_STAR_COUNT = 2000;
+
+interface CameraShakeProfile {
+  duration: number;
+  amplitudeX: number;
+  amplitudeY: number;
+  frequency: number;
+}
+
+const CAMERA_SHAKE_PROFILES: Record<VibrationEvent, CameraShakeProfile> = {
+  starCollect: { duration: 0.09, amplitudeX: 0.04, amplitudeY: 0.025, frequency: 34 },
+  rainbowCollect: { duration: 0.12, amplitudeX: 0.07, amplitudeY: 0.04, frequency: 32 },
+  meteoriteHit: { duration: 0.28, amplitudeX: 0.18, amplitudeY: 0.12, frequency: 42 },
+  boost: { duration: 0.14, amplitudeX: 0.08, amplitudeY: 0.045, frequency: 28 },
+  stageClear: { duration: 0.3, amplitudeX: 0.1, amplitudeY: 0.06, frequency: 22 },
+};
 
 function scheduleIdleTask(callback: () => void): void {
   const requestIdle = (window as Window & {
@@ -170,10 +190,7 @@ export class StageScene implements Scene {
   private cameraShakeTimer = 0;
   private cameraShakeElapsed = 0;
   private readonly cameraShakeOffset = new THREE.Vector3();
-  private static readonly CAMERA_SHAKE_DURATION = 0.28;
-  private static readonly CAMERA_SHAKE_AMPLITUDE_X = 0.18;
-  private static readonly CAMERA_SHAKE_AMPLITUDE_Y = 0.12;
-  private static readonly CAMERA_SHAKE_FREQUENCY = 42;
+  private cameraShakeProfile: CameraShakeProfile = CAMERA_SHAKE_PROFILES.meteoriteHit;
 
   // Destination planet
   private destinationPlanet: THREE.Group | null = null;
@@ -369,6 +386,8 @@ export class StageScene implements Scene {
     const saveData = this.saveManager.load();
     this.spaceship.applyCustomization(saveData.spaceshipCustomization ?? DEFAULT_SPACESHIP_CUSTOMIZATION);
     const highContrastEnabled = saveData.colorAccessibility?.highContrast === true;
+    setSharedVibrationIntensity(saveData.vibrationSettings?.intensity ?? 'medium');
+    setSharedVibrationFallbackHandler((event) => this.handleVibrationFallback(event));
     setStarHighContrastMode(highContrastEnabled);
     setMeteoriteHighContrastMode(highContrastEnabled);
     this.hud.setHighContrastMode(highContrastEnabled);
@@ -1074,7 +1093,7 @@ export class StageScene implements Scene {
       this.recordMeteoriteHit();
       this.boostSystem.cancel();
       this.damageTimer = StageScene.DAMAGE_FLASH_DURATION;
-      this.startCameraShake();
+      this.startCameraShake('meteoriteHit');
       this.audioManager.playSFX('meteoriteHit');
       this.audioManager.stopBoostSFX();
       this.boostFlameEffect.remove();
@@ -1455,12 +1474,21 @@ export class StageScene implements Scene {
   private resetCameraShake(): void {
     this.cameraShakeTimer = 0;
     this.cameraShakeElapsed = 0;
+    this.cameraShakeProfile = CAMERA_SHAKE_PROFILES.meteoriteHit;
     this.cameraShakeOffset.set(0, 0, 0);
   }
 
-  private startCameraShake(): void {
-    this.cameraShakeTimer = StageScene.CAMERA_SHAKE_DURATION;
+  private startCameraShake(event: VibrationEvent = 'meteoriteHit'): void {
+    this.cameraShakeProfile = CAMERA_SHAKE_PROFILES[event];
+    this.cameraShakeTimer = this.cameraShakeProfile.duration;
     this.cameraShakeElapsed = 0;
+  }
+
+  private handleVibrationFallback(event: VibrationEvent): void {
+    if (event === 'meteoriteHit') {
+      return;
+    }
+    this.startCameraShake(event);
   }
 
   private updateCameraShake(deltaTime: number): void {
@@ -1477,11 +1505,11 @@ export class StageScene implements Scene {
       return;
     }
 
-    const decay = this.cameraShakeTimer / StageScene.CAMERA_SHAKE_DURATION;
-    const phase = this.cameraShakeElapsed * StageScene.CAMERA_SHAKE_FREQUENCY;
+    const decay = this.cameraShakeTimer / this.cameraShakeProfile.duration;
+    const phase = this.cameraShakeElapsed * this.cameraShakeProfile.frequency;
     this.cameraShakeOffset.set(
-      Math.sin(phase) * StageScene.CAMERA_SHAKE_AMPLITUDE_X * decay,
-      Math.cos(phase * 0.8) * StageScene.CAMERA_SHAKE_AMPLITUDE_Y * decay,
+      Math.sin(phase) * this.cameraShakeProfile.amplitudeX * decay,
+      Math.cos(phase * 0.8) * this.cameraShakeProfile.amplitudeY * decay,
       0,
     );
   }
@@ -1892,6 +1920,7 @@ export class StageScene implements Scene {
     this.constellationHintOverlay.hide();
     this.hud.hide();
     this.scorePopupManager.dispose();
+    setSharedVibrationFallbackHandler(null);
     this.audioManager.stopBGM();
     this.audioManager.stopBoostSFX();
     if (this.stageIntroOverlay) {

@@ -23,6 +23,7 @@ import { getViewportSize } from '../utils/getViewportSize';
 import { attachReleaseConfirmButton } from '../../ui/attachReleaseConfirmButton';
 import { createStageMedalDisplay } from '../../ui/stageMedalDisplay';
 import { prewarmStageVisualAssets } from './stageVisualAssets';
+import { setSharedVibrationIntensity } from '../systems/VibrationSystem';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // SHARED background-star resources for TitleScene
@@ -459,6 +460,13 @@ export class TitleScene implements Scene {
     this.saveManager.save(data);
   }
 
+  private persistVibrationIntensitySetting(intensity: 'off' | 'weak' | 'medium' | 'strong'): void {
+    const data = this.saveManager.load();
+    data.vibrationSettings = { intensity };
+    this.saveManager.save(data);
+    setSharedVibrationIntensity(intensity);
+  }
+
   private createOverlay(): void {
     const uiOverlay = document.getElementById('ui-overlay');
     if (!uiOverlay) return;
@@ -721,7 +729,7 @@ export class TitleScene implements Scene {
     // Color accessibility button
     const colorSettingsBtn = document.createElement('button');
     colorSettingsBtn.setAttribute('data-color-settings-button', '');
-    colorSettingsBtn.textContent = 'いろのせってい';
+    colorSettingsBtn.textContent = 'みやすさ・しんどう';
     colorSettingsBtn.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
       font-size: ${compact ? '0.95rem' : '1.15rem'};
@@ -745,7 +753,9 @@ export class TitleScene implements Scene {
         this.ensureTitleAudioInitialized(true);
         this.colorAccessibilitySettings.show({
           initialHighContrast: this.saveManager.load().colorAccessibility?.highContrast === true,
+          initialVibrationIntensity: this.saveManager.load().vibrationSettings?.intensity ?? 'medium',
           onToggle: (enabled) => this.persistHighContrastSetting(enabled),
+          onVibrationIntensityChange: (intensity) => this.persistVibrationIntensitySetting(intensity),
         });
       },
       onPressChange: (pressed) => {

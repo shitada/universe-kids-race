@@ -26,6 +26,7 @@ export type SpeedState = 'NORMAL' | 'BOOST' | 'SLOWDOWN' | 'RECOVERING';
 export type StarType = 'NORMAL' | 'RAINBOW';
 
 export type VibrationPattern = number | number[];
+export type VibrationIntensity = 'off' | 'weak' | 'medium' | 'strong';
 
 // Input
 export interface InputState {
@@ -90,6 +91,10 @@ export interface ColorAccessibilitySettings {
   highContrast: boolean;
 }
 
+export interface VibrationSettings {
+  intensity: VibrationIntensity;
+}
+
 export const SPACESHIP_COLOR_KEYS = ['sky', 'sunset', 'aqua'] as const;
 export type SpaceshipColorKey = (typeof SPACESHIP_COLOR_KEYS)[number];
 
@@ -117,6 +122,7 @@ export interface SaveData {
   unlockedPlanets: number[];
   muted?: boolean;
   colorAccessibility?: ColorAccessibilitySettings;
+  vibrationSettings?: VibrationSettings;
   bestStageStars?: Record<number, number>;
   discoveredConstellations?: number[];
   gameplayStats?: GameplayStats;

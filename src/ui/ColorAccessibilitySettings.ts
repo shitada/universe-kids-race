@@ -1,6 +1,10 @@
+import type { VibrationIntensity } from '../types';
+
 export interface ColorAccessibilitySettingsOptions {
   initialHighContrast: boolean;
+  initialVibrationIntensity: VibrationIntensity;
   onToggle: (enabled: boolean) => void;
+  onVibrationIntensityChange: (intensity: VibrationIntensity) => void;
 }
 
 export class ColorAccessibilitySettings {
@@ -8,12 +12,16 @@ export class ColorAccessibilitySettings {
   private toggleButton: HTMLButtonElement | null = null;
   private descriptionEl: HTMLParagraphElement | null = null;
   private highContrast = false;
+  private vibrationIntensity: VibrationIntensity = 'medium';
+  private vibrationDescriptionEl: HTMLParagraphElement | null = null;
+  private vibrationButtons = new Map<VibrationIntensity, HTMLButtonElement>();
 
   show(options: ColorAccessibilitySettingsOptions): void {
     const host = document.getElementById('ui-overlay');
     if (!host) return;
 
     this.highContrast = options.initialHighContrast;
+    this.vibrationIntensity = options.initialVibrationIntensity;
     if (!this.overlay) {
       this.overlay = document.createElement('div');
       this.overlay.setAttribute('data-color-accessibility-settings', '');
@@ -43,7 +51,7 @@ export class ColorAccessibilitySettings {
       `;
 
       const title = document.createElement('h2');
-      title.textContent = 'いろのせってい';
+      title.textContent = 'みやすさ・しんどう せってい';
       title.style.cssText = 'margin: 0 0 0.65rem; font-size: clamp(1.25rem, 4.6vmin, 1.7rem);';
 
       this.descriptionEl = document.createElement('p');
@@ -72,6 +80,55 @@ export class ColorAccessibilitySettings {
         options.onToggle(this.highContrast);
       });
 
+      const vibrationTitle = document.createElement('h3');
+      vibrationTitle.textContent = 'しんどうの つよさ';
+      vibrationTitle.style.cssText = 'margin: 1.1rem 0 0.45rem; font-size: clamp(1rem, 3.8vmin, 1.2rem);';
+
+      this.vibrationDescriptionEl = document.createElement('p');
+      this.vibrationDescriptionEl.style.cssText = 'margin: 0 0 0.8rem; font-size: clamp(0.9rem, 3.2vmin, 1rem); line-height: 1.5;';
+
+      const vibrationGroup = document.createElement('div');
+      vibrationGroup.setAttribute('data-vibration-intensity-group', '');
+      vibrationGroup.style.cssText = `
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.65rem;
+        margin-bottom: 0.95rem;
+      `;
+
+      const vibrationOptions: Array<{ value: VibrationIntensity; label: string }> = [
+        { value: 'strong', label: 'つよい' },
+        { value: 'medium', label: 'ふつう' },
+        { value: 'weak', label: 'やさしい' },
+        { value: 'off', label: 'オフ' },
+      ];
+
+      for (const option of vibrationOptions) {
+        const button = document.createElement('button');
+        button.setAttribute('data-vibration-intensity-button', option.value);
+        button.textContent = option.label;
+        button.style.cssText = `
+          padding: 0.8rem 0.9rem;
+          border-radius: 1rem;
+          border: 2px solid rgba(255, 255, 255, 0.4);
+          background: rgba(255, 255, 255, 0.08);
+          color: #fff;
+          font-family: 'Zen Maru Gothic', sans-serif;
+          font-size: clamp(0.95rem, 3.4vmin, 1.05rem);
+          font-weight: 800;
+          cursor: pointer;
+          touch-action: manipulation;
+          transition: transform 0.08s ease-out, border-color 0.12s ease-out, background 0.12s ease-out;
+        `;
+        button.addEventListener('click', () => {
+          this.vibrationIntensity = option.value;
+          this.render();
+          options.onVibrationIntensityChange(option.value);
+        });
+        this.vibrationButtons.set(option.value, button);
+        vibrationGroup.appendChild(button);
+      }
+
       const closeButton = document.createElement('button');
       closeButton.textContent = 'とじる';
       closeButton.style.cssText = `
@@ -92,6 +149,9 @@ export class ColorAccessibilitySettings {
       panel.appendChild(title);
       panel.appendChild(this.descriptionEl);
       panel.appendChild(this.toggleButton);
+      panel.appendChild(vibrationTitle);
+      panel.appendChild(this.vibrationDescriptionEl);
+      panel.appendChild(vibrationGroup);
       panel.appendChild(closeButton);
       this.overlay.appendChild(panel);
     }
@@ -109,7 +169,7 @@ export class ColorAccessibilitySettings {
   }
 
   private render(): void {
-    if (!this.toggleButton || !this.descriptionEl) return;
+    if (!this.toggleButton || !this.descriptionEl || !this.vibrationDescriptionEl) return;
     this.descriptionEl.textContent = this.highContrast
       ? 'いろだけじゃなく ふちや しまもようで わかりやすくしているよ。'
       : 'いろだけでなく かたちや うごきでも みわけられるようにするよ。';
@@ -117,5 +177,24 @@ export class ColorAccessibilitySettings {
       ? 'みやすくする: ON'
       : 'みやすくする: OFF';
     this.toggleButton.setAttribute('aria-pressed', this.highContrast ? 'true' : 'false');
+
+    const vibrationDescriptions: Record<VibrationIntensity, string> = {
+      strong: 'しっかり つたえる しんどうだよ。',
+      medium: 'ちょうどよく わかる つよさだよ。',
+      weak: 'やさしく ふるえて つたえるよ。',
+      off: 'しんどうの かわりに がめんが すこし ゆれるよ。',
+    };
+    this.vibrationDescriptionEl.textContent = vibrationDescriptions[this.vibrationIntensity];
+
+    for (const [value, button] of this.vibrationButtons.entries()) {
+      const selected = value === this.vibrationIntensity;
+      button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+      button.style.borderColor = selected ? '#fff27a' : 'rgba(255, 255, 255, 0.4)';
+      button.style.background = selected
+        ? 'linear-gradient(135deg, rgba(255, 242, 122, 0.94), rgba(118, 240, 255, 0.92))'
+        : 'rgba(255, 255, 255, 0.08)';
+      button.style.color = selected ? '#102040' : '#fff';
+      button.style.transform = selected ? 'scale(1.02)' : 'scale(1)';
+    }
   }
 }

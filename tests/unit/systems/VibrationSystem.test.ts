@@ -46,6 +46,24 @@ describe('VibrationSystem', () => {
     expect(vibrate).not.toHaveBeenCalled();
   });
 
+  it('scales vibration patterns when intensity is lowered', () => {
+    const vibrate = vi.fn(() => true);
+    const system = new VibrationSystem({ vibrate }, () => 0, 0);
+    system.setIntensity('weak');
+
+    expect(system.trigger('stageClear')).toBe(true);
+    expect(vibrate).toHaveBeenCalledWith([45, 23, 45, 23, 68]);
+  });
+
+  it('uses fallback feedback when vibration is unsupported', () => {
+    const fallback = vi.fn();
+    const system = new VibrationSystem({} as Navigator, () => 0, 0);
+    system.setFallbackHandler(fallback);
+
+    expect(system.trigger('boost')).toBe(true);
+    expect(fallback).toHaveBeenCalledWith('boost');
+  });
+
   it('suppresses repeated low-priority vibrations but allows stronger ones to override', () => {
     const vibrate = vi.fn(() => true);
     let now = 1000;

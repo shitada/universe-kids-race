@@ -511,7 +511,7 @@ describe('TitleScene (T009)', () => {
     scene.enter({});
 
     const settingsButton = document.querySelector('[data-color-settings-button]') as HTMLButtonElement | null;
-    expect(settingsButton?.textContent).toBe('いろのせってい');
+    expect(settingsButton?.textContent).toBe('みやすさ・しんどう');
 
     dispatchReleaseConfirm(settingsButton!);
 
@@ -524,6 +524,13 @@ describe('TitleScene (T009)', () => {
 
     expect(saveManager.save).toHaveBeenCalledWith(expect.objectContaining({
       colorAccessibility: { highContrast: true },
+    }));
+
+    const strongButton = document.querySelector('[data-vibration-intensity-button="strong"]') as HTMLButtonElement | null;
+    strongButton?.click();
+
+    expect(saveManager.save).toHaveBeenCalledWith(expect.objectContaining({
+      vibrationSettings: { intensity: 'strong' },
     }));
 
     scene.exit();

@@ -52,6 +52,7 @@ function createScene(inputState = { moveDirection: 0 as -1 | 0 | 1, boostPressed
       clearedStage: 0,
       unlockedPlanets: [],
       muted: false,
+      vibrationSettings: { intensity: 'strong' },
       tutorialShown: true,
       bestStageStars: {},
     })),
@@ -68,6 +69,7 @@ function createScene(inputState = { moveDirection: 0 as -1 | 0 | 1, boostPressed
     countdownOverlay: { dispose(): void } | null;
     stageIntroOverlay: { dispose(): void } | null;
     awaitingResume: boolean;
+    cameraShakeTimer: number;
     isHomeConfirmOpen: boolean;
     isPauseOpen: boolean;
     isStarting: boolean;
@@ -106,5 +108,14 @@ describe('StageScene vibration integration', () => {
     internal.onStageClear();
 
     expect(vibrate).toHaveBeenCalledWith([100, 50, 100, 50, 150]);
+  });
+
+  it('falls back to camera shake for stage clear when vibration is unavailable', () => {
+    __setSharedVibrationSystemForTest(new VibrationSystem({} as Navigator, () => 0, 0));
+    const { internal } = createScene();
+
+    internal.onStageClear();
+
+    expect(internal.cameraShakeTimer).toBeGreaterThan(0);
   });
 });
