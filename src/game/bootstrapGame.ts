@@ -17,6 +17,7 @@ import { resolveInitialPixelTier } from './utils/resolveInitialPixelTier';
 import { MemoryHealthMonitor, type MemoryHealthAlert } from './utils/MemoryHealthMonitor';
 import { GameStateBackup } from './storage/GameStateBackup';
 import { InterruptionSystem } from './systems/InterruptionSystem';
+import { FrameRateAdaptationSystem } from './systems/FrameRateAdaptationSystem';
 import { setSharedVibrationIntensity } from './systems/VibrationSystem';
 import { ContextLossOverlay } from '../ui/ContextLossOverlay';
 import { ResumeOverlay } from '../ui/ResumeOverlay';
@@ -143,9 +144,16 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   setSharedVibrationIntensity(saveManager.load().vibrationSettings?.intensity ?? 'medium');
 
   const currentVisualTier = { value: initialPixelTier };
+  const currentPerformanceAdaptation = { value: 0 };
+  function syncStagePerformanceProfile(): void {
+    stageScene?.setVisualQualityTier(currentVisualTier.value);
+    (stageScene as (StageScene & {
+      setPerformanceAdaptationLevel?: (level: number) => void;
+    }) | null)?.setPerformanceAdaptationLevel?.(currentPerformanceAdaptation.value);
+  }
   function syncVisualQualityTier(tier: number): void {
     currentVisualTier.value = tier;
-    stageScene?.setVisualQualityTier(tier);
+    syncStagePerformanceProfile();
   }
   const pixelRatioController = new AdaptivePixelRatioController(
     maxTier,
@@ -158,6 +166,21 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
     },
     {},
     initialPixelTier,
+  );
+  const frameRateAdaptationSystem = new FrameRateAdaptationSystem(
+    2,
+    ({ level, previousLevel, direction }) => {
+      currentPerformanceAdaptation.value = level;
+      (stageScene as (StageScene & {
+        setPerformanceAdaptationLevel?: (value: number) => void;
+        showFrameRateHint?: (value: number) => void;
+      }) | null)?.setPerformanceAdaptationLevel?.(level);
+      if (direction === 'degraded' && level > previousLevel) {
+        (stageScene as (StageScene & {
+          showFrameRateHint?: (value: number) => void;
+        }) | null)?.showFrameRateHint?.(level);
+      }
+    },
   );
 
   renderer.setClearColor(0x000020);
@@ -247,9 +270,9 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
         void sceneManager.requestTransition('title');
       },
     });
-    stageScene.setVisualQualityTier(currentVisualTier.value);
-    return stageScene;
-  });
+      syncStagePerformanceProfile();
+      return stageScene;
+    });
   sceneManager.registerSceneFactory('ending', async () => {
     const { EndingScene } = await loadEndingSceneModule();
     return new EndingScene(sceneManager, saveManager, audioManager);
@@ -310,8 +333,9 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
         renderer.render(scene, camera);
       }
     },
-    (fps: number) => {
-      pixelRatioController.sample(fps, performance.now());
+    (fps: number, sampleTimeMs: number) => {
+      pixelRatioController.sample(fps, sampleTimeMs);
+      frameRateAdaptationSystem.sample(fps, sampleTimeMs);
       const performanceMemory = getPerformanceMemory();
       const report = memoryHealthMonitor.sample({
         jsHeapUsedBytes: performanceMemory?.usedJSHeapSize,
@@ -342,7 +366,9 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   }
 
   function restoreViewportAfterPause(): void {
-    pixelRatioController.notifyResume(performance.now());
+    const now = performance.now();
+    pixelRatioController.notifyResume(now);
+    frameRateAdaptationSystem.notifyResume(now);
     const { width, height } = updateViewportSizeCache();
     resizeCoalescer.schedule(width, height);
     resizeCoalescer.flush();

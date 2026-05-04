@@ -65,6 +65,24 @@ describe('GameLoop', () => {
     loop.stop();
   });
 
+  it('passes the sample timestamp to the fps callback', () => {
+    const loop = new GameLoop();
+    const sampleTimes: number[] = [];
+    loop.start(
+      () => {},
+      () => {},
+      (_fps, sampleTimeMs) => sampleTimes.push(sampleTimeMs),
+    );
+
+    for (let i = 0; i < 7; i += 1) {
+      advance(16);
+    }
+
+    expect(sampleTimes.length).toBe(1);
+    expect(sampleTimes[0]).toBe(nowValue);
+    loop.stop();
+  });
+
   it('exposes the current fps via getFps()', () => {
     const loop = new GameLoop();
     loop.start(

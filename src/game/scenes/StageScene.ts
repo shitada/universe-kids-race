@@ -67,6 +67,7 @@ import { attachReleaseConfirmButton } from '../../ui/attachReleaseConfirmButton'
 import { PauseOverlay } from '../../ui/PauseOverlay';
 import { SeasonalEventNotice } from '../../ui/SeasonalEventNotice';
 import { StageClearOverlay } from '../../ui/StageClearOverlay';
+import { FrameRateHintOverlay } from '../../ui/FrameRateHintOverlay';
 import { ConstellationSystem } from '../systems/ConstellationSystem';
 import {
   __resetStageSceneSharedAssetCachesForTest,
@@ -286,6 +287,8 @@ export class StageScene implements Scene {
   private prewarmRequestToken = 0;
   private static readonly TOUCH_GUIDE_IDLE_DELAY = 3;
   private visualQualityTier = StageScene.VISUAL_QUALITY_SCALE_BY_TIER.length - 1;
+  private performanceAdaptationLevel = 0;
+  private frameRateHintOverlay = new FrameRateHintOverlay();
   private readonly scheduleIdleTask: (callback: () => void) => void;
   private readonly loadEncyclopediaOverlay: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
   private clearRewardRequestToken = 0;
@@ -370,6 +373,18 @@ export class StageScene implements Scene {
   setVisualQualityTier(tier: number): void {
     this.visualQualityTier = StageScene.clampVisualQualityTier(tier);
     this.applyVisualQualityTier();
+  }
+
+  setPerformanceAdaptationLevel(level: number): void {
+    this.performanceAdaptationLevel = StageScene.clampPerformanceAdaptationLevel(level);
+    this.applyVisualQualityTier();
+  }
+
+  showFrameRateHint(level: number): void {
+    if (!this.isActive) {
+      return;
+    }
+    this.frameRateHintOverlay.show({ level });
   }
 
   enter(context: SceneContext): void {
@@ -2065,6 +2080,7 @@ export class StageScene implements Scene {
     this.adaptiveTutorialHint.hide();
     this.constellationHintOverlay.hide();
     this.seasonalEventNotice.dispose();
+    this.frameRateHintOverlay.hide();
     this.hud.hide();
     this.scorePopupManager.dispose();
     setSharedVibrationFallbackHandler(null);
@@ -2095,6 +2111,7 @@ export class StageScene implements Scene {
     this.stageSpecialEffects.clear();
     this.seasonalEventEffects.clear();
     this.seasonalEventSystem.clear();
+    this.frameRateHintOverlay.dispose();
     this.resetStageObjects();
     if (this.bgStars) {
       this.bgStars.parent?.remove(this.bgStars);
@@ -2118,17 +2135,18 @@ export class StageScene implements Scene {
   }
 
   private applyVisualQualityTier(): void {
-    const clampedTier = StageScene.clampVisualQualityTier(this.visualQualityTier);
-    this.particleBurstManager.setQualityTier(clampedTier);
+    const effectiveTier = this.getEffectiveVisualQualityTier();
+    this.particleBurstManager.setQualityTier(effectiveTier);
+    this.lodSystem.setQualityTier(effectiveTier);
     if (!this.initialized) {
       if (this.bgStars) {
         this.bgStars.geometry.setDrawRange(0, this.getBackgroundStarDrawCount());
       }
       return;
     }
-    this.boostLinesEffect.setQualityTier(clampedTier);
-    this.boostFlameEffect.setQualityTier(clampedTier);
-    this.stageAtmosphereEffect.setQualityTier(clampedTier);
+    this.boostLinesEffect.setQualityTier(effectiveTier);
+    this.boostFlameEffect.setQualityTier(effectiveTier);
+    this.stageAtmosphereEffect.setQualityTier(effectiveTier);
     if (this.bgStars) {
       this.bgStars.geometry.setDrawRange(0, this.getBackgroundStarDrawCount());
     }
@@ -2140,7 +2158,7 @@ export class StageScene implements Scene {
       1,
       Math.round(
         StageScene.BG_STAR_COUNT
-        * StageScene.getVisualQualityScale(this.visualQualityTier)
+        * StageScene.getVisualQualityScale(this.getEffectiveVisualQualityTier())
         * motionProfile.particleDensityScale,
       ),
     );
@@ -2160,7 +2178,16 @@ export class StageScene implements Scene {
     return Math.max(0, Math.min(maxTier, Math.round(tier)));
   }
 
+  private static clampPerformanceAdaptationLevel(level: number): number {
+    const maxLevel = StageScene.VISUAL_QUALITY_SCALE_BY_TIER.length - 1;
+    return Math.max(0, Math.min(maxLevel, Math.round(level)));
+  }
+
   private static getVisualQualityScale(tier: number): number {
     return StageScene.VISUAL_QUALITY_SCALE_BY_TIER[StageScene.clampVisualQualityTier(tier)];
+  }
+
+  private getEffectiveVisualQualityTier(): number {
+    return StageScene.clampVisualQualityTier(this.visualQualityTier - this.performanceAdaptationLevel);
   }
 }

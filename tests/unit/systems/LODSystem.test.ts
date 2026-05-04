@@ -37,4 +37,16 @@ describe('LODSystem', () => {
     expect(LODSystem.resolveLevel(49.99)).toBe('mid');
     expect(LODSystem.resolveLevel(50)).toBe('far');
   });
+
+  it('uses more aggressive thresholds on reduced quality tiers', () => {
+    const system = new LODSystem();
+    const star = new Star(0, 0, -40, 'NORMAL');
+
+    system.update({ x: 0, y: 0, z: 0 }, [star]);
+    expect(star.getLODLevel()).toBe('mid');
+
+    system.setQualityTier(0);
+    system.update({ x: 0, y: 0, z: 0 }, [star]);
+    expect(star.getLODLevel()).toBe('far');
+  });
 });
