@@ -24,7 +24,17 @@ type LoaderBehavior = () => Promise<void>;
 
 async function bootMain(
   titleBehaviors: LoaderBehavior[],
-  options: { initialPixelTier?: number } = {},
+  options: {
+    initialPixelTier?: number;
+    freshSession?: boolean;
+    initialSaveData?: {
+      muted?: boolean;
+      clearedStage?: number;
+      unlockedPlanets?: number[];
+      lastStablePixelTier?: number | null;
+      tutorialShown?: boolean;
+    };
+  } = {},
 ) {
   vi.resetModules();
   document.body.innerHTML = '<canvas id="game-canvas"></canvas><div id="hud"></div><div id="ui-overlay"></div>';
@@ -37,6 +47,13 @@ async function bootMain(
   };
   let loaderIndex = 0;
   const initialPixelTier = options.initialPixelTier ?? 0;
+  const saveState = {
+    muted: options.initialSaveData?.muted ?? false,
+    clearedStage: options.initialSaveData?.clearedStage ?? 0,
+    unlockedPlanets: options.initialSaveData?.unlockedPlanets ?? [1],
+    lastStablePixelTier: options.initialSaveData?.lastStablePixelTier ?? null,
+    tutorialShown: options.initialSaveData?.tutorialShown ?? true,
+  };
   const adaptiveState: {
     onTierChange: ((tier: number) => void) | null;
     resetToTier: ReturnType<typeof vi.fn> | null;
@@ -72,6 +89,7 @@ async function bootMain(
       start = vi.fn();
       pause = vi.fn();
       resume = vi.fn();
+      stop = vi.fn();
       isPaused = vi.fn(() => false);
     },
   }));
@@ -80,23 +98,29 @@ async function bootMain(
     InputSystem: class {
       setup = vi.fn();
       notifyResize = vi.fn();
+      dispose = vi.fn();
     },
   }));
 
   vi.doMock('../../src/game/storage/SaveManager', () => ({
     SaveManager: class {
       getSessionState(): string {
-        return 'existing';
+        return options.freshSession ? 'fresh' : 'existing';
       }
 
-      resetSessionDataPreservingMuted = vi.fn();
+      resetSessionDataPreservingMuted = vi.fn(() => {
+        saveState.clearedStage = 0;
+        saveState.unlockedPlanets = [];
+        saveState.tutorialShown = false;
+      });
 
       load() {
         return {
-          muted: false,
-          clearedStage: 0,
-          unlockedPlanets: [1],
-          lastStablePixelTier: null,
+          muted: saveState.muted,
+          clearedStage: saveState.clearedStage,
+          unlockedPlanets: [...saveState.unlockedPlanets],
+          lastStablePixelTier: saveState.lastStablePixelTier,
+          tutorialShown: saveState.tutorialShown,
         };
       }
 
@@ -109,6 +133,7 @@ async function bootMain(
       setMuted = vi.fn();
       ensureResumed = vi.fn();
       suspend = vi.fn();
+      dispose = vi.fn();
     },
   }));
 
@@ -145,12 +170,13 @@ async function bootMain(
     createWebGLContextLossHandler: vi.fn(
       (_canvas: HTMLCanvasElement, callbacks: { onLost: () => void; onRestored: () => void }) => {
         contextLossState.callbacks = callbacks;
+        return () => {};
       },
     ),
   }));
 
   vi.doMock('../../src/game/utils/createVisibilityPauseHandler', () => ({
-    createVisibilityPauseHandler: vi.fn(),
+    createVisibilityPauseHandler: vi.fn(() => () => {}),
   }));
 
   vi.doMock('../../src/game/utils/createRenderer', () => ({
@@ -159,12 +185,15 @@ async function bootMain(
       setPixelRatio: vi.fn(),
       setClearColor: vi.fn(),
       render: vi.fn(),
+      dispose: vi.fn(),
+      forceContextLoss: vi.fn(),
     }),
   }));
 
   vi.doMock('../../src/game/utils/getViewportSize', () => ({
     getViewportSize: () => ({ width: 1024, height: 768 }),
-    subscribeViewportResize: vi.fn(),
+    updateViewportSizeCache: () => ({ width: 1024, height: 768 }),
+    subscribeViewportResize: vi.fn(() => () => {}),
   }));
 
   vi.doMock('../../src/game/utils/resolveInitialPixelTier', () => ({
@@ -174,6 +203,7 @@ async function bootMain(
   vi.doMock('../../src/game/utils/createOrientationHintHandler', () => ({
     createOrientationHintHandler: () => ({
       evaluate: vi.fn(),
+      dispose: vi.fn(),
     }),
   }));
 
@@ -229,17 +259,32 @@ async function bootMain(
   vi.doMock('../../src/game/scenes/TitleScene', () => ({
     TitleScene: class extends MockScene {
       private overlay: HTMLDivElement | null = null;
+      private tutorialOverlay: HTMLDivElement | null = null;
+
+      constructor(
+        _sceneManager: unknown,
+        private readonly saveManager: { load: () => { tutorialShown?: boolean } },
+      ) {
+        super();
+      }
 
       override enter(): void {
         this.overlay = document.createElement('div');
         this.overlay.setAttribute('data-next-adventure-card', '');
         this.overlay.textContent = 'title ready';
         document.getElementById('ui-overlay')?.appendChild(this.overlay);
+        if (!this.saveManager.load().tutorialShown) {
+          this.tutorialOverlay = document.createElement('div');
+          this.tutorialOverlay.setAttribute('data-tutorial-overlay', '');
+          document.getElementById('ui-overlay')?.appendChild(this.tutorialOverlay);
+        }
       }
 
       override exit(): void {
         this.overlay?.remove();
         this.overlay = null;
+        this.tutorialOverlay?.remove();
+        this.tutorialOverlay = null;
       }
     },
   }));
@@ -323,7 +368,9 @@ describe('Main lazy title bootstrap', () => {
     vi.resetModules();
     document.body.innerHTML = '';
 
-    const bootstrapGameMock = vi.fn(async () => {});
+    const bootstrapGameMock = vi.fn(async () => ({
+      dispose: vi.fn(),
+    }));
     const loadBootstrapModule = vi
       .fn<() => Promise<{ bootstrapGame: typeof bootstrapGameMock }>>()
       .mockRejectedValueOnce(new Error('boot chunk failed'))
@@ -360,6 +407,36 @@ describe('Main lazy title bootstrap', () => {
     consoleErrorSpy.mockRestore();
   });
 
+  it('disposes the previous boot session before starting a new main bootstrap', async () => {
+    vi.resetModules();
+    document.body.innerHTML = '';
+
+    const firstHandle = { dispose: vi.fn() };
+    const secondHandle = { dispose: vi.fn() };
+    const bootstrapGameMock = vi
+      .fn()
+      .mockResolvedValueOnce(firstHandle)
+      .mockResolvedValueOnce(secondHandle);
+    const loadBootstrapModule = vi.fn().mockResolvedValue({ bootstrapGame: bootstrapGameMock });
+
+    const mainModule = await import('../../src/main');
+
+    document.body.innerHTML = '<canvas id="game-canvas"></canvas><div id="hud"></div><div id="ui-overlay"></div>';
+    const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
+
+    const firstBoot = mainModule.startMainBootstrap({ canvas, loadBootstrapModule });
+    await flushPromises();
+    await expect(firstBoot).resolves.toBe(firstHandle);
+    expect(firstHandle.dispose).not.toHaveBeenCalled();
+
+    const secondBoot = mainModule.startMainBootstrap({ canvas, loadBootstrapModule });
+    await flushPromises();
+
+    await expect(secondBoot).resolves.toBe(secondHandle);
+    expect(firstHandle.dispose).toHaveBeenCalledTimes(1);
+    expect(secondHandle.dispose).not.toHaveBeenCalled();
+  });
+
   it('starts stage prefetch right after title transition finishes', async () => {
     const titleReady = createDeferred();
 
@@ -387,5 +464,19 @@ describe('Main lazy title bootstrap', () => {
     contextLossState.callbacks?.onRestored();
 
     expect(adaptiveState.resetToTier).toHaveBeenCalledWith(1);
+  });
+
+  it('re-shows the tutorial after a fresh Safari session resets tutorialShown', async () => {
+    await bootMain([async () => {}], {
+      freshSession: true,
+      initialSaveData: {
+        tutorialShown: true,
+        clearedStage: 4,
+        unlockedPlanets: [1, 2, 3, 4],
+      },
+    });
+
+    expect(document.querySelector('[data-next-adventure-card]')).not.toBeNull();
+    expect(document.querySelector('[data-tutorial-overlay]')).not.toBeNull();
   });
 });

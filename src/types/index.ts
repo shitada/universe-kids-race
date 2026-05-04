@@ -37,6 +37,7 @@ export type AssistDirection = 'left' | 'right';
 export interface StageConfig {
   stageNumber: number;
   destination: string;
+  destinationReading: string;
   stageLength: number;
   meteoriteInterval: number;
   starDensity: number;
@@ -101,6 +102,8 @@ export type CompanionShape = 'basic' | 'ringed' | 'radiant' | 'horned' | 'icy' |
 export interface PlanetEncyclopediaEntry {
   stageNumber: number;
   name: string;
+  reading: string;
+  encyclopediaLabel: string;
   emoji: string;
   trivia: string;
   planetColor: number;

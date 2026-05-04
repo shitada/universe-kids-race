@@ -80,6 +80,16 @@ function findButtonByText(text: string): HTMLButtonElement | undefined {
   ) as HTMLButtonElement | undefined;
 }
 
+function dispatchReleaseConfirm(button: HTMLElement): void {
+  button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+  button.dispatchEvent(new Event('pointerup', { bubbles: true }));
+}
+
+function dispatchReleaseOutside(button: HTMLElement): void {
+  button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+  document.body.dispatchEvent(new Event('pointerup', { bubbles: true }));
+}
+
 function findCompanionParade(scene: TitleScene): THREE.Group | undefined {
   return scene.getThreeScene().children.find(
     (child) => child instanceof THREE.Group && child.name === 'title-companion-parade',
@@ -88,6 +98,10 @@ function findCompanionParade(scene: TitleScene): THREE.Group | undefined {
 
 function findNextAdventureCard(): HTMLDivElement | null {
   return document.querySelector('[data-next-adventure-card]');
+}
+
+function findNextRewardChip(type: 'card' | 'companion'): HTMLDivElement | null {
+  return document.querySelector(`[data-next-reward-chip="${type}"]`);
 }
 
 function findNextAdventureMedalDisplay(): HTMLDivElement | null {
@@ -168,8 +182,7 @@ describe('TitleScene (T009)', () => {
     const playButton = Array.from(buttons).find(b => b.textContent === 'あそぶ');
     expect(playButton).toBeTruthy();
 
-    const event = new Event('pointerdown', { bubbles: true });
-    playButton!.dispatchEvent(event);
+    dispatchReleaseConfirm(playButton!);
 
     expect(audioManager.initSync).not.toHaveBeenCalled();
     // ボタン押下では追加 playBGM は呼ばれない（StageScene 側が呼ぶため）
@@ -197,7 +210,7 @@ describe('TitleScene (T009)', () => {
     const playButton = findButtonByText('あそぶ');
     expect(playButton).toBeTruthy();
 
-    playButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(playButton!);
 
     expect(audioManager.initSync).toHaveBeenCalledTimes(1);
     expect(audioManager.playBGM).not.toHaveBeenCalled();
@@ -209,6 +222,45 @@ describe('TitleScene (T009)', () => {
         totalStarCount: 0,
       }),
     );
+
+    scene.exit();
+  });
+
+  it('"あそぶ" button cancels when the finger leaves on another element', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager(false);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager);
+    scene.enter({});
+
+    const playButton = findButtonByText('あそぶ');
+    expect(playButton).toBeTruthy();
+
+    dispatchReleaseOutside(playButton!);
+
+    expect(audioManager.initSync).not.toHaveBeenCalled();
+    expect(sceneManager.requestTransition).not.toHaveBeenCalled();
+
+    scene.exit();
+  });
+
+  it('"あそぶ" button suppresses the follow-up click after a same-button release', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager(false);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager);
+    scene.enter({});
+
+    const playButton = findButtonByText('あそぶ');
+    expect(playButton).toBeTruthy();
+
+    dispatchReleaseConfirm(playButton!);
+    playButton!.dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(audioManager.initSync).toHaveBeenCalledTimes(1);
+    expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
 
     scene.exit();
   });
@@ -228,15 +280,17 @@ describe('TitleScene (T009)', () => {
 
     const card = findNextAdventureCard();
     const hint = document.querySelector('[data-play-button-hint]') as HTMLDivElement | null;
+    const rewardPreview = document.querySelector('[data-next-reward-preview]') as HTMLDivElement | null;
     expect(card?.getAttribute('data-next-stage-number')).toBe('1');
-    expect(card?.getAttribute('data-next-stage-destination')).toBe('月');
-    expect(card?.textContent).toContain('ぜんぶ クリア！');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('つき');
+    expect(card?.textContent).toContain('ぜんぶ あつめたよ！');
     expect(card?.textContent).toContain('🌙');
+    expect(rewardPreview).toBeNull();
     expect(hint?.textContent).toContain('ステージ 1');
     expect(hint?.textContent).toContain('もういちど');
     expect(findResetProgressButton()?.textContent).toBe('さいしょから');
 
-    findButtonByText('あそぶ')?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(findButtonByText('あそぶ')!);
 
     expect(sceneManager.requestTransition).toHaveBeenCalledWith(
       'stage',
@@ -264,9 +318,11 @@ describe('TitleScene (T009)', () => {
 
     const card = findNextAdventureCard();
     const hint = document.querySelector('[data-play-button-hint]') as HTMLDivElement | null;
+    const medalDisplay = findNextAdventureMedalDisplay();
     expect(card?.getAttribute('data-next-stage-number')).toBe('4');
-    expect(card?.getAttribute('data-next-stage-destination')).toBe('火星');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('かせい');
     expect(card?.textContent).toContain('つづきから しゅっぱつ！');
+    expect(medalDisplay).not.toBeNull();
     expect(hint?.textContent).toContain('ステージ 4');
     expect(hint?.textContent).not.toContain('さいしょから');
     expect(findResetProgressButton()?.textContent).toBe('さいしょから');
@@ -288,9 +344,11 @@ describe('TitleScene (T009)', () => {
 
     const card = findNextAdventureCard();
     const hint = document.querySelector('[data-play-button-hint]') as HTMLDivElement | null;
+    const medalDisplay = findNextAdventureMedalDisplay();
     expect(card?.getAttribute('data-next-stage-number')).toBe('1');
-    expect(card?.getAttribute('data-next-stage-destination')).toBe('月');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('つき');
     expect(card?.textContent).toContain('はじめての しゅっぱつ！');
+    expect(medalDisplay).not.toBeNull();
     expect(hint?.textContent).toContain('ステージ 1');
     expect(hint?.textContent).not.toContain('さいしょから');
     expect(findResetProgressButton()).toBeNull();
@@ -370,7 +428,7 @@ describe('TitleScene (T009)', () => {
     const tutorialButton = findButtonByText('あそびかた');
     expect(tutorialButton).toBeTruthy();
 
-    tutorialButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(tutorialButton!);
 
     expect(audioManager.initSync).toHaveBeenCalledTimes(1);
     expect(audioManager.playBGM).toHaveBeenCalledTimes(1);
@@ -425,7 +483,7 @@ describe('TitleScene (T009)', () => {
     ) as HTMLButtonElement | undefined;
     expect(encyclopediaButton).toBeTruthy();
 
-    encyclopediaButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(encyclopediaButton!);
     await flushPromises();
     await flushPromises();
 
@@ -470,7 +528,7 @@ describe('TitleScene (T009)', () => {
     ) as HTMLButtonElement | undefined;
     expect(encyclopediaButton).toBeTruthy();
 
-    encyclopediaButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(encyclopediaButton!);
     await flushPromises();
     await flushPromises();
 
@@ -566,7 +624,7 @@ describe('TitleScene (T009)', () => {
     ) as HTMLButtonElement | undefined;
     expect(encyclopediaButton).toBeTruthy();
 
-    encyclopediaButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(encyclopediaButton!);
     await flushPromises();
     await flushPromises();
 
@@ -644,11 +702,11 @@ describe('TitleScene (T009)', () => {
     const card = findNextAdventureCard();
     expect(card).toBeTruthy();
     expect(card?.getAttribute('data-next-stage-number')).toBe('1');
-    expect(card?.getAttribute('data-next-stage-destination')).toBe('月');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('つき');
     expect(card?.textContent).toContain('つぎの ぼうけん');
     expect(card?.textContent).toContain('🌙');
     expect(card?.textContent).toContain('ステージ 1');
-    expect(card?.textContent).toContain('月');
+    expect(card?.textContent).toContain('つき');
     expect(document.querySelector('[data-play-button-hint]')?.textContent).toContain('ステージ 1');
 
     scene.exit();
@@ -670,10 +728,10 @@ describe('TitleScene (T009)', () => {
     const card = findNextAdventureCard();
     const medalDisplay = findNextAdventureMedalDisplay();
     expect(card?.getAttribute('data-next-stage-number')).toBe('5');
-    expect(card?.getAttribute('data-next-stage-destination')).toBe('木星');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('もくせい');
     expect(card?.textContent).toContain('🟠');
     expect(card?.textContent).toContain('ステージ 5');
-    expect(card?.textContent).toContain('木星');
+    expect(card?.textContent).toContain('もくせい');
     expect(medalDisplay?.getAttribute('data-stage-medal-earned')).toBe('2');
     expect(medalDisplay?.textContent).toContain('つぎ ⭐ 15');
     expect(document.querySelector('[data-play-button-hint]')?.textContent).toContain('ステージ 5');
@@ -711,10 +769,12 @@ describe('TitleScene (T009)', () => {
     scene.enter({});
 
     const card = findNextAdventureCard();
+    const rewardPreview = document.querySelector('[data-next-reward-preview]') as HTMLDivElement | null;
     expect(card?.getAttribute('data-next-stage-number')).toBe('1');
-    expect(card?.getAttribute('data-next-stage-destination')).toBe('月');
-    expect(card?.textContent).toContain('ぜんぶ クリア');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('つき');
+    expect(card?.textContent).toContain('ぜんぶ あつめたよ！');
     expect(card?.textContent).toContain('🌙');
+    expect(rewardPreview).toBeNull();
     expect(document.querySelector('[data-play-button-hint]')?.textContent).toContain('ステージ 1');
     expect(document.querySelector('[data-play-button-hint]')?.textContent).toContain('もういちど');
     expect(findResetProgressButton()?.textContent).toBe('さいしょから');
@@ -722,7 +782,7 @@ describe('TitleScene (T009)', () => {
     const playButton = findButtonByText('あそぶ');
     expect(playButton).toBeTruthy();
 
-    playButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(playButton!);
 
     expect(sceneManager.requestTransition).toHaveBeenCalledWith(
       'stage',
@@ -749,7 +809,7 @@ describe('TitleScene (T009)', () => {
     scene.enter({});
 
     const card = findNextAdventureCard();
-    expect(card?.textContent).not.toContain('ぜんぶ クリア');
+    expect(card?.textContent).not.toContain('ぜんぶ あつめたよ！');
     expect(card?.getAttribute('data-next-stage-number')).toBe(String(TOTAL_STAGES));
     expect(document.querySelector('[data-play-button-hint]')?.textContent).not.toContain('もういちど');
 
@@ -1101,7 +1161,7 @@ describe('TitleScene first-run onboarding (auto tutorial)', () => {
     const tutorialBtn = Array.from(uiOverlay.querySelectorAll('button'))
       .find((b) => b.textContent === 'あそびかた');
     expect(tutorialBtn).toBeTruthy();
-    tutorialBtn!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(tutorialBtn!);
 
     expect(document.querySelector('[data-tutorial-overlay]')).toBeTruthy();
 

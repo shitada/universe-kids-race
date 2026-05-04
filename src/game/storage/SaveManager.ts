@@ -130,15 +130,15 @@ export class SaveManager {
 
   // Resets only gameplay progress (clearedStage, unlockedPlanets,
   // bestStageStars) while preserving stable settings and onboarding state.
-  // Used both by the title-screen "さいしょから" flow and by Safari
-  // new-session detection so mute preference, tutorial read-state, and the
-  // adaptive pixel-ratio hint survive while progress returns to defaults.
+  // Used for the title-screen "さいしょから" flow so mute preference,
+  // tutorial read-state, and the adaptive pixel-ratio hint survive while
+  // progress returns to defaults.
   resetProgressPreservingSettings(): void {
     try {
       const prev = this.load();
       const muted = prev.muted === true;
-      const tutorialShown = prev.tutorialShown === true;
       const lastStablePixelTier = prev.lastStablePixelTier;
+      const tutorialShown = prev.tutorialShown === true;
       this.clear();
       const next: SaveData = {
         clearedStage: 0,
@@ -151,20 +151,40 @@ export class SaveManager {
         next.lastStablePixelTier = lastStablePixelTier;
       }
       this.save(next);
-      // save() already updates this.cached, but explicitly reaffirm the
-      // contract: after this call the cache must reflect the reset state.
       this.cached = cloneSaveData(next);
     } catch (e) {
-      // Conservatively drop the cache so the next load() re-reads from
-      // storage (which may be in an unknown intermediate state).
       this.cached = null;
       console.warn('SaveManager.resetProgressPreservingSettings failed:', e);
     }
   }
 
-  // Backward-compatible alias for the Safari session-reset path.
+  // Resets session-scoped progress and onboarding data while preserving
+  // stable preferences needed across Safari swipe-to-close on shared iPads.
+  // Used on Safari new-session detection so gameplay progress and the
+  // auto-shown tutorial both return to first-run defaults, while mute
+  // preference and adaptive pixel-ratio hint survive.
   resetSessionDataPreservingMuted(): void {
-    this.resetProgressPreservingSettings();
+    try {
+      const prev = this.load();
+      const muted = prev.muted === true;
+      const lastStablePixelTier = prev.lastStablePixelTier;
+      this.clear();
+      const next: SaveData = {
+        clearedStage: 0,
+        unlockedPlanets: [],
+        muted,
+        bestStageStars: {},
+        tutorialShown: false,
+      };
+      if (typeof lastStablePixelTier === 'number') {
+        next.lastStablePixelTier = lastStablePixelTier;
+      }
+      this.save(next);
+      this.cached = cloneSaveData(next);
+    } catch (e) {
+      this.cached = null;
+      console.warn('SaveManager.resetSessionDataPreservingMuted failed:', e);
+    }
   }
 
   // Updates the best (highest) star count for the given stage. Only persists

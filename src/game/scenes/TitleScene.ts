@@ -9,10 +9,10 @@ import { LoadFailureOverlay } from '../../ui/LoadFailureOverlay';
 import { TitleResetConfirmOverlay } from '../../ui/TitleResetConfirmOverlay';
 import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButton';
 import { getStageConfig, getStageMedalStatus, TOTAL_STAGES } from '../config/StageConfig';
-import { PLANET_ENCYCLOPEDIA } from '../config/PlanetEncyclopedia';
-import { getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
+import { PLANET_ENCYCLOPEDIA, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { formatEncyclopediaLabel } from '../../ui/formatEncyclopediaLabel';
 import { getViewportSize } from '../utils/getViewportSize';
+import { attachReleaseConfirmButton } from '../../ui/attachReleaseConfirmButton';
 import { createStageMedalDisplay } from '../../ui/stageMedalDisplay';
 import { prewarmStageVisualAssets } from './stageVisualAssets';
 
@@ -132,10 +132,10 @@ function getNextAdventurePreview(saveData: SaveData): NextAdventurePreview {
   if (isAllClear) {
     return {
       startStage,
-      destination: stageConfig.destination,
+      destination: stageConfig.destinationReading,
       emoji: stageConfig.emoji,
-      statusLabel: 'ぜんぶ クリア！',
-      destinationLabel: `${stageConfig.destination}へ もういちど しゅっぱつ！`,
+      statusLabel: 'ぜんぶ あつめたよ！',
+      destinationLabel: `${stageConfig.destinationReading}へ もういちど しゅっぱつ！`,
       buttonHint: `${stageConfig.emoji} ステージ ${startStage} から もういちど あそぶ`,
       bestStars,
     };
@@ -143,10 +143,10 @@ function getNextAdventurePreview(saveData: SaveData): NextAdventurePreview {
 
   return {
     startStage,
-    destination: stageConfig.destination,
+    destination: stageConfig.destinationReading,
     emoji: stageConfig.emoji,
     statusLabel: saveData.clearedStage > 0 ? 'つづきから しゅっぱつ！' : 'はじめての しゅっぱつ！',
-    destinationLabel: `${stageConfig.destination}へ むかおう！`,
+    destinationLabel: `${stageConfig.destinationReading}へ むかおう！`,
     buttonHint: `${stageConfig.emoji} ステージ ${startStage} から スタート`,
     bestStars,
   };
@@ -196,6 +196,7 @@ export class TitleScene implements Scene {
   // 機能する。初回起動時は overlay の pointerdown ハンドラ内で initSync()
   // 直後に再生開始するため、その判定にこのフラグを利用する。
   private bgmPending = false;
+  private readonly overlayButtonCleanups = new Set<() => void>();
 
   constructor(
     sceneManager: SceneManager,
@@ -453,15 +454,17 @@ export class TitleScene implements Scene {
       pointer-events: auto;
     `;
 
+    const compact = window.innerHeight <= 500;
+
     const title = document.createElement('div');
     title.textContent = 'うちゅうの たび';
     title.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: 3rem;
+      font-size: ${compact ? '2rem' : '3rem'};
       font-weight: 900;
       color: #FFD700;
       text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
-      margin-bottom: 2rem;
+      margin-bottom: ${compact ? '0.6rem' : '2rem'};
     `;
 
     const nextAdventureCard = document.createElement('div');
@@ -469,10 +472,10 @@ export class TitleScene implements Scene {
     nextAdventureCard.setAttribute('data-next-stage-number', String(nextAdventure.startStage));
     nextAdventureCard.setAttribute('data-next-stage-destination', nextAdventure.destination);
     nextAdventureCard.style.cssText = `
-      width: min(70vw, 26rem);
-      padding: 1rem 1.4rem;
-      margin-bottom: 1.25rem;
-      border-radius: 1.5rem;
+      width: min(${compact ? '60vw' : '70vw'}, ${compact ? '18rem' : '26rem'});
+      padding: ${compact ? '0.5rem 0.8rem' : '1rem 1.4rem'};
+      margin-bottom: ${compact ? '0.6rem' : '1.25rem'};
+      border-radius: ${compact ? '1rem' : '1.5rem'};
       background: rgba(255, 255, 255, 0.14);
       box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
       backdrop-filter: blur(6px);
@@ -484,26 +487,26 @@ export class TitleScene implements Scene {
     nextAdventureHeading.textContent = 'つぎの ぼうけん';
     nextAdventureHeading.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: 1rem;
+      font-size: ${compact ? '0.8rem' : '1rem'};
       font-weight: 700;
       color: #FFE66D;
-      margin-bottom: 0.35rem;
+      margin-bottom: ${compact ? '0.15rem' : '0.35rem'};
     `;
 
     const nextAdventureStatus = document.createElement('div');
     nextAdventureStatus.textContent = nextAdventure.statusLabel;
     nextAdventureStatus.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: 1.25rem;
+      font-size: ${compact ? '1rem' : '1.25rem'};
       font-weight: 900;
-      margin-bottom: 0.35rem;
+      margin-bottom: ${compact ? '0.15rem' : '0.35rem'};
     `;
 
     const nextAdventureStage = document.createElement('div');
     nextAdventureStage.textContent = `${nextAdventure.emoji} ステージ ${nextAdventure.startStage} ・ ${nextAdventure.destination}`;
     nextAdventureStage.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: 1.35rem;
+      font-size: ${compact ? '1.05rem' : '1.35rem'};
       font-weight: 700;
       margin-bottom: 0.25rem;
     `;
@@ -512,7 +515,7 @@ export class TitleScene implements Scene {
     nextAdventureDestination.textContent = nextAdventure.destinationLabel;
     nextAdventureDestination.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: 1rem;
+      font-size: ${compact ? '0.85rem' : '1rem'};
       font-weight: 700;
       color: rgba(255, 255, 255, 0.92);
     `;
@@ -546,9 +549,9 @@ export class TitleScene implements Scene {
     button.textContent = 'あそぶ';
     button.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: 2rem;
+      font-size: ${compact ? '1.4rem' : '2rem'};
       font-weight: 700;
-      padding: 1rem 3rem;
+      padding: ${compact ? '0.6rem 2rem' : '1rem 3rem'};
       border: none;
       border-radius: 2rem;
       background: linear-gradient(135deg, #FF6B6B, #FFE66D);
@@ -556,25 +559,37 @@ export class TitleScene implements Scene {
       cursor: pointer;
       touch-action: manipulation;
       box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
+      transform: scale(1);
+      transition: transform 0.08s ease-out;
     `;
 
-    button.addEventListener('pointerdown', (e) => {
-      e.stopPropagation();
-      // Initialize AudioContext synchronously on user gesture (iPad Safari requirement).
-      // ここで playBGM(0) は呼ばない。直後の StageScene.enter() が
-      // playBGM(stageNumber) を呼び、内部の stopBGM() でタイトル BGM を即停止
-      // するため、タイトル BGM は実質的に再生されない無駄な処理になっていた。
-      this.ensureTitleAudioInitialized(false);
-      const saveData = this.saveManager.load();
-      this.startCampaign(getNextAdventurePreview(saveData).startStage);
-    });
+    this.overlayButtonCleanups.add(attachReleaseConfirmButton(button, {
+      onActivate: () => {
+        // Initialize AudioContext synchronously on user gesture (iPad Safari requirement).
+        // ここで playBGM(0) は呼ばない。直後の StageScene.enter() が
+        // playBGM(stageNumber) を呼び、内部の stopBGM() でタイトル BGM を即停止
+        // するため、タイトル BGM は実質的に再生されない無駄な処理になっていた。
+        this.ensureTitleAudioInitialized(false);
+        const saveData = this.saveManager.load();
+        const startStage = getNextAdventurePreview(saveData).startStage;
+        this.sceneManager.requestTransition('stage', {
+          stageNumber: startStage,
+          totalScore: 0,
+          totalStarCount: 0,
+          launchSource: 'campaign',
+        });
+      },
+      onPressChange: (pressed) => {
+        button.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+      },
+    }));
 
     const playButtonHint = document.createElement('div');
     playButtonHint.setAttribute('data-play-button-hint', '');
     playButtonHint.textContent = nextAdventure.buttonHint;
     playButtonHint.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: 1rem;
+      font-size: ${compact ? '0.85rem' : '1rem'};
       font-weight: 700;
       color: rgba(255, 255, 255, 0.88);
       text-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
@@ -585,9 +600,9 @@ export class TitleScene implements Scene {
     tutorialBtn.textContent = 'あそびかた';
     tutorialBtn.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: 1.2rem;
+      font-size: ${compact ? '0.95rem' : '1.2rem'};
       font-weight: 700;
-      padding: 0.6rem 1.5rem;
+      padding: ${compact ? '0.4rem 1rem' : '0.6rem 1.5rem'};
       border: none;
       border-radius: 1.5rem;
       background: rgba(255, 255, 255, 0.15);
@@ -595,20 +610,26 @@ export class TitleScene implements Scene {
       cursor: pointer;
       touch-action: manipulation;
       position: absolute;
-      bottom: 2rem;
-      right: 2rem;
+      bottom: ${compact ? '1rem' : '2rem'};
+      right: ${compact ? '1rem' : '2rem'};
+      transform: scale(1);
+      transition: transform 0.08s ease-out;
     `;
     tutorialBtn.style.position = 'absolute';
-    tutorialBtn.style.bottom = '2rem';
-    tutorialBtn.style.right = '2rem';
-    tutorialBtn.addEventListener('pointerdown', (e) => {
-      e.stopPropagation();
-      this.ensureTitleAudioInitialized(true);
-      this.tutorialOverlay.show(() => {
+    tutorialBtn.style.bottom = compact ? '1rem' : '2rem';
+    tutorialBtn.style.right = compact ? '1rem' : '2rem';
+    this.overlayButtonCleanups.add(attachReleaseConfirmButton(tutorialBtn, {
+      onActivate: () => {
         this.ensureTitleAudioInitialized(true);
-        this.tutorialOverlay.hide();
-      });
-    });
+        this.tutorialOverlay.show(() => {
+          this.ensureTitleAudioInitialized(true);
+          this.tutorialOverlay.hide();
+        });
+      },
+      onPressChange: (pressed) => {
+        tutorialBtn.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+      },
+    }));
 
     // Encyclopedia button
     const encyclopediaBtn = document.createElement('button');
@@ -618,9 +639,9 @@ export class TitleScene implements Scene {
     );
     encyclopediaBtn.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: 1.2rem;
+      font-size: ${compact ? '0.95rem' : '1.2rem'};
       font-weight: 700;
-      padding: 0.6rem 1.5rem;
+      padding: ${compact ? '0.4rem 1rem' : '0.6rem 1.5rem'};
       border: none;
       border-radius: 1.5rem;
       background: rgba(255, 255, 255, 0.15);
@@ -629,18 +650,24 @@ export class TitleScene implements Scene {
       touch-action: manipulation;
       white-space: nowrap;
       position: absolute;
-      bottom: 2rem;
-      left: 2rem;
+      bottom: ${compact ? '1rem' : '2rem'};
+      left: ${compact ? '1rem' : '2rem'};
+      transform: scale(1);
+      transition: transform 0.08s ease-out;
     `;
     encyclopediaBtn.style.position = 'absolute';
-    encyclopediaBtn.style.bottom = '2rem';
-    encyclopediaBtn.style.left = '2rem';
+    encyclopediaBtn.style.bottom = compact ? '1rem' : '2rem';
+    encyclopediaBtn.style.left = compact ? '1rem' : '2rem';
     this.encyclopediaBtn = encyclopediaBtn;
-    encyclopediaBtn.addEventListener('pointerdown', (e) => {
-      e.stopPropagation();
-      this.ensureTitleAudioInitialized(true);
-      void this.openEncyclopedia();
-    });
+    this.overlayButtonCleanups.add(attachReleaseConfirmButton(encyclopediaBtn, {
+      onActivate: () => {
+        this.ensureTitleAudioInitialized(true);
+        void this.openEncyclopedia();
+      },
+      onPressChange: (pressed) => {
+        encyclopediaBtn.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+      },
+    }));
 
     playArea.appendChild(button);
     playArea.appendChild(playButtonHint);
@@ -812,6 +839,11 @@ export class TitleScene implements Scene {
       this.stars = null;
     }
     this.clearCompanionParade();
+    const overlayButtonCleanups = Array.from(this.overlayButtonCleanups);
+    this.overlayButtonCleanups.clear();
+    for (const cleanup of overlayButtonCleanups) {
+      cleanup();
+    }
     if (this.overlay) {
       this.overlay.remove();
       this.overlay = null;

@@ -17,10 +17,10 @@ agents: ["proposer", "coder", "tester", "evaluator"]
 
 | 順序 | エージェント | model | agent_type | 役割 |
 |------|-------------|-------|------------|------|
-| 1 | Proposer | `gpt-5.4` | `general-purpose` | コード分析 → 改善提案 |
+| 1 | Proposer | `claude-sonnet-4` | `general-purpose` | コード分析 → 改善提案 |
 | 2 | Coder | `gpt-5.4` | `general-purpose` | 実装 + テスト + コミット |
 | 3 | Tester | `gpt-5.4` | `general-purpose` | テスト実行 + 結果報告 |
-| 4 | Evaluator | `gpt-5.4` | `general-purpose` | レビュー + 品質ゲート |
+| 4 | Evaluator | `claude-sonnet-4` | `general-purpose` | レビュー + 品質ゲート |
 
 ---
 

@@ -26,6 +26,7 @@ export class LoadFailureOverlay {
 
     this.element = document.createElement('div');
     this.element.setAttribute('data-load-failure-overlay', '');
+    const compact = window.innerHeight <= 500;
     this.element.style.cssText = `
       position: absolute;
       inset: 0;
@@ -35,16 +36,16 @@ export class LoadFailureOverlay {
       background: rgba(0, 0, 32, 0.88);
       pointer-events: auto;
       z-index: 50;
-      padding: 1.5rem;
+      padding: ${compact ? '0.8rem' : '1.5rem'};
     `;
 
     const card = document.createElement('div');
     card.style.cssText = `
       width: min(460px, 100%);
-      border-radius: 1.75rem;
+      border-radius: ${compact ? '1.2rem' : '1.75rem'};
       background: rgba(255, 255, 255, 0.16);
       box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
-      padding: 1.5rem;
+      padding: ${compact ? '0.8rem' : '1.5rem'};
       text-align: center;
     `;
 
@@ -52,22 +53,22 @@ export class LoadFailureOverlay {
     title.textContent = titleText;
     title.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: 1.9rem;
+      font-size: ${compact ? '1.3rem' : '1.9rem'};
       font-weight: 900;
       color: #FFD700;
       text-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
-      margin-bottom: 0.8rem;
+      margin-bottom: ${compact ? '0.4rem' : '0.8rem'};
     `;
 
     const message = document.createElement('div');
     message.textContent = messageText;
     message.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: 1.1rem;
+      font-size: ${compact ? '0.9rem' : '1.1rem'};
       font-weight: 700;
       color: #fff;
       line-height: 1.6;
-      margin-bottom: 1.2rem;
+      margin-bottom: ${compact ? '0.6rem' : '1.2rem'};
     `;
 
     const buttonRow = document.createElement('div');
@@ -89,9 +90,9 @@ export class LoadFailureOverlay {
       button.textContent = action.label;
       button.style.cssText = `
         font-family: 'Zen Maru Gothic', sans-serif;
-        font-size: 1.4rem;
+        font-size: ${compact ? '1.1rem' : '1.4rem'};
         font-weight: 900;
-        min-height: 88px;
+        min-height: ${compact ? '52px' : '88px'};
         width: 100%;
         border: none;
         border-radius: 1.5rem;

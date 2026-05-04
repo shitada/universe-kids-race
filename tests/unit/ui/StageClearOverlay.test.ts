@@ -69,7 +69,7 @@ describe('StageClearOverlay', () => {
     expect(continueButton?.style.visibility).toBe('visible');
 
     retryButton?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-    retryButton?.dispatchEvent(new Event('click', { bubbles: true }));
+    retryButton?.dispatchEvent(new Event('pointerup', { bubbles: true }));
     continueButton?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
 
     expect(onRetry).toHaveBeenCalledTimes(1);
@@ -79,7 +79,7 @@ describe('StageClearOverlay', () => {
     overlay.enableContinue();
     const nextContinueButton = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
     nextContinueButton?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-    nextContinueButton?.dispatchEvent(new Event('click', { bubbles: true }));
+    nextContinueButton?.dispatchEvent(new Event('pointerup', { bubbles: true }));
 
     expect(onContinue).toHaveBeenCalledTimes(1);
   });

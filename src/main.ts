@@ -2,12 +2,16 @@ import { createRetryableModuleLoader } from './game/utils/createRetryableModuleL
 import { LoadFailureOverlay } from './ui/LoadFailureOverlay';
 import { LoadingOverlay } from './ui/LoadingOverlay';
 
+export interface MainBootstrapHandle {
+  dispose(): void;
+}
+
 interface BootstrapGameModule {
   bootstrapGame: (options: {
     canvas: HTMLCanvasElement;
     loadingOverlay?: LoadingOverlay;
     loadFailureOverlay?: LoadFailureOverlay;
-  }) => Promise<void>;
+  }) => Promise<MainBootstrapHandle>;
 }
 
 export interface StartMainBootstrapOptions {
@@ -17,26 +21,61 @@ export interface StartMainBootstrapOptions {
   loadFailureOverlay?: LoadFailureOverlay;
 }
 
-export function startMainBootstrap(options: StartMainBootstrapOptions): Promise<void> {
+const noopBootstrapHandle: MainBootstrapHandle = {
+  dispose(): void {},
+};
+
+let activeBootstrapHandle: MainBootstrapHandle | null = null;
+let activeBootstrapRequestId = 0;
+
+function disposeActiveBootstrapHandle(): void {
+  activeBootstrapHandle?.dispose();
+  activeBootstrapHandle = null;
+}
+
+export function startMainBootstrap(options: StartMainBootstrapOptions): Promise<MainBootstrapHandle> {
   const loadingOverlay = options.loadingOverlay ?? new LoadingOverlay();
   const loadFailureOverlay = options.loadFailureOverlay ?? new LoadFailureOverlay();
   const loadBootstrapModuleWithRetry = createRetryableModuleLoader(
     options.loadBootstrapModule ?? (() => import('./game/bootstrapGame')),
   );
+  const requestId = ++activeBootstrapRequestId;
 
-  const startBoot = (): Promise<void> => {
+  const startBoot = (): Promise<MainBootstrapHandle> => {
+    if (requestId !== activeBootstrapRequestId) {
+      return Promise.resolve(noopBootstrapHandle);
+    }
+
     loadFailureOverlay.hide();
     loadingOverlay.show('ゲームの じゅんび ちゅう...');
 
     return loadBootstrapModuleWithRetry()
-      .then(({ bootstrapGame }) =>
-        bootstrapGame({
+      .then(({ bootstrapGame }) => {
+        if (requestId !== activeBootstrapRequestId) {
+          return noopBootstrapHandle;
+        }
+
+        disposeActiveBootstrapHandle();
+        return bootstrapGame({
           canvas: options.canvas,
           loadingOverlay,
           loadFailureOverlay,
-        }),
-      )
+        });
+      })
+      .then((handle) => {
+        if (requestId !== activeBootstrapRequestId) {
+          handle.dispose();
+          return noopBootstrapHandle;
+        }
+
+        activeBootstrapHandle = handle;
+        return handle;
+      })
       .catch((error: unknown) => {
+        if (requestId !== activeBootstrapRequestId) {
+          return noopBootstrapHandle;
+        }
+
         console.error('Failed to bootstrap game', error);
         loadingOverlay.hide();
         loadFailureOverlay.show({
@@ -44,9 +83,10 @@ export function startMainBootstrap(options: StartMainBootstrapOptions): Promise<
           message: 'ボタンを おして もういちど ためそう！',
           primaryAction: {
             label: 'もういちど',
-            onSelect: startBoot,
+            onSelect: () => startBoot().then(() => undefined),
           },
         });
+        return noopBootstrapHandle;
       });
   };
 

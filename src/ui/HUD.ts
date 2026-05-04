@@ -1,8 +1,10 @@
 import { createMuteButton, type MuteButtonHandle } from './createMuteButton';
 import { HomeConfirmOverlay } from './HomeConfirmOverlay';
+import { attachReleaseConfirmButton } from './attachReleaseConfirmButton';
 import { PauseOverlay } from './PauseOverlay';
 
 export class HUD {
+  private pendingTimeouts = new Set<number>();
   private container: HTMLDivElement | null = null;
   private stageNameEl: HTMLDivElement | null = null;
   private assistMessageEl: HTMLDivElement | null = null;
@@ -28,11 +30,14 @@ export class HUD {
   private onHomeCallback: (() => void) | null = null;
   private onHomeConfirmOpenCallback: (() => void) | null = null;
   private onHomeConfirmCancelCallback: (() => void) | null = null;
+  private onPauseCallback: (() => void) | null = null;
   private onPauseOpenCallback: (() => boolean | void) | null = null;
   private onPauseResumeCallback: (() => void) | null = null;
   private onMuteCallback: (() => void) | null = null;
   private muted = false;
   private boostLocked = false;
+  private pauseEnabled = true;
+  private pauseButtonCleanup: (() => void) | null = null;
   private lastCooldownProgress = 1.0;
   // Differential write caches for updateCooldown.
   // NOTE: If a future code path mutates cooldownBar / boostButton styles
@@ -66,18 +71,19 @@ export class HUD {
     hudRoot.style.zIndex = '10';
 
     // Home button (top-left)
+    const compact = window.innerHeight <= 500;
     this.homeButton = document.createElement('button');
     this.homeButton.textContent = '🏠';
     this.homeButton.setAttribute('aria-label', 'ホームへ もどる');
     this.homeButton.style.position = 'absolute';
     this.homeButton.style.top = '0.8rem';
     this.homeButton.style.left = '1rem';
-    this.homeButton.style.fontSize = 'clamp(1.4rem, 4vmin, 1.8rem)';
+    this.homeButton.style.fontSize = compact ? 'clamp(1.1rem, 3.5vmin, 1.4rem)' : 'clamp(1.4rem, 4vmin, 1.8rem)';
     this.homeButton.style.background = 'rgba(255, 255, 255, 0.15)';
     this.homeButton.style.border = 'none';
     this.homeButton.style.borderRadius = '50%';
-    this.homeButton.style.width = '3rem';
-    this.homeButton.style.height = '3rem';
+    this.homeButton.style.width = compact ? '2.4rem' : '3rem';
+    this.homeButton.style.height = compact ? '2.4rem' : '3rem';
     this.homeButton.style.display = 'flex';
     this.homeButton.style.alignItems = 'center';
     this.homeButton.style.justifyContent = 'center';
@@ -124,14 +130,16 @@ export class HUD {
         text-align: center;
         font-family: 'Zen Maru Gothic', sans-serif;
         color: #FFD700;
-        font-size: 1.5rem;
+        font-size: ${compact ? '1.1rem' : '1.5rem'};
         font-weight: 700;
-        padding: 0.5rem;
+        padding: ${compact ? '0.25rem' : '0.5rem'};
         pointer-events: none;
         text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
       `;
       hudRoot.appendChild(this.stageNameEl);
     }
+
+    this.createPauseButton();
 
     this.assistMessageEl = document.createElement('div');
     this.assistMessageEl.setAttribute('data-hud-assist-message', '');
@@ -162,10 +170,10 @@ export class HUD {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 1rem 2rem;
+      padding: ${compact ? '0.4rem 1rem' : '1rem 2rem'};
       font-family: 'Zen Maru Gothic', sans-serif;
       color: #fff;
-      font-size: 1.4rem;
+      font-size: ${compact ? '1.1rem' : '1.4rem'};
       font-weight: 700;
       pointer-events: none;
     `;
@@ -211,8 +219,6 @@ export class HUD {
     // Boost button on ui-overlay
     this.createBoostButton();
 
-    this.createPauseButton(hudRoot);
-
     // Mute toggle button on HUD root (top-right) — created after stage name
     // and other elements so existing children indices remain stable.
     this.createMuteButton();
@@ -234,7 +240,7 @@ export class HUD {
     wrapper.style.justifyContent = 'center';
     wrapper.style.gap = '0.4rem';
     wrapper.style.margin = '0 auto 0.4rem';
-    wrapper.style.width = 'clamp(160px, 32vmin, 280px)';
+    wrapper.style.width = window.innerHeight <= 500 ? 'clamp(100px, 24vmin, 180px)' : 'clamp(160px, 32vmin, 280px)';
     wrapper.style.pointerEvents = 'none';
     wrapper.style.fontFamily = "'Zen Maru Gothic', sans-serif";
 
@@ -299,56 +305,46 @@ export class HUD {
     this.muteButton = this.muteHandle.element;
   }
 
-  private createPauseButton(hudRoot: HTMLElement): void {
+  private createPauseButton(): void {
+    const hudRoot = document.getElementById('hud');
+    if (!hudRoot) return;
+
+    const compact = window.innerHeight <= 500;
     this.pauseButton = document.createElement('button');
-    this.pauseButton.textContent = '⏸ やすむ';
+    this.pauseButton.textContent = '✋ やすむ';
     this.pauseButton.setAttribute('aria-label', 'やすむ');
     this.pauseButton.style.position = 'absolute';
     this.pauseButton.style.top = '0.8rem';
-    this.pauseButton.style.left = '4.5rem';
-    this.pauseButton.style.minWidth = '6rem';
-    this.pauseButton.style.minHeight = '3rem';
-    this.pauseButton.style.padding = '0 1rem';
+    this.pauseButton.style.left = compact ? '4rem' : '4.7rem';
+    this.pauseButton.style.fontFamily = "'Zen Maru Gothic', sans-serif";
+    this.pauseButton.style.fontSize = compact
+      ? 'clamp(0.9rem, 3.2vmin, 1rem)'
+      : 'clamp(1rem, 3.5vmin, 1.15rem)';
+    this.pauseButton.style.fontWeight = '900';
+    this.pauseButton.style.padding = compact ? '0.45rem 0.9rem' : '0.7rem 1.2rem';
     this.pauseButton.style.border = 'none';
     this.pauseButton.style.borderRadius = '999px';
     this.pauseButton.style.background = 'rgba(255, 255, 255, 0.16)';
     this.pauseButton.style.color = '#fff';
-    this.pauseButton.style.fontFamily = "'Zen Maru Gothic', sans-serif";
-    this.pauseButton.style.fontSize = 'clamp(1rem, 3.2vmin, 1.2rem)';
-    this.pauseButton.style.fontWeight = '900';
     this.pauseButton.style.cursor = 'pointer';
     this.pauseButton.style.pointerEvents = 'auto';
     this.pauseButton.style.touchAction = 'manipulation';
+    this.pauseButton.style.boxShadow = '0 4px 14px rgba(0, 0, 0, 0.2)';
     this.pauseButton.style.transform = 'scale(1)';
-    this.pauseButton.style.transition = 'transform 0.08s ease-out';
-
-    const releasePausePress = (): void => {
-      if (this.pauseButton) {
-        this.pauseButton.style.transform = 'scale(1)';
-      }
-    };
-
-    this.pauseButton.addEventListener('pointerdown', (event) => {
-      event.stopPropagation();
-      if (this.pauseButton) {
-        this.pauseButton.style.transform = 'scale(0.96)';
-      }
-      if (this.pauseOverlay.isVisible() || this.homeConfirmOverlay.isVisible()) {
-        return;
-      }
-      if (!document.getElementById('ui-overlay')) {
-        return;
-      }
-      const shouldOpen = this.onPauseOpenCallback?.() !== false;
-      if (!shouldOpen) {
-        return;
-      }
-      this.pauseOverlay.show(() => this.onPauseResumeCallback?.());
+    this.pauseButton.style.transition = 'transform 0.08s ease-out, opacity 0.12s ease-out';
+    this.pauseButton.style.minHeight = compact ? '2.4rem' : '3rem';
+    this.pauseButton.style.minWidth = compact ? '5.6rem' : '7rem';
+    this.pauseButtonCleanup = attachReleaseConfirmButton(this.pauseButton, {
+      onActivate: () => this.onPauseCallback?.(),
+      canActivate: () => this.pauseEnabled,
+      onPressChange: (pressed) => {
+        if (this.pauseButton) {
+          this.pauseButton.style.transform = pressed ? 'scale(0.95)' : 'scale(1)';
+        }
+      },
     });
-    this.pauseButton.addEventListener('pointerup', releasePausePress);
-    this.pauseButton.addEventListener('pointercancel', releasePausePress);
-    this.pauseButton.addEventListener('pointerleave', releasePausePress);
     hudRoot.appendChild(this.pauseButton);
+    this.applyPauseButtonState();
   }
 
   private createBoostButton(): void {
@@ -362,13 +358,14 @@ export class HUD {
     this.boostButton.textContent = '🚀 ブースト!';
     this.boostButton.setAttribute('aria-label', 'ブースト');
     this.boostButton.setAttribute('aria-disabled', 'false');
+    const boostCompact = window.innerHeight <= 500;
     this.boostButton.style.position = 'absolute';
-    this.boostButton.style.bottom = '2rem';
-    this.boostButton.style.right = '2rem';
+    this.boostButton.style.bottom = boostCompact ? '1rem' : '2rem';
+    this.boostButton.style.right = boostCompact ? '1rem' : '2rem';
     this.boostButton.style.fontFamily = "'Zen Maru Gothic', sans-serif";
-    this.boostButton.style.fontSize = 'clamp(1rem, 3.5vmin, 1.3rem)';
+    this.boostButton.style.fontSize = boostCompact ? 'clamp(0.85rem, 2.8vmin, 1.05rem)' : 'clamp(1rem, 3.5vmin, 1.3rem)';
     this.boostButton.style.fontWeight = '700';
-    this.boostButton.style.padding = '0.8rem 1.5rem';
+    this.boostButton.style.padding = boostCompact ? '0.5rem 1rem' : '0.8rem 1.5rem';
     this.boostButton.style.border = 'none';
     this.boostButton.style.borderRadius = '2rem';
     this.boostButton.style.background = 'linear-gradient(135deg, #FF6B6B, #FFD93D, #6BCB77)';
@@ -381,26 +378,23 @@ export class HUD {
 
     this.boostButton.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
-      if (!this.boostButton) return;
+      const boostButton = this.boostButton;
+      if (!boostButton) return;
       if (this.boostLocked) return;
 
       if (this.lastCooldownProgress < 1.0) {
-        if (this.boostButton.hasAttribute('data-boost-shake')) return;
-        this.boostButton.setAttribute('data-boost-shake', '');
-        setTimeout(() => {
-          if (this.boostButton) {
-            this.boostButton.removeAttribute('data-boost-shake');
-          }
+        if (boostButton.hasAttribute('data-boost-shake')) return;
+        boostButton.setAttribute('data-boost-shake', '');
+        this.registerTimeout(() => {
+          boostButton.removeAttribute('data-boost-shake');
         }, 250);
         this.onBoostDeniedCallback?.();
         return;
       }
 
-      this.boostButton.style.transform = 'scale(0.9)';
-      setTimeout(() => {
-        if (this.boostButton) {
-          this.boostButton.style.transform = 'scale(1.0)';
-        }
+      boostButton.style.transform = 'scale(0.9)';
+      this.registerTimeout(() => {
+        boostButton.style.transform = 'scale(1.0)';
       }, 150);
       this.onBoostCallback?.();
     });
@@ -438,17 +432,17 @@ export class HUD {
     this.cooldownContainer.setAttribute('data-cooldown-container', '');
     this.cooldownContainer.style.cssText = `
       position: absolute;
-      bottom: 1rem;
-      right: 2rem;
-      width: 80px;
+      bottom: ${boostCompact ? '0.4rem' : '1rem'};
+      right: ${boostCompact ? '1rem' : '2rem'};
+      width: ${boostCompact ? '60px' : '80px'};
       height: 6px;
       border-radius: 3px;
       background: rgba(255, 255, 255, 0.2);
       pointer-events: none;
     `;
     this.cooldownContainer.style.position = 'absolute';
-    this.cooldownContainer.style.bottom = '1rem';
-    this.cooldownContainer.style.right = '2rem';
+    this.cooldownContainer.style.bottom = boostCompact ? '0.4rem' : '1rem';
+    this.cooldownContainer.style.right = boostCompact ? '1rem' : '2rem';
 
     this.cooldownBar = document.createElement('div');
     this.cooldownBar.setAttribute('data-cooldown-bar', '');
@@ -556,6 +550,15 @@ export class HUD {
 
   setHomeConfirmCancelCallback(callback: () => void): void {
     this.onHomeConfirmCancelCallback = callback;
+  }
+
+  setPauseCallback(callback: () => void): void {
+    this.onPauseCallback = callback;
+  }
+
+  setPauseEnabled(enabled: boolean): void {
+    this.pauseEnabled = enabled;
+    this.applyPauseButtonState();
   }
 
   setMuteCallback(callback: () => void): void {
@@ -688,7 +691,24 @@ export class HUD {
       cleanup();
     };
     el.addEventListener('animationend', onEnd);
-    setTimeout(cleanup, 500);
+    this.registerTimeout(cleanup, 500);
+  }
+
+  private registerTimeout(callback: () => void, delayMs: number): number {
+    let timeoutId = 0;
+    timeoutId = window.setTimeout(() => {
+      this.pendingTimeouts.delete(timeoutId);
+      callback();
+    }, delayMs);
+    this.pendingTimeouts.add(timeoutId);
+    return timeoutId;
+  }
+
+  private clearPendingTimeouts(): void {
+    for (const timeoutId of this.pendingTimeouts) {
+      window.clearTimeout(timeoutId);
+    }
+    this.pendingTimeouts.clear();
   }
 
   updateCooldown(progress: number): void {
@@ -756,7 +776,7 @@ export class HUD {
       cleanup();
     };
     goal.addEventListener('animationend', onEnd);
-    setTimeout(cleanup, 500);
+    this.registerTimeout(cleanup, 500);
   }
 
   /**
@@ -793,7 +813,7 @@ export class HUD {
     // Fallback for iPad Safari where animationend may not fire (e.g., tab
     // switch interrupts the CSS animation). Slightly longer than the
     // 0.45s keyframe to allow the natural event to win when present.
-    setTimeout(cleanup, 500);
+    this.registerTimeout(cleanup, 500);
   }
 
   private clearBoostReadyFlash(): void {
@@ -820,13 +840,24 @@ export class HUD {
     }
   }
 
+  private applyPauseButtonState(): void {
+    if (!this.pauseButton) return;
+    this.pauseButton.style.opacity = this.pauseEnabled ? '1' : '0.45';
+    this.pauseButton.style.filter = this.pauseEnabled ? 'none' : 'grayscale(0.8)';
+    this.pauseButton.style.cursor = this.pauseEnabled ? 'pointer' : 'default';
+    this.pauseButton.setAttribute('aria-disabled', this.pauseEnabled ? 'false' : 'true');
+  }
+
   hide(): void {
+    this.clearPendingTimeouts();
     this.homeConfirmOverlay.hide();
     this.pauseOverlay.hide();
     if (this.homeButton) {
       this.homeButton.remove();
       this.homeButton = null;
     }
+    this.pauseButtonCleanup?.();
+    this.pauseButtonCleanup = null;
     if (this.pauseButton) {
       this.pauseButton.remove();
       this.pauseButton = null;
@@ -868,6 +899,7 @@ export class HUD {
     }
     this.cooldownBar = null;
     this.boostLocked = false;
+    this.pauseEnabled = true;
     this.lastCooldownProgress = 1.0;
     this.lastCooldownPct = -1;
     this.lastReadyState = null;

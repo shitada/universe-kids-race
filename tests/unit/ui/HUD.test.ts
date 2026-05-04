@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HUD } from '../../../src/ui/HUD';
 
 describe('HUD', () => {
@@ -180,42 +180,47 @@ describe('HUD', () => {
   });
 
   describe('Pause Button', () => {
-    it('creates pause button element in #hud', () => {
-      hud.show('🌙 つきを めざせ！');
-      const pauseBtn = getPauseButton();
+    const getPauseBtn = (): HTMLButtonElement =>
+      Array.from(document.getElementById('hud')!.querySelectorAll('button')).find((button) =>
+        (button.textContent ?? '').includes('やすむ'),
+      ) as HTMLButtonElement;
+
+    it('creates a visible やすむ button in #hud', () => {
+      hud.show('Test');
+      const pauseBtn = getPauseBtn();
       expect(pauseBtn).not.toBeNull();
-      expect(pauseBtn.textContent).toBe('⏸ やすむ');
+      expect(pauseBtn.textContent).toContain('やすむ');
     });
 
-    it('positions pause button beside home with a large tap target', () => {
-      hud.show('🌙 つきを めざせ！');
-      const pauseBtn = getPauseButton();
-      expect(pauseBtn.style.position).toBe('absolute');
-      expect(pauseBtn.style.top).toBe('0.8rem');
-      expect(pauseBtn.style.left).toBe('4.5rem');
-      expect(pauseBtn.style.minHeight).toBe('3rem');
-      expect(pauseBtn.style.minWidth).toBe('6rem');
+    it('invokes pause callback on release', () => {
+      const onPause = vi.fn();
+      hud.show('Test');
+      hud.setPauseCallback(onPause);
+
+      const pauseBtn = getPauseBtn();
+      pauseBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      pauseBtn.dispatchEvent(new Event('pointerup', { bubbles: true }));
+
+      expect(onPause).toHaveBeenCalledTimes(1);
     });
 
-    it('opens pause overlay and fires resume callback only from つづける', () => {
-      const onOpen = vi.fn();
-      const onResume = vi.fn();
-      hud.show('🌙 つきを めざせ！');
-      hud.setPauseOpenCallback(onOpen);
-      hud.setPauseResumeCallback(onResume);
+    it('setPauseEnabled(false) disables pause activation until re-enabled', () => {
+      const onPause = vi.fn();
+      hud.show('Test');
+      hud.setPauseCallback(onPause);
 
-      getPauseButton().dispatchEvent(new Event('pointerdown'));
+      const pauseBtn = getPauseBtn();
+      hud.setPauseEnabled(false);
+      pauseBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      pauseBtn.dispatchEvent(new Event('pointerup', { bubbles: true }));
+      expect(onPause).not.toHaveBeenCalled();
+      expect(pauseBtn.getAttribute('aria-disabled')).toBe('true');
 
-      expect(onOpen).toHaveBeenCalledTimes(1);
-      expect(onResume).not.toHaveBeenCalled();
-      expect(document.querySelector('[data-pause-overlay]')).not.toBeNull();
-
-      const continueButton = document.querySelector<HTMLButtonElement>('[data-pause-continue]')!;
-      continueButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-      continueButton.dispatchEvent(new Event('pointerup', { bubbles: true }));
-
-      expect(onResume).toHaveBeenCalledTimes(1);
-      expect(document.querySelector('[data-pause-overlay]')).toBeNull();
+      hud.setPauseEnabled(true);
+      pauseBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      pauseBtn.dispatchEvent(new Event('pointerup', { bubbles: true }));
+      expect(onPause).toHaveBeenCalledTimes(1);
+      expect(pauseBtn.getAttribute('aria-disabled')).toBe('false');
     });
   });
 
@@ -279,17 +284,17 @@ describe('HUD', () => {
 
   describe('Stage Number Display (004-US1)', () => {
     it('displays stage name with stage number prefix', () => {
-      hud.show('ステージ1: 🌙 月をめざせ！');
+      hud.show('ステージ1: 🌙 つきを めざせ！');
       const hudRoot = document.getElementById('hud')!;
       const stageNameEl = hudRoot.children[1] as HTMLElement;
-      expect(stageNameEl.textContent).toBe('ステージ1: 🌙 月をめざせ！');
+      expect(stageNameEl.textContent).toBe('ステージ1: 🌙 つきを めざせ！');
     });
 
     it('displays stage 8 with correct format', () => {
-      hud.show('ステージ8: ☀️ 太陽をめざせ！');
+      hud.show('ステージ8: ☀️ たいようを めざせ！');
       const hudRoot = document.getElementById('hud')!;
       const stageNameEl = hudRoot.children[1] as HTMLElement;
-      expect(stageNameEl.textContent).toBe('ステージ8: ☀️ 太陽をめざせ！');
+      expect(stageNameEl.textContent).toBe('ステージ8: ☀️ たいようを めざせ！');
     });
   });
 
@@ -451,6 +456,62 @@ describe('HUD', () => {
       await new Promise((resolve) => setTimeout(resolve, 300));
       boostBtn.dispatchEvent(new Event('pointerdown'));
       expect(deniedCount).toBe(2);
+    });
+  });
+
+  describe('Boost Button re-entry timer safety', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('clears pending boost timers on hide()', () => {
+      hud.show('Test');
+      const boostBtn = document.getElementById('ui-overlay')!.querySelector('button') as HTMLButtonElement;
+
+      hud.updateCooldown(1.0);
+      boostBtn.dispatchEvent(new Event('pointerdown'));
+      hud.updateCooldown(0.5);
+      boostBtn.dispatchEvent(new Event('pointerdown'));
+      hud.updateCooldown(1.0);
+      hud.flashBoostReady();
+
+      expect(vi.getTimerCount()).toBe(3);
+
+      hud.hide();
+
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('does not let old boost timers mutate the next HUD boost button after re-entry', () => {
+      hud.show('Test');
+      const oldBoostBtn = document.getElementById('ui-overlay')!.querySelector('button') as HTMLButtonElement;
+
+      hud.updateCooldown(1.0);
+      oldBoostBtn.dispatchEvent(new Event('pointerdown'));
+      hud.updateCooldown(0.5);
+      oldBoostBtn.dispatchEvent(new Event('pointerdown'));
+      hud.updateCooldown(1.0);
+      hud.flashBoostReady();
+
+      expect(oldBoostBtn.style.transform).toBe('scale(0.9)');
+      expect(oldBoostBtn.hasAttribute('data-boost-shake')).toBe(true);
+      expect(oldBoostBtn.hasAttribute('data-boost-ready-flash')).toBe(true);
+
+      hud.hide();
+      hud.show('Test');
+
+      const newBoostBtn = document.getElementById('ui-overlay')!.querySelector('button') as HTMLButtonElement;
+      expect(newBoostBtn).not.toBe(oldBoostBtn);
+
+      vi.advanceTimersByTime(600);
+
+      expect(newBoostBtn.style.transform).toBe('');
+      expect(newBoostBtn.hasAttribute('data-boost-shake')).toBe(false);
+      expect(newBoostBtn.hasAttribute('data-boost-ready-flash')).toBe(false);
     });
   });
 

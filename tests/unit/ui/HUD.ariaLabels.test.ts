@@ -42,8 +42,8 @@ describe('HUD aria-labels (VoiceOver support)', () => {
   function getPauseButton(): HTMLButtonElement | null {
     const hudRoot = document.getElementById('hud');
     if (!hudRoot) return null;
-    return Array.from(hudRoot.querySelectorAll('button')).find(
-      (btn) => btn.getAttribute('aria-label') === 'やすむ'
+    return Array.from(hudRoot.querySelectorAll('button')).find((btn) =>
+      (btn.textContent ?? '').includes('やすむ')
     ) as HTMLButtonElement | null;
   }
 
@@ -78,6 +78,21 @@ describe('HUD aria-labels (VoiceOver support)', () => {
     const btn = getPauseButton();
     expect(btn).not.toBeNull();
     expect(btn!.getAttribute('aria-label')).toBe('やすむ');
+  });
+
+  it('pause button visible text contains "やすむ"', () => {
+    hud.show('🌙');
+    const btn = getPauseButton()!;
+    expect(btn.textContent).toContain('やすむ');
+  });
+
+  it('setPauseEnabled(false) sets aria-disabled="true" on pause button', () => {
+    hud.show('🌙');
+    const btn = getPauseButton()!;
+    hud.setPauseEnabled(false);
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    hud.setPauseEnabled(true);
+    expect(btn.getAttribute('aria-disabled')).toBe('false');
   });
 
   it('boost button initial aria-disabled is "false"', () => {

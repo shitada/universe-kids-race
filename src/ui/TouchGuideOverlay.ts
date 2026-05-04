@@ -1,4 +1,11 @@
-export type TouchGuideMode = 'intro' | 'idle' | 'hidden' | 'assist-left' | 'assist-right';
+export type TouchGuideMode =
+  | 'intro'
+  | 'idle'
+  | 'hidden'
+  | 'active-left'
+  | 'active-right'
+  | 'assist-left'
+  | 'assist-right';
 
 export class TouchGuideOverlay {
   private overlayEl: HTMLDivElement | null = null;
@@ -109,6 +116,23 @@ export class TouchGuideOverlay {
         }
       }
 
+      [data-touch-guide-overlay][data-touch-guide-state^="active-"] [data-touch-guide] {
+        animation: none;
+      }
+
+      [data-touch-guide-overlay][data-touch-guide-state^="active-"] [data-touch-guide][data-touch-guide-emphasis="primary"] {
+        opacity: 1;
+        background: rgba(38, 94, 182, 0.78);
+        border-color: rgba(255, 255, 255, 0.78);
+        transform: translateY(-50%) scale(1.05);
+        box-shadow: 0 0 24px rgba(109, 214, 255, 0.38);
+      }
+
+      [data-touch-guide-overlay][data-touch-guide-state^="active-"] [data-touch-guide][data-touch-guide-emphasis="secondary"] {
+        opacity: 0.18;
+        transform: translateY(-50%) scale(0.96);
+      }
+
       [data-touch-guide-overlay][data-touch-guide-state="intro"] [data-touch-guide] {
         opacity: 0.82;
         animation: touchGuideBlink 1.8s ease-in-out infinite;
@@ -148,6 +172,8 @@ export class TouchGuideOverlay {
   }
 
   private getActiveSide(mode: TouchGuideMode): 'left' | 'right' | 'both' | 'none' {
+    if (mode === 'active-left') return 'left';
+    if (mode === 'active-right') return 'right';
     if (mode === 'assist-left') return 'left';
     if (mode === 'assist-right') return 'right';
     if (mode === 'hidden') return 'none';
@@ -155,6 +181,8 @@ export class TouchGuideOverlay {
   }
 
   private getGuideEmphasis(side: 'left' | 'right', mode: TouchGuideMode): 'primary' | 'secondary' | 'balanced' | 'hidden' {
+    if (mode === 'active-left') return side === 'left' ? 'primary' : 'secondary';
+    if (mode === 'active-right') return side === 'right' ? 'primary' : 'secondary';
     if (mode === 'assist-left') return side === 'left' ? 'primary' : 'secondary';
     if (mode === 'assist-right') return side === 'right' ? 'primary' : 'secondary';
     if (mode === 'hidden') return 'hidden';

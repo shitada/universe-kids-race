@@ -5,23 +5,70 @@ export class InputSystem {
   private canvas: HTMLCanvasElement | null = null;
   private activePointers = new Map<number, 'left' | 'right'>();
   private pendingPointers = new Set<number>();
-  // Cached canvas client width to avoid forced reflow on every pointer event
+  private pressedKeys = new Set<string>();
+  // Cached canvas bounds to avoid forced reflow on every pointer event
   // (Constitution III/IV: iPad Safari touch latency / 60fps). Updated via
   // notifyResize() from the main resize pipeline.
+  private canvasLeft = 0;
   private canvasWidth = 0;
   // pointermove listener options. Marked passive because the handler never
   // calls preventDefault(); this lets iPad Safari run pointermove on the
   // compositor fast path. DO NOT call preventDefault() inside onPointerMove.
   private static readonly POINTERMOVE_OPTIONS: AddEventListenerOptions = { passive: true };
+  private static readonly BOOST_KEYS = new Set([' ', 'Spacebar']);
+
+  private isBoostKey(e: KeyboardEvent): boolean {
+    return e.code === 'Space' || InputSystem.BOOST_KEYS.has(e.key);
+  }
+
+  private onKeyDown = (e: KeyboardEvent): void => {
+    if (e.repeat) return;
+    if (this.isBoostKey(e)) {
+      e.preventDefault();
+      this.state.boostPressed = true;
+      return;
+    }
+    switch (e.key) {
+      case 'ArrowLeft':
+      case 'ArrowRight':
+        e.preventDefault();
+        this.pressedKeys.add(e.key);
+        this.updateDirection();
+        break;
+    }
+  };
+
+  private onKeyUp = (e: KeyboardEvent): void => {
+    if (this.isBoostKey(e)) {
+      this.state.boostPressed = false;
+      return;
+    }
+    switch (e.key) {
+      case 'ArrowLeft':
+      case 'ArrowRight':
+        this.pressedKeys.delete(e.key);
+        this.updateDirection();
+        break;
+    }
+  };
+
+  private updateCanvasMetricsFromDom(): void {
+    if (!this.canvas) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const width = rect.width > 0 ? rect.width : this.canvas.clientWidth;
+    if (width > 0) {
+      this.canvasLeft = rect.left;
+      this.canvasWidth = width;
+    }
+  }
 
   private getCanvasWidth(): number {
     if (this.canvasWidth > 0) return this.canvasWidth;
     // Defensive fallback: if notifyResize was never called or width is stale,
     // re-read from the DOM (this triggers a reflow but only on the cold path).
     if (this.canvas) {
-      const w = this.canvas.clientWidth;
-      if (w > 0) this.canvasWidth = w;
-      return w;
+      this.updateCanvasMetricsFromDom();
+      return this.canvasWidth;
     }
     return 0;
   }
@@ -30,10 +77,11 @@ export class InputSystem {
     if (!this.canvas) return null;
     const width = this.getCanvasWidth();
     if (width <= 0) return null;
+    const localX = clientX - this.canvasLeft;
     const half = width / 2;
     const deadZone = width * 0.02;
-    if (Math.abs(clientX - half) <= deadZone) return null;
-    return clientX < half ? 'left' : 'right';
+    if (Math.abs(localX - half) <= deadZone) return null;
+    return localX < half ? 'left' : 'right';
   }
 
   private onPointerDown = (e: PointerEvent): void => {
@@ -72,33 +120,42 @@ export class InputSystem {
     this.updateDirection();
   };
 
+  private releasePointer(pointerId: number): void {
+    this.pendingPointers.delete(pointerId);
+    this.activePointers.delete(pointerId);
+    this.updateDirection();
+  }
+
   private onPointerUp = (e: PointerEvent): void => {
     e.preventDefault();
-    this.pendingPointers.delete(e.pointerId);
-    this.activePointers.delete(e.pointerId);
-    this.updateDirection();
+    this.releasePointer(e.pointerId);
   };
 
   private onPointerCancel = (e: PointerEvent): void => {
-    this.pendingPointers.delete(e.pointerId);
-    this.activePointers.delete(e.pointerId);
-    this.updateDirection();
+    this.releasePointer(e.pointerId);
+  };
+
+  private onGlobalPointerUp = (e: PointerEvent): void => {
+    this.releasePointer(e.pointerId);
+  };
+
+  private onGlobalPointerCancel = (e: PointerEvent): void => {
+    this.releasePointer(e.pointerId);
   };
 
   // Fallback for older WebKit versions where setPointerCapture may be lost
   // unexpectedly. If capture is lost while the pointer is still tracked,
   // clean it up so the direction doesn't stay stuck.
   private onLostPointerCapture = (e: PointerEvent): void => {
-    this.pendingPointers.delete(e.pointerId);
-    if (this.activePointers.has(e.pointerId)) {
-      this.activePointers.delete(e.pointerId);
-      this.updateDirection();
+    if (this.pendingPointers.has(e.pointerId) || this.activePointers.has(e.pointerId)) {
+      this.releasePointer(e.pointerId);
     }
   };
 
   private resetInputs(): void {
     this.activePointers.clear();
     this.pendingPointers.clear();
+    this.pressedKeys.clear();
     this.state.boostPressed = false;
     this.updateDirection();
   }
@@ -120,6 +177,8 @@ export class InputSystem {
       if (side === 'left') left = true;
       if (side === 'right') right = true;
     }
+    if (this.pressedKeys.has('ArrowLeft')) left = true;
+    if (this.pressedKeys.has('ArrowRight')) right = true;
     if (left && right) {
       this.state.moveDirection = 0;
     } else if (left) {
@@ -133,7 +192,7 @@ export class InputSystem {
 
   setup(canvas: HTMLCanvasElement): void {
     this.canvas = canvas;
-    this.canvasWidth = canvas.clientWidth;
+    this.updateCanvasMetricsFromDom();
     canvas.addEventListener('pointerdown', this.onPointerDown);
     // pointermove is registered passive — see POINTERMOVE_OPTIONS comment.
     canvas.addEventListener('pointermove', this.onPointerMove, InputSystem.POINTERMOVE_OPTIONS);
@@ -141,6 +200,12 @@ export class InputSystem {
     canvas.addEventListener('pointercancel', this.onPointerCancel);
     canvas.addEventListener('pointerleave', this.onPointerUp);
     canvas.addEventListener('lostpointercapture', this.onLostPointerCapture);
+    window.addEventListener('pointerup', this.onGlobalPointerUp);
+    window.addEventListener('pointercancel', this.onGlobalPointerCancel);
+    document.addEventListener('pointerup', this.onGlobalPointerUp);
+    document.addEventListener('pointercancel', this.onGlobalPointerCancel);
+    window.addEventListener('keydown', this.onKeyDown);
+    window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onLoseFocus);
     window.addEventListener('pagehide', this.onLoseFocus);
     document.addEventListener('visibilitychange', this.onVisibilityChange);
@@ -155,12 +220,13 @@ export class InputSystem {
   }
 
   /**
-   * Notify the InputSystem of a canvas width change. Called from the main
-   * resize pipeline so sideOf() can avoid reading canvas.clientWidth on every
-   * pointer event (which forces layout on iPad Safari).
+   * Notify the InputSystem of a canvas bounds change. Called from the main
+   * resize pipeline so sideOf() can avoid reading layout on every pointer
+   * event (which forces layout on iPad Safari).
    */
-  notifyResize(width: number): void {
+  notifyResize(left: number, width: number): void {
     if (width > 0) {
+      this.canvasLeft = left;
       this.canvasWidth = width;
     }
   }
@@ -185,8 +251,15 @@ export class InputSystem {
       this.canvas.removeEventListener('pointerleave', this.onPointerUp);
       this.canvas.removeEventListener('lostpointercapture', this.onLostPointerCapture);
       this.canvas = null;
+      this.canvasLeft = 0;
       this.canvasWidth = 0;
     }
+    window.removeEventListener('pointerup', this.onGlobalPointerUp);
+    window.removeEventListener('pointercancel', this.onGlobalPointerCancel);
+    document.removeEventListener('pointerup', this.onGlobalPointerUp);
+    document.removeEventListener('pointercancel', this.onGlobalPointerCancel);
+    window.removeEventListener('keydown', this.onKeyDown);
+    window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('blur', this.onLoseFocus);
     window.removeEventListener('pagehide', this.onLoseFocus);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);

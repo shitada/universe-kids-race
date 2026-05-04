@@ -12,6 +12,11 @@ import type { AudioManager } from '../../src/game/audio/AudioManager';
 import type { InputSystem } from '../../src/game/systems/InputSystem';
 import * as THREE from 'three';
 
+interface StageSceneInternals {
+  onStageClear(): void;
+  update(deltaTime: number): void;
+}
+
 function createTrackingScene(
   log: { type: SceneType; context: SceneContext }[],
   sceneType: SceneType,
@@ -39,6 +44,8 @@ function createMockSaveManager(): SaveManager {
     })),
     save: vi.fn(),
     clear: vi.fn(),
+    markStageCleared: vi.fn(() => false),
+    updateBestStageStars: vi.fn(),
     markTutorialShown: vi.fn(),
   } as unknown as SaveManager;
 }
@@ -67,11 +74,50 @@ function flushPromises(): Promise<void> {
   });
 }
 
+function createPointerEvent(type: string, init: PointerEventInit = {}): PointerEvent {
+  return new PointerEvent(type, { bubbles: true, ...init });
+}
+
+function dispatchReleaseConfirm(button: HTMLElement, init: PointerEventInit = {}): void {
+  button.dispatchEvent(createPointerEvent('pointerdown', init));
+  button.dispatchEvent(createPointerEvent('pointerup', init));
+}
+
+function dispatchCancelledReleaseConfirm(
+  element: HTMLElement,
+  moveInit: PointerEventInit,
+  startInit: PointerEventInit = {},
+): void {
+  element.dispatchEvent(createPointerEvent('pointerdown', startInit));
+  document.dispatchEvent(createPointerEvent('pointermove', { ...startInit, ...moveInit }));
+  element.dispatchEvent(createPointerEvent('pointerup', { ...startInit, ...moveInit }));
+}
+
+function mockCanvasContext(): void {
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => {
+    return {
+      fillStyle: '',
+      strokeStyle: '',
+      lineWidth: 0,
+      fillRect: () => {},
+      clearRect: () => {},
+      beginPath: () => {},
+      arc: () => {},
+      fill: () => {},
+      stroke: () => {},
+      lineTo: () => {},
+      ellipse: () => {},
+    } as unknown as CanvasRenderingContext2D;
+  });
+}
+
 describe('Encyclopedia Stage Selection Integration', () => {
   let uiOverlay: HTMLDivElement;
   let hud: HTMLDivElement;
 
   beforeEach(() => {
+    vi.restoreAllMocks();
+    mockCanvasContext();
     uiOverlay = document.createElement('div');
     uiOverlay.id = 'ui-overlay';
     document.body.appendChild(uiOverlay);
@@ -114,7 +160,7 @@ describe('Encyclopedia Stage Selection Integration', () => {
     const encyclopediaBtn = Array.from(uiOverlay.querySelectorAll('button')).find(
       (button) => button.textContent?.includes('ずかん'),
     ) as HTMLButtonElement;
-    encyclopediaBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(encyclopediaBtn);
 
     expect(loadEncyclopediaOverlay).toHaveBeenCalledTimes(1);
     expect(document.querySelector('[data-loading-overlay]')).not.toBeNull();
@@ -129,28 +175,91 @@ describe('Encyclopedia Stage Selection Integration', () => {
     const card = uiOverlay.querySelector('[data-card][data-stage="2"]') as HTMLElement;
     expect(card).not.toBeNull();
 
-    card.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    card.dispatchEvent(createPointerEvent('pointerdown', { clientX: 16, clientY: 16 }));
+    await flushPromises();
+
+    expect(uiOverlay.querySelector('[data-detail]')).toBeNull();
+    expect(manager.getCurrentType()).toBe('title');
+
+    card.dispatchEvent(createPointerEvent('pointerup', { clientX: 16, clientY: 16 }));
     await flushPromises();
 
     expect(uiOverlay.querySelector('[data-detail]')).not.toBeNull();
-    expect(manager.getCurrentType()).toBe('title');
 
     const playButton = uiOverlay.querySelector('[data-detail-play]') as HTMLElement;
     expect(playButton).not.toBeNull();
-    playButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    playButton.dispatchEvent(createPointerEvent('pointerdown', { clientX: 24, clientY: 24 }));
     await flushPromises();
 
-     expect(manager.getCurrentType()).toBe('stage');
-     expect(log).toContainEqual({
-       type: 'stage',
+    expect(manager.getCurrentType()).toBe('title');
+
+    playButton.dispatchEvent(createPointerEvent('pointerup', { clientX: 24, clientY: 24 }));
+    await flushPromises();
+
+      expect(manager.getCurrentType()).toBe('stage');
+      expect(log).toContainEqual({
+        type: 'stage',
        context: {
          stageNumber: 2,
          totalScore: 0,
          totalStarCount: 0,
          launchSource: 'encyclopedia',
        },
-     });
-   });
+      });
+    });
+
+  it('cancels encyclopedia detail open and stage launch after scroll-like movement', async () => {
+    const log: { type: SceneType; context: SceneContext }[] = [];
+    const manager = new SceneManager();
+    const loadingOverlay = new LoadingOverlay();
+    const titleScene = new TitleScene(
+      manager,
+      createMockSaveManager(),
+      createMockAudioManager(),
+      {
+        loadingOverlay,
+        loadEncyclopediaOverlay: vi.fn(async () => ({ EncyclopediaOverlay })),
+      },
+    );
+
+    manager.registerScene('title', titleScene);
+    manager.registerScene('stage', createTrackingScene(log, 'stage'));
+
+    await manager.transitionTo('title');
+
+    const encyclopediaBtn = Array.from(uiOverlay.querySelectorAll('button')).find(
+      (button) => button.textContent?.includes('ずかん'),
+    ) as HTMLButtonElement;
+    dispatchReleaseConfirm(encyclopediaBtn);
+    await flushPromises();
+    await flushPromises();
+
+    const card = uiOverlay.querySelector('[data-card][data-stage="2"]') as HTMLElement;
+    dispatchCancelledReleaseConfirm(
+      card,
+      { clientX: 30, clientY: 10 },
+      { clientX: 10, clientY: 10 },
+    );
+    await flushPromises();
+
+    expect(uiOverlay.querySelector('[data-detail]')).toBeNull();
+    expect(manager.getCurrentType()).toBe('title');
+
+    dispatchReleaseConfirm(card, { clientX: 10, clientY: 10 });
+    await flushPromises();
+
+    const playButton = uiOverlay.querySelector('[data-detail-play]') as HTMLElement;
+    dispatchCancelledReleaseConfirm(
+      playButton,
+      { clientX: 40, clientY: 12 },
+      { clientX: 12, clientY: 12 },
+    );
+    await flushPromises();
+
+    expect(manager.getCurrentType()).toBe('title');
+    expect(log).toEqual([]);
+    expect(uiOverlay.querySelector('[data-detail]')).not.toBeNull();
+  });
 
   it('reuses the loaded encyclopedia module on the second open', async () => {
     const manager = new SceneManager();
@@ -176,13 +285,13 @@ describe('Encyclopedia Stage Selection Integration', () => {
         (button) => button.textContent?.includes('ずかん'),
       ) as HTMLButtonElement;
 
-    encyclopediaBtn().dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(encyclopediaBtn());
     await flushPromises();
     await flushPromises();
     const backButton = uiOverlay.querySelector('[data-gallery-back]') as HTMLElement;
-    backButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(backButton);
 
-    encyclopediaBtn().dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(encyclopediaBtn());
     await flushPromises();
     await flushPromises();
 
@@ -220,7 +329,7 @@ describe('Encyclopedia Stage Selection Integration', () => {
     const encyclopediaBtn = Array.from(uiOverlay.querySelectorAll('button')).find(
       (button) => button.textContent?.includes('ずかん'),
     ) as HTMLButtonElement;
-    encyclopediaBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(encyclopediaBtn);
     await flushPromises();
 
     expect(loadEncyclopediaOverlay).toHaveBeenCalledTimes(1);
@@ -261,7 +370,7 @@ describe('Encyclopedia Stage Selection Integration', () => {
     const encyclopediaBtn = Array.from(uiOverlay.querySelectorAll('button')).find(
       (button) => button.textContent?.includes('ずかん'),
     ) as HTMLButtonElement;
-    encyclopediaBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(encyclopediaBtn);
     await flushPromises();
     await flushPromises();
 
@@ -314,7 +423,7 @@ describe('Encyclopedia Stage Selection Integration', () => {
         (button) => button.textContent?.includes('ずかん'),
       ) as HTMLButtonElement;
 
-    findEncyclopediaButton().dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(findEncyclopediaButton());
     expect(document.querySelector('[data-loading-overlay]')).not.toBeNull();
 
     await manager.requestTransition('stage', {
@@ -335,7 +444,7 @@ describe('Encyclopedia Stage Selection Integration', () => {
 
     await manager.requestTransition('title');
 
-    findEncyclopediaButton().dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(findEncyclopediaButton());
     await flushPromises();
 
     expect(loadEncyclopediaOverlay).toHaveBeenCalledTimes(1);
@@ -374,7 +483,7 @@ describe('Encyclopedia Stage Selection Integration', () => {
     const encyclopediaBtn = Array.from(uiOverlay.querySelectorAll('button')).find(
       (button) => button.textContent?.includes('ずかん'),
     ) as HTMLButtonElement;
-    encyclopediaBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(encyclopediaBtn);
     expect(document.querySelector('[data-loading-overlay]')).not.toBeNull();
 
     await manager.requestTransition('stage', {
@@ -426,7 +535,7 @@ describe('Encyclopedia Stage Selection Integration', () => {
     const playButton = Array.from(uiOverlay.querySelectorAll('button')).find(
       (button) => button.textContent === 'あそぶ',
     ) as HTMLButtonElement;
-    playButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(playButton);
     await flushPromises();
 
     stageInternal.countdownOverlay?.dispose();
@@ -441,7 +550,7 @@ describe('Encyclopedia Stage Selection Integration', () => {
     const replayButton = Array.from(uiOverlay.querySelectorAll('button')).find(
       (button) => button.textContent === 'あそぶ',
     ) as HTMLButtonElement;
-    replayButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(replayButton);
     await flushPromises();
 
     stageInternal.countdownOverlay?.dispose();
@@ -450,5 +559,85 @@ describe('Encyclopedia Stage Selection Integration', () => {
 
     expect(stageInternal.scoreSystem.getTotalScore()).toBe(0);
     expect(stageInternal.scoreSystem.getTotalStarCount()).toBe(0);
+  });
+
+  it('ずかん起動ステージのクリア画面はタイトルへ表示で次プレビューを出さない', async () => {
+    const manager = new SceneManager();
+    const requestTransitionSpy = vi.spyOn(manager, 'requestTransition');
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager();
+    const inputSystem = {
+      setBoostPressed: vi.fn(),
+      getState: vi.fn(() => ({ moveDirection: 0, boostPressed: false })),
+    } as unknown as InputSystem;
+    const titleScene = new TitleScene(manager, saveManager, audioManager, {
+      loadEncyclopediaOverlay: async () => ({ EncyclopediaOverlay }),
+    });
+    const stageScene = new StageScene(manager, inputSystem, audioManager, saveManager);
+    const stageInternal = stageScene as unknown as StageSceneInternals & {
+      countdownOverlay: { dispose(): void } | null;
+      isStarting: boolean;
+    };
+
+    manager.registerScene('title', titleScene);
+    manager.registerScene('stage', stageScene);
+
+    await manager.transitionTo('title');
+
+    const encyclopediaBtn = Array.from(uiOverlay.querySelectorAll('button')).find(
+      (button) => button.textContent?.includes('ずかん'),
+    ) as HTMLButtonElement;
+    dispatchReleaseConfirm(encyclopediaBtn);
+    await flushPromises();
+    await flushPromises();
+
+    const card = uiOverlay.querySelector('[data-card][data-stage="2"]') as HTMLElement;
+    dispatchReleaseConfirm(card);
+    await flushPromises();
+
+    const playButton = uiOverlay.querySelector('[data-detail-play]') as HTMLElement;
+    dispatchReleaseConfirm(playButton);
+    await flushPromises();
+
+    stageInternal.countdownOverlay?.dispose();
+    stageInternal.countdownOverlay = null;
+    stageInternal.isStarting = false;
+    stageInternal.onStageClear();
+    stageInternal.update(1);
+
+    const continueButton = document.querySelector('[data-stage-clear-continue]') as HTMLButtonElement | null;
+    expect(continueButton?.textContent).toBe('タイトルへ');
+    expect(document.querySelector('[data-stage-clear-next-preview]')).toBeNull();
+    expect(document.querySelector('[data-stage-clear-retry]')?.textContent).toBe('もういちど');
+    expect(document.querySelector('[data-stage-clear-overlay]')?.textContent).toContain('⭐');
+
+    const retryButton = document.querySelector('[data-stage-clear-retry]') as HTMLButtonElement | null;
+    expect(retryButton).not.toBeNull();
+    dispatchReleaseConfirm(retryButton!);
+    await flushPromises();
+
+    expect(manager.getCurrentType()).toBe('stage');
+    expect(requestTransitionSpy).toHaveBeenNthCalledWith(2, 'stage', {
+      stageNumber: 2,
+      totalScore: 0,
+      totalStarCount: 0,
+      launchSource: 'encyclopedia',
+      replayToken: expect.any(Number),
+    });
+
+    stageInternal.countdownOverlay?.dispose();
+    stageInternal.countdownOverlay = null;
+    stageInternal.isStarting = false;
+    stageInternal.onStageClear();
+    stageInternal.update(1);
+
+    const retryClearContinueButton = document.querySelector('[data-stage-clear-continue]') as HTMLButtonElement | null;
+    expect(retryClearContinueButton?.textContent).toBe('タイトルへ');
+    expect(document.querySelector('[data-stage-clear-next-preview]')).toBeNull();
+
+    dispatchReleaseConfirm(retryClearContinueButton!);
+    await flushPromises();
+
+    expect(manager.getCurrentType()).toBe('title');
   });
 });

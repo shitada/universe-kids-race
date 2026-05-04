@@ -9,9 +9,10 @@ import { AdaptivePixelRatioController } from './utils/AdaptivePixelRatioControll
 import { createResizeCoalescer } from './utils/ResizeCoalescer';
 import { createSceneTransitionHandler } from './utils/createSceneTransitionHandler';
 import { createWebGLContextLossHandler } from './utils/createWebGLContextLossHandler';
+import { createWebGLContextRestoredHandler } from './utils/createWebGLContextRestoredHandler';
 import { createVisibilityPauseHandler } from './utils/createVisibilityPauseHandler';
 import { createRenderer } from './utils/createRenderer';
-import { getViewportSize, subscribeViewportResize } from './utils/getViewportSize';
+import { getViewportSize, subscribeViewportResize, updateViewportSizeCache } from './utils/getViewportSize';
 import { resolveInitialPixelTier } from './utils/resolveInitialPixelTier';
 import { ContextLossOverlay } from '../ui/ContextLossOverlay';
 import { ResumeOverlay } from '../ui/ResumeOverlay';
@@ -28,7 +29,11 @@ export interface BootstrapGameOptions {
   loadFailureOverlay?: LoadFailureOverlay;
 }
 
-export async function bootstrapGame(options: BootstrapGameOptions): Promise<void> {
+export interface BootstrapGameHandle {
+  dispose(): void;
+}
+
+export async function bootstrapGame(options: BootstrapGameOptions): Promise<BootstrapGameHandle> {
   const { canvas } = options;
   const renderer = createRenderer(canvas);
   const maxPixelRatio = Math.min(window.devicePixelRatio, 2);
@@ -41,18 +46,36 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
   const gameLoop = new GameLoop();
   const loadingOverlay = options.loadingOverlay ?? new LoadingOverlay();
   const loadFailureOverlay = options.loadFailureOverlay ?? new LoadFailureOverlay();
+  let disposed = false;
 
   let lastAppliedWidth = 0;
   let lastAppliedHeight = 0;
   let stageScene: StageScene | null = null;
   let hasScheduledStagePrefetch = false;
 
+  function isStageManuallyPaused(): boolean {
+    return (stageScene as (StageScene & { isManuallyPaused?: () => boolean }) | null)?.isManuallyPaused?.() === true;
+  }
+
+  function getCanvasClientMetrics(): { left: number; width: number } {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      left: rect.left,
+      width: rect.width > 0 ? rect.width : canvas.clientWidth,
+    };
+  }
+
   function applyRendererSize(width: number, height: number): void {
+    if (disposed) {
+      return;
+    }
+
     if (width !== lastAppliedWidth || height !== lastAppliedHeight) {
       renderer.setSize(width, height);
       lastAppliedWidth = width;
       lastAppliedHeight = height;
-      inputSystem.notifyResize(canvas.clientWidth);
+      const metrics = getCanvasClientMetrics();
+      inputSystem.notifyResize(metrics.left, metrics.width);
     }
 
     const camera = sceneManager.getCurrentCamera();
@@ -66,11 +89,15 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
   }
 
   function applyPixelRatioTier(tier: number): void {
+    if (disposed) {
+      return;
+    }
+
     const clamped = Math.max(0, Math.min(maxTier, tier));
     renderer.setPixelRatio(pixelRatioTiers[clamped]);
     lastAppliedWidth = 0;
     lastAppliedHeight = 0;
-    const { width, height } = getViewportSize();
+    const { width, height } = updateViewportSizeCache();
     applyRendererSize(width, height);
   }
 
@@ -86,15 +113,18 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
   applyPixelRatioTier(initialPixelTier);
 
   const currentVisualTier = { value: initialPixelTier };
+  function syncVisualQualityTier(tier: number): void {
+    currentVisualTier.value = tier;
+    stageScene?.setVisualQualityTier(tier);
+  }
   const pixelRatioController = new AdaptivePixelRatioController(
     maxTier,
     (newTier: number) => {
       applyPixelRatioTier(newTier);
-      stageScene?.setVisualQualityTier(newTier);
       if (newTier < currentVisualTier.value) {
         saveManager.saveLastStablePixelTier(newTier);
       }
-      currentVisualTier.value = newTier;
+      syncVisualQualityTier(newTier);
     },
     {},
     initialPixelTier,
@@ -161,6 +191,32 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
   sceneManager.registerSceneFactory('stage', async () => {
     const { StageScene } = await loadStageSceneModule();
     stageScene = new StageScene(sceneManager, inputSystem, audioManager, saveManager);
+    (stageScene as StageScene & {
+      setPauseHandlers?: (handlers: {
+        onPauseRequested?: () => void;
+        onResumeRequested?: () => void;
+        onExitHomeRequested?: () => void;
+      }) => void;
+    }).setPauseHandlers?.({
+      onPauseRequested: () => {
+        pendingBackgroundResume = false;
+        resumeOverlay.hide();
+        gameLoop.pause();
+        audioManager.suspend();
+      },
+      onResumeRequested: () => {
+        pendingBackgroundResume = false;
+        resumeOverlay.hide();
+        resumeGame();
+        stageScene?.requestResumeCountdown();
+      },
+      onExitHomeRequested: () => {
+        pendingBackgroundResume = false;
+        resumeOverlay.hide();
+        resumeGame();
+        void sceneManager.requestTransition('title');
+      },
+    });
     stageScene.setVisualQualityTier(currentVisualTier.value);
     return stageScene;
   });
@@ -234,16 +290,16 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
     const { width, height } = getViewportSize();
     resizeCoalescer.schedule(width, height);
   }
-  subscribeViewportResize(window, scheduleResize);
+  const unsubscribeViewportResize = subscribeViewportResize(window, scheduleResize);
 
   function resumeGame(): void {
     gameLoop.resume();
     audioManager.ensureResumed();
   }
 
-  function refreshViewportAfterRestore(): void {
+  function restoreViewportAfterPause(): void {
     pixelRatioController.notifyResume(performance.now());
-    const { width, height } = getViewportSize();
+    const { width, height } = updateViewportSizeCache();
     resizeCoalescer.schedule(width, height);
     resizeCoalescer.flush();
   }
@@ -291,17 +347,21 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
     }
   }
 
-  function handleVisibilityRestore(): void {
-    refreshViewportAfterRestore();
+  function handleResumeAfterRestore(): void {
     if (isPortraitLocked) {
       return;
     }
     applyStageRestoreMode(true);
   }
 
-  createVisibilityPauseHandler({
+  function handleVisibilityRestore(): void {
+    restoreViewportAfterPause();
+    handleResumeAfterRestore();
+  }
+
+  const unsubscribeVisibilityPause = createVisibilityPauseHandler({
     onHide: () => {
-      pendingBackgroundResume = true;
+      pendingBackgroundResume = !isStageManuallyPaused();
       gameLoop.pause();
       audioManager.suspend();
     },
@@ -321,14 +381,14 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
       if (!isPortraitLocked) return;
       isPortraitLocked = false;
       orientationHintOverlay.hide();
-      refreshViewportAfterRestore();
+      restoreViewportAfterPause();
       applyStageRestoreMode(pendingBackgroundResume);
     },
   });
   orientationHintHandler.evaluate();
 
   const contextLossOverlay = new ContextLossOverlay();
-  createWebGLContextLossHandler(canvas, {
+  const unsubscribeContextLoss = createWebGLContextLossHandler(canvas, {
     onLost: () => {
       gameLoop.pause();
       audioManager.suspend();
@@ -336,17 +396,57 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<void
         window.location.reload();
       });
     },
-    onRestored: () => {
-      const restoreTier = currentVisualTier.value ?? initialPixelTier;
-      contextLossOverlay.hide();
-      pixelRatioController.resetToTier(restoreTier);
-      applyPixelRatioTier(restoreTier);
-      currentVisualTier.value = restoreTier;
-      stageScene?.setVisualQualityTier(restoreTier);
-      handleVisibilityRestore();
-    },
+    onRestored: createWebGLContextRestoredHandler({
+      pixelRatioController,
+      applyPixelRatioTier,
+      maxTier,
+      getRestoreTier: () => currentVisualTier.value ?? initialPixelTier,
+      syncVisualQualityTier,
+      getViewportSize: updateViewportSizeCache,
+      scheduleResize: (width, height) => {
+        resizeCoalescer.schedule(width, height);
+      },
+      flushResize: () => {
+        resizeCoalescer.flush();
+      },
+      gameLoopResume: handleResumeAfterRestore,
+      audioEnsureResumed: () => {},
+      hideOverlay: () => {
+        contextLossOverlay.hide();
+      },
+      now: () => performance.now(),
+    }),
   });
 
   await sceneManager.requestTransition('title');
   scheduleStagePrefetchAfterTitleReady();
+
+  return {
+    dispose(): void {
+      if (disposed) {
+        return;
+      }
+
+      disposed = true;
+      unsubscribeViewportResize();
+      unsubscribeVisibilityPause();
+      unsubscribeContextLoss();
+      orientationHintHandler.dispose();
+      gameLoop.stop();
+      resizeCoalescer.dispose();
+      sceneManager.dispose();
+      stageScene = null;
+      inputSystem.dispose();
+      audioManager.dispose();
+      resumeOverlay.hide();
+      resumeOverlay.dispose();
+      contextLossOverlay.hide();
+      orientationHintOverlay.hide();
+      orientationHintOverlay.dispose();
+      loadingOverlay.hide();
+      loadFailureOverlay.hide();
+      renderer.forceContextLoss?.();
+      renderer.dispose();
+    },
+  };
 }

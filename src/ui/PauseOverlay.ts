@@ -1,112 +1,140 @@
+import { attachReleaseConfirmButton } from './attachReleaseConfirmButton';
+
 export class PauseOverlay {
   private overlayEl: HTMLDivElement | null = null;
   private activePressCleanups = new Set<() => void>();
 
-  show(onContinue: () => void): void {
+  show(onResume: () => void, onExitHome: () => void): void {
     if (this.overlayEl) return;
 
-    const uiOverlay = document.getElementById('ui-overlay');
-    if (!uiOverlay) return;
+    const uiOverlay = document.getElementById('ui-overlay') ?? document.body;
 
     this.overlayEl = document.createElement('div');
     this.overlayEl.setAttribute('data-pause-overlay', '');
     this.overlayEl.setAttribute('role', 'dialog');
     this.overlayEl.setAttribute('aria-modal', 'true');
-    this.overlayEl.setAttribute('aria-label', 'やすみ ちゅう');
+    this.overlayEl.setAttribute('aria-label', 'やすみちゅう');
     this.overlayEl.style.cssText = `
       position: absolute;
       inset: 0;
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
       pointer-events: auto;
-      z-index: 55;
-      background: rgba(0, 0, 32, 0.84);
-      padding: 1.2rem;
-      box-sizing: border-box;
+      z-index: 60;
+      background: rgba(0, 0, 32, 0.92);
     `;
 
     const card = document.createElement('div');
+    card.setAttribute('data-pause-card', '');
     card.style.cssText = `
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 0.85rem;
+      gap: 1rem;
       width: min(90vw, 420px);
-      padding: 1.5rem 1.3rem 1.7rem;
+      padding: 1.6rem 1.4rem;
       border-radius: 1.8rem;
-      background: linear-gradient(180deg, rgba(28, 42, 112, 0.95), rgba(10, 18, 56, 0.96));
-      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.36);
+      background: rgba(0, 0, 64, 0.85);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
       text-align: center;
+      font-family: 'Zen Maru Gothic', sans-serif;
     `;
     card.addEventListener('pointerdown', (event) => {
       event.stopPropagation();
     });
-
-    const icon = document.createElement('div');
-    icon.textContent = '⏸';
-    icon.setAttribute('aria-hidden', 'true');
-    icon.style.cssText = `
-      font-size: clamp(3rem, 11vmin, 4.4rem);
-      line-height: 1;
-    `;
+    this.overlayEl.appendChild(card);
 
     const title = document.createElement('div');
-    title.textContent = 'やすみ ちゅう';
+    title.textContent = 'ひとやすみ ちゅう';
     title.style.cssText = `
-      font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: clamp(1.8rem, 6vmin, 2.4rem);
+      font-size: clamp(1.8rem, 5vmin, 2.4rem);
       font-weight: 900;
-      color: #fff4a3;
-      text-shadow: 0 0 16px rgba(255, 220, 120, 0.25);
+      color: #FFD700;
+      text-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
     `;
+    card.appendChild(title);
 
     const message = document.createElement('div');
-    message.textContent = 'じゅんびが できたら つづけよう';
+    message.textContent = 'また じゅんびが できたら つづけよう';
     message.style.cssText = `
-      font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: clamp(1rem, 3.8vmin, 1.25rem);
+      font-size: clamp(1rem, 3.5vmin, 1.2rem);
       font-weight: 700;
-      color: #e7f1ff;
-      line-height: 1.45;
+      color: #ffffff;
+      opacity: 0.92;
     `;
+    card.appendChild(message);
 
-    const continueButton = document.createElement('button');
-    continueButton.setAttribute('data-pause-continue', '');
-    continueButton.setAttribute('aria-label', 'つづける');
-    continueButton.textContent = '▶ つづける';
-    continueButton.style.cssText = `
-      min-width: min(72vw, 300px);
-      min-height: 88px;
-      padding: 1rem 1.8rem;
-      border: none;
-      border-radius: 999px;
-      font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: clamp(1.35rem, 4.6vmin, 1.8rem);
-      font-weight: 900;
-      color: #15204d;
-      background: linear-gradient(135deg, #ffe66d, #7ef0ff);
-      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
-      touch-action: manipulation;
-      transform: scale(1);
-      transition: transform 0.08s ease-out;
+    const buttonRow = document.createElement('div');
+    buttonRow.style.cssText = `
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      justify-content: center;
+      align-items: stretch;
+      width: 100%;
     `;
-    this.attachPress(continueButton, () => {
-      this.hide();
-      onContinue();
-    });
+    card.appendChild(buttonRow);
 
-    card.append(icon, title, message, continueButton);
-    this.overlayEl.appendChild(card);
+    const createButton = (
+      text: string,
+      testId: string,
+      ariaLabel: string,
+      background: string,
+      color: string,
+      onActivate: () => void,
+    ): HTMLButtonElement => {
+      const button = document.createElement('button');
+      button.setAttribute(testId, '');
+      button.setAttribute('aria-label', ariaLabel);
+      button.textContent = text;
+      button.style.cssText = `
+        flex: 1 1 140px;
+        padding: 1rem 1.2rem;
+        border: none;
+        border-radius: 1.6rem;
+        background: ${background};
+        color: ${color};
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: clamp(1.1rem, 3.6vmin, 1.4rem);
+        font-weight: 900;
+        cursor: pointer;
+        touch-action: manipulation;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+        transform: scale(1);
+        transition: transform 0.08s ease-out;
+        white-space: nowrap;
+      `;
+      button.style.minWidth = '140px';
+      button.style.minHeight = '88px';
+      const cleanup = attachReleaseConfirmButton(button, {
+        onActivate: () => {
+          this.hide();
+          onActivate();
+        },
+        onPressChange: (pressed) => {
+          button.style.transform = pressed ? 'scale(0.94)' : 'scale(1)';
+        },
+      });
+      this.activePressCleanups.add(cleanup);
+      return button;
+    };
+
+    buttonRow.appendChild(
+      createButton('▶ つづける', 'data-pause-continue', 'つづける', 'linear-gradient(135deg, #FF6B6B, #FFE66D)', '#1b1f52', onResume),
+    );
+    buttonRow.appendChild(
+      createButton('🏠 おうちへ', 'data-pause-home', 'おうちへ', 'rgba(255, 255, 255, 0.18)', '#ffffff', onExitHome),
+    );
+
     uiOverlay.appendChild(this.overlayEl);
   }
 
   hide(): void {
     if (!this.overlayEl) return;
-    const activePressCleanups = Array.from(this.activePressCleanups);
+    const cleanups = Array.from(this.activePressCleanups);
     this.activePressCleanups.clear();
-    for (const cleanup of activePressCleanups) {
+    for (const cleanup of cleanups) {
       cleanup();
     }
     this.overlayEl.remove();
@@ -119,68 +147,5 @@ export class PauseOverlay {
 
   isVisible(): boolean {
     return this.overlayEl !== null;
-  }
-
-  private attachPress(btn: HTMLButtonElement, onActivate: () => void): void {
-    let pointerActive = false;
-    let suppressNextClick = false;
-
-    const release = (): void => {
-      btn.style.transform = 'scale(1)';
-    };
-    const cleanupActivePress = (): void => {
-      clearPointerState(true);
-    };
-    const clearPointerState = (suppressClick = false): void => {
-      pointerActive = false;
-      suppressNextClick = suppressClick;
-      release();
-      this.activePressCleanups.delete(cleanupActivePress);
-      document.removeEventListener('pointerup', handleDocumentPointerUp, true);
-      document.removeEventListener('pointercancel', handleDocumentPointerCancel, true);
-    };
-    const handleDocumentPointerUp = (event: Event): void => {
-      const releasedOnButton =
-        event.target === btn || (event.target instanceof Node && btn.contains(event.target));
-      const shouldActivate = pointerActive && releasedOnButton;
-      clearPointerState(!releasedOnButton);
-      if (shouldActivate) {
-        onActivate();
-      }
-    };
-    const handleDocumentPointerCancel = (): void => {
-      clearPointerState(true);
-    };
-
-    btn.addEventListener('pointerdown', (event) => {
-      event.stopPropagation();
-      pointerActive = true;
-      suppressNextClick = false;
-      btn.style.transform = 'scale(0.96)';
-      this.activePressCleanups.add(cleanupActivePress);
-      document.addEventListener('pointerup', handleDocumentPointerUp, true);
-      document.addEventListener('pointercancel', handleDocumentPointerCancel, true);
-    });
-    btn.addEventListener('pointerenter', () => {
-      if (pointerActive) {
-        btn.style.transform = 'scale(0.96)';
-      }
-    });
-    btn.addEventListener('pointerleave', () => {
-      if (pointerActive) {
-        release();
-      }
-    });
-    btn.addEventListener('pointercancel', () => clearPointerState(true));
-    btn.addEventListener('click', (event) => {
-      event.stopPropagation();
-      if (suppressNextClick) {
-        suppressNextClick = false;
-        return;
-      }
-      if (!pointerActive) {
-        onActivate();
-      }
-    });
   }
 }

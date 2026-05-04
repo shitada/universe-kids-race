@@ -54,6 +54,11 @@ function flushPromises(): Promise<void> {
   });
 }
 
+function dispatchReleaseConfirm(button: HTMLElement): void {
+  button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+  button.dispatchEvent(new Event('pointerup', { bubbles: true }));
+}
+
 describe('Stage Flow Integration', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -221,6 +226,7 @@ describe('Stage Flow Integration', () => {
     await manager.transitionTo('stage', { stageNumber: 3, totalScore: 1000, totalStarCount: 10 });
 
     const internal = stageScene as unknown as {
+      stageIntroOverlay: { dispose(): void } | null;
       countdownOverlay: { dispose(): void } | null;
       isStarting: boolean;
       scoreSystem: {
@@ -236,6 +242,8 @@ describe('Stage Flow Integration', () => {
       onStageClear(): void;
       update(deltaTime: number): void;
     };
+    internal.stageIntroOverlay?.dispose();
+    internal.stageIntroOverlay = null;
     internal.countdownOverlay?.dispose();
     internal.countdownOverlay = null;
     internal.isStarting = false;
@@ -274,7 +282,7 @@ describe('Stage Flow Integration', () => {
 
     const retryButton = document.querySelector('[data-stage-clear-retry]') as HTMLButtonElement | null;
     expect(retryButton).toBeTruthy();
-    retryButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton!);
     await flushPromises();
 
     expect(transitionLog.at(-1)).toEqual({
@@ -296,7 +304,7 @@ describe('Stage Flow Integration', () => {
 
     const continueButton = document.querySelector('[data-stage-clear-continue]') as HTMLButtonElement | null;
     expect(continueButton).toBeTruthy();
-    continueButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(continueButton!);
     await flushPromises();
 
     expect(transitionLog.at(-1)).toEqual({
@@ -345,19 +353,19 @@ describe('Stage Flow Integration', () => {
     const card = document.querySelector('[data-next-adventure-card]') as HTMLDivElement | null;
     expect(card).toBeTruthy();
     expect(card?.getAttribute('data-next-stage-number')).toBe('5');
-    expect(card?.getAttribute('data-next-stage-destination')).toBe('木星');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('もくせい');
 
     const playButton = Array.from(document.querySelectorAll('button')).find(
       (button) => button.textContent === 'あそぶ',
     ) as HTMLButtonElement | undefined;
     expect(playButton).toBeTruthy();
 
-    playButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(playButton!);
     await flushPromises();
 
     expect(log.at(-1)?.type).toBe('stage');
     expect(log.at(-1)?.context.stageNumber).toBe(5);
-    expect(getStageConfig(log.at(-1)?.context.stageNumber ?? 0).destination).toBe(
+    expect(getStageConfig(log.at(-1)?.context.stageNumber ?? 0).destinationReading).toBe(
       card?.getAttribute('data-next-stage-destination'),
     );
   });
@@ -436,9 +444,11 @@ describe('Stage Flow Integration', () => {
 
     const card = document.querySelector('[data-next-adventure-card]') as HTMLDivElement | null;
     const hint = document.querySelector('[data-play-button-hint]') as HTMLDivElement | null;
+    const rewardPreview = document.querySelector('[data-next-reward-preview]') as HTMLDivElement | null;
     expect(card?.getAttribute('data-next-stage-number')).toBe('1');
-    expect(card?.getAttribute('data-next-stage-destination')).toBe('月');
-    expect(card?.textContent).toContain('ぜんぶ クリア');
+    expect(card?.getAttribute('data-next-stage-destination')).toBe('つき');
+    expect(card?.textContent).toContain('ぜんぶ あつめたよ！');
+    expect(rewardPreview).toBeNull();
     expect(hint?.textContent).toContain('ステージ 1');
     expect(hint?.textContent).toContain('もういちど');
     expect(document.querySelector('[data-reset-progress-button]')?.textContent).toBe('さいしょから');
@@ -786,7 +796,7 @@ describe('Stage Flow Integration', () => {
 
     const button = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
     expect(button).not.toBeNull();
-    button!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(button!);
     await Promise.resolve();
     await Promise.resolve();
 
@@ -852,7 +862,7 @@ describe('Stage Flow Integration', () => {
 
     const retryButton = document.querySelector<HTMLButtonElement>('[data-stage-clear-retry]');
     expect(retryButton?.textContent).toBe('もういちど');
-    retryButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton!);
     await Promise.resolve();
     await Promise.resolve();
 
@@ -916,7 +926,7 @@ describe('Stage Flow Integration', () => {
 
     const button = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
     expect(button?.textContent).toBe('おいわいへ');
-    button!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(button!);
     await flushPromises();
 
     expect(manager.getCurrentType()).toBe('ending');
@@ -988,7 +998,7 @@ describe('Stage Flow Integration', () => {
 
     const button = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
     expect(button?.textContent).toBe('おいわいへ');
-    button!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(button!);
     await flushPromises();
 
     expect(manager.getCurrentType()).toBe('ending');
@@ -1063,7 +1073,7 @@ describe('Stage Flow Integration', () => {
     expect(document.querySelector('[data-load-failure-overlay]')).not.toBeNull();
 
     const retryButton = document.querySelector('[data-load-failure-primary]') as HTMLButtonElement;
-    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton);
     await flushPromises();
     await flushPromises();
 
@@ -1146,7 +1156,7 @@ describe('Stage Flow Integration', () => {
     expect(document.querySelector('[data-load-failure-overlay]')).not.toBeNull();
 
     const retryButton = document.querySelector('[data-load-failure-primary]') as HTMLButtonElement;
-    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton);
     await flushPromises();
     await flushPromises();
 

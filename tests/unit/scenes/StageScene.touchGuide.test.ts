@@ -71,7 +71,7 @@ describe('StageScene touch guide overlay', () => {
     expect(root?.getAttribute('data-touch-guide-state')).toBe('intro');
   });
 
-  it('hides the touch guide after the player moves left or right', () => {
+  it('highlights the pressed side while the player moves left or right', () => {
     const { scene, inputState } = createScene();
     scene.enter({ stageNumber: 1 });
     finishStartCountdown(scene);
@@ -80,7 +80,26 @@ describe('StageScene touch guide overlay', () => {
     (scene as unknown as { update(dt: number): void }).update(0.016);
 
     const root = document.querySelector<HTMLElement>('[data-touch-guide-overlay]');
+    expect(root?.getAttribute('data-touch-guide-state')).toBe('active-left');
+    expect(root?.getAttribute('data-touch-guide-active-side')).toBe('left');
+  });
+
+  it('returns from pressed feedback to hidden after the player releases touch', () => {
+    const { scene, inputState } = createScene();
+    const internal = scene as unknown as { update(dt: number): void };
+    scene.enter({ stageNumber: 1 });
+    finishStartCountdown(scene);
+
+    inputState.moveDirection = 1;
+    internal.update(0.016);
+    expect(document.querySelector('[data-touch-guide-overlay]')?.getAttribute('data-touch-guide-state')).toBe('active-right');
+
+    inputState.moveDirection = 0;
+    internal.update(0.016);
+
+    const root = document.querySelector<HTMLElement>('[data-touch-guide-overlay]');
     expect(root?.getAttribute('data-touch-guide-state')).toBe('hidden');
+    expect(root?.getAttribute('data-touch-guide-active-side')).toBe('none');
   });
 
   it('shows the touch guide again in idle mode after 3 seconds without movement', () => {
@@ -121,6 +140,31 @@ describe('StageScene touch guide overlay', () => {
 
     const root = document.querySelector<HTMLElement>('[data-touch-guide-overlay]');
     expect(root?.getAttribute('data-touch-guide-state')).toBe('assist-right');
+  });
+
+  it('keeps assist guidance prioritized even while pressed feedback would normally appear', () => {
+    const { scene, inputState } = createScene();
+    const internal = scene as unknown as {
+      assistTimer: number;
+      assistDirection: 'left' | 'right' | null;
+      assistDirectionRefreshTimer: number;
+      update(dt: number): void;
+    };
+    scene.enter({ stageNumber: 1 });
+    finishStartCountdown(scene);
+
+    inputState.moveDirection = -1;
+    internal.update(0.016);
+    expect(document.querySelector('[data-touch-guide-overlay]')?.getAttribute('data-touch-guide-state')).toBe('active-left');
+
+    internal.assistTimer = 10;
+    internal.assistDirection = 'right';
+    internal.assistDirectionRefreshTimer = 10;
+    internal.update(0.016);
+
+    const root = document.querySelector<HTMLElement>('[data-touch-guide-overlay]');
+    expect(root?.getAttribute('data-touch-guide-state')).toBe('assist-right');
+    expect(root?.getAttribute('data-touch-guide-active-side')).toBe('right');
   });
 
   it('removes the touch guide on exit()', () => {

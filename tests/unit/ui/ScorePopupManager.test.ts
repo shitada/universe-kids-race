@@ -67,6 +67,20 @@ describe('ScorePopupManager', () => {
     expect(popup.style.animationName).not.toBe(firstAnimationName);
   });
 
+  it('injects distinct keyframes for alternating popup animations', () => {
+    manager.show(100, { x: 0, y: 0, z: 0 }, camera);
+
+    const style = document.getElementById('score-popup-animations');
+    const styleText = style?.textContent ?? '';
+
+    expect(style).not.toBeNull();
+    expect(styleText).toContain('@keyframes scorePopupFloatA');
+    expect(styleText).toContain('@keyframes scorePopupFloatB');
+    expect(styleText).toContain('translate3d(-50%, -105%, 0) scale(1.04)');
+    expect(styleText).toContain('translate3d(-43%, -84%, 0) scale(1.02)');
+    expect(styleText).toContain('translate3d(-38%, -105%, 0) scale(1.04)');
+  });
+
   it('avoids layout reads when showing and replaying a popup', () => {
     const overlay = document.getElementById('ui-overlay') as HTMLDivElement;
     Object.defineProperty(overlay, 'clientWidth', {

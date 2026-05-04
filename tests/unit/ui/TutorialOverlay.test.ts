@@ -4,6 +4,15 @@ import { TutorialOverlay } from '../../../src/ui/TutorialOverlay';
 
 describe('TutorialOverlay', () => {
   let overlay: TutorialOverlay;
+  const originalInnerHeight = window.innerHeight;
+
+  const setViewportHeight = (height: number) => {
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      writable: true,
+      value: height,
+    });
+  };
 
   beforeEach(() => {
     const uiOverlay = document.createElement('div');
@@ -16,6 +25,7 @@ describe('TutorialOverlay', () => {
   afterEach(() => {
     overlay.hide();
     document.getElementById('ui-overlay')?.remove();
+    setViewportHeight(originalInnerHeight);
   });
 
   describe('show()', () => {
@@ -56,6 +66,23 @@ describe('TutorialOverlay', () => {
       const closeBtn = uiOverlay.querySelector('button')!;
       closeBtn.dispatchEvent(new Event('pointerdown'));
       expect(called).toBe(true);
+    });
+
+    it('uses compact scrollable layout on low viewport heights so close button remains reachable', () => {
+      setViewportHeight(520);
+
+      overlay.show(() => {});
+
+      const uiOverlay = document.getElementById('ui-overlay')!;
+      const content = uiOverlay.querySelector('[data-tutorial-content]') as HTMLElement | null;
+      const closeBtn = uiOverlay.querySelector('button') as HTMLButtonElement | null;
+      const title = uiOverlay.querySelector('[data-tutorial-title]') as HTMLElement | null;
+
+      expect(content).not.toBeNull();
+      expect(content?.style.maxHeight).toContain('calc');
+      expect(content?.style.overflowY).toBe('auto');
+      expect(closeBtn).not.toBeNull();
+      expect(title?.style.fontSize).toBe('1.8rem');
     });
   });
 

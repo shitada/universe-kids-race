@@ -18,6 +18,9 @@ describe('PlanetEncyclopedia', () => {
   it('each entry has a non-empty name', () => {
     for (const entry of PLANET_ENCYCLOPEDIA) {
       expect(entry.name.length).toBeGreaterThan(0);
+      expect(entry.reading.length).toBeGreaterThan(0);
+      expect(entry.encyclopediaLabel).toContain(entry.name);
+      expect(entry.encyclopediaLabel).toContain(entry.reading);
     }
   });
 
@@ -51,6 +54,7 @@ describe('PlanetEncyclopedia', () => {
 
   it('can look up an entry by stage number', () => {
     expect(getPlanetEncyclopediaEntry(2)?.name).toBe('水星');
+    expect(getPlanetEncyclopediaEntry(2)?.reading).toBe('すいせい');
     expect(getPlanetEncyclopediaEntry(99)).toBeUndefined();
   });
 

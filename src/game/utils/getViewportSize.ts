@@ -14,17 +14,41 @@ export interface WindowLike {
   visualViewport?: VisualViewportLike | null;
 }
 
+let cachedViewportSize: ViewportSize | null = null;
+
+function isGlobalWindow(win: WindowLike): boolean {
+  return typeof window !== 'undefined' && win === window;
+}
+
+function readViewportSize(win: WindowLike): ViewportSize {
+  const vv = win.visualViewport;
+  if (vv && Number.isFinite(vv.width) && Number.isFinite(vv.height) && vv.width > 0 && vv.height > 0) {
+    return { width: vv.width, height: vv.height };
+  }
+  return { width: win.innerWidth, height: win.innerHeight };
+}
+
+export function updateViewportSizeCache(win: WindowLike = window): ViewportSize {
+  const nextViewportSize = readViewportSize(win);
+  if (isGlobalWindow(win)) {
+    cachedViewportSize = nextViewportSize;
+  }
+  return nextViewportSize;
+}
+
 /**
  * Returns the current viewport size, preferring `window.visualViewport` when
  * available so that iPad Safari URL bar show/hide is reflected immediately.
  * Falls back to `window.innerWidth` / `window.innerHeight` otherwise.
  */
 export function getViewportSize(win: WindowLike = window): ViewportSize {
-  const vv = win.visualViewport;
-  if (vv && Number.isFinite(vv.width) && Number.isFinite(vv.height) && vv.width > 0 && vv.height > 0) {
-    return { width: vv.width, height: vv.height };
+  if (isGlobalWindow(win)) {
+    if (cachedViewportSize === null) {
+      cachedViewportSize = updateViewportSizeCache(win);
+    }
+    return cachedViewportSize;
   }
-  return { width: win.innerWidth, height: win.innerHeight };
+  return readViewportSize(win);
 }
 
 type Listener = () => void;
@@ -52,19 +76,24 @@ export function subscribeViewportResize(
   win: SubscribeWindowLike,
   onResize: Listener,
 ): () => void {
-  win.addEventListener('resize', onResize);
-  win.addEventListener('orientationchange', onResize);
+  updateViewportSizeCache(win);
+  const handleResize = (): void => {
+    updateViewportSizeCache(win);
+    onResize();
+  };
+  win.addEventListener('resize', handleResize);
+  win.addEventListener('orientationchange', handleResize);
   const vv = win.visualViewport ?? null;
   if (vv) {
-    vv.addEventListener('resize', onResize);
-    vv.addEventListener('scroll', onResize);
+    vv.addEventListener('resize', handleResize);
+    vv.addEventListener('scroll', handleResize);
   }
   return () => {
-    win.removeEventListener('resize', onResize);
-    win.removeEventListener('orientationchange', onResize);
+    win.removeEventListener('resize', handleResize);
+    win.removeEventListener('orientationchange', handleResize);
     if (vv) {
-      vv.removeEventListener('resize', onResize);
-      vv.removeEventListener('scroll', onResize);
+      vv.removeEventListener('resize', handleResize);
+      vv.removeEventListener('scroll', handleResize);
     }
   };
 }

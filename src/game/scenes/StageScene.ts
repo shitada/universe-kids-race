@@ -13,6 +13,7 @@ import { SpawnSystem } from '../systems/SpawnSystem';
 import { BoostSystem } from '../systems/BoostSystem';
 import { HUD } from '../../ui/HUD';
 import { CountdownOverlay } from '../../ui/CountdownOverlay';
+import { StageIntroOverlay } from '../../ui/StageIntroOverlay';
 import { getStageConfig, TOTAL_STAGES } from '../config/StageConfig';
 import { ParticleBurstManager } from '../effects/ParticleBurst';
 import { AirShield } from '../effects/AirShield';
@@ -24,6 +25,8 @@ import { getViewportSize } from '../utils/getViewportSize';
 import { ScorePopupManager } from '../../ui/ScorePopupManager';
 import { getNextPlanetEncyclopediaEntry, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { TouchGuideOverlay, type TouchGuideMode } from '../../ui/TouchGuideOverlay';
+import { attachReleaseConfirmButton } from '../../ui/attachReleaseConfirmButton';
+import { PauseOverlay } from '../../ui/PauseOverlay';
 import { StageClearOverlay } from '../../ui/StageClearOverlay';
 import {
   __resetStageSceneSharedAssetCachesForTest,
@@ -60,6 +63,12 @@ type EncyclopediaOverlayInstance = InstanceType<EncyclopediaOverlayCtor>;
 interface StageSceneOptions {
   scheduleIdleTask?: (callback: () => void) => void;
   loadEncyclopediaOverlay?: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
+}
+
+interface StagePauseHandlers {
+  onPauseRequested?: () => void;
+  onResumeRequested?: () => void;
+  onExitHomeRequested?: () => void;
 }
 
 export class StageScene implements Scene {
@@ -166,6 +175,7 @@ export class StageScene implements Scene {
   // child can mentally prepare. Background stars and the destination planet
   // continue to rotate gently for a calm waiting state.
   private isStarting = false;
+  private stageIntroOverlay: StageIntroOverlay | null = null;
   private countdownOverlay: CountdownOverlay | null = null;
 
   // Background-resume countdown ("3 → 2 → 1 → スタート！" after Safari
@@ -177,6 +187,7 @@ export class StageScene implements Scene {
   private resumeCountdownOverlay: CountdownOverlay | null = null;
   private isHomeConfirmOpen = false;
   private shouldResumeAfterHomeConfirm = false;
+  private pauseOverlay = new PauseOverlay();
   private isPauseOpen = false;
   private shouldResumeAfterPause = false;
   private touchGuide = new TouchGuideOverlay();
@@ -193,6 +204,9 @@ export class StageScene implements Scene {
   private readonly scheduleIdleTask: (callback: () => void) => void;
   private readonly loadEncyclopediaOverlay: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
   private clearRewardRequestToken = 0;
+  private onPauseRequested: (() => void) | null = null;
+  private onResumeRequested: (() => void) | null = null;
+  private onExitHomeRequested: (() => void) | null = null;
 
   constructor(
     sceneManager: SceneManager,
@@ -278,6 +292,7 @@ export class StageScene implements Scene {
     this.shouldResumeAfterHomeConfirm = false;
     this.isPauseOpen = false;
     this.shouldResumeAfterPause = false;
+    this.pauseOverlay.hide();
     this.touchGuideIdleTimer = 0;
     this.hasSeenMoveInput = false;
     this.touchGuideMode = 'intro';
@@ -339,43 +354,29 @@ export class StageScene implements Scene {
       this.isHomeConfirmOpen = false;
       this.shouldResumeAfterHomeConfirm = false;
       this.syncBoostInputLock();
+      this.syncPauseAvailability();
       this.sceneManager.requestTransition('title');
     });
     this.hud.setHomeConfirmOpenCallback(() => {
       this.shouldResumeAfterHomeConfirm = this.isPlaying();
-      this.releasePointerInputForLock();
+      this.clearBlockedGameplayInput();
       this.isHomeConfirmOpen = true;
       this.syncBoostInputLock();
+      this.syncPauseAvailability();
     });
     this.hud.setHomeConfirmCancelCallback(() => {
       const shouldResume = this.shouldResumeAfterHomeConfirm;
       this.isHomeConfirmOpen = false;
       this.shouldResumeAfterHomeConfirm = false;
+      this.syncPauseAvailability();
       if (shouldResume) {
         this.requestResumeCountdown();
         return;
       }
       this.syncBoostInputLock();
     });
-    this.hud.setPauseOpenCallback(() => {
-      if (!this.isPlaying()) {
-        return false;
-      }
-      this.shouldResumeAfterPause = true;
-      this.releasePointerInputForLock();
-      this.isPauseOpen = true;
-      this.syncBoostInputLock();
-      return true;
-    });
-    this.hud.setPauseResumeCallback(() => {
-      const shouldResume = this.shouldResumeAfterPause;
-      this.isPauseOpen = false;
-      this.shouldResumeAfterPause = false;
-      if (shouldResume) {
-        this.requestResumeCountdown();
-        return;
-      }
-      this.syncBoostInputLock();
+    this.hud.setPauseCallback(() => {
+      this.requestManualPause();
     });
     this.hud.setMuteState(this.audioManager.isMuted());
     this.hud.setMuteCallback(() => {
@@ -388,6 +389,7 @@ export class StageScene implements Scene {
     this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
     this.hud.hideAssistMessage();
     this.touchGuide.show('intro');
+    this.syncPauseAvailability();
 
     // Companions
     const saveData = this.saveManager.load();
@@ -403,11 +405,13 @@ export class StageScene implements Scene {
     // BGM
     this.audioManager.playBGM(this.stageNumber);
 
-    // Stage start countdown. Locks input/spawn/forward motion until the
-    // child sees "3 → 2 → 1 → スタート！". Honors `?nocount=1` query string
-    // for E2E / smoke tests so existing assertions about immediate forward
-    // motion are not broken.
-    this.startCountdown();
+    this.stageIntroOverlay?.dispose();
+    this.stageIntroOverlay = null;
+
+    // Stage start flow. Campaign transitions can show a short planet intro
+    // card before the existing countdown; retries / encyclopedia launches keep
+    // the existing tempo.
+    this.startOpeningSequence(context);
   }
 
   private prefetchEndingSceneModuleIfNeeded(): void {
@@ -423,13 +427,38 @@ export class StageScene implements Scene {
     void prefetchPromise?.catch(() => {});
   }
 
+  private startOpeningSequence(context: SceneContext): void {
+    this.isStarting = true;
+    this.syncBoostInputLock();
+    this.syncPauseAvailability();
+
+    if (!this.shouldShowStageIntro(context)) {
+      this.startCountdown();
+      return;
+    }
+
+    const entry = getPlanetEncyclopediaEntry(this.stageNumber);
+    if (!entry) {
+      this.startCountdown();
+      return;
+    }
+
+    this.stageIntroOverlay = new StageIntroOverlay(entry);
+    this.stageIntroOverlay.show(() => {
+      this.stageIntroOverlay = null;
+      this.startCountdown();
+    });
+  }
+
   private startCountdown(): void {
     this.isStarting = true;
     this.syncBoostInputLock();
+    this.syncPauseAvailability();
     if (this.shouldSkipCountdown()) {
       this.isStarting = false;
       this.countdownOverlay = null;
       this.syncBoostInputLock();
+      this.syncPauseAvailability();
       return;
     }
     this.countdownOverlay = new CountdownOverlay({
@@ -444,7 +473,16 @@ export class StageScene implements Scene {
       this.isStarting = false;
       this.countdownOverlay = null;
       this.syncBoostInputLock();
+      this.syncPauseAvailability();
     });
+  }
+
+  private shouldShowStageIntro(context: SceneContext): boolean {
+    if (this.shouldSkipCountdown()) return false;
+    if (this.launchSource !== 'campaign') return false;
+    if (context.replayToken !== undefined) return false;
+    if (context.totalScore === undefined || context.totalStarCount === undefined) return false;
+    return getPlanetEncyclopediaEntry(this.stageNumber) !== undefined;
   }
 
   private releasePointerInputForLock(): void {
@@ -458,6 +496,15 @@ export class StageScene implements Scene {
       this.resetBoostHintState();
       this.inputSystem.setBoostPressed?.(false);
     }
+  }
+
+  private clearBlockedGameplayInput(): void {
+    this.inputSystem.resetPointers?.();
+    this.inputSystem.setBoostPressed?.(false);
+  }
+
+  private syncPauseAvailability(): void {
+    this.hud.setPauseEnabled(this.canPause());
   }
 
   private shouldSkipCountdown(): boolean {
@@ -483,6 +530,7 @@ export class StageScene implements Scene {
   isPlaying(): boolean {
     if (!this.stageConfig) return false;
     if (this.isCleared) return false;
+    if (this.isClearRewardOpen || this.isOpeningClearReward) return false;
     if (this.isStarting) return false;
     if (this.awaitingResume) return false;
     if (this.isHomeConfirmOpen) return false;
@@ -505,11 +553,12 @@ export class StageScene implements Scene {
   requestResumeCountdown(): void {
     if (!this.isPlaying()) return;
     if (this.resumeCountdownOverlay) return;
-    this.releasePointerInputForLock();
     if (this.shouldSkipCountdown()) return;
 
+    this.clearBlockedGameplayInput();
     this.awaitingResume = true;
     this.syncBoostInputLock();
+    this.syncPauseAvailability();
     this.resumeCountdownOverlay = new CountdownOverlay({
       onTick: () => {
         this.audioManager.playSFX('countdownTick');
@@ -522,7 +571,53 @@ export class StageScene implements Scene {
       this.awaitingResume = false;
       this.resumeCountdownOverlay = null;
       this.syncBoostInputLock();
+      this.syncPauseAvailability();
     });
+  }
+
+  setPauseHandlers(handlers: StagePauseHandlers): void {
+    this.onPauseRequested = handlers.onPauseRequested ?? null;
+    this.onResumeRequested = handlers.onResumeRequested ?? null;
+    this.onExitHomeRequested = handlers.onExitHomeRequested ?? null;
+  }
+
+  isManuallyPaused(): boolean {
+    return this.isPauseOpen;
+  }
+
+  requestManualPause(): void {
+    if (!this.canPause()) return;
+
+    this.clearBlockedGameplayInput();
+    this.isPauseOpen = true;
+    this.syncBoostInputLock();
+    this.syncPauseAvailability();
+    this.pauseOverlay.show(
+      () => {
+        this.isPauseOpen = false;
+        this.syncBoostInputLock();
+        this.syncPauseAvailability();
+        this.onResumeRequested?.();
+      },
+      () => {
+        this.isPauseOpen = false;
+        this.syncBoostInputLock();
+        this.syncPauseAvailability();
+        this.onExitHomeRequested?.();
+      },
+    );
+    this.onPauseRequested?.();
+  }
+
+  private canPause(): boolean {
+    if (!this.stageConfig) return false;
+    if (this.isCleared) return false;
+    if (this.isClearRewardOpen || this.isOpeningClearReward) return false;
+    if (this.isStarting) return false;
+    if (this.awaitingResume) return false;
+    if (this.isHomeConfirmOpen) return false;
+    if (this.isPauseOpen) return false;
+    return true;
   }
 
   private createBackground(): void {
@@ -608,7 +703,11 @@ export class StageScene implements Scene {
       this.resetBoostHintState();
       this.inputSystem.setBoostPressed?.(false);
       if (!this.isHomeConfirmOpen && !this.isPauseOpen) {
-        this.countdownOverlay?.tick(deltaTime);
+        const hadStageIntro = this.stageIntroOverlay?.isActive() ?? false;
+        this.stageIntroOverlay?.tick(deltaTime);
+        if (!hadStageIntro) {
+          this.countdownOverlay?.tick(deltaTime);
+        }
         this.resumeCountdownOverlay?.tick(deltaTime);
       }
       if (this.destinationPlanetSpinTarget) {
@@ -880,7 +979,7 @@ export class StageScene implements Scene {
     if (moveDirection !== 0) {
       this.touchGuideIdleTimer = 0;
       this.hasSeenMoveInput = true;
-      this.setTouchGuideMode('hidden');
+      this.setTouchGuideMode(moveDirection < 0 ? 'active-left' : 'active-right');
       return;
     }
 
@@ -1172,6 +1271,7 @@ export class StageScene implements Scene {
     this.resetAssistNavigation();
     this.resetBoostHintState();
     this.touchGuide.hide();
+    this.syncPauseAvailability();
     const isNewPlanetUnlock = this.saveManager.markStageCleared(this.stageNumber);
     this.audioManager.playSFX('stageClear');
     this.audioManager.stopBoostSFX();
@@ -1256,6 +1356,7 @@ export class StageScene implements Scene {
           return;
         }
         this.isClearRewardOpen = false;
+        this.syncPauseAvailability();
         this.restoreClearRewardButton();
       }, {
         bestStageStars: { [this.stageNumber]: starCount },
@@ -1267,6 +1368,7 @@ export class StageScene implements Scene {
         return;
       }
       this.isClearRewardOpen = true;
+      this.syncPauseAvailability();
     } catch {
       if (!this.isCurrentClearRewardRequest(requestToken)) {
         return;
@@ -1275,6 +1377,7 @@ export class StageScene implements Scene {
     } finally {
       if (this.clearRewardRequestToken === requestToken) {
         this.isOpeningClearReward = false;
+        this.syncPauseAvailability();
         if (!this.isClearRewardOpen) {
           this.restoreClearRewardButton();
         }
@@ -1290,14 +1393,18 @@ export class StageScene implements Scene {
   ): void {
     const starCount = _earnedStars ?? this.scoreSystem.getStarCount();
     const bestStarCount = bestStars ?? starCount;
-    const nextEntry = getNextPlanetEncyclopediaEntry(this.stageNumber);
+    const nextEntry = this.launchSource === 'encyclopedia'
+      ? undefined
+      : getNextPlanetEncyclopediaEntry(this.stageNumber);
     const rewardEntry = isNewPlanetUnlock ? getPlanetEncyclopediaEntry(this.stageNumber) : undefined;
     this.stageClearOverlay.show({
       stageNumber: this.stageNumber,
       starCount,
       bestStarCount,
       isBestUpdated,
-      continueLabel: this.stageNumber >= TOTAL_STAGES ? 'おいわいへ' : 'つぎへ',
+      continueLabel: this.launchSource === 'encyclopedia'
+        ? 'タイトルへ'
+        : (this.stageNumber >= TOTAL_STAGES ? 'おいわいへ' : 'つぎへ'),
       nextEntry,
       rewardEntry,
       onContinue: () => {
@@ -1339,12 +1446,16 @@ export class StageScene implements Scene {
   }
 
   private handleStageRetry(): void {
-    this.sceneManager.requestTransition('stage', {
+    const context: SceneContext = {
       stageNumber: this.stageNumber,
       totalScore: this.stageEntryTotalScore,
       totalStarCount: this.stageEntryTotalStarCount,
       replayToken: Date.now() + Math.random(),
-    });
+    };
+    if (this.launchSource !== 'campaign') {
+      context.launchSource = this.launchSource;
+    }
+    this.sceneManager.requestTransition('stage', context);
   }
 
   exit(): void {
@@ -1358,11 +1469,16 @@ export class StageScene implements Scene {
     this.stageClearOverlay.hide();
     this.isClearRewardOpen = false;
     this.isOpeningClearReward = false;
+    this.pauseOverlay.hide();
     this.touchGuide.hide();
     this.hud.hide();
     this.scorePopupManager.dispose();
     this.audioManager.stopBGM();
     this.audioManager.stopBoostSFX();
+    if (this.stageIntroOverlay) {
+      this.stageIntroOverlay.dispose();
+      this.stageIntroOverlay = null;
+    }
     if (this.countdownOverlay) {
       this.countdownOverlay.dispose();
       this.countdownOverlay = null;

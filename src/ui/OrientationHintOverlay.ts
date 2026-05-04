@@ -1,7 +1,7 @@
 /**
  * OrientationHintOverlay
  *
- * iPad を縦向きで起動／回転したときに表示する「よこむきにしてね」案内
+ * 端末を縦向きで起動／回転したときに表示する「よこむきにしてね」案内
  * オーバーレイ。横向きに戻ったら hide() で消える。
  *
  * Constitution:
@@ -81,7 +81,7 @@ export class OrientationHintOverlay {
         よこむきにしてね
       </div>
       <div style="font-size: clamp(18px, 3vw, 28px); margin-top: 14px; opacity: 0.85;">
-        iPad を ➡️ よこ にすると あそべるよ ✨
+        ➡️ よこ にすると あそべるよ ✨
       </div>
     `;
 

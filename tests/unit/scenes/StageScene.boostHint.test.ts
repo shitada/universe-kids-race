@@ -148,6 +148,7 @@ describe('StageScene boost hint', () => {
 
     const pauseButton = document.querySelector('#hud button[aria-label="やすむ"]') as HTMLButtonElement;
     pauseButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    pauseButton.dispatchEvent(new Event('pointerup', { bubbles: true }));
     expect(getBoostHint()?.style.display).toBe('none');
     expect(getBoostButton().getAttribute('aria-disabled')).toBe('true');
 

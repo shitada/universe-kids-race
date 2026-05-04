@@ -1,3 +1,5 @@
+import { attachReleaseConfirmButton } from './attachReleaseConfirmButton';
+
 /**
  * Child-friendly confirmation overlay shown when the player taps the
  * 🏠 button on the in-stage HUD. Prevents losing stage progress from
@@ -125,69 +127,13 @@ export class HomeConfirmOverlay {
     `;
 
     const attachPress = (btn: HTMLButtonElement, onActivate: () => void): void => {
-      let pointerActive = false;
-      let suppressNextClick = false;
-      const cleanupActivePress = (): void => {
-        clearPointerState(true);
-      };
-
-      const press = (): void => {
-        btn.style.transform = 'scale(0.9)';
-      };
-      const release = (): void => {
-        btn.style.transform = 'scale(1)';
-      };
-      const clearPointerState = (suppressClick = false): void => {
-        pointerActive = false;
-        suppressNextClick = suppressClick;
-        release();
-        this.activePressCleanups.delete(cleanupActivePress);
-        document.removeEventListener('pointerup', handleDocumentPointerUp, true);
-        document.removeEventListener('pointercancel', handleDocumentPointerCancel, true);
-      };
-      const handleDocumentPointerUp = (event: Event): void => {
-        const releasedOnButton =
-          event.target === btn || (event.target instanceof Node && btn.contains(event.target));
-        const shouldActivate = pointerActive && releasedOnButton;
-        clearPointerState(!releasedOnButton);
-        if (shouldActivate) {
-          onActivate();
-        }
-      };
-      const handleDocumentPointerCancel = (): void => {
-        clearPointerState(true);
-      };
-
-      btn.addEventListener('pointerdown', (e) => {
-        e.stopPropagation();
-        pointerActive = true;
-        suppressNextClick = false;
-        press();
-        this.activePressCleanups.add(cleanupActivePress);
-        document.addEventListener('pointerup', handleDocumentPointerUp, true);
-        document.addEventListener('pointercancel', handleDocumentPointerCancel, true);
+      const cleanup = attachReleaseConfirmButton(btn, {
+        onActivate,
+        onPressChange: (pressed) => {
+          btn.style.transform = pressed ? 'scale(0.9)' : 'scale(1)';
+        },
       });
-      btn.addEventListener('pointerenter', () => {
-        if (pointerActive) {
-          press();
-        }
-      });
-      btn.addEventListener('pointerleave', () => {
-        if (pointerActive) {
-          release();
-        }
-      });
-      btn.addEventListener('pointercancel', () => clearPointerState(true));
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (suppressNextClick) {
-          suppressNextClick = false;
-          return;
-        }
-        if (!pointerActive) {
-          onActivate();
-        }
-      });
+      this.activePressCleanups.add(cleanup);
     };
 
     // Back button (left, weaker color to discourage misclick).

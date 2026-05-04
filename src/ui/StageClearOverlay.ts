@@ -1,5 +1,6 @@
 import type { PlanetEncyclopediaEntry } from '../types';
 import { createStageMedalDisplay } from './stageMedalDisplay';
+import { attachReleaseConfirmButton } from './attachReleaseConfirmButton';
 
 export interface StageClearOverlayShowOptions {
   stageNumber: number;
@@ -22,6 +23,7 @@ export class StageClearOverlay {
   private isContinueEnabled = false;
   private hasHandledContinue = false;
   private isRewardOpen = false;
+  private readonly buttonCleanups = new Set<() => void>();
 
   show(options: StageClearOverlayShowOptions): void {
     this.hide();
@@ -42,7 +44,7 @@ export class StageClearOverlay {
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: safe center;
       width: 100%;
       height: 100%;
       background: rgba(0, 0, 32, 0.6);
@@ -52,7 +54,9 @@ export class StageClearOverlay {
       padding: 1.2rem;
       box-sizing: border-box;
       text-align: center;
-      overflow: hidden;
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
     `;
     this.overlayEl = overlay;
 
@@ -165,6 +169,11 @@ export class StageClearOverlay {
   }
 
   hide(): void {
+    const cleanups = Array.from(this.buttonCleanups);
+    this.buttonCleanups.clear();
+    for (const cleanup of cleanups) {
+      cleanup();
+    }
     this.overlayEl?.remove();
     this.overlayEl = null;
     this.continueButton = null;
@@ -270,7 +279,7 @@ export class StageClearOverlay {
       color: #b9d7ff;
       letter-spacing: 0.08em;
     `);
-    const nextAdventureTitle = this.createHeading(`つぎは ${nextEntry.name}！`, `
+    const nextAdventureTitle = this.createHeading(`つぎは ${nextEntry.reading}！`, `
       font-family: 'Zen Maru Gothic', sans-serif;
       font-size: clamp(1.5rem, 5.2vmin, 2.05rem);
       font-weight: 900;
@@ -288,7 +297,7 @@ export class StageClearOverlay {
       filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.24));
     `;
 
-    const nextAdventureName = this.createHeading(nextEntry.name, `
+    const nextAdventureName = this.createHeading(nextEntry.reading, `
       font-family: 'Zen Maru Gothic', sans-serif;
       font-size: clamp(1.35rem, 4.8vmin, 1.8rem);
       font-weight: 800;
@@ -390,35 +399,30 @@ export class StageClearOverlay {
   }
 
   private attachActionHandlers(button: HTMLButtonElement, onActivate: () => void): void {
-    const activate = (event: Event): void => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (this.isRewardOpen) return;
-      if (!this.isContinueEnabled || this.hasHandledContinue) return;
-      this.hasHandledContinue = true;
-      for (const actionButton of [this.retryButton, this.continueButton]) {
-        if (!actionButton) continue;
-        actionButton.disabled = true;
-        actionButton.style.pointerEvents = 'none';
-        actionButton.style.transform = 'scale(1)';
-      }
-      button.style.transform = 'scale(1)';
-      onActivate();
-    };
+    const canActivate = (): boolean =>
+      !this.isRewardOpen && this.isContinueEnabled && !this.hasHandledContinue;
 
-    button.addEventListener('pointerdown', (event) => {
-      if (this.isRewardOpen) return;
-      if (!this.isContinueEnabled || this.hasHandledContinue) return;
-      button.style.transform = 'scale(0.96)';
-      activate(event);
+    const cleanup = attachReleaseConfirmButton(button, {
+      canActivate,
+      onActivate: () => {
+        if (!canActivate()) return;
+        this.hasHandledContinue = true;
+        for (const actionButton of [this.retryButton, this.continueButton]) {
+          if (!actionButton) continue;
+          actionButton.disabled = true;
+          actionButton.style.pointerEvents = 'none';
+          actionButton.style.transform = 'scale(1)';
+        }
+        onActivate();
+      },
+      onPressChange: (pressed) => {
+        button.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+      },
+      preventDefaultOnPointerDown: true,
+      preventDefaultOnClick: true,
+      stopPropagation: true,
     });
-    button.addEventListener('click', activate);
-    const release = (): void => {
-      button.style.transform = 'scale(1)';
-    };
-    button.addEventListener('pointerup', release);
-    button.addEventListener('pointercancel', release);
-    button.addEventListener('pointerleave', release);
+    this.buttonCleanups.add(cleanup);
   }
 
   private appendClearCelebrationBurst(): void {

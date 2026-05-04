@@ -31,6 +31,7 @@ function createScene(options?: {
   stageNumber?: number;
   totalScore?: number;
   totalStarCount?: number;
+  launchSource?: 'campaign' | 'encyclopedia';
   saveData?: Partial<SaveData>;
   isNewPlanetUnlock?: boolean;
   earnedStars?: number;
@@ -89,6 +90,8 @@ function createScene(options?: {
     stageNumber,
     totalScore: options?.totalScore,
     totalStarCount: options?.totalStarCount,
+    launchSource: options?.launchSource,
+    replayToken: 1,
   });
 
   const internal = scene as unknown as StageSceneInternals;
@@ -121,6 +124,16 @@ function getCardButton(): HTMLButtonElement | null {
 
 function getNextPreviewCard(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[data-stage-clear-next-preview]');
+}
+
+function dispatchReleaseConfirm(button: HTMLElement): void {
+  button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+  button.dispatchEvent(new Event('pointerup', { bubbles: true }));
+}
+
+function dispatchReleaseOutside(button: HTMLElement): void {
+  button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+  document.body.dispatchEvent(new Event('pointerup', { bubbles: true }));
 }
 
 function mockCanvasContext(): void {
@@ -177,7 +190,7 @@ describe('StageScene clear CTA', () => {
     expect(retryButton.disabled).toBe(true);
     expect(continueButton.disabled).toBe(true);
 
-    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton);
     internal.update(30);
 
     expect(sceneManager.requestTransition).not.toHaveBeenCalled();
@@ -198,7 +211,7 @@ describe('StageScene clear CTA', () => {
     const button = getContinueButton();
     expect(button.textContent).toBe('つぎへ');
 
-    button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(button);
     button.dispatchEvent(new Event('click', { bubbles: true }));
 
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
@@ -207,6 +220,45 @@ describe('StageScene clear CTA', () => {
       totalScore: 2400,
       totalStarCount: 14,
     });
+  });
+
+  it('通常ステージでは同じボタン上で離した時だけつぎへ進む', () => {
+    const { scene, sceneManager } = createScene({
+      stageNumber: 4,
+      finalizeStageResult: { totalScore: 2400, totalStarCount: 14 },
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const button = getContinueButton();
+    dispatchReleaseOutside(button);
+
+    expect(sceneManager.requestTransition).not.toHaveBeenCalled();
+  });
+
+  it('ずかん起動ステージではCTAをタイトルへにし、つぎのぼうけんを表示しない', () => {
+    const { scene, sceneManager } = createScene({
+      stageNumber: 4,
+      launchSource: 'encyclopedia',
+      finalizeStageResult: { totalScore: 2400, totalStarCount: 14 },
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const button = getContinueButton();
+    expect(button.textContent).toBe('タイトルへ');
+    expect(button.getAttribute('aria-label')).toBe('タイトルへ');
+    expect(getNextPreviewCard()).toBeNull();
+    expect(document.querySelector('[data-stage-clear-next-title]')).toBeNull();
+
+    dispatchReleaseConfirm(button);
+
+    expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith('title');
   });
 
   it('通常ステージではつぎのわくせいプレビューを表示する', () => {
@@ -223,9 +275,9 @@ describe('StageScene clear CTA', () => {
     const previewCard = getNextPreviewCard();
     expect(previewCard).not.toBeNull();
     expect(previewCard?.textContent).toContain('つぎのぼうけん');
-    expect(document.querySelector('[data-stage-clear-next-title]')?.textContent).toBe(`つぎは ${nextEntry?.name}！`);
+    expect(document.querySelector('[data-stage-clear-next-title]')?.textContent).toBe(`つぎは ${nextEntry?.reading}！`);
     expect(document.querySelector('[data-stage-clear-next-emoji]')?.textContent).toBe(nextEntry?.emoji);
-    expect(document.querySelector('[data-stage-clear-next-name]')?.textContent).toBe(nextEntry?.name);
+    expect(document.querySelector('[data-stage-clear-next-name]')?.textContent).toBe(nextEntry?.reading);
     expect(document.querySelector('[data-stage-clear-next-trivia]')?.textContent).toBe(nextEntry?.trivia);
   });
 
@@ -243,7 +295,7 @@ describe('StageScene clear CTA', () => {
     expect(retryButton.textContent).toBe('もういちど');
     expect(retryButton.disabled).toBe(false);
 
-    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton);
     retryButton.dispatchEvent(new Event('click', { bubbles: true }));
 
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
@@ -251,6 +303,31 @@ describe('StageScene clear CTA', () => {
       stageNumber: 4,
       totalScore: 0,
       totalStarCount: 0,
+      replayToken: expect.any(Number),
+    });
+  });
+
+  it('ずかん起動ステージのもういちどは起動元を引き継ぐ', () => {
+    const { scene, sceneManager } = createScene({
+      stageNumber: 4,
+      launchSource: 'encyclopedia',
+      totalScore: 1200,
+      totalStarCount: 7,
+    });
+    const internal = scene as unknown as StageSceneInternals;
+
+    internal.onStageClear();
+    internal.update(1);
+
+    const retryButton = getRetryButton();
+    dispatchReleaseConfirm(retryButton);
+
+    expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith('stage', {
+      stageNumber: 4,
+      totalScore: 1200,
+      totalStarCount: 7,
+      launchSource: 'encyclopedia',
       replayToken: expect.any(Number),
     });
   });
@@ -268,7 +345,7 @@ describe('StageScene clear CTA', () => {
     const button = getContinueButton();
     expect(button.textContent).toBe('おいわいへ');
     expect(getNextPreviewCard()).toBeNull();
-    button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(button);
 
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
     expect(sceneManager.requestTransition).toHaveBeenCalledWith('ending', {
@@ -292,7 +369,7 @@ describe('StageScene clear CTA', () => {
     const retryButton = getRetryButton();
     expect(retryButton.textContent).toBe('もういちど');
 
-    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton);
     retryButton.dispatchEvent(new Event('click', { bubbles: true }));
 
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
@@ -317,7 +394,7 @@ describe('StageScene clear CTA', () => {
     internal.update(1);
 
     const retryButton = getRetryButton();
-    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton);
 
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
     expect(sceneManager.requestTransition).toHaveBeenCalledWith('stage', {
@@ -369,7 +446,7 @@ describe('StageScene clear CTA', () => {
     internal.update(1);
 
     const retryButton = getRetryButton();
-    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton);
 
     expect(finalizeStageMock).not.toHaveBeenCalled();
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
@@ -430,7 +507,7 @@ describe('StageScene clear CTA', () => {
 
     await flushPromises();
 
-    getCardButton()?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(getCardButton()!);
     expect(loadEncyclopediaOverlay).toHaveBeenCalledTimes(1);
   });
 
@@ -450,32 +527,32 @@ describe('StageScene clear CTA', () => {
 
     const cardButton = getCardButton();
     expect(cardButton).not.toBeNull();
-    cardButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(cardButton!);
     await flushPromises();
     await flushPromises();
 
     const detailOverlay = document.querySelector('[data-encyclopedia-detail-overlay]') as HTMLElement | null;
     expect(detailOverlay).not.toBeNull();
-    expect(detailOverlay?.textContent).toContain('水星');
+    expect(detailOverlay?.textContent).toContain('水星（すいせい）');
     expect(detailOverlay?.textContent).toContain('⚫');
     expect(detailOverlay?.textContent).toContain('すいせいは たいように いちばん ちかい わくせいだよ');
     expect(sceneManager.requestTransition).not.toHaveBeenCalled();
 
     const continueButton = getContinueButton();
-    continueButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(continueButton);
     expect(sceneManager.requestTransition).not.toHaveBeenCalled();
     const retryButton = getRetryButton();
-    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton);
     expect(sceneManager.requestTransition).not.toHaveBeenCalled();
 
     const backButton = document.querySelector('[data-detail-back]') as HTMLElement | null;
     expect(backButton?.textContent).toBe('クリアへ もどる');
-    backButton?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    backButton && dispatchReleaseConfirm(backButton);
 
     expect(document.querySelector('[data-encyclopedia-detail-overlay]')).toBeNull();
     expect(document.querySelector('[data-stage-clear-overlay]')).not.toBeNull();
 
-    continueButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(continueButton);
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
     expect(sceneManager.requestTransition).toHaveBeenCalledWith('stage', {
       stageNumber: 3,
@@ -499,7 +576,7 @@ describe('StageScene clear CTA', () => {
 
     const cardButton = getCardButton();
     expect(cardButton).not.toBeNull();
-    cardButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(cardButton!);
 
     expect(document.querySelector('[data-encyclopedia-detail-overlay]')).toBeNull();
     expect(cardButton?.style.pointerEvents).toBe('none');
@@ -529,7 +606,7 @@ describe('StageScene clear CTA', () => {
 
     const cardButton = getCardButton();
     expect(cardButton).not.toBeNull();
-    cardButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(cardButton!);
     await flushPromises();
     await flushPromises();
 
@@ -537,7 +614,7 @@ describe('StageScene clear CTA', () => {
     expect(cardButton?.style.pointerEvents).toBe('auto');
     expect(cardButton?.style.transform).toBe('scale(1)');
 
-    cardButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(cardButton!);
     await flushPromises();
     await flushPromises();
 
@@ -560,7 +637,7 @@ describe('StageScene clear CTA', () => {
 
     const cardButton = getCardButton();
     expect(cardButton).not.toBeNull();
-    cardButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(cardButton!);
 
     scene.exit();
     deferred.resolve({ EncyclopediaOverlay });
@@ -589,18 +666,18 @@ describe('StageScene clear CTA', () => {
     const cardButton = getCardButton();
     expect(cardButton).not.toBeNull();
 
-    cardButton!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(cardButton!);
     await flushPromises();
     await flushPromises();
-    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton);
     expect(sceneManager.requestTransition).not.toHaveBeenCalled();
 
     const backButton = document.querySelector('[data-detail-back]') as HTMLElement | null;
-    backButton?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    backButton && dispatchReleaseConfirm(backButton);
 
-    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton);
     retryButton.dispatchEvent(new Event('click', { bubbles: true }));
-    retryButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    dispatchReleaseConfirm(retryButton);
 
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
     expect(sceneManager.requestTransition).toHaveBeenCalledWith('stage', {

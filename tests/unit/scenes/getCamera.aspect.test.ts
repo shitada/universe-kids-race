@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { TitleScene } from '../../../src/game/scenes/TitleScene';
 import { EndingScene } from '../../../src/game/scenes/EndingScene';
 import { StageScene } from '../../../src/game/scenes/StageScene';
+import { updateViewportSizeCache } from '../../../src/game/utils/getViewportSize';
 import type { SceneManager } from '../../../src/game/SceneManager';
 import type { SaveManager } from '../../../src/game/storage/SaveManager';
 import type { AudioManager } from '../../../src/game/audio/AudioManager';
@@ -71,11 +72,13 @@ beforeEach(() => {
   overlay.id = 'ui-overlay';
   document.body.appendChild(overlay);
   setWindowSize(1024, 768);
+  updateViewportSizeCache();
 });
 
 afterEach(() => {
   const overlay = document.getElementById('ui-overlay');
   if (overlay) overlay.remove();
+  updateViewportSizeCache();
 });
 
 describe('getCamera() aspect-change-only updateProjectionMatrix', () => {
@@ -107,6 +110,7 @@ describe('getCamera() aspect-change-only updateProjectionMatrix', () => {
       const cam = scene.getCamera() as THREE.PerspectiveCamera;
       const spy = vi.spyOn(cam, 'updateProjectionMatrix');
       setWindowSize(800, 500);
+      updateViewportSizeCache();
       scene.getCamera();
       expect(spy).toHaveBeenCalledTimes(1);
       expect(cam.aspect).toBeCloseTo(800 / 500);
@@ -143,6 +147,7 @@ describe('getCamera() aspect-change-only updateProjectionMatrix', () => {
       const cam = scene.getCamera() as THREE.PerspectiveCamera;
       const spy = vi.spyOn(cam, 'updateProjectionMatrix');
       setWindowSize(640, 360);
+      updateViewportSizeCache();
       scene.getCamera();
       expect(spy).toHaveBeenCalledTimes(1);
       expect(cam.aspect).toBeCloseTo(640 / 360);
@@ -178,6 +183,7 @@ describe('getCamera() aspect-change-only updateProjectionMatrix', () => {
       const cam = scene.getCamera() as THREE.PerspectiveCamera;
       const spy = vi.spyOn(cam, 'updateProjectionMatrix');
       setWindowSize(1280, 720);
+      updateViewportSizeCache();
       scene.getCamera();
       expect(spy).toHaveBeenCalledTimes(1);
       expect(cam.aspect).toBeCloseTo(1280 / 720);
@@ -196,6 +202,7 @@ describe('getCamera() aspect-change-only updateProjectionMatrix', () => {
       const aspectBefore = cam.aspect;
       const spy = vi.spyOn(cam, 'updateProjectionMatrix');
       setWindowSize(1024, 0);
+      updateViewportSizeCache();
       scene.getCamera();
       expect(spy).toHaveBeenCalledTimes(0);
       expect(cam.aspect).toBe(aspectBefore);

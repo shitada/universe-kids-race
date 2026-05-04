@@ -485,4 +485,19 @@ describe('SceneManager', () => {
     expect(manager.getCurrentType()).toBe('title');
     expect(titleScene.exit).not.toHaveBeenCalled();
   });
+
+  it('disposes the current scene and clears current references', async () => {
+    const manager = new SceneManager();
+    const titleScene = createMockScene();
+
+    manager.registerScene('title', titleScene);
+
+    await manager.transitionTo('title');
+    manager.dispose();
+
+    expect(titleScene.exit).toHaveBeenCalledTimes(1);
+    expect(manager.getCurrentType()).toBeNull();
+    expect(manager.getCurrentThreeScene()).toBeNull();
+    expect(manager.getCurrentCamera()).toBeNull();
+  });
 });
