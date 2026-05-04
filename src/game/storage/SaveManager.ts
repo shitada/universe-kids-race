@@ -9,6 +9,10 @@ import {
   type SpaceshipCustomization,
   type VibrationIntensity,
 } from '../../types';
+import {
+  DEFAULT_MOTION_SENSITIVITY,
+  normalizeMotionSensitivity,
+} from '../accessibility/motionSensitivity';
 import { TOTAL_STAGES } from '../config/StageConfig';
 
 const STORAGE_KEY = 'universe-kids-race-save';
@@ -129,6 +133,26 @@ function normalizeVibrationIntensity(value: unknown): VibrationIntensity {
   }
 }
 
+function normalizeColorAccessibilitySettings(value: unknown): SaveData['colorAccessibility'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const highContrast = (value as { highContrast?: unknown }).highContrast === true;
+  const motionSensitivity = normalizeMotionSensitivity(
+    (value as { motionSensitivity?: unknown }).motionSensitivity,
+  );
+
+  if (!highContrast && motionSensitivity === DEFAULT_MOTION_SENSITIVITY) {
+    return undefined;
+  }
+
+  return {
+    ...(highContrast ? { highContrast: true } : {}),
+    ...(motionSensitivity !== DEFAULT_MOTION_SENSITIVITY ? { motionSensitivity } : {}),
+  };
+}
+
 function normalizeSpecialShootingStars(value: unknown): SpecialShootingStarType[] {
   if (!Array.isArray(value)) {
     return [];
@@ -173,8 +197,9 @@ function sanitizeSaveData(data: SaveData): SaveData {
     sanitized.discoveredSpecialStars = discoveredSpecialStars;
   }
 
-  if (data.colorAccessibility?.highContrast === true) {
-    sanitized.colorAccessibility = { highContrast: true };
+  const colorAccessibility = normalizeColorAccessibilitySettings(data.colorAccessibility);
+  if (colorAccessibility) {
+    sanitized.colorAccessibility = colorAccessibility;
   }
 
   if (data.bestStageStars && typeof data.bestStageStars === 'object') {
@@ -221,14 +246,11 @@ export class SaveManager {
         intensity: normalizeVibrationIntensity((data as { vibrationSettings?: { intensity?: unknown } }).vibrationSettings?.intensity),
       };
 
-      const rawColorAccessibility = (data as { colorAccessibility?: unknown }).colorAccessibility;
-      if (rawColorAccessibility && typeof rawColorAccessibility === 'object' && !Array.isArray(rawColorAccessibility)) {
-        const highContrast = (rawColorAccessibility as { highContrast?: unknown }).highContrast === true;
-        if (highContrast) {
-          data.colorAccessibility = { highContrast: true };
-        } else {
-          delete (data as { colorAccessibility?: unknown }).colorAccessibility;
-        }
+      const colorAccessibility = normalizeColorAccessibilitySettings(
+        (data as { colorAccessibility?: unknown }).colorAccessibility,
+      );
+      if (colorAccessibility) {
+        data.colorAccessibility = colorAccessibility;
       } else {
         delete (data as { colorAccessibility?: unknown }).colorAccessibility;
       }
@@ -332,9 +354,7 @@ export class SaveManager {
       };
       const lastStablePixelTier = prev.lastStablePixelTier;
       const tutorialShown = prev.tutorialShown === true;
-      const colorAccessibility = prev.colorAccessibility?.highContrast === true
-        ? { highContrast: true as const }
-        : undefined;
+      const colorAccessibility = normalizeColorAccessibilitySettings(prev.colorAccessibility);
       const gameplayStats = normalizeGameplayStats(prev.gameplayStats);
       const spaceshipCustomization = normalizeSpaceshipCustomization(prev.spaceshipCustomization);
       this.clear();
@@ -370,9 +390,7 @@ export class SaveManager {
         intensity: normalizeVibrationIntensity(prev.vibrationSettings?.intensity),
       };
       const lastStablePixelTier = prev.lastStablePixelTier;
-      const colorAccessibility = prev.colorAccessibility?.highContrast === true
-        ? { highContrast: true as const }
-        : undefined;
+      const colorAccessibility = normalizeColorAccessibilitySettings(prev.colorAccessibility);
       const gameplayStats = normalizeGameplayStats(prev.gameplayStats);
       const spaceshipCustomization = normalizeSpaceshipCustomization(prev.spaceshipCustomization);
       this.clear();

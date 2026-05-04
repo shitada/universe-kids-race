@@ -533,6 +533,13 @@ describe('TitleScene (T009)', () => {
       vibrationSettings: { intensity: 'strong' },
     }));
 
+    const minimalMotionButton = document.querySelector('[data-motion-sensitivity-button="minimal"]') as HTMLButtonElement | null;
+    minimalMotionButton?.click();
+
+    expect(saveManager.save).toHaveBeenCalledWith(expect.objectContaining({
+      colorAccessibility: { highContrast: true, motionSensitivity: 'minimal' },
+    }));
+
     scene.exit();
   });
 

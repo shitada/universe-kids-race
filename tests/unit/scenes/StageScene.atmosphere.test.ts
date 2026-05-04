@@ -62,4 +62,49 @@ describe('StageScene atmosphere integration', () => {
     });
     expect(internal.stageAtmosphereEffect.getParticleSystem().geometry.drawRange.count).toBe(24);
   });
+
+  it('モーション感度がさいしょうだと演出の粒子数をさらに抑える', () => {
+    const inputState = { moveDirection: 0 as -1 | 0 | 1, boostPressed: false };
+    const sceneManager = { requestTransition: vi.fn() } as unknown as SceneManager;
+    const inputSystem = {
+      getState: () => inputState,
+      setBoostPressed: vi.fn(),
+      resetPointers: vi.fn(),
+    } as unknown as InputSystem;
+    const audioManager = {
+      playBGM: vi.fn(),
+      stopBGM: vi.fn(),
+      isMuted: vi.fn(() => false),
+      toggleMute: vi.fn(() => false),
+      setMuted: vi.fn(),
+      playSFX: vi.fn(),
+      startBoostSFX: vi.fn(),
+      stopBoostSFX: vi.fn(),
+      initFromInteraction: vi.fn(),
+    } as unknown as AudioManager;
+    const saveManager = {
+      load: vi.fn(() => ({
+        clearedStage: 0,
+        unlockedPlanets: [],
+        muted: false,
+        bestStageStars: {},
+        colorAccessibility: { motionSensitivity: 'minimal' },
+      })),
+      save: vi.fn(),
+      clear: vi.fn(),
+      markStageCleared: vi.fn(() => false),
+      updateBestStageStars: vi.fn(),
+    } as unknown as SaveManager;
+    const scene = new StageScene(sceneManager, inputSystem, audioManager, saveManager);
+
+    scene.enter({ stageNumber: 6, replayToken: 1, totalScore: 0, totalStarCount: 0 });
+
+    const internal = scene as unknown as {
+      stageAtmosphereEffect: {
+        getParticleSystem(): { geometry: { drawRange: { count: number } } };
+      };
+    };
+
+    expect(internal.stageAtmosphereEffect.getParticleSystem().geometry.drawRange.count).toBeLessThan(54);
+  });
 });

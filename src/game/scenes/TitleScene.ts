@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {
   DEFAULT_SPACESHIP_CUSTOMIZATION,
+  type MotionSensitivity,
   type SaveData,
   type Scene,
   type SceneContext,
@@ -24,6 +25,7 @@ import { attachReleaseConfirmButton } from '../../ui/attachReleaseConfirmButton'
 import { createStageMedalDisplay } from '../../ui/stageMedalDisplay';
 import { prewarmStageVisualAssets } from './stageVisualAssets';
 import { setSharedVibrationIntensity } from '../systems/VibrationSystem';
+import { DEFAULT_MOTION_SENSITIVITY } from '../accessibility/motionSensitivity';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // SHARED background-star resources for TitleScene
@@ -452,9 +454,10 @@ export class TitleScene implements Scene {
 
   private persistHighContrastSetting(enabled: boolean): void {
     const data = this.saveManager.load();
-    if (enabled) {
-      data.colorAccessibility = { highContrast: true };
-    } else {
+    const currentMotionSensitivity =
+      data.colorAccessibility?.motionSensitivity ?? DEFAULT_MOTION_SENSITIVITY;
+    data.colorAccessibility = this.buildColorAccessibilitySettings(enabled, currentMotionSensitivity);
+    if (!data.colorAccessibility) {
       delete data.colorAccessibility;
     }
     this.saveManager.save(data);
@@ -465,6 +468,30 @@ export class TitleScene implements Scene {
     data.vibrationSettings = { intensity };
     this.saveManager.save(data);
     setSharedVibrationIntensity(intensity);
+  }
+
+  private persistMotionSensitivitySetting(sensitivity: MotionSensitivity): void {
+    const data = this.saveManager.load();
+    const highContrastEnabled = data.colorAccessibility?.highContrast === true;
+    data.colorAccessibility = this.buildColorAccessibilitySettings(highContrastEnabled, sensitivity);
+    if (!data.colorAccessibility) {
+      delete data.colorAccessibility;
+    }
+    this.saveManager.save(data);
+  }
+
+  private buildColorAccessibilitySettings(
+    highContrastEnabled: boolean,
+    motionSensitivity: MotionSensitivity,
+  ): SaveData['colorAccessibility'] {
+    if (!highContrastEnabled && motionSensitivity === DEFAULT_MOTION_SENSITIVITY) {
+      return undefined;
+    }
+
+    return {
+      ...(highContrastEnabled ? { highContrast: true } : {}),
+      ...(motionSensitivity !== DEFAULT_MOTION_SENSITIVITY ? { motionSensitivity } : {}),
+    };
   }
 
   private createOverlay(): void {
@@ -754,8 +781,11 @@ export class TitleScene implements Scene {
         this.colorAccessibilitySettings.show({
           initialHighContrast: this.saveManager.load().colorAccessibility?.highContrast === true,
           initialVibrationIntensity: this.saveManager.load().vibrationSettings?.intensity ?? 'medium',
+          initialMotionSensitivity:
+            this.saveManager.load().colorAccessibility?.motionSensitivity ?? DEFAULT_MOTION_SENSITIVITY,
           onToggle: (enabled) => this.persistHighContrastSetting(enabled),
           onVibrationIntensityChange: (intensity) => this.persistVibrationIntensitySetting(intensity),
+          onMotionSensitivityChange: (sensitivity) => this.persistMotionSensitivitySetting(sensitivity),
         });
       },
       onPressChange: (pressed) => {

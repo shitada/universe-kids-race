@@ -27,6 +27,8 @@ export type StarType = 'NORMAL' | 'RAINBOW';
 
 export type VibrationPattern = number | number[];
 export type VibrationIntensity = 'off' | 'weak' | 'medium' | 'strong';
+export const MOTION_SENSITIVITY_LEVELS = ['strong', 'medium', 'gentle', 'minimal'] as const;
+export type MotionSensitivity = (typeof MOTION_SENSITIVITY_LEVELS)[number];
 
 // Input
 export interface InputState {
@@ -110,7 +112,8 @@ export type SFXType =
 
 // Save data
 export interface ColorAccessibilitySettings {
-  highContrast: boolean;
+  highContrast?: boolean;
+  motionSensitivity?: MotionSensitivity;
 }
 
 export interface VibrationSettings {

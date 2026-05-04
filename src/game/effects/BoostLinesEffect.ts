@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import type { MotionSensitivity } from '../../types';
+import { getMotionSensitivityProfile } from '../accessibility/motionSensitivity';
 
 /**
  * ブースト中に船の周囲に表示される速度ラインのエフェクト。
@@ -23,6 +25,7 @@ export class BoostLinesEffect {
   private lastVisible: boolean | null = null;
   private writeCursor = 0;
   private qualityTier = BoostLinesEffect.VISUAL_QUALITY_SCALE_BY_TIER.length - 1;
+  private motionSensitivity: MotionSensitivity = 'strong';
 
   init(scene: THREE.Scene): void {
     if (this.lines) return;
@@ -47,6 +50,12 @@ export class BoostLinesEffect {
     this.writeCursor = 0;
   }
 
+  setMotionSensitivity(sensitivity: MotionSensitivity): void {
+    this.motionSensitivity = sensitivity;
+    this.lines?.geometry.setDrawRange(0, this.getActiveLineCount() * 2);
+    this.writeCursor = 0;
+  }
+
   update(boostActive: boolean, shipX: number, shipZ: number): void {
     if (!this.lines || !this.positions) return;
 
@@ -60,6 +69,8 @@ export class BoostLinesEffect {
 
     const pos = this.positions;
     const activeLineCount = this.getActiveLineCount();
+    const motionProfile = getMotionSensitivityProfile(this.motionSensitivity);
+    const lengthScale = motionProfile.boostLineLengthScale;
     const isFirstBoostFrame = this.lastVisible !== true;
     // boost 開始フレームは初期見栄え担保のため全 20 本を一度に書き込み、
     // 以降は LINES_PER_FRAME 本ずつ round-robin で更新する。
@@ -78,7 +89,7 @@ export class BoostLinesEffect {
       pos[base + 2] = z;
       pos[base + 3] = x;
       pos[base + 4] = y;
-      pos[base + 5] = z + 2 + Math.random() * 3;
+      pos[base + 5] = z + (2 + Math.random() * 3) * lengthScale;
     }
     if (isFirstBoostFrame) {
       this.writeCursor = 0;
@@ -120,9 +131,14 @@ export class BoostLinesEffect {
   }
 
   private getActiveLineCount(): number {
+    const motionProfile = getMotionSensitivityProfile(this.motionSensitivity);
     return Math.max(
       1,
-      Math.round(BoostLinesEffect.LINE_COUNT * BoostLinesEffect.getQualityScale(this.qualityTier)),
+      Math.round(
+        BoostLinesEffect.LINE_COUNT
+        * BoostLinesEffect.getQualityScale(this.qualityTier)
+        * motionProfile.particleDensityScale,
+      ),
     );
   }
 

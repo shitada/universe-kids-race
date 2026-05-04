@@ -8,7 +8,7 @@ import type { InputSystem } from '../../../src/game/systems/InputSystem';
 import type { AudioManager } from '../../../src/game/audio/AudioManager';
 import type { SaveManager } from '../../../src/game/storage/SaveManager';
 
-function createScene(): StageScene {
+function createScene(motionSensitivity: 'strong' | 'medium' | 'gentle' | 'minimal' = 'strong'): StageScene {
   const sceneManager = { requestTransition: vi.fn() } as unknown as SceneManager;
   const inputState = { moveDirection: 0, boostPressed: false };
   const inputSystem = {
@@ -30,7 +30,11 @@ function createScene(): StageScene {
     initFromInteraction: vi.fn(),
   } as unknown as AudioManager;
   const saveManager = {
-    load: vi.fn(() => ({ clearedStage: 0, unlockedPlanets: [] })),
+    load: vi.fn(() => ({
+      clearedStage: 0,
+      unlockedPlanets: [],
+      colorAccessibility: motionSensitivity === 'strong' ? undefined : { motionSensitivity },
+    })),
     save: vi.fn(),
     clear: vi.fn(),
   } as unknown as SaveManager;
@@ -121,6 +125,33 @@ describe('StageScene camera shake', () => {
     expect(internal.cameraShakeTimer).toBeGreaterThan(remaining);
     internal.updateCameraFollow(0.016);
     expect(internal.cameraShakeOffset.length()).toBeGreaterThan(0);
+  });
+
+  it('reduces shake amplitude and smooths camera follow when motion sensitivity is minimal', () => {
+    const strongScene = createScene('strong');
+    const minimalScene = createScene('minimal');
+    const strongInternal = strongScene as unknown as InternalScene;
+    const minimalInternal = minimalScene as unknown as InternalScene;
+
+    strongInternal.spaceship.position.x = 10;
+    strongInternal.spaceship.position.z = -120;
+    minimalInternal.spaceship.position.x = 10;
+    minimalInternal.spaceship.position.z = -120;
+
+    strongInternal.updateCameraFollow(0.016);
+    minimalInternal.updateCameraFollow(0.016);
+    expect(strongInternal.camera.position.x).toBeCloseTo(3, 6);
+    expect(minimalInternal.camera.position.x).toBeGreaterThan(0);
+    expect(minimalInternal.camera.position.x).toBeLessThan(3);
+
+    strongInternal.startCameraShake();
+    minimalInternal.startCameraShake();
+    strongInternal.updateCameraFollow(0.016);
+    minimalInternal.updateCameraFollow(0.016);
+
+    expect(minimalInternal.cameraShakeOffset.length()).toBeLessThan(strongInternal.cameraShakeOffset.length());
+    strongScene.exit();
+    minimalScene.exit();
   });
 
   it('resets any shake state when the scene exits', () => {

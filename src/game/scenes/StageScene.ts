@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {
   DEFAULT_SPACESHIP_CUSTOMIZATION,
   type AssistDirection,
+  type MotionSensitivity,
   type Scene,
   type SceneContext,
   type StageConfig,
@@ -75,6 +76,10 @@ import {
   prewarmStageVisualAssets,
 } from './stageVisualAssets';
 import { SPECIAL_STAR_CONFIG } from '../config/SpecialStarConfig';
+import {
+  DEFAULT_MOTION_SENSITIVITY,
+  getMotionSensitivityProfile,
+} from '../accessibility/motionSensitivity';
 
 const BG_STAR_PARALLAX = 1.0;
 const BG_STAR_COUNT = 2000;
@@ -212,6 +217,9 @@ export class StageScene implements Scene {
   private cameraShakeElapsed = 0;
   private readonly cameraShakeOffset = new THREE.Vector3();
   private cameraShakeProfile: CameraShakeProfile = CAMERA_SHAKE_PROFILES.meteoriteHit;
+  private motionSensitivity: MotionSensitivity = DEFAULT_MOTION_SENSITIVITY;
+  private readonly cameraPositionTarget = new THREE.Vector3(0, 5, 10);
+  private readonly cameraLookAtTarget = new THREE.Vector3(0, 0, -10);
 
   // Destination planet
   private destinationPlanet: THREE.Group | null = null;
@@ -415,6 +423,7 @@ export class StageScene implements Scene {
     const saveData = this.saveManager.load();
     this.spaceship.applyCustomization(saveData.spaceshipCustomization ?? DEFAULT_SPACESHIP_CUSTOMIZATION);
     const highContrastEnabled = saveData.colorAccessibility?.highContrast === true;
+    this.motionSensitivity = saveData.colorAccessibility?.motionSensitivity ?? DEFAULT_MOTION_SENSITIVITY;
     setSharedVibrationIntensity(saveData.vibrationSettings?.intensity ?? 'medium');
     setSharedVibrationFallbackHandler((event) => this.handleVibrationFallback(event));
     setStarHighContrastMode(highContrastEnabled);
@@ -443,6 +452,7 @@ export class StageScene implements Scene {
     this.companionManager?.resetUnlockedPlanets([]);
     this.createBackground();
     this.stageAtmosphereEffect.start(getStageAtmosphereConfig(this.stageNumber));
+    this.applyMotionSensitivity();
     this.applyVisualQualityTier();
     const seasonalEvent = this.seasonalEventSystem.refresh();
     if (seasonalEvent) {
@@ -453,6 +463,7 @@ export class StageScene implements Scene {
     // Camera behind spaceship
     this.camera.position.set(0, 5, 10);
     this.camera.lookAt(0, 0, -10);
+    this.cameraLookAtTarget.set(0, 0, -10);
 
     // Destination planet
     this.createDestinationPlanet();
@@ -1618,25 +1629,34 @@ export class StageScene implements Scene {
 
     const decay = this.cameraShakeTimer / this.cameraShakeProfile.duration;
     const phase = this.cameraShakeElapsed * this.cameraShakeProfile.frequency;
+    const motionProfile = getMotionSensitivityProfile(this.motionSensitivity);
     this.cameraShakeOffset.set(
-      Math.sin(phase) * this.cameraShakeProfile.amplitudeX * decay,
-      Math.cos(phase * 0.8) * this.cameraShakeProfile.amplitudeY * decay,
+      Math.sin(phase) * this.cameraShakeProfile.amplitudeX * decay * motionProfile.cameraShakeScale,
+      Math.cos(phase * 0.8) * this.cameraShakeProfile.amplitudeY * decay * motionProfile.cameraShakeScale,
       0,
     );
   }
 
   private updateCameraFollow(deltaTime: number): void {
     this.updateCameraShake(deltaTime);
-    this.camera.position.set(
-      this.spaceship.position.x * 0.3 + this.cameraShakeOffset.x,
-      5 + this.cameraShakeOffset.y,
-      this.spaceship.position.z + 12,
-    );
-    this.camera.lookAt(
+    const motionProfile = getMotionSensitivityProfile(this.motionSensitivity);
+    const targetX = this.spaceship.position.x * 0.3 + this.cameraShakeOffset.x;
+    const targetY = 5 + this.cameraShakeOffset.y;
+    const targetZ = this.spaceship.position.z + 12;
+    const followResponsiveness = motionProfile.cameraFollowResponsiveness;
+    if (followResponsiveness >= 1) {
+      this.camera.position.set(targetX, targetY, targetZ);
+    } else {
+      const frameScaledLerp = 1 - Math.pow(1 - followResponsiveness, Math.max(1, deltaTime * 60));
+      this.cameraPositionTarget.set(targetX, targetY, targetZ);
+      this.camera.position.lerp(this.cameraPositionTarget, frameScaledLerp);
+    }
+    this.cameraLookAtTarget.set(
       this.spaceship.position.x * 0.5,
       0,
       this.spaceship.position.z - 20,
     );
+    this.camera.lookAt(this.cameraLookAtTarget);
   }
 
   private cleanupPassedObjects(deltaTime: number): void {
@@ -2115,10 +2135,24 @@ export class StageScene implements Scene {
   }
 
   private getBackgroundStarDrawCount(): number {
+    const motionProfile = getMotionSensitivityProfile(this.motionSensitivity);
     return Math.max(
       1,
-      Math.round(StageScene.BG_STAR_COUNT * StageScene.getVisualQualityScale(this.visualQualityTier)),
+      Math.round(
+        StageScene.BG_STAR_COUNT
+        * StageScene.getVisualQualityScale(this.visualQualityTier)
+        * motionProfile.particleDensityScale,
+      ),
     );
+  }
+
+  private applyMotionSensitivity(): void {
+    if (!this.initialized) {
+      return;
+    }
+    this.boostLinesEffect.setMotionSensitivity(this.motionSensitivity);
+    this.boostFlameEffect.setMotionSensitivity(this.motionSensitivity);
+    this.stageAtmosphereEffect.setMotionSensitivity(this.motionSensitivity);
   }
 
   private static clampVisualQualityTier(tier: number): number {

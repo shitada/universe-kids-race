@@ -36,6 +36,38 @@ describe('StageAtmosphereEffect', () => {
     expect(effect.getParticleSystem().geometry.drawRange.count).toBe(24);
   });
 
+  it('モーション感度を下げると粒子数と動きの強さを抑える', () => {
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 2000);
+    const strongEffect = new StageAtmosphereEffect();
+    const minimalEffect = new StageAtmosphereEffect();
+    const config = getStageAtmosphereConfig(6);
+
+    strongEffect.init(scene);
+    strongEffect.start(config);
+    strongEffect.update(0.2, camera, 0, 0);
+
+    minimalEffect.init(scene);
+    minimalEffect.setMotionSensitivity('minimal');
+    minimalEffect.start(config);
+    minimalEffect.update(0.2, camera, 0, 0);
+
+    const strongPositions = (
+      strongEffect.getParticleSystem().geometry.getAttribute('position').array
+    ) as Float32Array;
+    const minimalPositions = (
+      minimalEffect.getParticleSystem().geometry.getAttribute('position').array
+    ) as Float32Array;
+
+    expect(minimalEffect.getParticleSystem().geometry.drawRange.count).toBeLessThan(
+      strongEffect.getParticleSystem().geometry.drawRange.count,
+    );
+    expect((minimalEffect.getParticleSystem().material as THREE.PointsMaterial).size).toBeLessThan(
+      (strongEffect.getParticleSystem().material as THREE.PointsMaterial).size,
+    );
+    expect(minimalPositions[1]).not.toBe(strongPositions[1]);
+  });
+
   it('clear で非表示に戻る', () => {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 2000);

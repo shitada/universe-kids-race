@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import type { StageAtmosphereConfig, StageAtmosphereParticlePattern } from '../../types';
+import type { MotionSensitivity, StageAtmosphereConfig, StageAtmosphereParticlePattern } from '../../types';
+import { getMotionSensitivityProfile } from '../accessibility/motionSensitivity';
 
 interface ParticleState {
   angle: number;
@@ -51,6 +52,7 @@ export class StageAtmosphereEffect {
   private gradientTexture: THREE.DataTexture | null = null;
   private particleStates: ParticleState[] = [];
   private particlePositions = new Float32Array(0);
+  private motionSensitivity: MotionSensitivity = 'strong';
 
   constructor() {
     this.group.visible = false;
@@ -84,8 +86,7 @@ export class StageAtmosphereEffect {
     this.group.visible = true;
     this.backdropMesh.visible = true;
     this.particleSystem.visible = true;
-    this.particleMaterial.size = config.particleSize;
-    this.particleMaterial.opacity = config.particlePattern === 'mist' ? 0.5 : 0.72;
+    this.applyMotionSensitivityToMaterial(config);
     this.updateGradientTexture(config.gradientTopColor, config.gradientBottomColor);
     this.rebuildParticles(config);
     this.applyQualityTier();
@@ -106,7 +107,7 @@ export class StageAtmosphereEffect {
       return;
     }
 
-    this.elapsed += Math.max(0, deltaTime);
+    this.elapsed += Math.max(0, deltaTime) * getMotionSensitivityProfile(this.motionSensitivity).animationSpeedScale;
     this.syncBackdrop(camera);
     this.syncParticles(shipX, shipZ, this.activeConfig.particlePattern);
   }
@@ -114,6 +115,14 @@ export class StageAtmosphereEffect {
   setQualityTier(tier: number): void {
     const maxTier = StageAtmosphereEffect.QUALITY_SCALES.length - 1;
     this.qualityTier = Math.max(0, Math.min(maxTier, Math.round(tier)));
+    this.applyQualityTier();
+  }
+
+  setMotionSensitivity(sensitivity: MotionSensitivity): void {
+    this.motionSensitivity = sensitivity;
+    if (this.activeConfig) {
+      this.applyMotionSensitivityToMaterial(this.activeConfig);
+    }
     this.applyQualityTier();
   }
 
@@ -143,10 +152,18 @@ export class StageAtmosphereEffect {
       return;
     }
     const scale = StageAtmosphereEffect.QUALITY_SCALES[this.qualityTier];
+    const motionProfile = getMotionSensitivityProfile(this.motionSensitivity);
     this.particleGeometry.setDrawRange(
       0,
-      Math.max(1, Math.round(this.activeConfig.particleCount * scale)),
+      Math.max(1, Math.round(this.activeConfig.particleCount * scale * motionProfile.particleDensityScale)),
     );
+  }
+
+  private applyMotionSensitivityToMaterial(config: StageAtmosphereConfig): void {
+    const motionProfile = getMotionSensitivityProfile(this.motionSensitivity);
+    this.particleMaterial.size = config.particleSize * motionProfile.effectSizeScale;
+    this.particleMaterial.opacity =
+      (config.particlePattern === 'mist' ? 0.5 : 0.72) * (0.7 + motionProfile.effectSizeScale * 0.3);
   }
 
   private rebuildParticles(config: StageAtmosphereConfig): void {

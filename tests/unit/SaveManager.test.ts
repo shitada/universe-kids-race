@@ -461,6 +461,41 @@ describe('SaveManager', () => {
 
       expect(manager.load().colorAccessibility).toBeUndefined();
     });
+
+    it('keeps non-default motion sensitivity values on load', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        colorAccessibility: { motionSensitivity: 'gentle' },
+      }));
+      const manager = new SaveManager();
+
+      expect(manager.load().colorAccessibility).toEqual({ motionSensitivity: 'gentle' });
+    });
+
+    it('drops default-only motion sensitivity payloads', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        colorAccessibility: { motionSensitivity: 'strong' },
+      }));
+      const manager = new SaveManager();
+
+      expect(manager.load().colorAccessibility).toBeUndefined();
+    });
+
+    it('preserves motion sensitivity when progress is reset', () => {
+      const manager = new SaveManager();
+      manager.save({
+        clearedStage: 4,
+        unlockedPlanets: [1, 2, 3, 4],
+        colorAccessibility: { motionSensitivity: 'minimal' },
+      });
+
+      manager.resetProgressPreservingSettings();
+
+      expect(manager.load().colorAccessibility).toEqual({ motionSensitivity: 'minimal' });
+    });
   });
 
   describe('storage failure resilience', () => {

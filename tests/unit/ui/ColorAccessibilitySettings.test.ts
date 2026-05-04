@@ -22,8 +22,10 @@ describe('ColorAccessibilitySettings', () => {
     settings.show({
       initialHighContrast: false,
       initialVibrationIntensity: 'medium',
+      initialMotionSensitivity: 'strong',
       onToggle,
       onVibrationIntensityChange,
+      onMotionSensitivityChange: vi.fn(),
     });
 
     const toggle = document.querySelector('[data-color-accessibility-toggle]') as HTMLButtonElement | null;
@@ -41,8 +43,10 @@ describe('ColorAccessibilitySettings', () => {
     settings.show({
       initialHighContrast: true,
       initialVibrationIntensity: 'weak',
+      initialMotionSensitivity: 'strong',
       onToggle: vi.fn(),
       onVibrationIntensityChange,
+      onMotionSensitivityChange: vi.fn(),
     });
 
     const weakButton = document.querySelector('[data-vibration-intensity-button="weak"]') as HTMLButtonElement | null;
@@ -55,12 +59,36 @@ describe('ColorAccessibilitySettings', () => {
     expect(onVibrationIntensityChange).toHaveBeenCalledWith('strong');
   });
 
+  it('lets children pick gentler motion intensity explicitly', () => {
+    const onMotionSensitivityChange = vi.fn();
+    settings.show({
+      initialHighContrast: false,
+      initialVibrationIntensity: 'medium',
+      initialMotionSensitivity: 'medium',
+      onToggle: vi.fn(),
+      onVibrationIntensityChange: vi.fn(),
+      onMotionSensitivityChange,
+    });
+
+    const mediumButton = document.querySelector('[data-motion-sensitivity-button="medium"]') as HTMLButtonElement | null;
+    const minimalButton = document.querySelector('[data-motion-sensitivity-button="minimal"]') as HTMLButtonElement | null;
+    expect(mediumButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(document.body.textContent).toContain('うごきの つよさを かえて めが つかれないようにするよ');
+
+    minimalButton?.click();
+
+    expect(minimalButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(onMotionSensitivityChange).toHaveBeenCalledWith('minimal');
+  });
+
   it('hides the panel when requested', () => {
     settings.show({
       initialHighContrast: true,
       initialVibrationIntensity: 'medium',
+      initialMotionSensitivity: 'strong',
       onToggle: vi.fn(),
       onVibrationIntensityChange: vi.fn(),
+      onMotionSensitivityChange: vi.fn(),
     });
     expect(settings.isVisible()).toBe(true);
 
