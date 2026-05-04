@@ -59,7 +59,7 @@ describe('ColorAccessibilitySettings', () => {
     expect(onVibrationIntensityChange).toHaveBeenCalledWith('strong');
   });
 
-  it('lets children pick gentler motion intensity explicitly', () => {
+  it('shows visual motion choices and starts a preview when selected', () => {
     const onMotionSensitivityChange = vi.fn();
     settings.show({
       initialHighContrast: false,
@@ -72,12 +72,20 @@ describe('ColorAccessibilitySettings', () => {
 
     const mediumButton = document.querySelector('[data-motion-sensitivity-button="medium"]') as HTMLButtonElement | null;
     const minimalButton = document.querySelector('[data-motion-sensitivity-button="minimal"]') as HTMLButtonElement | null;
+    const preview = document.querySelector('[data-motion-preview]') as HTMLDivElement | null;
+    const previewCaption = document.querySelector('[data-motion-preview-caption]') as HTMLParagraphElement | null;
     expect(mediumButton?.getAttribute('aria-pressed')).toBe('true');
-    expect(document.body.textContent).toContain('うごきの つよさを かえて めが つかれないようにするよ');
+    expect(mediumButton?.textContent).toContain('🏃');
+    expect(minimalButton?.textContent).toContain('🐢');
+    expect(minimalButton?.textContent).toContain('ゆっくり');
+    expect(document.body.textContent).toContain('えらんで みると うごきの おためしが みえるよ');
+    expect(previewCaption?.textContent).toContain('はやい');
 
     minimalButton?.click();
 
     expect(minimalButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(preview?.dataset.previewActive).toBe('true');
+    expect(previewCaption?.textContent).toContain('ゆっくり');
     expect(onMotionSensitivityChange).toHaveBeenCalledWith('minimal');
   });
 
