@@ -44,7 +44,7 @@ export class StageClearOverlay {
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: safe center;
       width: 100%;
       height: 100%;
       background: rgba(0, 0, 32, 0.6);
@@ -54,7 +54,9 @@ export class StageClearOverlay {
       padding: 1.2rem;
       box-sizing: border-box;
       text-align: center;
-      overflow: hidden;
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
     `;
     this.overlayEl = overlay;
 
