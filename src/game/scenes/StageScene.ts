@@ -31,6 +31,7 @@ import { ParticleBurstManager } from '../effects/ParticleBurst';
 import { AirShield } from '../effects/AirShield';
 import { BoostLinesEffect } from '../effects/BoostLinesEffect';
 import { BoostFlameEffect } from '../effects/BoostFlameEffect';
+import { PlanetRingEffect } from '../effects/PlanetRingEffect';
 import { CompanionManager } from '../entities/CompanionManager';
 import { followCameraZ } from '../utils/followCameraZ';
 import { getViewportSize } from '../utils/getViewportSize';
@@ -124,6 +125,7 @@ export class StageScene implements Scene {
   private hud!: HUD;
   private scorePopupManager = new ScorePopupManager();
   private particleBurstManager = new ParticleBurstManager();
+  private planetRingEffect = new PlanetRingEffect();
   private airShield!: AirShield;
 
   private stageConfig!: StageConfig;
@@ -304,6 +306,7 @@ export class StageScene implements Scene {
     this.damageTimer = 0;
     this.elapsedTime = 0;
     this.destinationPlanetSpinTarget = null;
+    this.planetRingEffect.clear();
     this.isHomeConfirmOpen = false;
     this.shouldResumeAfterHomeConfirm = false;
     this.isPauseOpen = false;
@@ -697,6 +700,7 @@ export class StageScene implements Scene {
     this.isOpeningClearReward = false;
     this.removeDestinationPlanet();
     this.resetCameraShake();
+    this.planetRingEffect.clear();
     this.particleBurstManager.clear(this.threeScene);
     this.spawnSystem.recycleAll();
     this.spawnSystem.setMeteoriteIntervalMultiplier(1);
@@ -716,6 +720,8 @@ export class StageScene implements Scene {
     if (this.isCleared) {
       this.resetBoostHintState();
       this.clearTimer += deltaTime;
+      this.planetRingEffect.update(deltaTime);
+      this.particleBurstManager.update(this.threeScene, deltaTime);
       // Keep companion entrance animation progressing during clear screen
       this.companionManager?.update(
         deltaTime,
@@ -723,6 +729,10 @@ export class StageScene implements Scene {
         this.spaceship.position.y,
         this.spaceship.position.z,
       );
+      if (this.destinationPlanetSpinTarget) {
+        this.destinationPlanetSpinTarget.rotation.y +=
+          deltaTime * StageScene.DESTINATION_PLANET_SPIN_SPEED;
+      }
       this.revealClearActionButtonsIfReady();
       return;
     }
@@ -1449,6 +1459,16 @@ export class StageScene implements Scene {
     triggerSharedVibration('stageClear');
     this.audioManager.stopBoostSFX();
     this.boostFlameEffect.remove();
+    if (this.destinationPlanet) {
+      const planetRadius = this.getDestinationPlanetEffectRadius(this.destinationPlanet);
+      this.planetRingEffect.start(
+        this.threeScene,
+        this.destinationPlanet,
+        planetRadius,
+        this.stageConfig.planetColor,
+        this.particleBurstManager,
+      );
+    }
 
     // Capture previous best BEFORE updating, so we can show "じこベスト
     // こうしん" feedback only when the child actually improved.
@@ -1601,6 +1621,15 @@ export class StageScene implements Scene {
     this.stageClearOverlay.enableContinue();
   }
 
+  private getDestinationPlanetEffectRadius(planet: THREE.Object3D): number {
+    const bounds = new THREE.Box3().setFromObject(planet);
+    if (bounds.isEmpty()) {
+      return 15;
+    }
+    const size = bounds.getSize(new THREE.Vector3());
+    return Math.max(size.x, size.y, size.z) * 0.5;
+  }
+
   private handleStageComplete(): void {
     const { totalScore, totalStarCount } = this.scoreSystem.finalizeStage();
 
@@ -1687,6 +1716,7 @@ export class StageScene implements Scene {
     this.boostFlameEffect.remove();
     this.boostLinesEffect.update(false, this.spaceship.position.x, this.spaceship.position.z);
     this.airShield.reset(this.spaceship.position.x, this.spaceship.position.y, this.spaceship.position.z);
+    this.planetRingEffect.clear();
     this.resetStageObjects();
     if (this.bgStars) {
       this.bgStars.parent?.remove(this.bgStars);
