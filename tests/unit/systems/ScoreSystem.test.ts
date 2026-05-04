@@ -31,6 +31,29 @@ describe('ScoreSystem', () => {
     expect(system.getStarCount()).toBe(3);
   });
 
+  it('doubles star score while shooting star bonus is active', () => {
+    const system = new ScoreSystem();
+
+    system.activateShootingStarBonus(6);
+    system.addStarScore('NORMAL');
+    system.addStarScore('RAINBOW');
+
+    expect(system.getScoreMultiplier()).toBe(2);
+    expect(system.getStageScore()).toBe(1200);
+    expect(system.getStarCount()).toBe(2);
+  });
+
+  it('returns to normal score after the shooting star bonus expires', () => {
+    const system = new ScoreSystem();
+
+    system.activateShootingStarBonus(0.5);
+    system.update(0.5);
+    system.addStarScore('NORMAL');
+
+    expect(system.getScoreMultiplier()).toBe(1);
+    expect(system.getStageScore()).toBe(100);
+  });
+
   it('finalizeStage adds stageScore to totalScore and resets stage', () => {
     const system = new ScoreSystem();
     system.addStarScore('NORMAL');
@@ -60,5 +83,6 @@ describe('ScoreSystem', () => {
     system.reset();
     expect(system.getStageScore()).toBe(0);
     expect(system.getTotalScore()).toBe(0);
+    expect(system.getScoreMultiplier()).toBe(1);
   });
 });

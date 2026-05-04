@@ -7,6 +7,7 @@ import type { SaveManager } from '../storage/SaveManager';
 import { Spaceship } from '../entities/Spaceship';
 import { Star, setStarHighContrastMode } from '../entities/Star';
 import { Meteorite, setMeteoriteHighContrastMode } from '../entities/Meteorite';
+import { ShootingStar } from '../entities/ShootingStar';
 import { CollisionSystem } from '../systems/CollisionSystem';
 import { ScoreSystem } from '../systems/ScoreSystem';
 import { SpawnSystem } from '../systems/SpawnSystem';
@@ -101,6 +102,7 @@ export class StageScene implements Scene {
   private spaceship!: Spaceship;
   private stars: Star[] = [];
   private meteorites: Meteorite[] = [];
+  private shootingStars: ShootingStar[] = [];
 
   private collisionSystem = new CollisionSystem();
   private scoreSystem = new ScoreSystem();
@@ -154,6 +156,7 @@ export class StageScene implements Scene {
   private static readonly BOOST_HINT_REPEAT_DELAY = 12;
   private static readonly BOOST_HINT_DURATION = 2.4;
   private static readonly BOOST_HINT_MESSAGE = '🚀 いまだよ！';
+  private static readonly SHOOTING_STAR_SCORE_BONUS_DURATION = 6;
 
   // Background stars
   private bgStars: THREE.Points | null = null;
@@ -342,6 +345,7 @@ export class StageScene implements Scene {
     // Clear systems
     this.stars.length = 0;
     this.meteorites.length = 0;
+    this.shootingStars.length = 0;
     this.spawnSystem.reset();
     this.spawnSystem.setMeteoriteIntervalMultiplier(1);
     this.boostSystem.reset();
@@ -677,6 +681,7 @@ export class StageScene implements Scene {
     this.spawnSystem.setMeteoriteIntervalMultiplier(1);
     this.stars.length = 0;
     this.meteorites.length = 0;
+    this.shootingStars.length = 0;
     this.hud?.hideAssistMessage();
     this.resetBoostHintState();
   }
@@ -790,6 +795,7 @@ export class StageScene implements Scene {
       this.stageConfig,
       this.stars,
       this.meteorites,
+      this.shootingStars,
     );
     for (const star of spawnResult.newStars) {
       this.stars.push(star);
@@ -798,6 +804,10 @@ export class StageScene implements Scene {
     for (const met of spawnResult.newMeteorites) {
       this.meteorites.push(met);
       this.threeScene.add(met.mesh);
+    }
+    for (const shootingStar of spawnResult.newShootingStars) {
+      this.shootingStars.push(shootingStar);
+      this.threeScene.add(shootingStar.mesh);
     }
 
     // Note: star.update() (rainbow hue / Y rotation) is folded into the
@@ -817,7 +827,30 @@ export class StageScene implements Scene {
 
     // Collision (with companion star attraction bonus)
     const companionBonus = this.companionManager?.getStarAttractionBonus() ?? 0;
-    const collisionResult = this.collisionSystem.check(this.spaceship, this.stars, this.meteorites, companionBonus);
+    const collisionResult = this.collisionSystem.check(
+      this.spaceship,
+      this.stars,
+      this.meteorites,
+      companionBonus,
+      this.shootingStars,
+    );
+
+    if (collisionResult.shootingStarHit) {
+      const shootingStar = collisionResult.shootingStarHit;
+      this.scoreSystem.activateShootingStarBonus(
+        Math.max(StageScene.SHOOTING_STAR_SCORE_BONUS_DURATION, shootingStar.bonusDuration),
+      );
+      this.audioManager.playSFX('shootingStarCollect');
+      this.particleBurstManager.emit(
+        this.threeScene,
+        shootingStar.position.x,
+        shootingStar.position.y,
+        shootingStar.position.z,
+        0xffffff,
+        50,
+        true,
+      );
+    }
 
     // Star collection
     for (const star of collisionResult.starCollisions) {
@@ -963,6 +996,7 @@ export class StageScene implements Scene {
 
     // Particle effects
     this.particleBurstManager.update(this.threeScene, deltaTime);
+    this.scoreSystem.update(deltaTime);
 
     // HUD update
     this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
@@ -1267,6 +1301,20 @@ export class StageScene implements Scene {
       }
     }
     meteorites.length = metWrite;
+
+    const shootingStars = this.shootingStars;
+    let shootingWrite = 0;
+    for (let read = 0; read < shootingStars.length; read++) {
+      const shootingStar = shootingStars[read];
+      if (shootingStar.isCollected || shootingStar.position.z > behindThreshold) {
+        this.spawnSystem.releaseShootingStar(shootingStar);
+      } else {
+        shootingStar.update(deltaTime, shipZ);
+        if (shootingWrite !== read) shootingStars[shootingWrite] = shootingStar;
+        shootingWrite++;
+      }
+    }
+    shootingStars.length = shootingWrite;
   }
 
 

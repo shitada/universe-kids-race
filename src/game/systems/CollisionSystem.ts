@@ -1,10 +1,12 @@
 import type { Spaceship } from '../entities/Spaceship';
 import type { Star } from '../entities/Star';
 import type { Meteorite } from '../entities/Meteorite';
+import type { ShootingStar } from '../entities/ShootingStar';
 
 export interface CollisionResult {
   starCollisions: Star[];
   meteoriteCollision: boolean;
+  shootingStarHit: ShootingStar | null;
   // Reference to the Meteorite that triggered the collision this frame, or
   // null if no meteorite was hit. Callers should set `meteoriteHit.isActive
   // = false` after handling the hit so the same meteorite is skipped on
@@ -22,6 +24,7 @@ export class CollisionSystem {
   private readonly result: CollisionResult = {
     starCollisions: [],
     meteoriteCollision: false,
+    shootingStarHit: null,
     meteoriteHit: null,
   };
 
@@ -39,10 +42,17 @@ export class CollisionSystem {
    *   and its square out of the per-entity loops, replacing N additions and N
    *   multiplications per loop with a single computation.
    */
-  check(spaceship: Spaceship, stars: Star[], meteorites: Meteorite[], companionBonus = 0): CollisionResult {
+  check(
+    spaceship: Spaceship,
+    stars: Star[],
+    meteorites: Meteorite[],
+    companionBonus = 0,
+    shootingStars: ShootingStar[] = [],
+  ): CollisionResult {
     const result = this.result;
     result.starCollisions.length = 0;
     result.meteoriteCollision = false;
+    result.shootingStarHit = null;
     result.meteoriteHit = null;
 
     const sp = spaceship.position;
@@ -78,6 +88,25 @@ export class CollisionSystem {
         if (distSq < starCollisionDistSq) {
           star.collect();
           result.starCollisions.push(star);
+        }
+      }
+    }
+
+    if (shootingStars.length > 0) {
+      const shootingStarCollisionDist = 1.0 + shootingStars[0].radius;
+      const shootingStarCollisionDistSq = shootingStarCollisionDist * shootingStarCollisionDist;
+      for (const shootingStar of shootingStars) {
+        if (shootingStar.isCollected) continue;
+        const dz = sp.z - shootingStar.position.z;
+        if (dz > shootingStarCollisionDist) continue;
+        if (dz < -shootingStarCollisionDist) continue;
+        const dx = sp.x - shootingStar.position.x;
+        const dy = sp.y - shootingStar.position.y;
+        const distSq = dx * dx + dy * dy + dz * dz;
+        if (distSq < shootingStarCollisionDistSq) {
+          shootingStar.collect();
+          result.shootingStarHit = shootingStar;
+          break;
         }
       }
     }

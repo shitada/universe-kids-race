@@ -254,6 +254,67 @@ describe('SpawnSystem', () => {
     expect(second.newStars).toHaveLength(0);
   });
 
+  it('spawns a rare shooting star after its random delay elapses', () => {
+    const config: StageConfig = {
+      ...testConfig,
+      meteoriteInterval: 999,
+      starDensity: 1,
+      destinationReading: 'つき',
+      medalThresholds: [5, 10, 15],
+      emoji: '🌙',
+      displayName: 'つき',
+      planetColor: 0xcccccc,
+    };
+    const randomValues = [0, 0.5, 0, 0];
+    const randomSpy = vi.spyOn(Math, 'random').mockImplementation(() => randomValues.shift() ?? 0.5);
+
+    try {
+      const system = new SpawnSystem();
+      const result = system.update(8.1, 100, config, [], [], []);
+
+      expect(result.newShootingStars).toHaveLength(1);
+      expect(Math.abs(result.newShootingStars[0].position.x)).toBeGreaterThanOrEqual(8);
+      expect(result.newShootingStars[0].position.z).toBeLessThan(100);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
+  it('reuses the same shooting star instance after releaseShootingStar', () => {
+    const config: StageConfig = {
+      ...testConfig,
+      meteoriteInterval: 999,
+      starDensity: 1,
+      destinationReading: 'つき',
+      medalThresholds: [5, 10, 15],
+      emoji: '🌙',
+      displayName: 'つき',
+      planetColor: 0xcccccc,
+    };
+    const randomValues = [0, 0.5, 0, 0, 0, 0.5, 0, 0];
+    const randomSpy = vi.spyOn(Math, 'random').mockImplementation(() => {
+      return randomValues.shift() ?? 0.5;
+    });
+
+    try {
+      const system = new SpawnSystem();
+      const first = system.update(8.1, 100, config, [], [], []);
+      expect(first.newShootingStars).toHaveLength(1);
+      const shootingStar = first.newShootingStars[0];
+      const poolSize = system.getShootingStarPoolSize();
+
+      system.releaseShootingStar(shootingStar);
+      system.reset();
+      const second = system.update(8.1, 100, config, [], [], []);
+
+      expect(second.newShootingStars).toHaveLength(1);
+      expect(second.newShootingStars[0]).toBe(shootingStar);
+      expect(system.getShootingStarPoolSize()).toBe(poolSize);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
   it('dispose() releases pooled GPU resources for the meteorite pool', () => {
     const system = new SpawnSystem();
     const result = system.update(3.5, -10, testConfig);

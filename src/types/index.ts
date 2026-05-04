@@ -72,6 +72,7 @@ export interface StageMedalStatus {
 export type SFXType =
   | 'starCollect'
   | 'rainbowCollect'
+  | 'shootingStarCollect'
   | 'meteoriteHit'
   | 'boost'
   | 'stageClear'

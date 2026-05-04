@@ -1,6 +1,7 @@
 import type { StageConfig } from '../../types';
 import { Star } from '../entities/Star';
 import { Meteorite } from '../entities/Meteorite';
+import { ShootingStar } from '../entities/ShootingStar';
 import { EntityPool } from '../utils/EntityPool';
 
 /**
@@ -14,6 +15,7 @@ import { EntityPool } from '../utils/EntityPool';
 export interface SpawnResult {
   newStars: Star[];
   newMeteorites: Meteorite[];
+  newShootingStars: ShootingStar[];
 }
 
 /**
@@ -52,9 +54,15 @@ export class SpawnSystem {
   // ばらつきを保ちつつフェアな回避経路を確保）。
   private static readonly STAR_SPAWN_Y_HALF_RANGE = 1.0;
   private static readonly METEORITE_SPAWN_Y_HALF_RANGE = 0.8;
+  private static readonly SHOOTING_STAR_MIN_DELAY = 8;
+  private static readonly SHOOTING_STAR_DELAY_RANGE = 6;
+  private static readonly SHOOTING_STAR_SPAWN_X = 8.5;
+  private static readonly SHOOTING_STAR_SPAWN_Y_HALF_RANGE = 0.45;
 
   private lastStarSpawnZ = 0;
   private meteoriteTimer = 0;
+  private shootingStarTimer = 0;
+  private nextShootingStarDelay = SpawnSystem.SHOOTING_STAR_MIN_DELAY;
   private spawnAheadDistance = 80;
   private meteoriteIntervalMultiplier = 1;
 
@@ -65,6 +73,7 @@ export class SpawnSystem {
   private readonly result: SpawnResult = {
     newStars: [],
     newMeteorites: [],
+    newShootingStars: [],
   };
 
   // NORMAL stars, RAINBOW stars, and meteorites are all pooled to eliminate
@@ -90,6 +99,12 @@ export class SpawnSystem {
     (met) => met.recycle(),
     (met) => met.dispose(),
   );
+  private readonly shootingStarPool = new EntityPool<ShootingStar, readonly [number, number, number, -1 | 1]>(
+    (x, y, z, direction) => new ShootingStar(x, y, z, direction),
+    (shootingStar, x, y, z, direction) => shootingStar.reset(x, y, z, direction),
+    (shootingStar) => shootingStar.recycle(),
+    (shootingStar) => shootingStar.dispose(),
+  );
 
   /**
    * Advances the spawner by `deltaTime` and returns any newly spawned stars
@@ -113,10 +128,12 @@ export class SpawnSystem {
     config: StageConfig,
     existingStars: readonly Star[] = [],
     existingMeteorites: readonly Meteorite[] = [],
+    existingShootingStars: readonly ShootingStar[] = [],
   ): SpawnResult {
     const result = this.result;
     result.newStars.length = 0;
     result.newMeteorites.length = 0;
+    result.newShootingStars.length = 0;
 
     // Spawn stars ahead based on density
     const starSpacing = 100 / config.starDensity;
@@ -169,7 +186,28 @@ export class SpawnSystem {
       }
     }
 
+    this.shootingStarTimer += deltaTime;
+    if (this.shootingStarTimer >= this.nextShootingStarDelay && !this.hasActiveShootingStar(existingShootingStars)) {
+      const direction = Math.random() < 0.5 ? 1 : -1;
+      const x = direction === 1 ? -SpawnSystem.SHOOTING_STAR_SPAWN_X : SpawnSystem.SHOOTING_STAR_SPAWN_X;
+      const y = (Math.random() - 0.5) * 2 * SpawnSystem.SHOOTING_STAR_SPAWN_Y_HALF_RANGE;
+      const z = spaceshipZ - this.spawnAheadDistance - 8 - Math.random() * 12;
+      const shootingStar = this.shootingStarPool.acquire(x, y, z, direction);
+      result.newShootingStars.push(shootingStar);
+      this.shootingStarTimer = 0;
+      this.nextShootingStarDelay = SpawnSystem.sampleShootingStarDelay();
+    }
+
     return result;
+  }
+
+  private hasActiveShootingStar(existingShootingStars: readonly ShootingStar[]): boolean {
+    for (const shootingStar of existingShootingStars) {
+      if (!shootingStar.isCollected) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -241,9 +279,15 @@ export class SpawnSystem {
     this.meteoritePool.release(met);
   }
 
+  releaseShootingStar(shootingStar: ShootingStar): void {
+    this.shootingStarPool.release(shootingStar);
+  }
+
   reset(): void {
     this.lastStarSpawnZ = 0;
     this.meteoriteTimer = 0;
+    this.shootingStarTimer = 0;
+    this.nextShootingStarDelay = SpawnSystem.SHOOTING_STAR_MIN_DELAY;
     this.meteoriteIntervalMultiplier = 1;
   }
 
@@ -264,6 +308,7 @@ export class SpawnSystem {
     this.normalStarPool.releaseAll();
     this.rainbowStarPool.releaseAll();
     this.meteoritePool.releaseAll();
+    this.shootingStarPool.releaseAll();
   }
 
   /** Permanently free all pooled GPU resources. Call from scene teardown. */
@@ -271,6 +316,7 @@ export class SpawnSystem {
     this.normalStarPool.dispose();
     this.rainbowStarPool.dispose();
     this.meteoritePool.dispose();
+    this.shootingStarPool.dispose();
   }
 
   /** Test/diagnostic helper: number of NORMAL stars allocated by the pool. */
@@ -288,11 +334,19 @@ export class SpawnSystem {
     return this.meteoritePool.getPoolSize();
   }
 
+  getShootingStarPoolSize(): number {
+    return this.shootingStarPool.getPoolSize();
+  }
+
   setMeteoriteIntervalMultiplier(multiplier: number): void {
     this.meteoriteIntervalMultiplier = Number.isFinite(multiplier) && multiplier >= 1 ? multiplier : 1;
   }
 
   getMeteoriteIntervalMultiplier(): number {
     return this.meteoriteIntervalMultiplier;
+  }
+
+  private static sampleShootingStarDelay(): number {
+    return SpawnSystem.SHOOTING_STAR_MIN_DELAY + Math.random() * SpawnSystem.SHOOTING_STAR_DELAY_RANGE;
   }
 }

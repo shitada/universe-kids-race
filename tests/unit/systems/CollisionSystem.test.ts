@@ -3,6 +3,7 @@ import { CollisionSystem } from '../../../src/game/systems/CollisionSystem';
 import { Spaceship } from '../../../src/game/entities/Spaceship';
 import { Star } from '../../../src/game/entities/Star';
 import { Meteorite } from '../../../src/game/entities/Meteorite';
+import { ShootingStar } from '../../../src/game/entities/ShootingStar';
 
 describe('CollisionSystem', () => {
   const system = new CollisionSystem();
@@ -31,6 +32,28 @@ describe('CollisionSystem', () => {
     const star = new Star(20, 0, 0);
     const result = system.check(ship, [star], []);
     expect(result.starCollisions).toHaveLength(0);
+  });
+
+  it('detects shooting star collision when in range', () => {
+    const ship = new Spaceship();
+    ship.position = { x: 0, y: 0, z: 0 };
+    const shootingStar = new ShootingStar(0.5, 0, 0, 1);
+
+    const result = system.check(ship, [], [], 0, [shootingStar]);
+
+    expect(result.shootingStarHit).toBe(shootingStar);
+    expect(shootingStar.isCollected).toBe(true);
+  });
+
+  it('clears shootingStarHit when no shooting star is hit', () => {
+    const ship = new Spaceship();
+    ship.position = { x: 0, y: 0, z: 0 };
+    const shootingStar = new ShootingStar(10, 0, 0, 1);
+
+    const result = system.check(ship, [], [], 0, [shootingStar]);
+
+    expect(result.shootingStarHit).toBeNull();
+    expect(shootingStar.isCollected).toBe(false);
   });
 
   it('detects meteorite collision when in range', () => {
