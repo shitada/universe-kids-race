@@ -15,8 +15,11 @@ import { createRenderer } from './utils/createRenderer';
 import { getViewportSize, subscribeViewportResize, updateViewportSizeCache } from './utils/getViewportSize';
 import { resolveInitialPixelTier } from './utils/resolveInitialPixelTier';
 import { MemoryHealthMonitor, type MemoryHealthAlert } from './utils/MemoryHealthMonitor';
+import { GameStateBackup } from './storage/GameStateBackup';
+import { InterruptionSystem } from './systems/InterruptionSystem';
 import { ContextLossOverlay } from '../ui/ContextLossOverlay';
 import { ResumeOverlay } from '../ui/ResumeOverlay';
+import { ResumeGentlyOverlay } from '../ui/ResumeGentlyOverlay';
 import { OrientationHintOverlay } from '../ui/OrientationHintOverlay';
 import { LoadingOverlay } from '../ui/LoadingOverlay';
 import { LoadFailureOverlay } from '../ui/LoadFailureOverlay';
@@ -224,19 +227,19 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
       }) => void;
     }).setPauseHandlers?.({
       onPauseRequested: () => {
-        pendingBackgroundResume = false;
+        interruptionSystem.clear();
         resumeOverlay.hide();
         gameLoop.pause();
         audioManager.suspend();
       },
       onResumeRequested: () => {
-        pendingBackgroundResume = false;
+        interruptionSystem.clear();
         resumeOverlay.hide();
         resumeGame();
         stageScene?.requestResumeCountdown();
       },
       onExitHomeRequested: () => {
-        pendingBackgroundResume = false;
+        interruptionSystem.clear();
         resumeOverlay.hide();
         resumeGame();
         void sceneManager.requestTransition('title');
@@ -344,19 +347,19 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   }
 
   const resumeOverlay = new ResumeOverlay();
+  const resumeGentlyOverlay = new ResumeGentlyOverlay();
   const memoryPressureOverlay = new MemoryPressureOverlay();
   let isPortraitLocked = false;
-  let pendingBackgroundResume = false;
 
   function handleMemoryPressure(alert: MemoryHealthAlert): void {
     if (disposed || memoryPressureOverlay.isVisible()) {
       return;
     }
 
-    pendingBackgroundResume = false;
-    resumeOverlay.hide();
+    interruptionSystem.clear();
     gameLoop.pause();
     audioManager.suspend();
+    resumeOverlay.hide();
     if (isMemoryHealthDebugEnabled) {
       console.warn('[bootstrapGame] memory health alert', alert.reason, alert.sample);
     }
@@ -367,74 +370,81 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
     });
   }
 
-  function showStageResumeOverlay(): void {
-    if (memoryPressureOverlay.isVisible()) {
-      return;
-    }
-    resumeOverlay.show(() => {
-      pendingBackgroundResume = false;
-      resumeGame();
-      stageScene?.requestResumeCountdown();
-    });
-  }
-
-  function getStageRestoreMode(allowResumeOverlay: boolean): 'resume-overlay' | 'keep-paused' | 'immediate-resume' {
-    if (sceneManager.getCurrentType() !== 'stage' || !gameLoop.isPaused()) {
-      return 'immediate-resume';
-    }
-    if (stageScene?.isUserPaused() === true) {
-      return 'keep-paused';
-    }
-    if (allowResumeOverlay && stageScene?.isPlaying() === true) {
-      return 'resume-overlay';
-    }
-    return 'immediate-resume';
-  }
-
-  function shouldShowStageResumeOverlay(): boolean {
-    return getStageRestoreMode(true) === 'resume-overlay';
-  }
-
-  function applyStageRestoreMode(allowResumeOverlay: boolean): void {
-    const restoreMode = getStageRestoreMode(allowResumeOverlay);
-    if (restoreMode === 'resume-overlay') {
-      showStageResumeOverlay();
-      return;
-    }
-
-    resumeOverlay.hide();
-    pendingBackgroundResume = false;
-    if (restoreMode === 'immediate-resume') {
-      resumeGame();
-    }
-  }
-
   function handleResumeAfterRestore(): void {
     if (isPortraitLocked || memoryPressureOverlay.isVisible()) {
       return;
     }
-    applyStageRestoreMode(true);
+
+    if (sceneManager.getCurrentType() !== 'stage' || !gameLoop.isPaused()) {
+      resumeOverlay.hide();
+      resumeGame();
+      return;
+    }
+
+    if (stageScene?.isUserPaused() === true) {
+      resumeOverlay.hide();
+      return;
+    }
+
+    if (stageScene?.isPlaying() === true) {
+      resumeOverlay.show(() => {
+        resumeGame();
+        stageScene?.requestResumeCountdown();
+      });
+      return;
+    }
+
+    resumeOverlay.hide();
+    resumeGame();
   }
 
-  function handleVisibilityRestore(): void {
-    restoreViewportAfterPause();
-    handleResumeAfterRestore();
-  }
-
-  const unsubscribeVisibilityPause = createVisibilityPauseHandler({
-    onHide: () => {
-      pendingBackgroundResume = !isStageManuallyPaused();
+  const interruptionBackup = new GameStateBackup();
+  const interruptionSystem = new InterruptionSystem({
+    backup: interruptionBackup,
+    getSceneState: () => ({
+      sceneType: sceneManager.getCurrentType() ?? 'unknown',
+      stagePlaying: stageScene?.isPlaying() === true,
+      userPaused: isStageManuallyPaused(),
+    }),
+    isGamePaused: () => gameLoop.isPaused(),
+    isPortraitLocked: () => isPortraitLocked,
+    isBlockingOverlayVisible: () => memoryPressureOverlay.isVisible(),
+    pauseGame: () => {
       gameLoop.pause();
       audioManager.suspend();
     },
-    onShow: handleVisibilityRestore,
+    resumeGame,
+    restoreViewport: restoreViewportAfterPause,
+    showResumeOverlay: (overlayOptions) => {
+      if (memoryPressureOverlay.isVisible()) {
+        return;
+      }
+      resumeGentlyOverlay.show(overlayOptions);
+    },
+    hideResumeOverlay: () => {
+      resumeGentlyOverlay.hide();
+    },
+    requestResumeCountdown: () => {
+      stageScene?.requestResumeCountdown();
+    },
+    getPausedDurationMs: () =>
+      (gameLoop as GameLoop & { getPausedDuration?: () => number | null }).getPausedDuration?.() ?? null,
+  });
+
+  const unsubscribeVisibilityPause = createVisibilityPauseHandler({
+    onHide: ({ source } = { source: 'visibilitychange' }) => {
+      interruptionSystem.handleHide(source);
+    },
+    onShow: () => {
+      interruptionSystem.handleShow();
+    },
   });
 
   const orientationHintOverlay = new OrientationHintOverlay();
   const orientationHintHandler = createOrientationHintHandler({
     onPortrait: () => {
       isPortraitLocked = true;
-      resumeOverlay.hide();
+      interruptionSystem.handlePortrait();
       orientationHintOverlay.show();
       gameLoop.pause();
       audioManager.suspend();
@@ -443,8 +453,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
       if (!isPortraitLocked) return;
       isPortraitLocked = false;
       orientationHintOverlay.hide();
-      restoreViewportAfterPause();
-      applyStageRestoreMode(pendingBackgroundResume);
+      interruptionSystem.handleLandscape();
     },
   });
   orientationHintHandler.evaluate();
@@ -503,8 +512,11 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
       stageScene = null;
       inputSystem.dispose();
       audioManager.dispose();
+      interruptionSystem.clear();
       resumeOverlay.hide();
       resumeOverlay.dispose();
+      resumeGentlyOverlay.hide();
+      resumeGentlyOverlay.dispose();
       memoryPressureOverlay.hide();
       memoryPressureOverlay.dispose();
       contextLossOverlay.hide();

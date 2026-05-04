@@ -261,6 +261,21 @@ describe('GameLoop', () => {
     expect(loop.isRunning()).toBe(false);
   });
 
+  it('tracks paused duration only while paused', () => {
+    const loop = new GameLoop();
+    expect(loop.getPausedDuration()).toBeNull();
+
+    loop.start(() => {}, () => {});
+    advance(16);
+    loop.pause();
+    nowValue += 2500;
+
+    expect(loop.getPausedDuration()).toBe(2500);
+
+    loop.resume();
+    expect(loop.getPausedDuration()).toBeNull();
+  });
+
   it('caps updateCallback deltaTime at 100ms but feeds raw deltaTime to the FPS monitor', () => {
     const loop = new GameLoop();
     const deltas: number[] = [];

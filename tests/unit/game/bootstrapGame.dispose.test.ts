@@ -287,6 +287,14 @@ async function setupBootSession(): Promise<MockBootSession> {
     },
   }));
 
+  vi.doMock('../../../src/ui/ResumeGentlyOverlay', () => ({
+    ResumeGentlyOverlay: class {
+      show = vi.fn();
+      hide = vi.fn();
+      dispose = vi.fn();
+    },
+  }));
+
   vi.doMock('../../../src/ui/MemoryPressureOverlay', () => ({
     MemoryPressureOverlay: class {
       show = vi.fn();

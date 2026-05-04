@@ -255,6 +255,14 @@ async function setupBootstrap(failingSceneType: SceneType): Promise<SetupResult>
     },
   }));
 
+  vi.doMock('../../../src/ui/ResumeGentlyOverlay', () => ({
+    ResumeGentlyOverlay: class {
+      show = vi.fn();
+      hide = vi.fn();
+      dispose = vi.fn();
+    },
+  }));
+
   vi.doMock('../../../src/ui/OrientationHintOverlay', () => ({
     OrientationHintOverlay: class {
       show = vi.fn();

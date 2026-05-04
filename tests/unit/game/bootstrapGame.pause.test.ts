@@ -56,6 +56,11 @@ interface SetupResult {
     show: ReturnType<typeof vi.fn>;
     hide: ReturnType<typeof vi.fn>;
   };
+  resumeGentlyOverlayInstance: {
+    show: ReturnType<typeof vi.fn>;
+    hide: ReturnType<typeof vi.fn>;
+    dispose: ReturnType<typeof vi.fn>;
+  };
   memoryPressureOverlayInstance: {
     show: ReturnType<typeof vi.fn>;
     hide: ReturnType<typeof vi.fn>;
@@ -117,6 +122,7 @@ async function setup(
   let resizeCoalescerInstance: SetupResult['resizeCoalescerInstance'] | null = null;
   let contextLossOverlayInstance: SetupResult['contextLossOverlayInstance'] | null = null;
   let resumeOverlayInstance: SetupResult['resumeOverlayInstance'] | null = null;
+  let resumeGentlyOverlayInstance: SetupResult['resumeGentlyOverlayInstance'] | null = null;
   let memoryPressureOverlayInstance: SetupResult['memoryPressureOverlayInstance'] | null = null;
   let memoryHealthMonitorInstance: SetupResult['memoryHealthMonitorInstance'] | null = null;
   let fpsSampleCallback: ((fps: number) => void) | undefined;
@@ -345,6 +351,17 @@ async function setup(
     },
   }));
 
+  vi.doMock('../../../src/ui/ResumeGentlyOverlay', () => ({
+    ResumeGentlyOverlay: class {
+      show = vi.fn();
+      hide = vi.fn();
+      dispose = vi.fn();
+      constructor() {
+        resumeGentlyOverlayInstance = this as unknown as SetupResult['resumeGentlyOverlayInstance'];
+      }
+    },
+  }));
+
   vi.doMock('../../../src/ui/MemoryPressureOverlay', () => ({
     MemoryPressureOverlay: class {
       private visible = false;
@@ -477,6 +494,7 @@ async function setup(
     resizeCoalescerInstance: resizeCoalescerInstance!,
     contextLossOverlayInstance: contextLossOverlayInstance!,
     resumeOverlayInstance: resumeOverlayInstance!,
+    resumeGentlyOverlayInstance: resumeGentlyOverlayInstance!,
     memoryPressureOverlayInstance: memoryPressureOverlayInstance!,
     memoryHealthMonitorInstance: memoryHealthMonitorInstance!,
     runFpsSample: (fps = 60) => {

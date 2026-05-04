@@ -34,6 +34,7 @@ describe('createVisibilityPauseHandler', () => {
     document.dispatchEvent(new Event('visibilitychange'));
 
     expect(onHide).toHaveBeenCalledTimes(1);
+    expect(onHide).toHaveBeenCalledWith({ source: 'visibilitychange' });
     expect(onShow).not.toHaveBeenCalled();
   });
 
@@ -46,6 +47,7 @@ describe('createVisibilityPauseHandler', () => {
     document.dispatchEvent(new Event('visibilitychange'));
 
     expect(onShow).toHaveBeenCalledTimes(1);
+    expect(onShow).toHaveBeenCalledWith({ source: 'visibilitychange' });
     expect(onHide).not.toHaveBeenCalled();
   });
 
@@ -58,6 +60,8 @@ describe('createVisibilityPauseHandler', () => {
     window.dispatchEvent(new Event('blur'));
 
     expect(onHide).toHaveBeenCalledTimes(2);
+    expect(onHide).toHaveBeenNthCalledWith(1, { source: 'pagehide' });
+    expect(onHide).toHaveBeenNthCalledWith(2, { source: 'blur' });
     expect(onShow).not.toHaveBeenCalled();
   });
 
@@ -77,6 +81,7 @@ describe('createVisibilityPauseHandler', () => {
     Object.defineProperty(e2, 'persisted', { value: true });
     window.dispatchEvent(e2);
     expect(onShow).toHaveBeenCalledTimes(1);
+    expect(onShow).toHaveBeenCalledWith({ source: 'pageshow', persisted: true });
   });
 
   it('calls onShow on window.focus', () => {
@@ -87,6 +92,7 @@ describe('createVisibilityPauseHandler', () => {
     window.dispatchEvent(new Event('focus'));
 
     expect(onShow).toHaveBeenCalledTimes(1);
+    expect(onShow).toHaveBeenCalledWith({ source: 'focus' });
     expect(onHide).not.toHaveBeenCalled();
   });
 
