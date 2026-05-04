@@ -8,6 +8,8 @@ export class HUD {
   private container: HTMLDivElement | null = null;
   private stageNameEl: HTMLDivElement | null = null;
   private assistMessageEl: HTMLDivElement | null = null;
+  private politeLiveRegionEl: HTMLDivElement | null = null;
+  private assertiveLiveRegionEl: HTMLDivElement | null = null;
   private scoreEl: HTMLSpanElement | null = null;
   private starCountEl: HTMLSpanElement | null = null;
   private bestStarContainerEl: HTMLSpanElement | null = null;
@@ -62,6 +64,8 @@ export class HUD {
   private bestStarCount = 0;
   private lastBestStarCount = -1;
   private bestStarPulsed = false;
+  private liveRegionWriteNonce = 0;
+  private lastAnnouncedProgressThreshold = 0;
 
   show(stageName?: string, planetColor?: number): void {
     const hudRoot = document.getElementById('hud');
@@ -143,6 +147,7 @@ export class HUD {
 
     this.assistMessageEl = document.createElement('div');
     this.assistMessageEl.setAttribute('data-hud-assist-message', '');
+    this.assistMessageEl.setAttribute('aria-hidden', 'true');
     this.assistMessageEl.style.cssText = `
       display: none;
       margin: 0 auto 0.5rem;
@@ -222,6 +227,7 @@ export class HUD {
     // Mute toggle button on HUD root (top-right) — created after stage name
     // and other elements so existing children indices remain stable.
     this.createMuteButton();
+    this.createLiveRegions(hudRoot);
   }
 
   private createStageProgress(hudRoot: HTMLElement, planetColor?: number): void {
@@ -234,6 +240,7 @@ export class HUD {
     wrapper.setAttribute('aria-valuemin', '0');
     wrapper.setAttribute('aria-valuemax', '100');
     wrapper.setAttribute('aria-valuenow', '0');
+    wrapper.setAttribute('aria-valuetext', 'ゴールまで あと 100%');
     wrapper.style.position = 'relative';
     wrapper.style.display = 'flex';
     wrapper.style.alignItems = 'center';
@@ -587,6 +594,7 @@ export class HUD {
     if (!this.assistMessageEl) return;
     this.assistMessageEl.textContent = message;
     this.assistMessageEl.style.display = 'block';
+    this.announcePolite(message);
   }
 
   hideAssistMessage(): void {
@@ -635,6 +643,7 @@ export class HUD {
       this.lastStarCount = starCount;
       if (prev !== -1 && starCount > prev) {
         this.flashCount(this.starCountEl);
+        this.announcePolite(`ほし ${starCount}こ ゲット！`);
       }
     }
     // Pulse the best sub-label once when the child first surpasses their
@@ -744,8 +753,11 @@ export class HUD {
     if (pct !== this.lastStageProgressPct) {
       this.stageProgressFill.style.width = `${pct}%`;
       this.stageProgressContainer.setAttribute('aria-valuenow', String(pct));
+      this.stageProgressContainer.setAttribute('aria-valuetext', `ゴールまで あと ${100 - pct}%`);
       this.lastStageProgressPct = pct;
     }
+
+    this.announceStageProgressMilestone(pct);
 
     const complete = clamped >= 1.0;
     if (complete !== this.lastStageProgressComplete) {
@@ -791,6 +803,7 @@ export class HUD {
     if (!btn) return;
     if (btn.hasAttribute('data-boost-ready-flash')) return;
 
+    this.announcePolite('ブースト じゅんび OK！');
     btn.setAttribute('data-boost-ready-flash', '');
 
     let cleared = false;
@@ -822,6 +835,21 @@ export class HUD {
     }
   }
 
+  announceMeteoriteHit(): void {
+    this.announceAssertive('いんせきに ぶつかった！ シールド かいふくちゅう');
+  }
+
+  announceStageClear(starCount: number, isNewPlanetUnlock = false, isBestUpdated = false): void {
+    const parts = [`ステージ クリア！ ほし ${starCount}こ あつめたよ！`];
+    if (isBestUpdated) {
+      parts.push('じこベスト こうしん！');
+    }
+    if (isNewPlanetUnlock) {
+      parts.push('あたらしい なかまも みつけたよ！');
+    }
+    this.announceAssertive(parts.join(' '));
+  }
+
   private applyBoostButtonState(): void {
     if (!this.cooldownBar || !this.boostButton) return;
 
@@ -846,6 +874,72 @@ export class HUD {
     this.pauseButton.style.filter = this.pauseEnabled ? 'none' : 'grayscale(0.8)';
     this.pauseButton.style.cursor = this.pauseEnabled ? 'pointer' : 'default';
     this.pauseButton.setAttribute('aria-disabled', this.pauseEnabled ? 'false' : 'true');
+  }
+
+  private createLiveRegions(hudRoot: HTMLElement): void {
+    this.politeLiveRegionEl = this.createLiveRegion('polite');
+    this.assertiveLiveRegionEl = this.createLiveRegion('assertive');
+    hudRoot.appendChild(this.politeLiveRegionEl);
+    hudRoot.appendChild(this.assertiveLiveRegionEl);
+  }
+
+  private createLiveRegion(politeness: 'polite' | 'assertive'): HTMLDivElement {
+    const region = document.createElement('div');
+    region.setAttribute('data-hud-live-region', politeness);
+    region.setAttribute('aria-live', politeness);
+    region.setAttribute('aria-atomic', 'true');
+    region.setAttribute('role', politeness === 'assertive' ? 'alert' : 'status');
+    region.style.cssText = `
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    `;
+    return region;
+  }
+
+  private announcePolite(message: string): void {
+    this.writeLiveRegion(this.politeLiveRegionEl, message);
+  }
+
+  private announceAssertive(message: string): void {
+    this.writeLiveRegion(this.assertiveLiveRegionEl, message);
+  }
+
+  private writeLiveRegion(region: HTMLDivElement | null, message: string): void {
+    if (!region || message.length === 0) return;
+    this.liveRegionWriteNonce += 1;
+    const invisibleSuffix = this.liveRegionWriteNonce % 2 === 0 ? '\u200b' : '\u200c';
+    region.textContent = `${message}${invisibleSuffix}`;
+    region.setAttribute('data-live-message', message);
+  }
+
+  private announceStageProgressMilestone(pct: number): void {
+    if (pct >= 100) {
+      if (this.lastAnnouncedProgressThreshold < 100) {
+        this.announcePolite('ゴール！');
+        this.lastAnnouncedProgressThreshold = 100;
+      }
+      return;
+    }
+
+    const milestones = [
+      { pct: 75, remaining: 25 },
+      { pct: 50, remaining: 50 },
+      { pct: 25, remaining: 75 },
+    ];
+
+    for (const milestone of milestones) {
+      if (pct >= milestone.pct && this.lastAnnouncedProgressThreshold < milestone.pct) {
+        this.lastAnnouncedProgressThreshold = milestone.pct;
+        this.announcePolite(`ゴールまで あと ${milestone.remaining}%`);
+      }
+    }
   }
 
   hide(): void {
@@ -874,6 +968,14 @@ export class HUD {
     if (this.assistMessageEl) {
       this.assistMessageEl.remove();
       this.assistMessageEl = null;
+    }
+    if (this.politeLiveRegionEl) {
+      this.politeLiveRegionEl.remove();
+      this.politeLiveRegionEl = null;
+    }
+    if (this.assertiveLiveRegionEl) {
+      this.assertiveLiveRegionEl.remove();
+      this.assertiveLiveRegionEl = null;
     }
     if (this.stageProgressContainer) {
       this.stageProgressContainer.remove();
@@ -914,5 +1016,7 @@ export class HUD {
     this.bestStarCount = 0;
     this.lastBestStarCount = -1;
     this.bestStarPulsed = false;
+    this.liveRegionWriteNonce = 0;
+    this.lastAnnouncedProgressThreshold = 0;
   }
 }

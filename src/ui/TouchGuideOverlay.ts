@@ -11,6 +11,7 @@ export class TouchGuideOverlay {
   private overlayEl: HTMLDivElement | null = null;
   private leftGuideEl: HTMLDivElement | null = null;
   private rightGuideEl: HTMLDivElement | null = null;
+  private instructionEl: HTMLDivElement | null = null;
   private currentMode: TouchGuideMode | null = null;
 
   show(initialMode: TouchGuideMode = 'intro'): void {
@@ -26,6 +27,8 @@ export class TouchGuideOverlay {
 
     this.overlayEl = document.createElement('div');
     this.overlayEl.setAttribute('data-touch-guide-overlay', '');
+    this.overlayEl.setAttribute('role', 'region');
+    this.overlayEl.setAttribute('aria-label', 'そうさ ガイド');
     this.overlayEl.style.cssText = `
       position: absolute;
       inset: 0;
@@ -35,8 +38,10 @@ export class TouchGuideOverlay {
 
     this.leftGuideEl = this.createGuide('left', '⬅️ ひだり');
     this.rightGuideEl = this.createGuide('right', 'みぎ ➡️');
+    this.instructionEl = this.createInstruction();
     this.overlayEl.appendChild(this.leftGuideEl);
     this.overlayEl.appendChild(this.rightGuideEl);
+    this.overlayEl.appendChild(this.instructionEl);
     uiOverlay.appendChild(this.overlayEl);
     this.setMode(initialMode);
   }
@@ -50,6 +55,7 @@ export class TouchGuideOverlay {
     this.overlayEl.style.visibility = mode === 'hidden' ? 'hidden' : 'visible';
     this.leftGuideEl?.setAttribute('data-touch-guide-emphasis', this.getGuideEmphasis('left', mode));
     this.rightGuideEl?.setAttribute('data-touch-guide-emphasis', this.getGuideEmphasis('right', mode));
+    this.updateInstruction(mode);
   }
 
   hide(): void {
@@ -58,12 +64,14 @@ export class TouchGuideOverlay {
     this.overlayEl = null;
     this.leftGuideEl = null;
     this.rightGuideEl = null;
+    this.instructionEl = null;
     this.currentMode = null;
   }
 
   private createGuide(side: 'left' | 'right', label: string): HTMLDivElement {
     const guide = document.createElement('div');
     guide.setAttribute('data-touch-guide', side);
+    guide.setAttribute('aria-hidden', 'true');
     guide.textContent = label;
     guide.style.position = 'absolute';
     guide.style.top = '50%';
@@ -92,6 +100,26 @@ export class TouchGuideOverlay {
     }
 
     return guide;
+  }
+
+  private createInstruction(): HTMLDivElement {
+    const instruction = document.createElement('div');
+    instruction.setAttribute('data-touch-guide-instruction', '');
+    instruction.setAttribute('role', 'status');
+    instruction.setAttribute('aria-live', 'polite');
+    instruction.setAttribute('aria-atomic', 'true');
+    instruction.style.cssText = `
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    `;
+    return instruction;
   }
 
   private injectStyles(): void {
@@ -187,5 +215,20 @@ export class TouchGuideOverlay {
     if (mode === 'assist-right') return side === 'right' ? 'primary' : 'secondary';
     if (mode === 'hidden') return 'hidden';
     return 'balanced';
+  }
+
+  private updateInstruction(mode: TouchGuideMode): void {
+    if (!this.instructionEl) return;
+    const message = this.getInstructionMessage(mode);
+    this.instructionEl.textContent = message;
+    this.instructionEl.setAttribute('data-touch-guide-message', message);
+  }
+
+  private getInstructionMessage(mode: TouchGuideMode): string {
+    if (mode === 'intro') return 'ひだりか みぎを さわると うごけるよ';
+    if (mode === 'idle') return 'ひつような ときは ひだりか みぎを さわって うごこう';
+    if (mode === 'assist-left') return 'ひだりへ よけよう';
+    if (mode === 'assist-right') return 'みぎへ よけよう';
+    return '';
   }
 }
