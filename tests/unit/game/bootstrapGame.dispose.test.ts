@@ -240,6 +240,12 @@ async function setupBootSession(): Promise<MockBootSession> {
         render: vi.fn(),
         dispose: vi.fn(),
         forceContextLoss: vi.fn(),
+        info: {
+          memory: {
+            textures: 0,
+            geometries: 0,
+          },
+        },
       };
       rendererInstance = renderer;
       return renderer;
@@ -269,6 +275,7 @@ async function setupBootSession(): Promise<MockBootSession> {
     ContextLossOverlay: class {
       show = vi.fn();
       hide = vi.fn();
+      dispose = vi.fn();
     },
   }));
 
@@ -276,6 +283,15 @@ async function setupBootSession(): Promise<MockBootSession> {
     ResumeOverlay: class {
       show = vi.fn();
       hide = vi.fn();
+      dispose = vi.fn();
+    },
+  }));
+
+  vi.doMock('../../../src/ui/MemoryPressureOverlay', () => ({
+    MemoryPressureOverlay: class {
+      show = vi.fn();
+      hide = vi.fn();
+      isVisible = vi.fn(() => false);
       dispose = vi.fn();
     },
   }));
@@ -292,6 +308,7 @@ async function setupBootSession(): Promise<MockBootSession> {
     LoadingOverlay: class {
       show = vi.fn();
       hide = vi.fn();
+      dispose = vi.fn();
     },
   }));
 
@@ -299,6 +316,18 @@ async function setupBootSession(): Promise<MockBootSession> {
     LoadFailureOverlay: class {
       show = vi.fn();
       hide = vi.fn();
+      dispose = vi.fn();
+    },
+  }));
+
+  vi.doMock('../../../src/game/utils/MemoryHealthMonitor', () => ({
+    MemoryHealthMonitor: class {
+      sample = vi.fn(() => ({
+        sampled: true,
+        latestSample: null,
+        alert: null,
+      }));
+      reset = vi.fn();
     },
   }));
 

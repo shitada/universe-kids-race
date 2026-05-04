@@ -161,4 +161,8 @@ export class LoadFailureOverlay {
   isVisible(): boolean {
     return this.element !== null;
   }
+
+  dispose(): void {
+    this.hide();
+  }
 }

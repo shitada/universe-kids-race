@@ -119,4 +119,8 @@ export class LoadingOverlay {
     this.element = null;
     this.label = null;
   }
+
+  dispose(): void {
+    this.hide();
+  }
 }

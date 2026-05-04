@@ -15,6 +15,7 @@ function makeDeps(overrides: Partial<Parameters<typeof createWebGLContextRestore
   const gameLoopResume = overrides.gameLoopResume ?? vi.fn();
   const audioEnsureResumed = overrides.audioEnsureResumed ?? vi.fn();
   const hideOverlay = overrides.hideOverlay ?? vi.fn();
+  const onRecovered = overrides.onRecovered ?? vi.fn();
   const now = overrides.now ?? vi.fn(() => 4242);
   const maxTier = overrides.maxTier ?? 2;
   return {
@@ -29,6 +30,7 @@ function makeDeps(overrides: Partial<Parameters<typeof createWebGLContextRestore
     gameLoopResume,
     audioEnsureResumed,
     hideOverlay,
+    onRecovered,
     now,
   };
 }
@@ -72,6 +74,7 @@ describe('createWebGLContextRestoredHandler', () => {
     expect(deps.hideOverlay).toHaveBeenCalledTimes(1);
     expect(deps.gameLoopResume).toHaveBeenCalledTimes(1);
     expect(deps.audioEnsureResumed).toHaveBeenCalledTimes(1);
+    expect(deps.onRecovered).toHaveBeenCalledTimes(1);
   });
 
   it('hides the overlay before resetting/applying pixel ratio', () => {
@@ -126,6 +129,7 @@ describe('createWebGLContextRestoredHandler', () => {
       (deps.flushResize as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0],
       (deps.gameLoopResume as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0],
       (deps.audioEnsureResumed as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0],
+      (deps.onRecovered as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0],
       (deps.pixelRatioController.notifyResume as ReturnType<typeof vi.fn>).mock
         .invocationCallOrder[0],
     ];
@@ -142,5 +146,17 @@ describe('createWebGLContextRestoredHandler', () => {
     expect(deps.pixelRatioController.resetToTier).toHaveBeenCalledWith(deps.maxTier);
     expect(deps.applyPixelRatioTier).toHaveBeenCalledWith(deps.maxTier);
     expect(deps.syncVisualQualityTier).toHaveBeenCalledWith(deps.maxTier);
+  });
+
+  it('runs onRecovered before notifyResume so post-restore cleanup finishes first', () => {
+    const deps = makeDeps();
+    const handler = createWebGLContextRestoredHandler(deps);
+
+    handler();
+
+    const recoveredOrder = (deps.onRecovered as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0];
+    const notifyOrder = (deps.pixelRatioController.notifyResume as ReturnType<typeof vi.fn>).mock
+      .invocationCallOrder[0];
+    expect(recoveredOrder).toBeLessThan(notifyOrder);
   });
 });

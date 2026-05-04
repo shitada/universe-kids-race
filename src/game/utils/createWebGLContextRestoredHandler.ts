@@ -17,6 +17,7 @@ export interface WebGLContextRestoredHandlerDeps {
   gameLoopResume: () => void;
   audioEnsureResumed: () => void;
   hideOverlay: () => void;
+  onRecovered?: () => void;
   now: () => number;
 }
 
@@ -41,6 +42,7 @@ export interface WebGLContextRestoredHandlerDeps {
  *               -> scheduleResize(viewport) + flushResize
  *               -> gameLoopResume
  *               -> audioEnsureResumed
+ *               -> onRecovered
  *               -> pixelRatioController.notifyResume(now())
  */
 export function createWebGLContextRestoredHandler(
@@ -58,6 +60,7 @@ export function createWebGLContextRestoredHandler(
     gameLoopResume,
     audioEnsureResumed,
     hideOverlay,
+    onRecovered,
     now,
   } = deps;
 
@@ -75,6 +78,7 @@ export function createWebGLContextRestoredHandler(
     flushResize();
     gameLoopResume();
     audioEnsureResumed();
+    onRecovered?.();
     pixelRatioController.notifyResume(now());
   };
 }

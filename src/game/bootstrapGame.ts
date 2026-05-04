@@ -14,11 +14,13 @@ import { createVisibilityPauseHandler } from './utils/createVisibilityPauseHandl
 import { createRenderer } from './utils/createRenderer';
 import { getViewportSize, subscribeViewportResize, updateViewportSizeCache } from './utils/getViewportSize';
 import { resolveInitialPixelTier } from './utils/resolveInitialPixelTier';
+import { MemoryHealthMonitor, type MemoryHealthAlert } from './utils/MemoryHealthMonitor';
 import { ContextLossOverlay } from '../ui/ContextLossOverlay';
 import { ResumeOverlay } from '../ui/ResumeOverlay';
 import { OrientationHintOverlay } from '../ui/OrientationHintOverlay';
 import { LoadingOverlay } from '../ui/LoadingOverlay';
 import { LoadFailureOverlay } from '../ui/LoadFailureOverlay';
+import { MemoryPressureOverlay } from '../ui/MemoryPressureOverlay';
 import { createOrientationHintHandler } from './utils/createOrientationHintHandler';
 import { createRetryableModuleLoader } from './utils/createRetryableModuleLoader';
 import type { SceneType } from '../types';
@@ -33,6 +35,25 @@ export interface BootstrapGameHandle {
   dispose(): void;
 }
 
+interface PerformanceMemoryLike {
+  usedJSHeapSize?: number;
+  jsHeapSizeLimit?: number;
+}
+
+interface ViteImportMetaLike extends ImportMeta {
+  env?: {
+    DEV?: boolean;
+    MODE?: string;
+  };
+}
+
+function getPerformanceMemory(): PerformanceMemoryLike | undefined {
+  return (performance as Performance & { memory?: PerformanceMemoryLike }).memory;
+}
+
+const viteImportMeta = import.meta as ViteImportMetaLike;
+const isMemoryHealthDebugEnabled = viteImportMeta.env?.DEV === true && viteImportMeta.env.MODE !== 'test';
+
 export async function bootstrapGame(options: BootstrapGameOptions): Promise<BootstrapGameHandle> {
   const { canvas } = options;
   const renderer = createRenderer(canvas);
@@ -44,6 +65,10 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   const saveManager = new SaveManager();
   const audioManager = new AudioManager();
   const gameLoop = new GameLoop();
+  const memoryHealthMonitor = new MemoryHealthMonitor({
+    debugLogging: isMemoryHealthDebugEnabled,
+    logger: console,
+  });
   const loadingOverlay = options.loadingOverlay ?? new LoadingOverlay();
   const loadFailureOverlay = options.loadFailureOverlay ?? new LoadFailureOverlay();
   let disposed = false;
@@ -282,6 +307,17 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
     },
     (fps: number) => {
       pixelRatioController.sample(fps, performance.now());
+      const performanceMemory = getPerformanceMemory();
+      const report = memoryHealthMonitor.sample({
+        jsHeapUsedBytes: performanceMemory?.usedJSHeapSize,
+        jsHeapLimitBytes: performanceMemory?.jsHeapSizeLimit,
+        textureCount: renderer.info.memory.textures,
+        geometryCount: renderer.info.memory.geometries,
+        visibleOverlayCount: document.querySelectorAll('#ui-overlay > *').length,
+      });
+      if (report.alert) {
+        handleMemoryPressure(report.alert);
+      }
     },
   );
 
@@ -293,6 +329,9 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   const unsubscribeViewportResize = subscribeViewportResize(window, scheduleResize);
 
   function resumeGame(): void {
+    if (memoryPressureOverlay.isVisible()) {
+      return;
+    }
     gameLoop.resume();
     audioManager.ensureResumed();
   }
@@ -305,10 +344,33 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   }
 
   const resumeOverlay = new ResumeOverlay();
+  const memoryPressureOverlay = new MemoryPressureOverlay();
   let isPortraitLocked = false;
   let pendingBackgroundResume = false;
 
+  function handleMemoryPressure(alert: MemoryHealthAlert): void {
+    if (disposed || memoryPressureOverlay.isVisible()) {
+      return;
+    }
+
+    pendingBackgroundResume = false;
+    resumeOverlay.hide();
+    gameLoop.pause();
+    audioManager.suspend();
+    if (isMemoryHealthDebugEnabled) {
+      console.warn('[bootstrapGame] memory health alert', alert.reason, alert.sample);
+    }
+    memoryPressureOverlay.show({
+      onReload: () => {
+        window.location.reload();
+      },
+    });
+  }
+
   function showStageResumeOverlay(): void {
+    if (memoryPressureOverlay.isVisible()) {
+      return;
+    }
     resumeOverlay.show(() => {
       pendingBackgroundResume = false;
       resumeGame();
@@ -348,7 +410,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   }
 
   function handleResumeAfterRestore(): void {
-    if (isPortraitLocked) {
+    if (isPortraitLocked || memoryPressureOverlay.isVisible()) {
       return;
     }
     applyStageRestoreMode(true);
@@ -414,6 +476,9 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
       hideOverlay: () => {
         contextLossOverlay.hide();
       },
+      onRecovered: () => {
+        memoryHealthMonitor.reset();
+      },
       now: () => performance.now(),
     }),
   });
@@ -440,11 +505,16 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
       audioManager.dispose();
       resumeOverlay.hide();
       resumeOverlay.dispose();
+      memoryPressureOverlay.hide();
+      memoryPressureOverlay.dispose();
       contextLossOverlay.hide();
+      contextLossOverlay.dispose();
       orientationHintOverlay.hide();
       orientationHintOverlay.dispose();
       loadingOverlay.hide();
+      loadingOverlay.dispose();
       loadFailureOverlay.hide();
+      loadFailureOverlay.dispose();
       renderer.forceContextLoss?.();
       renderer.dispose();
     },
