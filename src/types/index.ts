@@ -161,3 +161,34 @@ export interface ConstellationDefinition {
   celebrationMessage: string;
   points: readonly ConstellationPoint[];
 }
+
+export type StageSpecialEffectStyle =
+  | 'rabbit'
+  | 'twinkle'
+  | 'veil'
+  | 'dust'
+  | 'halo'
+  | 'ring'
+  | 'aurora'
+  | 'bubble'
+  | 'crystal'
+  | 'flare'
+  | 'homecoming';
+
+export interface StageSpecialEventConfig {
+  stageNumber: number;
+  id: string;
+  style: StageSpecialEffectStyle;
+  startProgress: number;
+  duration: number;
+  message: string;
+  accentColor: number;
+}
+
+export interface StageSpecialEventState {
+  active: boolean;
+  started: boolean;
+  ended: boolean;
+  timeRemaining: number;
+  event: StageSpecialEventConfig | null;
+}

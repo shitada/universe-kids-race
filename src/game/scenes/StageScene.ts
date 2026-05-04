@@ -22,6 +22,7 @@ import { BoostSystem } from '../systems/BoostSystem';
 import { LODSystem } from '../systems/LODSystem';
 import { AdaptiveTutorialSystem, type AdaptiveTutorialEvent } from '../systems/AdaptiveTutorialSystem';
 import { MeteoShowerEventSystem } from '../systems/MeteoShowerEventSystem';
+import { StageSpecialEventSystem } from '../systems/StageSpecialEventSystem';
 import { triggerSharedVibration } from '../systems/VibrationSystem';
 import { HUD } from '../../ui/HUD';
 import { AdaptiveTutorialHint } from '../../ui/AdaptiveTutorialHint';
@@ -35,8 +36,10 @@ import { BoostFlameEffect } from '../effects/BoostFlameEffect';
 import { ConstellationLineEffect } from '../effects/ConstellationLineEffect';
 import { MeteoShowerEffect } from '../effects/MeteoShowerEffect';
 import { PlanetRingEffect } from '../effects/PlanetRingEffect';
+import { StageSpecialEffects } from '../effects/StageSpecialEffects';
 import { CompanionManager } from '../entities/CompanionManager';
 import { getConstellationForStage } from '../config/ConstellationData';
+import { getStageSpecialEventConfig } from '../config/StageSpecialEvents';
 import { followCameraZ } from '../utils/followCameraZ';
 import { getViewportSize } from '../utils/getViewportSize';
 import { ScorePopupManager } from '../../ui/ScorePopupManager';
@@ -129,6 +132,7 @@ export class StageScene implements Scene {
   private boostSystem = new BoostSystem();
   private lodSystem = new LODSystem();
   private meteoShowerEventSystem = new MeteoShowerEventSystem();
+  private stageSpecialEventSystem = new StageSpecialEventSystem();
   private hud!: HUD;
   private scorePopupManager = new ScorePopupManager();
   private particleBurstManager = new ParticleBurstManager();
@@ -138,6 +142,7 @@ export class StageScene implements Scene {
   private constellationHintOverlay = new ConstellationHintOverlay();
   private airShield!: AirShield;
   private meteoShowerEffect!: MeteoShowerEffect;
+  private stageSpecialEffects!: StageSpecialEffects;
 
   private stageConfig!: StageConfig;
   private stageNumber = 1;
@@ -183,6 +188,7 @@ export class StageScene implements Scene {
   private static readonly SHOOTING_STAR_SCORE_BONUS_DURATION = 6;
   private static readonly METEO_SHOWER_MESSAGE = 'りゅうせいぐんだ！ ✨';
   private static readonly METEO_SHOWER_MESSAGE_DURATION = 2.4;
+  private static readonly STAGE_SPECIAL_MESSAGE_DURATION = 2.8;
 
   // Background stars
   private bgStars: THREE.Points | null = null;
@@ -229,6 +235,8 @@ export class StageScene implements Scene {
   private adaptiveTutorialSystem = new AdaptiveTutorialSystem();
   private adaptiveTutorialHint = new AdaptiveTutorialHint();
   private meteoShowerAnnouncementTimer = 0;
+  private stageSpecialAnnouncementTimer = 0;
+  private stageSpecialAnnouncementMessage = '';
   private prewarmRequestToken = 0;
   private static readonly TOUCH_GUIDE_IDLE_DELAY = 3;
   private visualQualityTier = StageScene.VISUAL_QUALITY_SCALE_BY_TIER.length - 1;
@@ -297,6 +305,9 @@ export class StageScene implements Scene {
     this.meteoShowerEffect = new MeteoShowerEffect();
     this.meteoShowerEffect.init(this.threeScene);
 
+    this.stageSpecialEffects = new StageSpecialEffects();
+    this.stageSpecialEffects.init(this.threeScene);
+
     this.hud = new HUD();
     this.initialized = true;
     this.applyVisualQualityTier();
@@ -338,6 +349,8 @@ export class StageScene implements Scene {
     this.attemptStatsRecorded = false;
     this.meteoriteHitTimes.length = 0;
     this.meteoShowerAnnouncementTimer = 0;
+    this.stageSpecialAnnouncementTimer = 0;
+    this.stageSpecialAnnouncementMessage = '';
     this.assistTimer = 0;
     this.assistMessageTimer = 0;
     this.assistDirection = null;
@@ -346,7 +359,9 @@ export class StageScene implements Scene {
     this.adaptiveHintDisplayTimer = 0;
     this.adaptiveTutorialHint.hide();
     this.meteoShowerEventSystem.reset();
+    this.stageSpecialEventSystem.setStage(getStageSpecialEventConfig(this.stageNumber));
     this.meteoShowerEffect.clear();
+    this.stageSpecialEffects.clear();
     this.resetBoostHintState();
 
     const totalScore = context.totalScore ?? 0;
@@ -739,6 +754,10 @@ export class StageScene implements Scene {
     this.meteoShowerEventSystem.reset();
     this.meteoShowerEffect.clear();
     this.meteoShowerAnnouncementTimer = 0;
+    this.stageSpecialEventSystem.reset();
+    this.stageSpecialEffects.clear();
+    this.stageSpecialAnnouncementTimer = 0;
+    this.stageSpecialAnnouncementMessage = '';
     this.stars.length = 0;
     this.meteorites.length = 0;
     this.shootingStars.length = 0;
@@ -816,6 +835,7 @@ export class StageScene implements Scene {
     this.playTime += deltaTime;
     this.updateAssistTimers(deltaTime);
     this.updateMeteoShowerAnnouncement(deltaTime);
+    this.updateStageSpecialAnnouncement(deltaTime);
     this.updateAdaptiveHintDisplay(deltaTime);
     this.updateBoostHintDisplay(deltaTime);
     this.updateTouchGuide(input.moveDirection, deltaTime);
@@ -865,6 +885,14 @@ export class StageScene implements Scene {
 
     // Update spaceship
     this.spaceship.update(deltaTime);
+
+    const progress = this.spaceship.getProgress(this.stageConfig.stageLength);
+
+    const stageSpecialEventState = this.stageSpecialEventSystem.update(progress, deltaTime);
+    if (stageSpecialEventState.started && stageSpecialEventState.event) {
+      this.stageSpecialEffects.start(stageSpecialEventState.event);
+      this.showStageSpecialAnnouncement(stageSpecialEventState.event.message);
+    }
 
     const meteoShowerState = this.meteoShowerEventSystem.update(deltaTime);
     if (meteoShowerState.started) {
@@ -1092,6 +1120,12 @@ export class StageScene implements Scene {
       this.spaceship.position.x,
       this.spaceship.position.z,
     );
+    this.stageSpecialEffects.update(
+      stageSpecialEventState.active,
+      deltaTime,
+      this.spaceship.position.x,
+      this.spaceship.position.z,
+    );
 
     // Boost visual effects
     this.boostLinesEffect.update(
@@ -1137,7 +1171,6 @@ export class StageScene implements Scene {
     this.hud.updateCooldown(this.boostSystem.getCooldownProgress());
 
     // Check stage clear
-    const progress = this.spaceship.getProgress(this.stageConfig.stageLength);
     this.hud.updateStageProgress(progress);
     if (progress >= 1) {
       this.onStageClear();
@@ -1202,11 +1235,7 @@ export class StageScene implements Scene {
     if (this.assistMessageTimer > 0) {
       this.assistMessageTimer = Math.max(0, this.assistMessageTimer - deltaTime);
       if (this.assistMessageTimer === 0) {
-        if (this.meteoShowerAnnouncementTimer > 0) {
-          this.hud.showAssistMessage(StageScene.METEO_SHOWER_MESSAGE);
-        } else {
-          this.hud.hideAssistMessage();
-        }
+        this.syncAssistMessage();
       }
     }
   }
@@ -1217,21 +1246,48 @@ export class StageScene implements Scene {
     }
 
     this.meteoShowerAnnouncementTimer = Math.max(0, this.meteoShowerAnnouncementTimer - deltaTime);
-    if (this.meteoShowerAnnouncementTimer > 0) {
-      return;
+    if (this.meteoShowerAnnouncementTimer === 0) {
+      this.syncAssistMessage();
     }
-
-    if (this.assistMessageTimer > 0) {
-      this.hud.showAssistMessage(StageScene.ASSIST_MESSAGE);
-      return;
-    }
-
-    this.hud.hideAssistMessage();
   }
 
   private showMeteoShowerAnnouncement(): void {
     this.meteoShowerAnnouncementTimer = StageScene.METEO_SHOWER_MESSAGE_DURATION;
-    this.hud.showAssistMessage(StageScene.METEO_SHOWER_MESSAGE);
+    this.syncAssistMessage();
+  }
+
+  private updateStageSpecialAnnouncement(deltaTime: number): void {
+    if (this.stageSpecialAnnouncementTimer <= 0) {
+      return;
+    }
+
+    this.stageSpecialAnnouncementTimer = Math.max(0, this.stageSpecialAnnouncementTimer - deltaTime);
+    if (this.stageSpecialAnnouncementTimer === 0) {
+      this.stageSpecialAnnouncementMessage = '';
+      this.syncAssistMessage();
+    }
+  }
+
+  private showStageSpecialAnnouncement(message: string): void {
+    this.stageSpecialAnnouncementMessage = message;
+    this.stageSpecialAnnouncementTimer = StageScene.STAGE_SPECIAL_MESSAGE_DURATION;
+    this.syncAssistMessage();
+  }
+
+  private syncAssistMessage(): void {
+    if (this.meteoShowerAnnouncementTimer > 0) {
+      this.hud.showAssistMessage(StageScene.METEO_SHOWER_MESSAGE);
+      return;
+    }
+    if (this.stageSpecialAnnouncementTimer > 0 && this.stageSpecialAnnouncementMessage) {
+      this.hud.showAssistMessage(this.stageSpecialAnnouncementMessage);
+      return;
+    }
+    if (this.assistMessageTimer > 0) {
+      this.hud.showAssistMessage(StageScene.ASSIST_MESSAGE);
+      return;
+    }
+    this.hud.hideAssistMessage();
   }
 
   private resetBoostHintState(): void {
@@ -1586,8 +1642,12 @@ export class StageScene implements Scene {
     this.stageClearOverlay.hide();
     this.resetAssistNavigation();
     this.meteoShowerAnnouncementTimer = 0;
+    this.stageSpecialAnnouncementTimer = 0;
+    this.stageSpecialAnnouncementMessage = '';
     this.meteoShowerEventSystem.reset();
     this.meteoShowerEffect.clear();
+    this.stageSpecialEventSystem.reset();
+    this.stageSpecialEffects.clear();
     this.resetBoostHintState();
     this.touchGuide.hide();
     this.syncPauseAvailability();
@@ -1856,6 +1916,7 @@ export class StageScene implements Scene {
     this.boostLinesEffect.update(false, this.spaceship.position.x, this.spaceship.position.z);
     this.airShield.reset(this.spaceship.position.x, this.spaceship.position.y, this.spaceship.position.z);
     this.planetRingEffect.clear();
+    this.stageSpecialEffects.clear();
     this.resetStageObjects();
     if (this.bgStars) {
       this.bgStars.parent?.remove(this.bgStars);
