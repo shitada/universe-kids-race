@@ -63,6 +63,25 @@ describe('Meteorite', () => {
     }
   });
 
+  it('switches meteorites across shared LOD resources', () => {
+    const a = new Meteorite(0, 0, 0);
+    const b = new Meteorite(0, 0, 0);
+    const nearGeometry = a.mesh.geometry;
+
+    a.applyLOD('mid');
+    b.applyLOD('mid');
+    expect(a.getLODLevel()).toBe('mid');
+    expect(a.mesh.geometry).toBe(b.mesh.geometry);
+    expect(a.mesh.material).toBe(b.mesh.material);
+    expect(a.mesh.geometry).not.toBe(nearGeometry);
+
+    a.applyLOD('far');
+    b.applyLOD('far');
+    expect(a.getLODLevel()).toBe('far');
+    expect(a.mesh.geometry).toBe(b.mesh.geometry);
+    expect(a.mesh.material).toBe(b.mesh.material);
+  });
+
   it('disposing one meteorite does not break a sibling created afterwards', () => {
     const a = new Meteorite(0, 0, 0);
     a.dispose();

@@ -1,8 +1,42 @@
 import * as THREE from 'three';
+import type { LODLevel } from '../systems/LODSystem';
 
-const SHARED_GEOMETRY = new THREE.BoxGeometry(1.55, 1.55, 1.55);
-const SHARED_OUTLINE_GEOMETRY = new THREE.EdgesGeometry(SHARED_GEOMETRY);
-const SHARED_MATERIAL = new THREE.MeshToonMaterial({ color: 0x7f7566 });
+interface MeteoriteSharedResources {
+  geometry: THREE.BufferGeometry;
+  material: THREE.Material;
+  outlineGeometry: THREE.BufferGeometry;
+  outlineScale: number;
+}
+
+const SHARED_METEORITE_RESOURCES: Record<LODLevel, MeteoriteSharedResources> = (() => {
+  const nearGeometry = new THREE.BoxGeometry(1.55, 1.55, 1.55);
+  const midGeometry = new THREE.OctahedronGeometry(1.08, 0);
+  const farGeometry = new THREE.PlaneGeometry(1.45, 1.45);
+
+  return {
+    near: {
+      geometry: nearGeometry,
+      material: new THREE.MeshToonMaterial({ color: 0x7f7566 }),
+      outlineGeometry: new THREE.EdgesGeometry(nearGeometry),
+      outlineScale: 1.03,
+    },
+    mid: {
+      geometry: midGeometry,
+      material: new THREE.MeshToonMaterial({ color: 0x7f7566 }),
+      outlineGeometry: new THREE.EdgesGeometry(midGeometry),
+      outlineScale: 1.04,
+    },
+    far: {
+      geometry: farGeometry,
+      material: new THREE.MeshBasicMaterial({
+        color: 0x7f7566,
+        side: THREE.DoubleSide,
+      }),
+      outlineGeometry: new THREE.EdgesGeometry(farGeometry),
+      outlineScale: 1.05,
+    },
+  };
+})();
 const SHARED_OUTLINE_MATERIAL = new THREE.LineBasicMaterial({ color: 0x05060a });
 
 const METEORITE_ANIMATION_AHEAD = 60;
@@ -21,6 +55,7 @@ export class Meteorite {
   mesh: THREE.Mesh;
   private vibrationTime = 0;
   private readonly vibrationPhase: number;
+  private lodLevel: LODLevel = 'near';
 
   constructor(x: number, y: number, z: number) {
     this.position = { x, y, z };
@@ -30,29 +65,50 @@ export class Meteorite {
   }
 
   private createMesh(): THREE.Mesh {
-    const mesh = new THREE.Mesh(SHARED_GEOMETRY, SHARED_MATERIAL);
+    const mesh = new THREE.Mesh(
+      SHARED_METEORITE_RESOURCES[this.lodLevel].geometry,
+      SHARED_METEORITE_RESOURCES[this.lodLevel].material,
+    );
     mesh.userData.sharedAssets = true;
     this.syncOutlineVisibility(mesh);
     return mesh;
   }
 
   private attachOutline(mesh: THREE.Mesh): void {
-    const outline = new THREE.LineSegments(SHARED_OUTLINE_GEOMETRY, SHARED_OUTLINE_MATERIAL);
+    const resources = SHARED_METEORITE_RESOURCES[this.lodLevel];
+    const outline = new THREE.LineSegments(resources.outlineGeometry, SHARED_OUTLINE_MATERIAL);
     outline.name = 'meteorite-high-contrast-outline';
-    outline.scale.setScalar(1.03);
+    outline.scale.setScalar(resources.outlineScale);
     outline.userData.sharedAssets = true;
     mesh.add(outline);
   }
 
   private syncOutlineVisibility(mesh: THREE.Mesh = this.mesh): void {
-    let outline = mesh.getObjectByName('meteorite-high-contrast-outline');
+    let outline = mesh.getObjectByName('meteorite-high-contrast-outline') as THREE.LineSegments | null;
     if (!outline && HIGH_CONTRAST_MODE) {
       this.attachOutline(mesh);
-      outline = mesh.getObjectByName('meteorite-high-contrast-outline');
+      outline = mesh.getObjectByName('meteorite-high-contrast-outline') as THREE.LineSegments | null;
     }
     if (outline) {
+      const resources = SHARED_METEORITE_RESOURCES[this.lodLevel];
+      outline.geometry = resources.outlineGeometry;
+      outline.scale.setScalar(resources.outlineScale);
       outline.visible = HIGH_CONTRAST_MODE;
     }
+  }
+
+  getLODLevel(): LODLevel {
+    return this.lodLevel;
+  }
+
+  applyLOD(level: LODLevel): void {
+    if (this.lodLevel === level) {
+      return;
+    }
+    this.lodLevel = level;
+    this.mesh.geometry = SHARED_METEORITE_RESOURCES[level].geometry;
+    this.mesh.material = SHARED_METEORITE_RESOURCES[level].material;
+    this.syncOutlineVisibility();
   }
 
   update(deltaTime: number, cameraZ?: number): void {
@@ -80,6 +136,7 @@ export class Meteorite {
     this.vibrationTime = 0;
     this.isActive = true;
     this.mesh.visible = true;
+    this.applyLOD('near');
     this.syncOutlineVisibility();
   }
 
@@ -90,6 +147,7 @@ export class Meteorite {
     this.vibrationTime = 0;
     this.isActive = true;
     this.mesh.visible = true;
+    this.applyLOD('near');
     this.syncOutlineVisibility();
   }
 

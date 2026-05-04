@@ -12,6 +12,7 @@ import { CollisionSystem } from '../systems/CollisionSystem';
 import { ScoreSystem } from '../systems/ScoreSystem';
 import { SpawnSystem } from '../systems/SpawnSystem';
 import { BoostSystem } from '../systems/BoostSystem';
+import { LODSystem } from '../systems/LODSystem';
 import { HUD } from '../../ui/HUD';
 import { CountdownOverlay } from '../../ui/CountdownOverlay';
 import { StageIntroOverlay } from '../../ui/StageIntroOverlay';
@@ -108,6 +109,7 @@ export class StageScene implements Scene {
   private scoreSystem = new ScoreSystem();
   private spawnSystem = new SpawnSystem();
   private boostSystem = new BoostSystem();
+  private lodSystem = new LODSystem();
   private hud!: HUD;
   private scorePopupManager = new ScorePopupManager();
   private particleBurstManager = new ParticleBurstManager();
@@ -809,6 +811,9 @@ export class StageScene implements Scene {
       this.shootingStars.push(shootingStar);
       this.threeScene.add(shootingStar.mesh);
     }
+
+    this.lodSystem.update(this.spaceship.position, this.stars);
+    this.lodSystem.update(this.spaceship.position, this.meteorites);
 
     // Note: star.update() (rainbow hue / Y rotation) is folded into the
     // retain branch of cleanupPassedObjects() below so this.stars is walked

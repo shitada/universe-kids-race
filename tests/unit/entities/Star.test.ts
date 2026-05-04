@@ -86,6 +86,38 @@ describe('Star', () => {
     expect(rainbow1.mesh.material).not.toBe(rainbow2.mesh.material);
   });
 
+  it('switches NORMAL stars across shared LOD resources', () => {
+    const a = new Star(0, 0, -10, 'NORMAL');
+    const b = new Star(0, 0, -10, 'NORMAL');
+    const nearGeometry = a.mesh.geometry;
+
+    a.applyLOD('mid');
+    b.applyLOD('mid');
+    expect(a.getLODLevel()).toBe('mid');
+    expect(a.mesh.geometry).toBe(b.mesh.geometry);
+    expect(a.mesh.material).toBe(b.mesh.material);
+    expect(a.mesh.geometry).not.toBe(nearGeometry);
+
+    a.applyLOD('far');
+    b.applyLOD('far');
+    expect(a.getLODLevel()).toBe('far');
+    expect(a.mesh.geometry).toBe(b.mesh.geometry);
+    expect(a.mesh.material).toBe(b.mesh.material);
+  });
+
+  it('keeps rainbow color in sync when switching LOD levels', () => {
+    const star = new Star(0, 0, -10, 'RAINBOW');
+    star.update(0.5);
+    const nearColor = (star.mesh.material as THREE.MeshToonMaterial).color.getHex();
+
+    star.applyLOD('far');
+    expect(star.getLODLevel()).toBe('far');
+    expect((star.mesh.material as THREE.MeshBasicMaterial).color.getHex()).toBe(nearColor);
+
+    star.applyLOD('mid');
+    expect((star.mesh.material as THREE.MeshToonMaterial).color.getHex()).toBe(nearColor);
+  });
+
   it('disposing one star does not affect a sibling star created afterwards', () => {
     const a = new Star(0, 0, -10, 'NORMAL');
     a.dispose();
