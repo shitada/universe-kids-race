@@ -50,6 +50,28 @@ export interface StageConfig {
   planetColor: number;
 }
 
+export type StageAtmosphereParticlePattern =
+  | 'sparkle'
+  | 'mist'
+  | 'dust'
+  | 'ember'
+  | 'ring'
+  | 'aurora'
+  | 'crystal'
+  | 'flare'
+  | 'homecoming';
+
+export interface StageAtmosphereConfig {
+  stageNumber: number;
+  gradientTopColor: number;
+  gradientBottomColor: number;
+  particlePrimaryColor: number;
+  particleSecondaryColor: number;
+  particlePattern: StageAtmosphereParticlePattern;
+  particleCount: number;
+  particleSize: number;
+}
+
 export type StageMedalTier = 'none' | 'bronze' | 'silver' | 'gold';
 export type StageMedalGoalTier = Exclude<StageMedalTier, 'none'>;
 

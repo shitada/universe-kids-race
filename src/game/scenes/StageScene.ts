@@ -36,6 +36,7 @@ import { AdaptiveTutorialHint } from '../../ui/AdaptiveTutorialHint';
 import { CountdownOverlay } from '../../ui/CountdownOverlay';
 import { StageIntroOverlay } from '../../ui/StageIntroOverlay';
 import { getStageConfig, TOTAL_STAGES } from '../config/StageConfig';
+import { getStageAtmosphereConfig } from '../config/StageAtmosphereConfig';
 import { ParticleBurstManager } from '../effects/ParticleBurst';
 import { AirShield } from '../effects/AirShield';
 import { BoostLinesEffect } from '../effects/BoostLinesEffect';
@@ -44,6 +45,7 @@ import { ConstellationLineEffect } from '../effects/ConstellationLineEffect';
 import { MeteoShowerEffect } from '../effects/MeteoShowerEffect';
 import { PlanetRingEffect } from '../effects/PlanetRingEffect';
 import { RainbowTrailEffect } from '../effects/RainbowTrailEffect';
+import { StageAtmosphereEffect } from '../effects/StageAtmosphereEffect';
 import { StageSpecialEffects } from '../effects/StageSpecialEffects';
 import { CompanionManager } from '../entities/CompanionManager';
 import { getConstellationForStage } from '../config/ConstellationData';
@@ -174,6 +176,7 @@ export class StageScene implements Scene {
   private meteoShowerEffect!: MeteoShowerEffect;
   private stageSpecialEffects!: StageSpecialEffects;
   private rainbowTrailEffect!: RainbowTrailEffect;
+  private stageAtmosphereEffect = new StageAtmosphereEffect();
 
   private stageConfig!: StageConfig;
   private stageNumber = 1;
@@ -339,6 +342,8 @@ export class StageScene implements Scene {
     this.stageSpecialEffects = new StageSpecialEffects();
     this.stageSpecialEffects.init(this.threeScene);
 
+    this.stageAtmosphereEffect.init(this.threeScene);
+
     this.hud = new HUD();
     this.initialized = true;
     this.applyVisualQualityTier();
@@ -426,6 +431,7 @@ export class StageScene implements Scene {
     this.rainbowTrailEffect.clear();
     this.companionManager?.resetUnlockedPlanets([]);
     this.createBackground();
+    this.stageAtmosphereEffect.start(getStageAtmosphereConfig(this.stageNumber));
     this.applyVisualQualityTier();
 
     // Camera behind spaceship
@@ -792,6 +798,7 @@ export class StageScene implements Scene {
     this.meteoShowerAnnouncementTimer = 0;
     this.stageSpecialEventSystem.reset();
     this.stageSpecialEffects.clear();
+    this.stageAtmosphereEffect.clear();
     this.rainbowTrailEffect.clear();
     this.stageSpecialAnnouncementTimer = 0;
     this.stageSpecialAnnouncementMessage = '';
@@ -833,6 +840,7 @@ export class StageScene implements Scene {
           deltaTime * StageScene.DESTINATION_PLANET_SPIN_SPEED;
       }
       this.revealClearActionButtonsIfReady();
+      this.stageAtmosphereEffect.update(deltaTime, this.camera, this.spaceship.position.x, this.spaceship.position.z);
       return;
     }
 
@@ -868,6 +876,7 @@ export class StageScene implements Scene {
       this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
       this.constellationHintOverlay.tick(deltaTime);
       this.constellationLineEffect.update(deltaTime);
+      this.stageAtmosphereEffect.update(deltaTime, this.camera, this.spaceship.position.x, this.spaceship.position.z);
       return;
     }
 
@@ -1183,6 +1192,7 @@ export class StageScene implements Scene {
 
     // Camera follow
     this.updateCameraFollow(deltaTime);
+    this.stageAtmosphereEffect.update(deltaTime, this.camera, this.spaceship.position.x, this.spaceship.position.z);
     this.rainbowTrailEffect.update(deltaTime, this.spaceship.position);
 
     for (const star of collisionResult.starCollisions) {
@@ -2070,6 +2080,7 @@ export class StageScene implements Scene {
     }
     this.boostLinesEffect.setQualityTier(clampedTier);
     this.boostFlameEffect.setQualityTier(clampedTier);
+    this.stageAtmosphereEffect.setQualityTier(clampedTier);
     if (this.bgStars) {
       this.bgStars.geometry.setDrawRange(0, this.getBackgroundStarDrawCount());
     }
