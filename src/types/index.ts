@@ -234,3 +234,17 @@ export interface StageSpecialEventState {
   timeRemaining: number;
   event: StageSpecialEventConfig | null;
 }
+
+export type SeasonalEventId = 'tanabata' | 'christmas' | 'new-year';
+
+export interface SeasonalEventConfig {
+  id: SeasonalEventId;
+  title: string;
+  emoji: string;
+  noticeMessage: string;
+  accentColor: number;
+  startMonth: number;
+  startDay: number;
+  endMonth: number;
+  endDay: number;
+}

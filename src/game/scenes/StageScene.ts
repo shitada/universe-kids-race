@@ -46,10 +46,12 @@ import { MeteoShowerEffect } from '../effects/MeteoShowerEffect';
 import { PlanetRingEffect } from '../effects/PlanetRingEffect';
 import { RainbowTrailEffect } from '../effects/RainbowTrailEffect';
 import { StageAtmosphereEffect } from '../effects/StageAtmosphereEffect';
+import { SeasonalEventEffects } from '../effects/SeasonalEventEffects';
 import { StageSpecialEffects } from '../effects/StageSpecialEffects';
 import { CompanionManager } from '../entities/CompanionManager';
 import { getConstellationForStage } from '../config/ConstellationData';
 import { getStageSpecialEventConfig } from '../config/StageSpecialEvents';
+import { SeasonalEventSystem } from '../systems/SeasonalEventSystem';
 import { followCameraZ } from '../utils/followCameraZ';
 import { getViewportSize } from '../utils/getViewportSize';
 import { ScorePopupManager } from '../../ui/ScorePopupManager';
@@ -62,6 +64,7 @@ import { TouchGuideOverlay, type TouchGuideMode } from '../../ui/TouchGuideOverl
 import { ConstellationHintOverlay } from '../../ui/ConstellationHintOverlay';
 import { attachReleaseConfirmButton } from '../../ui/attachReleaseConfirmButton';
 import { PauseOverlay } from '../../ui/PauseOverlay';
+import { SeasonalEventNotice } from '../../ui/SeasonalEventNotice';
 import { StageClearOverlay } from '../../ui/StageClearOverlay';
 import { ConstellationSystem } from '../systems/ConstellationSystem';
 import {
@@ -115,6 +118,7 @@ type EncyclopediaOverlayInstance = InstanceType<EncyclopediaOverlayCtor>;
 interface StageSceneOptions {
   scheduleIdleTask?: (callback: () => void) => void;
   loadEncyclopediaOverlay?: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
+  seasonalEventDateProvider?: () => Date;
 }
 
 interface StagePauseHandlers {
@@ -165,6 +169,7 @@ export class StageScene implements Scene {
   private meteoShowerEventSystem = new MeteoShowerEventSystem();
   private stageSpecialEventSystem = new StageSpecialEventSystem();
   private specialStarSpawnSystem = new SpecialStarSpawnSystem();
+  private readonly seasonalEventSystem: SeasonalEventSystem;
   private hud!: HUD;
   private scorePopupManager = new ScorePopupManager();
   private particleBurstManager = new ParticleBurstManager();
@@ -175,8 +180,10 @@ export class StageScene implements Scene {
   private airShield!: AirShield;
   private meteoShowerEffect!: MeteoShowerEffect;
   private stageSpecialEffects!: StageSpecialEffects;
+  private seasonalEventEffects = new SeasonalEventEffects();
   private rainbowTrailEffect!: RainbowTrailEffect;
   private stageAtmosphereEffect = new StageAtmosphereEffect();
+  private seasonalEventNotice = new SeasonalEventNotice();
 
   private stageConfig!: StageConfig;
   private stageNumber = 1;
@@ -291,6 +298,7 @@ export class StageScene implements Scene {
     this.audioManager = audioManager;
     this.saveManager = saveManager;
     this.scheduleIdleTask = options.scheduleIdleTask ?? scheduleIdleTask;
+    this.seasonalEventSystem = new SeasonalEventSystem(options.seasonalEventDateProvider);
     this.loadEncyclopediaOverlay =
       options.loadEncyclopediaOverlay ??
       (() => import('../../ui/EncyclopediaOverlay'));
@@ -341,6 +349,8 @@ export class StageScene implements Scene {
 
     this.stageSpecialEffects = new StageSpecialEffects();
     this.stageSpecialEffects.init(this.threeScene);
+
+    this.seasonalEventEffects.init(this.threeScene);
 
     this.stageAtmosphereEffect.init(this.threeScene);
 
@@ -413,6 +423,7 @@ export class StageScene implements Scene {
     this.scorePopupManager.setHighContrastMode(highContrastEnabled);
     this.adaptiveTutorialHint.setHighContrastMode(highContrastEnabled);
     this.constellationHintOverlay.setHighContrastMode(highContrastEnabled);
+    this.seasonalEventNotice.setHighContrastMode(highContrastEnabled);
     this.stageEntryTotalScore = totalScore;
     this.stageEntryTotalStarCount = totalStarCount;
     this.scoreSystem.setTotalScore(totalScore);
@@ -433,6 +444,11 @@ export class StageScene implements Scene {
     this.createBackground();
     this.stageAtmosphereEffect.start(getStageAtmosphereConfig(this.stageNumber));
     this.applyVisualQualityTier();
+    const seasonalEvent = this.seasonalEventSystem.refresh();
+    if (seasonalEvent) {
+      this.seasonalEventEffects.start(seasonalEvent);
+      this.seasonalEventNotice.show(seasonalEvent);
+    }
 
     // Camera behind spaceship
     this.camera.position.set(0, 5, 10);
@@ -798,10 +814,13 @@ export class StageScene implements Scene {
     this.meteoShowerAnnouncementTimer = 0;
     this.stageSpecialEventSystem.reset();
     this.stageSpecialEffects.clear();
+    this.seasonalEventSystem.clear();
+    this.seasonalEventEffects.clear();
     this.stageAtmosphereEffect.clear();
     this.rainbowTrailEffect.clear();
     this.stageSpecialAnnouncementTimer = 0;
     this.stageSpecialAnnouncementMessage = '';
+    this.seasonalEventNotice.hide();
     this.stars.length = 0;
     this.meteorites.length = 0;
     this.shootingStars.length = 0;
@@ -824,6 +843,7 @@ export class StageScene implements Scene {
     if (this.isCleared) {
       this.resetBoostHintState();
       this.clearTimer += deltaTime;
+      this.seasonalEventNotice.tick(deltaTime);
       this.constellationHintOverlay.tick(deltaTime);
       this.constellationLineEffect.update(deltaTime);
       this.planetRingEffect.update(deltaTime);
@@ -839,6 +859,7 @@ export class StageScene implements Scene {
         this.destinationPlanetSpinTarget.rotation.y +=
           deltaTime * StageScene.DESTINATION_PLANET_SPIN_SPEED;
       }
+      this.seasonalEventEffects.update(deltaTime, this.spaceship.position.x, this.spaceship.position.z);
       this.revealClearActionButtonsIfReady();
       this.stageAtmosphereEffect.update(deltaTime, this.camera, this.spaceship.position.x, this.spaceship.position.z);
       return;
@@ -851,6 +872,7 @@ export class StageScene implements Scene {
     if (this.isStarting || this.awaitingResume || this.isHomeConfirmOpen || this.isPauseOpen) {
       this.resetBoostHintState();
       this.hideAdaptiveTutorialHint();
+      this.seasonalEventNotice.tick(deltaTime);
       this.inputSystem.setBoostPressed?.(false);
       if (!this.isHomeConfirmOpen && !this.isPauseOpen) {
         const hadStageIntro = this.stageIntroOverlay?.isActive() ?? false;
@@ -876,12 +898,14 @@ export class StageScene implements Scene {
       this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
       this.constellationHintOverlay.tick(deltaTime);
       this.constellationLineEffect.update(deltaTime);
+      this.seasonalEventEffects.update(deltaTime, this.spaceship.position.x, this.spaceship.position.z);
       this.stageAtmosphereEffect.update(deltaTime, this.camera, this.spaceship.position.x, this.spaceship.position.z);
       return;
     }
 
     const input = this.inputSystem.getState();
     this.playTime += deltaTime;
+    this.seasonalEventNotice.tick(deltaTime);
     this.updateAssistTimers(deltaTime);
     this.updateMeteoShowerAnnouncement(deltaTime);
     this.updateStageSpecialAnnouncement(deltaTime);
@@ -934,6 +958,7 @@ export class StageScene implements Scene {
 
     // Update spaceship
     this.spaceship.update(deltaTime);
+    this.seasonalEventEffects.update(deltaTime, this.spaceship.position.x, this.spaceship.position.z);
 
     const progress = this.spaceship.getProgress(this.stageConfig.stageLength);
 
@@ -2019,6 +2044,7 @@ export class StageScene implements Scene {
     this.touchGuide.hide();
     this.adaptiveTutorialHint.hide();
     this.constellationHintOverlay.hide();
+    this.seasonalEventNotice.dispose();
     this.hud.hide();
     this.scorePopupManager.dispose();
     setSharedVibrationFallbackHandler(null);
@@ -2047,6 +2073,8 @@ export class StageScene implements Scene {
     this.airShield.reset(this.spaceship.position.x, this.spaceship.position.y, this.spaceship.position.z);
     this.planetRingEffect.clear();
     this.stageSpecialEffects.clear();
+    this.seasonalEventEffects.clear();
+    this.seasonalEventSystem.clear();
     this.resetStageObjects();
     if (this.bgStars) {
       this.bgStars.parent?.remove(this.bgStars);
