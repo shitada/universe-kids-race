@@ -188,6 +188,31 @@ describe('SaveManager', () => {
     });
   });
 
+  describe('discoveredSpecialStars', () => {
+    it('defaults to empty array when the field is missing', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({ clearedStage: 1, unlockedPlanets: [1] }));
+      const manager = new SaveManager();
+      expect(manager.load().discoveredSpecialStars ?? []).toEqual([]);
+    });
+
+    it('sanitizes invalid special star ids', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        discoveredSpecialStars: ['rainbow', 'bad', 'gold', 3, 'gold'],
+      }));
+      const manager = new SaveManager();
+      expect(manager.load().discoveredSpecialStars ?? []).toEqual(['rainbow', 'gold']);
+    });
+
+    it('marks a special shooting star as discovered only once', () => {
+      const manager = new SaveManager();
+      expect(manager.markSpecialStarDiscovered('silver')).toBe(true);
+      expect(manager.markSpecialStarDiscovered('silver')).toBe(false);
+      expect(manager.load().discoveredSpecialStars ?? []).toEqual(['silver']);
+    });
+  });
+
   describe('muted persistence', () => {
     it('defaults muted to false when no save exists', () => {
       const manager = new SaveManager();

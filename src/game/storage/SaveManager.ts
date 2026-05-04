@@ -1,8 +1,10 @@
 import {
   DEFAULT_SPACESHIP_CUSTOMIZATION,
   type GameplayStats,
+  SPECIAL_SHOOTING_STAR_TYPES,
   SPACESHIP_COLOR_KEYS,
   type SaveData,
+  type SpecialShootingStarType,
   type SpaceshipColorKey,
   type SpaceshipCustomization,
   type VibrationIntensity,
@@ -127,6 +129,16 @@ function normalizeVibrationIntensity(value: unknown): VibrationIntensity {
   }
 }
 
+function normalizeSpecialShootingStars(value: unknown): SpecialShootingStarType[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return [...new Set(value.filter(
+    (entry): entry is SpecialShootingStarType =>
+      typeof entry === 'string' && (SPECIAL_SHOOTING_STAR_TYPES as readonly string[]).includes(entry),
+  ))];
+}
+
 function sanitizeSaveData(data: SaveData): SaveData {
   const sanitized: SaveData = {
     clearedStage: Number.isInteger(data.clearedStage) && data.clearedStage >= 0 && data.clearedStage <= TOTAL_STAGES
@@ -154,6 +166,11 @@ function sanitizeSaveData(data: SaveData): SaveData {
     : [];
   if (discoveredConstellations.length > 0) {
     sanitized.discoveredConstellations = discoveredConstellations;
+  }
+
+  const discoveredSpecialStars = normalizeSpecialShootingStars(data.discoveredSpecialStars);
+  if (discoveredSpecialStars.length > 0) {
+    sanitized.discoveredSpecialStars = discoveredSpecialStars;
   }
 
   if (data.colorAccessibility?.highContrast === true) {
@@ -247,6 +264,14 @@ export class SaveManager {
         }
       } else {
         delete (data as { discoveredConstellations?: unknown }).discoveredConstellations;
+      }
+      const discoveredSpecialStars = normalizeSpecialShootingStars(
+        (data as { discoveredSpecialStars?: unknown }).discoveredSpecialStars,
+      );
+      if (discoveredSpecialStars.length > 0) {
+        data.discoveredSpecialStars = discoveredSpecialStars;
+      } else {
+        delete (data as { discoveredSpecialStars?: unknown }).discoveredSpecialStars;
       }
       data.gameplayStats = normalizeGameplayStats((data as { gameplayStats?: unknown }).gameplayStats);
 
@@ -438,6 +463,26 @@ export class SaveManager {
       return true;
     } catch (e) {
       console.warn('SaveManager.markConstellationDiscovered failed:', e);
+      return false;
+    }
+  }
+
+  markSpecialStarDiscovered(specialStarId: SpecialShootingStarType): boolean {
+    if (!(SPECIAL_SHOOTING_STAR_TYPES as readonly string[]).includes(specialStarId)) {
+      return false;
+    }
+    try {
+      const data = this.load();
+      const discoveredSpecialStars = [...(data.discoveredSpecialStars ?? [])];
+      if (discoveredSpecialStars.includes(specialStarId)) {
+        return false;
+      }
+      discoveredSpecialStars.push(specialStarId);
+      data.discoveredSpecialStars = discoveredSpecialStars;
+      this.save(data);
+      return true;
+    } catch (e) {
+      console.warn('SaveManager.markSpecialStarDiscovered failed:', e);
       return false;
     }
   }

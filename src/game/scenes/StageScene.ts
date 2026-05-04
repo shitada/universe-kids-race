@@ -15,6 +15,7 @@ import { Star, setStarHighContrastMode } from '../entities/Star';
 import { Meteorite, setMeteoriteHighContrastMode } from '../entities/Meteorite';
 import { ShootingStar } from '../entities/ShootingStar';
 import { Comet } from '../entities/Comet';
+import { SpecialShootingStar } from '../entities/SpecialShootingStar';
 import { CollisionSystem } from '../systems/CollisionSystem';
 import { ScoreSystem } from '../systems/ScoreSystem';
 import { SpawnSystem } from '../systems/SpawnSystem';
@@ -23,6 +24,7 @@ import { LODSystem } from '../systems/LODSystem';
 import { AdaptiveTutorialSystem, type AdaptiveTutorialEvent } from '../systems/AdaptiveTutorialSystem';
 import { MeteoShowerEventSystem } from '../systems/MeteoShowerEventSystem';
 import { StageSpecialEventSystem } from '../systems/StageSpecialEventSystem';
+import { SpecialStarSpawnSystem } from '../systems/SpecialStarSpawnSystem';
 import {
   setSharedVibrationFallbackHandler,
   setSharedVibrationIntensity,
@@ -49,7 +51,11 @@ import { getStageSpecialEventConfig } from '../config/StageSpecialEvents';
 import { followCameraZ } from '../utils/followCameraZ';
 import { getViewportSize } from '../utils/getViewportSize';
 import { ScorePopupManager } from '../../ui/ScorePopupManager';
-import { getNextPlanetEncyclopediaEntry, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
+import {
+  getNextPlanetEncyclopediaEntry,
+  getPlanetEncyclopediaEntry,
+  getSpecialStarEncyclopediaEntry,
+} from '../config/PlanetEncyclopedia';
 import { TouchGuideOverlay, type TouchGuideMode } from '../../ui/TouchGuideOverlay';
 import { ConstellationHintOverlay } from '../../ui/ConstellationHintOverlay';
 import { attachReleaseConfirmButton } from '../../ui/attachReleaseConfirmButton';
@@ -63,6 +69,7 @@ import {
   createStageBackground as buildStageBackground,
   prewarmStageVisualAssets,
 } from './stageVisualAssets';
+import { SPECIAL_STAR_CONFIG } from '../config/SpecialStarConfig';
 
 const BG_STAR_PARALLAX = 1.0;
 const BG_STAR_COUNT = 2000;
@@ -146,6 +153,7 @@ export class StageScene implements Scene {
   private meteorites: Meteorite[] = [];
   private shootingStars: ShootingStar[] = [];
   private comets: Comet[] = [];
+  private specialShootingStars: SpecialShootingStar[] = [];
 
   private collisionSystem = new CollisionSystem();
   private scoreSystem = new ScoreSystem();
@@ -154,6 +162,7 @@ export class StageScene implements Scene {
   private lodSystem = new LODSystem();
   private meteoShowerEventSystem = new MeteoShowerEventSystem();
   private stageSpecialEventSystem = new StageSpecialEventSystem();
+  private specialStarSpawnSystem = new SpecialStarSpawnSystem();
   private hud!: HUD;
   private scorePopupManager = new ScorePopupManager();
   private particleBurstManager = new ParticleBurstManager();
@@ -432,8 +441,10 @@ export class StageScene implements Scene {
     this.meteorites.length = 0;
     this.shootingStars.length = 0;
     this.comets.length = 0;
+    this.specialShootingStars.length = 0;
     this.spawnSystem.reset();
     this.spawnSystem.setMeteoriteIntervalMultiplier(1);
+    this.specialStarSpawnSystem.reset();
     this.boostSystem.reset();
     this.scoreSystem.resetStage();
     this.constellationSystem.reset(getConstellationForStage(this.stageNumber));
@@ -788,6 +799,9 @@ export class StageScene implements Scene {
     this.meteorites.length = 0;
     this.shootingStars.length = 0;
     this.comets.length = 0;
+    this.specialShootingStars.length = 0;
+    this.specialStarSpawnSystem.recycleAll();
+    this.specialStarSpawnSystem.reset();
     this.hud?.hideAssistMessage();
     this.constellationHintOverlay.hide();
     this.constellationLineEffect.clear();
@@ -954,6 +968,17 @@ export class StageScene implements Scene {
       this.comets.push(comet);
       this.threeScene.add(comet.mesh);
     }
+    const specialStarSpawnResult = this.specialStarSpawnSystem.update(
+      deltaTime,
+      this.spaceship.position.z,
+      this.specialShootingStars,
+      this.shootingStars,
+      this.comets,
+    );
+    for (const specialStar of specialStarSpawnResult.newSpecialStars) {
+      this.specialShootingStars.push(specialStar);
+      this.threeScene.add(specialStar.mesh);
+    }
 
     this.lodSystem.update(this.spaceship.position, this.stars);
     this.lodSystem.update(this.spaceship.position, this.meteorites);
@@ -982,6 +1007,7 @@ export class StageScene implements Scene {
       companionBonus,
       this.shootingStars,
       this.comets,
+      this.specialShootingStars,
     );
 
     if (collisionResult.shootingStarHit) {
@@ -1022,6 +1048,47 @@ export class StageScene implements Scene {
         0xffffff,
         50,
         true,
+      );
+    }
+
+    if (collisionResult.specialShootingStarHit) {
+      const specialStar = collisionResult.specialShootingStarHit;
+      const encyclopediaEntry = getSpecialStarEncyclopediaEntry(specialStar.specialType);
+      const isNewDiscovery = this.saveManager.markSpecialStarDiscovered?.(specialStar.specialType) ?? false;
+      this.scoreSystem.addBonusScore(specialStar.scoreBonus);
+      this.audioManager.playSFX('shootingStarCollect');
+      triggerSharedVibration('rainbowCollect');
+      this.particleBurstManager.emitShootingStar(
+        this.threeScene,
+        specialStar.position.x,
+        specialStar.position.y,
+        specialStar.position.z,
+      );
+      this.particleBurstManager.emit(
+        this.threeScene,
+        specialStar.position.x,
+        specialStar.position.y,
+        specialStar.position.z,
+        SPECIAL_STAR_CONFIG[specialStar.specialType].visual.trailColor,
+        50,
+        true,
+      );
+      this.particleBurstManager.emit(
+        this.threeScene,
+        specialStar.position.x,
+        specialStar.position.y,
+        specialStar.position.z,
+        SPECIAL_STAR_CONFIG[specialStar.specialType].visual.auraColor,
+        50,
+        true,
+      );
+      this.scorePopupManager.showLabel(
+        isNewDiscovery && encyclopediaEntry
+          ? `${encyclopediaEntry.emoji} ${encyclopediaEntry.reading}`
+          : SPECIAL_STAR_CONFIG[specialStar.specialType].label,
+        specialStar.position,
+        this.camera,
+        'special-star',
       );
     }
 
@@ -1619,6 +1686,20 @@ export class StageScene implements Scene {
       }
     }
     comets.length = cometWrite;
+
+    const specialShootingStars = this.specialShootingStars;
+    let specialWrite = 0;
+    for (let read = 0; read < specialShootingStars.length; read++) {
+      const specialStar = specialShootingStars[read];
+      if (specialStar.isCollected || specialStar.position.z > behindThreshold) {
+        this.specialStarSpawnSystem.releaseSpecialStar(specialStar);
+      } else {
+        specialStar.update(deltaTime, shipZ);
+        if (specialWrite !== read) specialShootingStars[specialWrite] = specialStar;
+        specialWrite++;
+      }
+    }
+    specialShootingStars.length = specialWrite;
   }
 
   private spawnConstellationStars(): void {

@@ -11,7 +11,7 @@ interface PopupEntry {
   currentAnimationName: 'scorePopupFloatA' | 'scorePopupFloatB' | 'none';
 }
 
-type PopupKind = 'normal' | 'bonus' | 'shooting-star';
+type PopupKind = 'normal' | 'bonus' | 'shooting-star' | 'special-star';
 
 interface PopupVisualStyle {
   text: string;
@@ -51,7 +51,7 @@ export class ScorePopupManager {
 
   showLabel(text: string, worldPosition: WorldPosition, camera: THREE.Camera, kind: PopupKind = 'normal'): void {
     const style =
-      kind === 'shooting-star'
+      kind === 'shooting-star' || kind === 'special-star'
         ? {
             text,
             kind,
@@ -93,12 +93,12 @@ export class ScorePopupManager {
     entry.el.style.color = style.color;
     entry.el.style.textShadow = `0 2px 10px ${style.shadow}`;
     entry.el.style.background = this.highContrastMode
-      ? style.kind === 'bonus' || style.kind === 'shooting-star'
+      ? style.kind === 'bonus' || style.kind === 'shooting-star' || style.kind === 'special-star'
         ? 'rgba(13, 18, 38, 0.92)'
         : 'rgba(0, 0, 0, 0.82)'
       : 'transparent';
     entry.el.style.border = this.highContrastMode
-      ? style.kind === 'bonus' || style.kind === 'shooting-star'
+      ? style.kind === 'bonus' || style.kind === 'shooting-star' || style.kind === 'special-star'
         ? '3px solid rgba(255, 255, 255, 0.95)'
         : '2px dashed rgba(255, 255, 255, 0.95)'
       : 'none';

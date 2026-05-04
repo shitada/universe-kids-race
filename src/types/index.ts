@@ -125,6 +125,7 @@ export interface SaveData {
   vibrationSettings?: VibrationSettings;
   bestStageStars?: Record<number, number>;
   discoveredConstellations?: number[];
+  discoveredSpecialStars?: SpecialShootingStarType[];
   gameplayStats?: GameplayStats;
   spaceshipCustomization?: SpaceshipCustomization;
   // Last stable adaptive pixel-ratio tier observed in the previous session.
@@ -149,6 +150,19 @@ export interface PlanetEncyclopediaEntry {
   trivia: string;
   planetColor: number;
   companionShape: CompanionShape;
+}
+
+export const SPECIAL_SHOOTING_STAR_TYPES = ['rainbow', 'gold', 'silver'] as const;
+export type SpecialShootingStarType = (typeof SPECIAL_SHOOTING_STAR_TYPES)[number];
+
+export interface SpecialStarEncyclopediaEntry {
+  id: SpecialShootingStarType;
+  name: string;
+  reading: string;
+  encyclopediaLabel: string;
+  emoji: string;
+  trivia: string;
+  accentColor: number;
 }
 
 export interface ConstellationPoint {

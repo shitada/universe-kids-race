@@ -1,8 +1,17 @@
-import type { PlanetEncyclopediaEntry } from '../../types';
+import type { PlanetEncyclopediaEntry, SpecialStarEncyclopediaEntry } from '../../types';
 
 export interface PlanetRewardPreview {
   cardChipLabel: string;
   companionChipLabel: string;
+}
+
+function createSpecialStarEncyclopediaEntry(
+  entry: Omit<SpecialStarEncyclopediaEntry, 'encyclopediaLabel'>,
+): SpecialStarEncyclopediaEntry {
+  return {
+    ...entry,
+    encyclopediaLabel: `${entry.name}（${entry.reading}）`,
+  };
 }
 
 function createPlanetEncyclopediaEntry(
@@ -116,8 +125,38 @@ export const PLANET_ENCYCLOPEDIA: PlanetEncyclopediaEntry[] = [
   }),
 ];
 
+export const SPECIAL_STAR_ENCYCLOPEDIA: SpecialStarEncyclopediaEntry[] = [
+  createSpecialStarEncyclopediaEntry({
+    id: 'rainbow',
+    name: 'にじりゅうせい',
+    reading: 'にじりゅうせい',
+    emoji: '🌈',
+    trivia: 'にじいろに ひかる とくべつな ながれぼしだよ',
+    accentColor: 0xff66d9,
+  }),
+  createSpecialStarEncyclopediaEntry({
+    id: 'gold',
+    name: 'きんりゅうせい',
+    reading: 'きんりゅうせい',
+    emoji: '🥇',
+    trivia: 'きらきら かがやく きんいろの ごうかな りゅうせいだよ',
+    accentColor: 0xffd54f,
+  }),
+  createSpecialStarEncyclopediaEntry({
+    id: 'silver',
+    name: 'ぎんりゅうせい',
+    reading: 'ぎんりゅうせい',
+    emoji: '🥈',
+    trivia: 'ぎんいろの ひかりを のこして すべるように とぶよ',
+    accentColor: 0xcfe8ff,
+  }),
+];
+
 const PLANET_ENCYCLOPEDIA_BY_STAGE = new Map(
   PLANET_ENCYCLOPEDIA.map((entry) => [entry.stageNumber, entry] as const),
+);
+const SPECIAL_STAR_ENCYCLOPEDIA_BY_ID = new Map(
+  SPECIAL_STAR_ENCYCLOPEDIA.map((entry) => [entry.id, entry] as const),
 );
 
 export function getPlanetEncyclopediaEntry(stageNumber: number): PlanetEncyclopediaEntry | undefined {
@@ -126,6 +165,10 @@ export function getPlanetEncyclopediaEntry(stageNumber: number): PlanetEncyclope
 
 export function getNextPlanetEncyclopediaEntry(stageNumber: number): PlanetEncyclopediaEntry | undefined {
   return getPlanetEncyclopediaEntry(stageNumber + 1);
+}
+
+export function getSpecialStarEncyclopediaEntry(id: SpecialStarEncyclopediaEntry['id']): SpecialStarEncyclopediaEntry | undefined {
+  return SPECIAL_STAR_ENCYCLOPEDIA_BY_ID.get(id);
 }
 
 export function getPlanetRewardPreview(stageNumber: number): PlanetRewardPreview | undefined {
