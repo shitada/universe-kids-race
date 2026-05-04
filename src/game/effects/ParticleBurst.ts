@@ -15,17 +15,58 @@ export interface ParticleBurstOptions {
 }
 
 const MAX_PARTICLES_PER_BURST = 50;
+const MAX_BURSTS = 10;
+const PARTICLE_COMPONENT_COUNT = MAX_PARTICLES_PER_BURST * 3;
 const VISUAL_QUALITY_SCALE_BY_TIER = [0.45, 0.7, 1];
+const BUFFER_POOL_RETAINED_LIMIT_BY_TIER = [1, 2, 4];
+const EMPTY_PARTICLE_BUFFER = new Float32Array(0);
+
+interface ParticleBurstBuffers {
+  positions: Float32Array;
+  colors: Float32Array;
+  velocities: Float32Array;
+}
+
+class ParticleBurstBufferPool {
+  private readonly available: ParticleBurstBuffers[] = [];
+  private retainedLimit = BUFFER_POOL_RETAINED_LIMIT_BY_TIER[BUFFER_POOL_RETAINED_LIMIT_BY_TIER.length - 1];
+
+  acquire(): ParticleBurstBuffers {
+    return (
+      this.available.pop() ?? {
+        positions: new Float32Array(PARTICLE_COMPONENT_COUNT),
+        colors: new Float32Array(PARTICLE_COMPONENT_COUNT),
+        velocities: new Float32Array(PARTICLE_COMPONENT_COUNT),
+      }
+    );
+  }
+
+  release(buffers: ParticleBurstBuffers): void {
+    if (this.available.length >= this.retainedLimit) {
+      return;
+    }
+    this.available.push(buffers);
+  }
+
+  setRetainedLimit(limit: number): void {
+    this.retainedLimit = Math.max(0, Math.min(MAX_BURSTS, Math.floor(limit)));
+    while (this.available.length > this.retainedLimit) {
+      this.available.pop();
+    }
+  }
+}
+
+const particleBurstBufferPool = new ParticleBurstBufferPool();
 
 export class ParticleBurst {
   private readonly geometry: THREE.BufferGeometry;
   private readonly material: THREE.PointsMaterial;
   private readonly points: THREE.Points;
-  private readonly positions: Float32Array;
-  private readonly colors: Float32Array;
-  private readonly velocities: Float32Array;
-  private readonly positionAttr: THREE.BufferAttribute;
-  private readonly colorAttr: THREE.BufferAttribute;
+  private positions: Float32Array = EMPTY_PARTICLE_BUFFER;
+  private colors: Float32Array = EMPTY_PARTICLE_BUFFER;
+  private velocities: Float32Array = EMPTY_PARTICLE_BUFFER;
+  private positionAttr: THREE.BufferAttribute;
+  private colorAttr: THREE.BufferAttribute;
   private initialSize = 0.3;
   // Per-burst velocity decay scalar. Replaces per-particle multiplication
   // because every particle is damped by the same 0.95 factor each frame.
@@ -42,10 +83,6 @@ export class ParticleBurst {
   private disposed = false;
 
   constructor() {
-    this.positions = new Float32Array(MAX_PARTICLES_PER_BURST * 3);
-    this.colors = new Float32Array(MAX_PARTICLES_PER_BURST * 3);
-    this.velocities = new Float32Array(MAX_PARTICLES_PER_BURST * 3);
-
     this.positionAttr = new THREE.BufferAttribute(this.positions, 3).setUsage(THREE.DynamicDrawUsage);
     this.colorAttr = new THREE.BufferAttribute(this.colors, 3).setUsage(THREE.DynamicDrawUsage);
 
@@ -87,11 +124,15 @@ export class ParticleBurst {
     isRainbow: boolean,
   ): void {
     if (this.disposed) return;
+    this.ensureBuffers();
     const count = Math.min(Math.max(0, particleCount), MAX_PARTICLES_PER_BURST);
     this.count = count;
     this.maxLifetime = isRainbow ? 0.8 : 0.5;
     this.elapsed = 0;
 
+    const positions = this.positions;
+    const colors = this.colors;
+    const velocities = this.velocities;
     this.baseColor.set(color);
     const baseColor = this.baseColor;
     const speedMin = isRainbow ? 8 : 5;
@@ -101,9 +142,9 @@ export class ParticleBurst {
 
     for (let i = 0; i < count; i++) {
       const i3 = i * 3;
-      this.positions[i3] = x;
-      this.positions[i3 + 1] = y;
-      this.positions[i3 + 2] = z;
+      positions[i3] = x;
+      positions[i3 + 1] = y;
+      positions[i3 + 2] = z;
 
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
@@ -113,19 +154,19 @@ export class ParticleBurst {
       const cosPhi = Math.cos(phi);
       const cosTheta = Math.cos(theta);
       const sinTheta = Math.sin(theta);
-      this.velocities[i3] = sinPhi * cosTheta * speed;
-      this.velocities[i3 + 1] = sinPhi * sinTheta * speed;
-      this.velocities[i3 + 2] = cosPhi * speed;
+      velocities[i3] = sinPhi * cosTheta * speed;
+      velocities[i3 + 1] = sinPhi * sinTheta * speed;
+      velocities[i3 + 2] = cosPhi * speed;
 
       if (isRainbow && tempColor) {
         tempColor.setHSL(Math.random(), 1, 0.5);
-        this.colors[i3] = tempColor.r;
-        this.colors[i3 + 1] = tempColor.g;
-        this.colors[i3 + 2] = tempColor.b;
+        colors[i3] = tempColor.r;
+        colors[i3 + 1] = tempColor.g;
+        colors[i3 + 2] = tempColor.b;
       } else {
-        this.colors[i3] = baseColor.r;
-        this.colors[i3 + 1] = baseColor.g;
-        this.colors[i3 + 2] = baseColor.b;
+        colors[i3] = baseColor.r;
+        colors[i3 + 1] = baseColor.g;
+        colors[i3 + 2] = baseColor.b;
       }
     }
 
@@ -181,18 +222,21 @@ export class ParticleBurst {
       this.geometry.setDrawRange(0, 0);
       this.points.visible = false;
       this.active = false;
+      this.releaseBuffers();
       return true;
     }
 
     const remaining = 1 - this.elapsed / this.maxLifetime;
     const vScale = this.velocityScale;
     const stepScale = vScale * deltaTime;
+    const positions = this.positions;
+    const velocities = this.velocities;
 
     for (let i = 0; i < this.count; i++) {
       const i3 = i * 3;
-      this.positions[i3] += this.velocities[i3] * stepScale;
-      this.positions[i3 + 1] += this.velocities[i3 + 1] * stepScale;
-      this.positions[i3 + 2] += this.velocities[i3 + 2] * stepScale;
+      positions[i3] += velocities[i3] * stepScale;
+      positions[i3 + 1] += velocities[i3 + 1] * stepScale;
+      positions[i3 + 2] += velocities[i3 + 2] * stepScale;
     }
     // Per-burst scalar damping: equivalent to multiplying every velocity
     // component by 0.95 each frame, but writes 1 scalar instead of 3*count.
@@ -235,6 +279,7 @@ export class ParticleBurst {
     this.points.visible = false;
     this.geometry.setDrawRange(0, 0);
     this.active = false;
+    this.releaseBuffers();
   }
 
   /** Fully releases GPU resources. Use only when the owning scene tears down. */
@@ -244,6 +289,7 @@ export class ParticleBurst {
       this.inScene = false;
     }
     if (!this.disposed) {
+      this.releaseBuffers();
       this.geometry.dispose();
       this.material.dispose();
       this.disposed = true;
@@ -263,10 +309,43 @@ export class ParticleBurst {
     this.colorAttr.addUpdateRange(0, count * 3);
     this.colorAttr.needsUpdate = true;
   }
+
+  private ensureBuffers(): void {
+    if (this.positions.length > 0) {
+      return;
+    }
+    const buffers = particleBurstBufferPool.acquire();
+    this.positions = buffers.positions;
+    this.colors = buffers.colors;
+    this.velocities = buffers.velocities;
+    this.bindAttributes();
+  }
+
+  private releaseBuffers(): void {
+    if (this.positions.length === 0) {
+      return;
+    }
+    particleBurstBufferPool.release({
+      positions: this.positions,
+      colors: this.colors,
+      velocities: this.velocities,
+    });
+    this.positions = EMPTY_PARTICLE_BUFFER;
+    this.colors = EMPTY_PARTICLE_BUFFER;
+    this.velocities = EMPTY_PARTICLE_BUFFER;
+    this.bindAttributes();
+  }
+
+  private bindAttributes(): void {
+    this.positionAttr = new THREE.BufferAttribute(this.positions, 3).setUsage(THREE.DynamicDrawUsage);
+    this.colorAttr = new THREE.BufferAttribute(this.colors, 3).setUsage(THREE.DynamicDrawUsage);
+    this.geometry.setAttribute('position', this.positionAttr);
+    this.geometry.setAttribute('color', this.colorAttr);
+  }
 }
 
 export class ParticleBurstManager {
-  static readonly MAX_BURSTS = 10;
+  static readonly MAX_BURSTS = MAX_BURSTS;
   private readonly pool: ParticleBurst[];
   // Cached count of currently active pool slots. Maintains the invariant
   // `activeCount === pool.filter(b => b.isActive()).length` so update()
@@ -323,6 +402,7 @@ export class ParticleBurstManager {
 
   setQualityTier(tier: number): void {
     this.qualityTier = ParticleBurstManager.clampQualityTier(tier);
+    particleBurstBufferPool.setRetainedLimit(BUFFER_POOL_RETAINED_LIMIT_BY_TIER[this.qualityTier]);
   }
 
   /**
