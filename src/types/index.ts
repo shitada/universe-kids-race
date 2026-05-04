@@ -88,12 +88,28 @@ export interface ColorAccessibilitySettings {
   highContrast: boolean;
 }
 
+export const SPACESHIP_COLOR_KEYS = ['sky', 'sunset', 'aqua'] as const;
+export type SpaceshipColorKey = (typeof SPACESHIP_COLOR_KEYS)[number];
+
+export interface SpaceshipCustomization {
+  bodyColor: SpaceshipColorKey;
+  noseColor: SpaceshipColorKey;
+  wingColor: SpaceshipColorKey;
+}
+
+export const DEFAULT_SPACESHIP_CUSTOMIZATION: SpaceshipCustomization = {
+  bodyColor: 'sky',
+  noseColor: 'sunset',
+  wingColor: 'aqua',
+};
+
 export interface SaveData {
   clearedStage: number;
   unlockedPlanets: number[];
   muted?: boolean;
   colorAccessibility?: ColorAccessibilitySettings;
   bestStageStars?: Record<number, number>;
+  spaceshipCustomization?: SpaceshipCustomization;
   // Last stable adaptive pixel-ratio tier observed in the previous session.
   // Persisted so the next launch can start at the same tier and avoid the
   // initial-frame downscale hitch on slower iPads (Constitution IV).

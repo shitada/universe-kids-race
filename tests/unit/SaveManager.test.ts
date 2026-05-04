@@ -197,6 +197,78 @@ describe('SaveManager', () => {
     });
   });
 
+  describe('spaceshipCustomization', () => {
+    it('defaults to the starter spaceship colors when missing', () => {
+      const manager = new SaveManager();
+
+      expect(manager.load().spaceshipCustomization).toEqual({
+        bodyColor: 'sky',
+        noseColor: 'sunset',
+        wingColor: 'aqua',
+      });
+    });
+
+    it('keeps valid customization values on load', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 2,
+        unlockedPlanets: [1, 2],
+        spaceshipCustomization: {
+          bodyColor: 'aqua',
+          noseColor: 'sky',
+          wingColor: 'sunset',
+        },
+      }));
+      const manager = new SaveManager();
+
+      expect(manager.load().spaceshipCustomization).toEqual({
+        bodyColor: 'aqua',
+        noseColor: 'sky',
+        wingColor: 'sunset',
+      });
+    });
+
+    it('falls back per part when customization is malformed', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        spaceshipCustomization: {
+          bodyColor: 'bad',
+          noseColor: 'sky',
+          wingColor: null,
+        },
+      }));
+      const manager = new SaveManager();
+
+      expect(manager.load().spaceshipCustomization).toEqual({
+        bodyColor: 'sky',
+        noseColor: 'sky',
+        wingColor: 'aqua',
+      });
+    });
+
+    it('preserves spaceship customization when progress is reset', () => {
+      const manager = new SaveManager();
+      manager.save({
+        clearedStage: 4,
+        unlockedPlanets: [1, 2, 3, 4],
+        muted: true,
+        spaceshipCustomization: {
+          bodyColor: 'sunset',
+          noseColor: 'aqua',
+          wingColor: 'sky',
+        },
+      });
+
+      manager.resetProgressPreservingSettings();
+
+      expect(manager.load().spaceshipCustomization).toEqual({
+        bodyColor: 'sunset',
+        noseColor: 'aqua',
+        wingColor: 'sky',
+      });
+    });
+  });
+
   describe('colorAccessibility', () => {
     it('persists high contrast mode when enabled', () => {
       const manager = new SaveManager();
@@ -338,6 +410,7 @@ describe('SaveManager', () => {
         bestStageStars: {},
         tutorialShown: false,
         muted: true,
+        spaceshipCustomization: { bodyColor: 'sky', noseColor: 'sunset', wingColor: 'aqua' },
       });
     });
   });
@@ -432,6 +505,7 @@ describe('SaveManager', () => {
         bestStageStars: { 1: 3, 3: 2 },
         muted: true,
         tutorialShown: true,
+        spaceshipCustomization: { bodyColor: 'sky', noseColor: 'sunset', wingColor: 'aqua' },
       };
       const manager = new SaveManager();
       manager.save(initialData);
@@ -456,6 +530,7 @@ describe('SaveManager', () => {
         bestStageStars: { 2: 1, 4: 3 },
         muted: false,
         tutorialShown: true,
+        spaceshipCustomization: { bodyColor: 'sky', noseColor: 'sunset', wingColor: 'aqua' },
       };
       const manager = new SaveManager();
       manager.save(initialData);
@@ -514,6 +589,7 @@ describe('SaveManager', () => {
         tutorialShown: false,
         colorAccessibility: { highContrast: true },
         bestStageStars: {},
+        spaceshipCustomization: { bodyColor: 'sky', noseColor: 'sunset', wingColor: 'aqua' },
       });
     });
 
@@ -535,6 +611,7 @@ describe('SaveManager', () => {
         muted: false,
         tutorialShown: false,
         bestStageStars: {},
+        spaceshipCustomization: { bodyColor: 'sky', noseColor: 'sunset', wingColor: 'aqua' },
       });
     });
 
@@ -580,6 +657,7 @@ describe('SaveManager', () => {
         tutorialShown: true,
         colorAccessibility: { highContrast: true },
         bestStageStars: {},
+        spaceshipCustomization: { bodyColor: 'sky', noseColor: 'sunset', wingColor: 'aqua' },
         lastStablePixelTier: 2,
       });
     });
@@ -595,6 +673,7 @@ describe('SaveManager', () => {
         muted: false,
         tutorialShown: false,
         bestStageStars: {},
+        spaceshipCustomization: { bodyColor: 'sky', noseColor: 'sunset', wingColor: 'aqua' },
       });
     });
   });

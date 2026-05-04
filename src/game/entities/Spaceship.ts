@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import type { SpeedState } from '../../types';
+import type { SpeedState, SpaceshipCustomization } from '../../types';
+import { DEFAULT_SPACESHIP_CUSTOMIZATION } from '../../types';
+import { SpaceshipMaterialManager } from './SpaceshipMaterialManager';
 
 // Shared resources for Spaceship instances. StageScene re-creates a Spaceship
 // on every stage transition / retry; without sharing, each lifecycle would
@@ -14,9 +16,6 @@ import type { SpeedState } from '../../types';
 const SHARED_BODY_GEOM = new THREE.CylinderGeometry(0.4, 0.6, 2, 8);
 const SHARED_NOSE_GEOM = new THREE.ConeGeometry(0.4, 0.8, 8);
 const SHARED_WING_GEOM = new THREE.BoxGeometry(2.4, 0.1, 0.8);
-const SHARED_BODY_MATERIAL = new THREE.MeshToonMaterial({ color: 0x4488ff });
-const SHARED_NOSE_MATERIAL = new THREE.MeshToonMaterial({ color: 0xff6644 });
-const SHARED_WING_MATERIAL = new THREE.MeshToonMaterial({ color: 0x44aaff });
 
 const BASE_SPEED = 50;
 const LATERAL_SPEED = 15;
@@ -52,13 +51,29 @@ export class Spaceship {
   // rotation has been normalized to zero. While this is true and no lateral
   // input is active, update() skips mesh.rotation writes.
   private bankAtRest = true;
+  private readonly materialManager = new SpaceshipMaterialManager();
+  private readonly bodyMesh: THREE.Mesh;
+  private readonly noseMesh: THREE.Mesh;
+  private readonly wingsMesh: THREE.Mesh;
+  private customization: SpaceshipCustomization;
 
-  constructor() {
-    this.mesh = this.createMesh();
+  constructor(customization: SpaceshipCustomization = DEFAULT_SPACESHIP_CUSTOMIZATION) {
+    this.customization = SpaceshipMaterialManager.normalizeCustomization(customization);
+    const { group, body, nose, wings } = this.createMesh();
+    this.mesh = group;
+    this.bodyMesh = body;
+    this.noseMesh = nose;
+    this.wingsMesh = wings;
     this.startZ = this.position.z;
+    this.applyCustomization(this.customization);
   }
 
-  private createMesh(): THREE.Group {
+  private createMesh(): {
+    group: THREE.Group;
+    body: THREE.Mesh;
+    nose: THREE.Mesh;
+    wings: THREE.Mesh;
+  } {
     const group = new THREE.Group();
 
     // Every child mesh below uses module-level SHARED_* geometry/material.
@@ -66,26 +81,41 @@ export class Spaceship {
     // ever passes this Group to disposeObject3D() (e.g. via a refactor), the
     // shared GPU resources are NOT disposed. See src/game/utils/disposeObject3D.ts.
 
+    const materials = this.materialManager.getMaterials(this.customization);
+
     // Body: cylinder
-    const body = new THREE.Mesh(SHARED_BODY_GEOM, SHARED_BODY_MATERIAL);
+    const body = new THREE.Mesh(SHARED_BODY_GEOM, materials.body);
     body.userData.sharedAssets = true;
     body.rotation.x = Math.PI / 2;
     group.add(body);
 
     // Nose: cone
-    const nose = new THREE.Mesh(SHARED_NOSE_GEOM, SHARED_NOSE_MATERIAL);
+    const nose = new THREE.Mesh(SHARED_NOSE_GEOM, materials.nose);
     nose.userData.sharedAssets = true;
     nose.rotation.x = Math.PI / 2;
     nose.position.z = -1.4;
     group.add(nose);
 
     // Wings
-    const wings = new THREE.Mesh(SHARED_WING_GEOM, SHARED_WING_MATERIAL);
+    const wings = new THREE.Mesh(SHARED_WING_GEOM, materials.wings);
     wings.userData.sharedAssets = true;
     wings.position.z = 0.2;
     group.add(wings);
 
-    return group;
+    return { group, body, nose, wings };
+  }
+
+  applyCustomization(customization: SpaceshipCustomization): void {
+    const normalized = SpaceshipMaterialManager.normalizeCustomization(customization);
+    this.customization = normalized;
+    const materials = this.materialManager.getMaterials(normalized);
+    this.bodyMesh.material = materials.body;
+    this.noseMesh.material = materials.nose;
+    this.wingsMesh.material = materials.wings;
+  }
+
+  getCustomization(): SpaceshipCustomization {
+    return { ...this.customization };
   }
 
   moveLeft(deltaTime: number): void {

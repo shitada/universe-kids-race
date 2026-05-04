@@ -1,5 +1,11 @@
 import * as THREE from 'three';
-import type { AssistDirection, Scene, SceneContext, StageConfig } from '../../types';
+import {
+  DEFAULT_SPACESHIP_CUSTOMIZATION,
+  type AssistDirection,
+  type Scene,
+  type SceneContext,
+  type StageConfig,
+} from '../../types';
 import type { SceneManager } from '../SceneManager';
 import type { InputSystem } from '../systems/InputSystem';
 import type { AudioManager } from '../audio/AudioManager';
@@ -313,6 +319,7 @@ export class StageScene implements Scene {
     const totalScore = context.totalScore ?? 0;
     const totalStarCount = context.totalStarCount ?? 0;
     const saveData = this.saveManager.load();
+    this.spaceship.applyCustomization(saveData.spaceshipCustomization ?? DEFAULT_SPACESHIP_CUSTOMIZATION);
     const highContrastEnabled = saveData.colorAccessibility?.highContrast === true;
     setStarHighContrastMode(highContrastEnabled);
     setMeteoriteHighContrastMode(highContrastEnabled);

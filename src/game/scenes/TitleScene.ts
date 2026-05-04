@@ -1,5 +1,10 @@
 import * as THREE from 'three';
-import type { SaveData, Scene, SceneContext } from '../../types';
+import {
+  DEFAULT_SPACESHIP_CUSTOMIZATION,
+  type SaveData,
+  type Scene,
+  type SceneContext,
+} from '../../types';
 import type { SceneManager } from '../SceneManager';
 import type { SaveManager } from '../storage/SaveManager';
 import type { AudioManager } from '../audio/AudioManager';
@@ -9,6 +14,7 @@ import { LoadFailureOverlay } from '../../ui/LoadFailureOverlay';
 import { TitleResetConfirmOverlay } from '../../ui/TitleResetConfirmOverlay';
 import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButton';
 import { ColorAccessibilitySettings } from '../../ui/ColorAccessibilitySettings';
+import { SpaceshipCustomizer } from '../../ui/SpaceshipCustomizer';
 import { getStageConfig, getStageMedalStatus, TOTAL_STAGES } from '../config/StageConfig';
 import { PLANET_ENCYCLOPEDIA, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { formatEncyclopediaLabel } from '../../ui/formatEncyclopediaLabel';
@@ -178,6 +184,7 @@ export class TitleScene implements Scene {
   private tutorialOverlay = new TutorialOverlay();
   private readonly titleResetConfirmOverlay = new TitleResetConfirmOverlay();
   private readonly colorAccessibilitySettings = new ColorAccessibilitySettings();
+  private readonly spaceshipCustomizer = new SpaceshipCustomizer();
   private encyclopediaOverlay: EncyclopediaOverlayInstance | null = null;
   private encyclopediaOverlayPromise: Promise<EncyclopediaOverlayInstance> | null = null;
   private companionFactory: TitleCompanionFactory | null = null;
@@ -607,6 +614,42 @@ export class TitleScene implements Scene {
       text-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
     `;
 
+    const customizeButton = document.createElement('button');
+    customizeButton.setAttribute('data-spaceship-customizer-button', '');
+    customizeButton.textContent = 'うちゅうせんをかざろう';
+    customizeButton.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: ${compact ? '1rem' : '1.25rem'};
+      font-weight: 900;
+      padding: ${compact ? '0.65rem 1.2rem' : '0.85rem 1.8rem'};
+      min-width: min(76vw, 20rem);
+      border: 3px solid rgba(255, 255, 255, 0.92);
+      border-radius: 1.7rem;
+      background: rgba(8, 16, 52, 0.76);
+      color: #fff;
+      cursor: pointer;
+      touch-action: manipulation;
+      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.26);
+      transform: scale(1);
+      transition: transform 0.08s ease-out;
+    `;
+    this.overlayButtonCleanups.add(attachReleaseConfirmButton(customizeButton, {
+      onActivate: () => {
+        const saveData = this.saveManager.load();
+        this.spaceshipCustomizer.show({
+          initialCustomization: saveData.spaceshipCustomization ?? DEFAULT_SPACESHIP_CUSTOMIZATION,
+          onComplete: (spaceshipCustomization) => {
+            const nextSaveData = this.saveManager.load();
+            nextSaveData.spaceshipCustomization = spaceshipCustomization;
+            this.saveManager.save(nextSaveData);
+          },
+        });
+      },
+      onPressChange: (pressed) => {
+        customizeButton.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+      },
+    }));
+
     // Tutorial button
     const tutorialBtn = document.createElement('button');
     tutorialBtn.textContent = 'あそびかた';
@@ -718,6 +761,7 @@ export class TitleScene implements Scene {
 
     playArea.appendChild(button);
     playArea.appendChild(playButtonHint);
+    playArea.appendChild(customizeButton);
 
     if (hasSavedProgress(initialSaveData)) {
       const resetButton = document.createElement('button');
@@ -872,6 +916,7 @@ export class TitleScene implements Scene {
     this.tutorialOverlay.hide();
     this.titleResetConfirmOverlay.hide();
     this.colorAccessibilitySettings.hide();
+    this.spaceshipCustomizer.hide();
     this.encyclopediaOverlay?.hide();
     this.loadingOverlay.hide();
     this.loadFailureOverlay.hide();

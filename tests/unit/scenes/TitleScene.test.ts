@@ -52,7 +52,9 @@ function createMockSaveManager(overrides: Partial<ReturnType<SaveManager['load']
   };
   return {
     load: vi.fn(() => ({ ...saveData, unlockedPlanets: [...saveData.unlockedPlanets] })),
-    save: vi.fn(),
+    save: vi.fn((nextData) => {
+      Object.assign(saveData, nextData);
+    }),
     clear: vi.fn(),
     resetProgressPreservingSettings: vi.fn(),
     markTutorialShown: vi.fn(),
@@ -261,6 +263,33 @@ describe('TitleScene (T009)', () => {
 
     expect(audioManager.initSync).toHaveBeenCalledTimes(1);
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
+
+    scene.exit();
+  });
+
+  it('opens the spaceship customizer and saves the chosen colors', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager(true);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager);
+    scene.enter({});
+
+    const customizeButton = findButtonByText('うちゅうせんをかざろう');
+    expect(customizeButton).toBeTruthy();
+    dispatchReleaseConfirm(customizeButton!);
+
+    const bodyOption = document.querySelector('[data-spaceship-color-option="bodyColor:sunset"]') as HTMLButtonElement | null;
+    const doneButton = document.querySelector('[data-spaceship-customizer-done]') as HTMLButtonElement | null;
+    expect(bodyOption).toBeTruthy();
+    expect(doneButton).toBeTruthy();
+
+    dispatchReleaseConfirm(bodyOption!);
+    dispatchReleaseConfirm(doneButton!);
+
+    expect(saveManager.save).toHaveBeenCalledWith(expect.objectContaining({
+      spaceshipCustomization: expect.objectContaining({ bodyColor: 'sunset' }),
+    }));
 
     scene.exit();
   });

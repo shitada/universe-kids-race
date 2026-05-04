@@ -1,20 +1,35 @@
-import type { SaveData } from '../../types';
+import {
+  DEFAULT_SPACESHIP_CUSTOMIZATION,
+  SPACESHIP_COLOR_KEYS,
+  type SaveData,
+  type SpaceshipColorKey,
+  type SpaceshipCustomization,
+} from '../../types';
 import { TOTAL_STAGES } from '../config/StageConfig';
 
 const STORAGE_KEY = 'universe-kids-race-save';
 const SESSION_KEY = 'universe-kids-race-session';
-const DEFAULT_DATA: SaveData = { clearedStage: 0, unlockedPlanets: [], muted: false, bestStageStars: {}, tutorialShown: false };
+const DEFAULT_DATA: SaveData = {
+  clearedStage: 0,
+  unlockedPlanets: [],
+  muted: false,
+  bestStageStars: {},
+  tutorialShown: false,
+  spaceshipCustomization: { ...DEFAULT_SPACESHIP_CUSTOMIZATION },
+};
 
 export type SessionState = 'fresh' | 'existing' | 'unavailable';
 
 function defaults(): SaveData {
-  return { ...DEFAULT_DATA, unlockedPlanets: [], bestStageStars: {}, tutorialShown: false };
+  return {
+    ...DEFAULT_DATA,
+    unlockedPlanets: [],
+    bestStageStars: {},
+    tutorialShown: false,
+    spaceshipCustomization: { ...DEFAULT_SPACESHIP_CUSTOMIZATION },
+  };
 }
 
-// Returns a deep copy of SaveData. Uses structuredClone when available
-// (modern iPad Safari, Node 17+, jsdom v22+), falling back to JSON round-trip
-// for older test runners. Used to ensure callers can never mutate the
-// in-memory cache held by SaveManager.
 function cloneSaveData(src: SaveData): SaveData {
   const sc = (globalThis as { structuredClone?: (v: unknown) => unknown }).structuredClone;
   if (typeof sc === 'function') {
@@ -23,12 +38,69 @@ function cloneSaveData(src: SaveData): SaveData {
   return JSON.parse(JSON.stringify(src)) as SaveData;
 }
 
+function isSpaceshipColorKey(value: unknown): value is SpaceshipColorKey {
+  return typeof value === 'string' && (SPACESHIP_COLOR_KEYS as readonly string[]).includes(value);
+}
+
+function normalizeSpaceshipCustomization(value: unknown): SpaceshipCustomization {
+  const customization = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Partial<Record<keyof SpaceshipCustomization, unknown>>
+    : {};
+
+  return {
+    bodyColor: isSpaceshipColorKey(customization.bodyColor)
+      ? customization.bodyColor
+      : DEFAULT_SPACESHIP_CUSTOMIZATION.bodyColor,
+    noseColor: isSpaceshipColorKey(customization.noseColor)
+      ? customization.noseColor
+      : DEFAULT_SPACESHIP_CUSTOMIZATION.noseColor,
+    wingColor: isSpaceshipColorKey(customization.wingColor)
+      ? customization.wingColor
+      : DEFAULT_SPACESHIP_CUSTOMIZATION.wingColor,
+  };
+}
+
+function sameCustomization(a: SpaceshipCustomization, b: SpaceshipCustomization): boolean {
+  return a.bodyColor === b.bodyColor && a.noseColor === b.noseColor && a.wingColor === b.wingColor;
+}
+
+function sanitizeSaveData(data: SaveData): SaveData {
+  const sanitized: SaveData = {
+    clearedStage: Number.isInteger(data.clearedStage) && data.clearedStage >= 0 && data.clearedStage <= TOTAL_STAGES
+      ? data.clearedStage
+      : 0,
+    unlockedPlanets: Array.isArray(data.unlockedPlanets)
+      ? [...new Set(data.unlockedPlanets.filter(
+        (value): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= TOTAL_STAGES,
+      ))]
+      : [],
+    muted: data.muted === true,
+    bestStageStars: {},
+    tutorialShown: data.tutorialShown === true,
+    spaceshipCustomization: normalizeSpaceshipCustomization(data.spaceshipCustomization),
+  };
+
+  if (data.colorAccessibility?.highContrast === true) {
+    sanitized.colorAccessibility = { highContrast: true };
+  }
+
+  if (data.bestStageStars && typeof data.bestStageStars === 'object') {
+    for (const [key, value] of Object.entries(data.bestStageStars)) {
+      const stage = Number(key);
+      if (Number.isInteger(stage) && stage >= 1 && stage <= TOTAL_STAGES && Number.isInteger(value) && value >= 0) {
+        (sanitized.bestStageStars as Record<number, number>)[stage] = value;
+      }
+    }
+  }
+
+  if (typeof data.lastStablePixelTier === 'number' && Number.isInteger(data.lastStablePixelTier) && data.lastStablePixelTier >= 0) {
+    sanitized.lastStablePixelTier = data.lastStablePixelTier;
+  }
+
+  return sanitized;
+}
+
 export class SaveManager {
-  // In-memory cache of the validated SaveData. Populated lazily on the first
-  // load() call and invalidated on save()/clear()/reset paths. This avoids
-  // the per-call cost of localStorage.getItem + JSON.parse + full revalidation
-  // (Constitution IV: 60fps on iPad Safari). Single-tab game; cross-tab
-  // storage events are out of scope (YAGNI).
   private cached: SaveData | null = null;
 
   private loadFromStorage(): SaveData {
@@ -40,7 +112,6 @@ export class SaveManager {
         return defaults();
       }
 
-      // Validate unlockedPlanets
       if (!Array.isArray(data.unlockedPlanets)) {
         data.unlockedPlanets = [];
       } else {
@@ -51,15 +122,9 @@ export class SaveManager {
         )];
       }
 
-      // Validate muted (default false; backward compatible with saves missing the field)
       data.muted = data.muted === true;
-
-      // Validate tutorialShown (default false; backward compatible with saves
-      // predating the first-run onboarding feature). Any non-boolean value is
-      // normalized to false so legacy users see the tutorial once.
       data.tutorialShown = data.tutorialShown === true;
 
-      // Validate colorAccessibility (backward compatible; malformed / falsey → missing).
       const rawColorAccessibility = (data as { colorAccessibility?: unknown }).colorAccessibility;
       if (rawColorAccessibility && typeof rawColorAccessibility === 'object' && !Array.isArray(rawColorAccessibility)) {
         const highContrast = (rawColorAccessibility as { highContrast?: unknown }).highContrast === true;
@@ -72,7 +137,6 @@ export class SaveManager {
         delete (data as { colorAccessibility?: unknown }).colorAccessibility;
       }
 
-      // Validate bestStageStars (backward compatible; missing or malformed → {})
       const rawBest = (data as { bestStageStars?: unknown }).bestStageStars;
       const validatedBest: Record<number, number> = {};
       if (rawBest && typeof rawBest === 'object' && !Array.isArray(rawBest)) {
@@ -93,9 +157,10 @@ export class SaveManager {
       }
       data.bestStageStars = validatedBest;
 
-      // Validate lastStablePixelTier (backward compatible; missing/invalid → undefined).
-      // No upper bound check here because MAX_TIER is a runtime concept derived
-      // from devicePixelRatio in main.ts; callers clamp on read.
+      data.spaceshipCustomization = normalizeSpaceshipCustomization(
+        (data as { spaceshipCustomization?: unknown }).spaceshipCustomization,
+      );
+
       const rawTier = (data as { lastStablePixelTier?: unknown }).lastStablePixelTier;
       if (
         typeof rawTier === 'number' &&
@@ -122,11 +187,10 @@ export class SaveManager {
 
   save(data: SaveData): void {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      this.cached = cloneSaveData(data);
+      const sanitized = sanitizeSaveData(data);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
+      this.cached = cloneSaveData(sanitized);
     } catch (e) {
-      // On failure, conservatively invalidate the cache so the next load()
-      // re-reads from storage and reflects whatever actually persisted.
       this.cached = null;
       console.warn('SaveManager.save failed:', e);
     }
@@ -141,11 +205,6 @@ export class SaveManager {
     }
   }
 
-  // Resets only gameplay progress (clearedStage, unlockedPlanets,
-  // bestStageStars) while preserving stable settings and onboarding state.
-  // Used for the title-screen "さいしょから" flow so mute preference,
-  // tutorial read-state, and the adaptive pixel-ratio hint survive while
-  // progress returns to defaults.
   resetProgressPreservingSettings(): void {
     try {
       const prev = this.load();
@@ -155,6 +214,7 @@ export class SaveManager {
       const colorAccessibility = prev.colorAccessibility?.highContrast === true
         ? { highContrast: true as const }
         : undefined;
+      const spaceshipCustomization = normalizeSpaceshipCustomization(prev.spaceshipCustomization);
       this.clear();
       const next: SaveData = {
         clearedStage: 0,
@@ -162,6 +222,7 @@ export class SaveManager {
         muted,
         bestStageStars: {},
         tutorialShown,
+        spaceshipCustomization,
       };
       if (colorAccessibility) {
         next.colorAccessibility = colorAccessibility;
@@ -177,11 +238,6 @@ export class SaveManager {
     }
   }
 
-  // Resets session-scoped progress and onboarding data while preserving
-  // stable preferences needed across Safari swipe-to-close on shared iPads.
-  // Used on Safari new-session detection so gameplay progress and the
-  // auto-shown tutorial both return to first-run defaults, while mute
-  // preference and adaptive pixel-ratio hint survive.
   resetSessionDataPreservingMuted(): void {
     try {
       const prev = this.load();
@@ -190,6 +246,7 @@ export class SaveManager {
       const colorAccessibility = prev.colorAccessibility?.highContrast === true
         ? { highContrast: true as const }
         : undefined;
+      const spaceshipCustomization = normalizeSpaceshipCustomization(prev.spaceshipCustomization);
       this.clear();
       const next: SaveData = {
         clearedStage: 0,
@@ -197,6 +254,7 @@ export class SaveManager {
         muted,
         bestStageStars: {},
         tutorialShown: false,
+        spaceshipCustomization,
       };
       if (colorAccessibility) {
         next.colorAccessibility = colorAccessibility;
@@ -212,9 +270,6 @@ export class SaveManager {
     }
   }
 
-  // Updates the best (highest) star count for the given stage. Only persists
-  // if the new count exceeds the previously stored value, so replays that
-  // earn fewer stars never overwrite a child's best record.
   updateBestStageStars(stageNumber: number, starCount: number): void {
     if (
       !Number.isInteger(stageNumber) ||
@@ -262,9 +317,6 @@ export class SaveManager {
     }
   }
 
-  // Marks the first-run tutorial overlay as shown so subsequent TitleScene
-  // entries don't auto-display it. Idempotent: calling it after the flag is
-  // already true short-circuits to avoid an unnecessary localStorage write.
   markTutorialShown(): void {
     try {
       const data = this.load();
@@ -278,12 +330,21 @@ export class SaveManager {
     }
   }
 
-  // Persists the last observed stable adaptive pixel-ratio tier so the next
-  // launch can start at this level instead of MAX_TIER, avoiding the initial
-  // downscale hitch on slower iPads (Constitution IV: 60fps on iPad Safari).
-  // Validates the value (non-negative integer); negative / non-integer inputs
-  // are ignored. The controller (caller) is responsible for upper-bound
-  // clamping via its own maxTier knowledge.
+  saveSpaceshipCustomization(customization: SpaceshipCustomization): void {
+    try {
+      const data = this.load();
+      const normalized = normalizeSpaceshipCustomization(customization);
+      const current = normalizeSpaceshipCustomization(data.spaceshipCustomization);
+      if (sameCustomization(current, normalized)) {
+        return;
+      }
+      data.spaceshipCustomization = normalized;
+      this.save(data);
+    } catch (e) {
+      console.warn('SaveManager.saveSpaceshipCustomization failed:', e);
+    }
+  }
+
   saveLastStablePixelTier(tier: number): void {
     if (!Number.isInteger(tier) || tier < 0) {
       return;
@@ -300,9 +361,6 @@ export class SaveManager {
     }
   }
 
-  // Returns whether this launch is a fresh session, an existing live session,
-  // or a sessionStorage-unavailable fallback case. Also marks the session as
-  // active when sessionStorage is fully usable.
   getSessionState(): SessionState {
     try {
       const fresh = !sessionStorage.getItem(SESSION_KEY);
