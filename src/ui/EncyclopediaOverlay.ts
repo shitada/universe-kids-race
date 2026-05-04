@@ -16,6 +16,8 @@ interface EncyclopediaOverlayDependencies {
 
 export class EncyclopediaOverlay {
   private static readonly RELEASE_CONFIRM_MOVE_TOLERANCE_PX = 12;
+  private static readonly GALLERY_TITLE_ID = 'encyclopedia-gallery-title';
+  private static readonly DETAIL_TITLE_ID = 'encyclopedia-detail-title';
   private overlayEl: HTMLDivElement | null = null;
   private detailEl: HTMLDivElement | null = null;
   private isShowingDetail = false;
@@ -48,6 +50,9 @@ export class EncyclopediaOverlay {
 
     this.overlayEl = document.createElement('div');
     this.applyOverlayStyle(this.overlayEl, 30);
+    this.overlayEl.setAttribute('role', 'dialog');
+    this.overlayEl.setAttribute('aria-modal', 'true');
+    this.overlayEl.setAttribute('aria-labelledby', EncyclopediaOverlay.GALLERY_TITLE_ID);
     const isCompactHeight = this.isCompactHeight();
 
     const content = document.createElement('div');
@@ -65,6 +70,7 @@ export class EncyclopediaOverlay {
 
     // Title
     const title = document.createElement('div');
+    title.id = EncyclopediaOverlay.GALLERY_TITLE_ID;
     title.textContent = 'わくせいずかん';
     title.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
@@ -80,6 +86,7 @@ export class EncyclopediaOverlay {
     // Card grid
     const grid = document.createElement('div');
     grid.setAttribute('data-gallery-grid', '');
+    grid.setAttribute('aria-label', 'わくせい の いちらん');
     grid.style.cssText = `
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(${isCompactHeight ? '110px' : '140px'}, 1fr));
@@ -146,6 +153,9 @@ export class EncyclopediaOverlay {
     this.overlayEl = document.createElement('div');
     this.overlayEl.setAttribute('data-encyclopedia-detail-overlay', '');
     this.applyOverlayStyle(this.overlayEl, options.zIndex ?? 30);
+    this.overlayEl.setAttribute('role', 'dialog');
+    this.overlayEl.setAttribute('aria-modal', 'true');
+    this.overlayEl.setAttribute('aria-labelledby', EncyclopediaOverlay.DETAIL_TITLE_ID);
     uiOverlay.appendChild(this.overlayEl);
     this.showDetail(entry, onClose);
     return true;
@@ -210,9 +220,12 @@ export class EncyclopediaOverlay {
       const colorHex = '#' + entry.planetColor.toString(16).padStart(6, '0');
       card.style.background = `linear-gradient(135deg, ${colorHex}88, ${colorHex}44)`;
       card.style.cursor = 'pointer';
+      card.setAttribute('role', 'button');
+      card.setAttribute('tabindex', '0');
 
       const emoji = document.createElement('div');
       emoji.textContent = entry.emoji;
+      emoji.setAttribute('aria-hidden', 'true');
       emoji.style.fontSize = isCompactHeight ? '1.7rem' : '2rem';
       card.appendChild(emoji);
 
@@ -228,6 +241,7 @@ export class EncyclopediaOverlay {
       card.appendChild(name);
 
       const bestCount = this.bestStageStars[entry.stageNumber] ?? 0;
+      card.setAttribute('aria-label', this.getCardAriaLabel(entry, bestCount));
       const medalDisplay = createStageMedalDisplay(entry.stageNumber, bestCount, {
         hint: bestCount > 0 ? `⭐ ベスト ${bestCount}` : undefined,
         size: 'compact',
@@ -249,6 +263,8 @@ export class EncyclopediaOverlay {
       card.style.background = '#444';
       card.style.opacity = '0.6';
       card.style.pointerEvents = 'none';
+      card.setAttribute('aria-disabled', 'true');
+      card.setAttribute('aria-label', 'まだ みつけていない わくせい');
 
       const lock = document.createElement('div');
       lock.textContent = '？？？';
@@ -273,6 +289,9 @@ export class EncyclopediaOverlay {
 
     this.detailEl = document.createElement('div');
     this.detailEl.setAttribute('data-detail', '');
+    this.detailEl.setAttribute('role', 'dialog');
+    this.detailEl.setAttribute('aria-modal', 'true');
+    this.detailEl.setAttribute('aria-labelledby', EncyclopediaOverlay.DETAIL_TITLE_ID);
     this.detailEl.style.cssText = `
       position: absolute;
       inset: 0;
@@ -318,10 +337,12 @@ export class EncyclopediaOverlay {
 
     const emoji = document.createElement('div');
     emoji.textContent = entry.emoji;
+    emoji.setAttribute('aria-hidden', 'true');
     emoji.style.fontSize = isCompactHeight ? '3rem' : '4rem';
     detailCard.appendChild(emoji);
 
     const name = document.createElement('div');
+    name.id = EncyclopediaOverlay.DETAIL_TITLE_ID;
     name.textContent = entry.encyclopediaLabel;
     name.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
@@ -356,6 +377,7 @@ export class EncyclopediaOverlay {
 
     const companionPreview = document.createElement('div');
     companionPreview.setAttribute('data-detail-companion-preview', '');
+    companionPreview.setAttribute('aria-hidden', 'true');
     companionPreview.style.cssText = `
       width: ${isCompactHeight ? '96px' : '120px'};
       height: ${isCompactHeight ? '96px' : '120px'};
@@ -501,5 +523,14 @@ export class EncyclopediaOverlay {
 
   private isCompactHeight(): boolean {
     return window.innerHeight <= EncyclopediaOverlay.COMPACT_HEIGHT_THRESHOLD;
+  }
+
+  private getCardAriaLabel(entry: PlanetEncyclopediaEntry, bestCount: number): string {
+    const parts = [`${entry.encyclopediaLabel}`];
+    if (bestCount > 0) {
+      parts.push(`ベスト ほし ${bestCount}こ`);
+    }
+    parts.push('くわしく みる');
+    return parts.join('、');
   }
 }

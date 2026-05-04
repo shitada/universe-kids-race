@@ -879,6 +879,7 @@ export class StageScene implements Scene {
         );
       }
       this.spaceship.onMeteoriteHit();
+      this.hud.announceMeteoriteHit();
       this.recordMeteoriteHit();
       this.boostSystem.cancel();
       this.damageTimer = StageScene.DAMAGE_FLASH_DURATION;
@@ -1295,6 +1296,7 @@ export class StageScene implements Scene {
     }
 
     this.showClearMessage(isBestUpdated, earnedStars, isNewPlanetUnlock, bestStarCount);
+    this.hud.announceStageClear(earnedStars, isNewPlanetUnlock, isBestUpdated);
 
     if (isBestUpdated) {
       this.audioManager.playSFX('rainbowCollect');
