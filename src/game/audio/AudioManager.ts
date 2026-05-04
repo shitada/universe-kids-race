@@ -468,6 +468,9 @@ export class AudioManager {
         case 'shootingStarCollect':
           this.playArpeggio([659, 988, 1319, 1760], 'triangle', 0.06, 0.2);
           break;
+        case 'cometCollect':
+          this.playArpeggio([392, 587, 880, 1175, 1568], 'sine', 0.07, 0.22);
+          break;
         case 'meteoriteHit':
           this.playSweep('sawtooth', 200, 80, 0.3, 0.18);
           break;

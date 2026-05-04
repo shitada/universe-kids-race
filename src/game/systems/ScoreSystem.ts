@@ -22,6 +22,13 @@ export class ScoreSystem {
     this.scoreMultiplierTimer = Math.max(this.scoreMultiplierTimer, duration);
   }
 
+  addBonusScore(value: number): void {
+    if (!Number.isFinite(value) || value <= 0) {
+      return;
+    }
+    this.stageScore += Math.round(value);
+  }
+
   update(deltaTime: number): void {
     if (this.scoreMultiplierTimer <= 0) {
       return;

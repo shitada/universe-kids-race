@@ -75,6 +75,7 @@ export type SFXType =
   | 'starCollect'
   | 'rainbowCollect'
   | 'shootingStarCollect'
+  | 'cometCollect'
   | 'meteoriteHit'
   | 'boost'
   | 'stageClear'

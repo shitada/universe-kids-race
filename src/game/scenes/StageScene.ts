@@ -14,6 +14,7 @@ import { Spaceship } from '../entities/Spaceship';
 import { Star, setStarHighContrastMode } from '../entities/Star';
 import { Meteorite, setMeteoriteHighContrastMode } from '../entities/Meteorite';
 import { ShootingStar } from '../entities/ShootingStar';
+import { Comet } from '../entities/Comet';
 import { CollisionSystem } from '../systems/CollisionSystem';
 import { ScoreSystem } from '../systems/ScoreSystem';
 import { SpawnSystem } from '../systems/SpawnSystem';
@@ -111,6 +112,7 @@ export class StageScene implements Scene {
   private stars: Star[] = [];
   private meteorites: Meteorite[] = [];
   private shootingStars: ShootingStar[] = [];
+  private comets: Comet[] = [];
 
   private collisionSystem = new CollisionSystem();
   private scoreSystem = new ScoreSystem();
@@ -356,6 +358,7 @@ export class StageScene implements Scene {
     this.stars.length = 0;
     this.meteorites.length = 0;
     this.shootingStars.length = 0;
+    this.comets.length = 0;
     this.spawnSystem.reset();
     this.spawnSystem.setMeteoriteIntervalMultiplier(1);
     this.boostSystem.reset();
@@ -692,6 +695,7 @@ export class StageScene implements Scene {
     this.stars.length = 0;
     this.meteorites.length = 0;
     this.shootingStars.length = 0;
+    this.comets.length = 0;
     this.hud?.hideAssistMessage();
     this.resetBoostHintState();
   }
@@ -807,6 +811,7 @@ export class StageScene implements Scene {
       this.stars,
       this.meteorites,
       this.shootingStars,
+      this.comets,
     );
     for (const star of spawnResult.newStars) {
       this.stars.push(star);
@@ -819,6 +824,10 @@ export class StageScene implements Scene {
     for (const shootingStar of spawnResult.newShootingStars) {
       this.shootingStars.push(shootingStar);
       this.threeScene.add(shootingStar.mesh);
+    }
+    for (const comet of spawnResult.newComets) {
+      this.comets.push(comet);
+      this.threeScene.add(comet.mesh);
     }
 
     this.lodSystem.update(this.spaceship.position, this.stars);
@@ -847,6 +856,7 @@ export class StageScene implements Scene {
       this.meteorites,
       companionBonus,
       this.shootingStars,
+      this.comets,
     );
 
     if (collisionResult.shootingStarHit) {
@@ -860,6 +870,31 @@ export class StageScene implements Scene {
         shootingStar.position.x,
         shootingStar.position.y,
         shootingStar.position.z,
+        0xffffff,
+        50,
+        true,
+      );
+    }
+
+    if (collisionResult.cometHit) {
+      const comet = collisionResult.cometHit;
+      this.scoreSystem.addBonusScore(comet.scoreBonus);
+      this.scoreSystem.activateShootingStarBonus(comet.bonusDuration);
+      this.audioManager.playSFX('cometCollect');
+      this.particleBurstManager.emit(
+        this.threeScene,
+        comet.position.x,
+        comet.position.y,
+        comet.position.z,
+        0xbdefff,
+        50,
+        true,
+      );
+      this.particleBurstManager.emit(
+        this.threeScene,
+        comet.position.x,
+        comet.position.y,
+        comet.position.z,
         0xffffff,
         50,
         true,
@@ -1334,6 +1369,20 @@ export class StageScene implements Scene {
       }
     }
     shootingStars.length = shootingWrite;
+
+    const comets = this.comets;
+    let cometWrite = 0;
+    for (let read = 0; read < comets.length; read++) {
+      const comet = comets[read];
+      if (comet.isCollected || comet.position.z > behindThreshold) {
+        this.spawnSystem.releaseComet(comet);
+      } else {
+        comet.update(deltaTime, shipZ);
+        if (cometWrite !== read) comets[cometWrite] = comet;
+        cometWrite++;
+      }
+    }
+    comets.length = cometWrite;
   }
 
 

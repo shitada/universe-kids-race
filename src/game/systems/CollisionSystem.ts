@@ -2,11 +2,13 @@ import type { Spaceship } from '../entities/Spaceship';
 import type { Star } from '../entities/Star';
 import type { Meteorite } from '../entities/Meteorite';
 import type { ShootingStar } from '../entities/ShootingStar';
+import type { Comet } from '../entities/Comet';
 
 export interface CollisionResult {
   starCollisions: Star[];
   meteoriteCollision: boolean;
   shootingStarHit: ShootingStar | null;
+  cometHit: Comet | null;
   // Reference to the Meteorite that triggered the collision this frame, or
   // null if no meteorite was hit. Callers should set `meteoriteHit.isActive
   // = false` after handling the hit so the same meteorite is skipped on
@@ -25,6 +27,7 @@ export class CollisionSystem {
     starCollisions: [],
     meteoriteCollision: false,
     shootingStarHit: null,
+    cometHit: null,
     meteoriteHit: null,
   };
 
@@ -48,11 +51,13 @@ export class CollisionSystem {
     meteorites: Meteorite[],
     companionBonus = 0,
     shootingStars: ShootingStar[] = [],
+    comets: Comet[] = [],
   ): CollisionResult {
     const result = this.result;
     result.starCollisions.length = 0;
     result.meteoriteCollision = false;
     result.shootingStarHit = null;
+    result.cometHit = null;
     result.meteoriteHit = null;
 
     const sp = spaceship.position;
@@ -106,6 +111,25 @@ export class CollisionSystem {
         if (distSq < shootingStarCollisionDistSq) {
           shootingStar.collect();
           result.shootingStarHit = shootingStar;
+          break;
+        }
+      }
+    }
+
+    if (comets.length > 0) {
+      const cometCollisionDist = 1.0 + comets[0].radius;
+      const cometCollisionDistSq = cometCollisionDist * cometCollisionDist;
+      for (const comet of comets) {
+        if (comet.isCollected) continue;
+        const dz = sp.z - comet.position.z;
+        if (dz > cometCollisionDist) continue;
+        if (dz < -cometCollisionDist) continue;
+        const dx = sp.x - comet.position.x;
+        const dy = sp.y - comet.position.y;
+        const distSq = dx * dx + dy * dy + dz * dz;
+        if (distSq < cometCollisionDistSq) {
+          comet.collect();
+          result.cometHit = comet;
           break;
         }
       }

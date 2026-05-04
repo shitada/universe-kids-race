@@ -315,6 +315,58 @@ describe('SpawnSystem', () => {
     }
   });
 
+  it('spawns a comet after a longer rare-event delay elapses', () => {
+    const config: StageConfig = {
+      ...testConfig,
+      meteoriteInterval: 999,
+      starDensity: 1,
+      destinationReading: 'つき',
+      medalThresholds: [5, 10, 15],
+      emoji: '🌙',
+      displayName: 'つき',
+      planetColor: 0xcccccc,
+    };
+    const randomValues = [0.5, 0, 0, 0.5, 0, 0];
+    const randomSpy = vi.spyOn(Math, 'random').mockImplementation(() => randomValues.shift() ?? 0.5);
+
+    try {
+      const system = new SpawnSystem();
+      const result = system.update(18.1, 100, config, [], [], [], []);
+
+      expect(result.newComets).toHaveLength(1);
+      expect(Math.abs(result.newComets[0].position.x)).toBeGreaterThanOrEqual(9);
+      expect(result.newComets[0].position.z).toBeLessThan(100);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
+  it('does not spawn a comet while another comet is still active', () => {
+    const config: StageConfig = {
+      ...testConfig,
+      meteoriteInterval: 999,
+      starDensity: 1,
+      destinationReading: 'つき',
+      medalThresholds: [5, 10, 15],
+      emoji: '🌙',
+      displayName: 'つき',
+      planetColor: 0xcccccc,
+    };
+    const randomValues = [0.5, 0, 0, 0.5, 0, 0, 0.5, 0, 0, 0.5, 0, 0];
+    const randomSpy = vi.spyOn(Math, 'random').mockImplementation(() => randomValues.shift() ?? 0.5);
+
+    try {
+      const system = new SpawnSystem();
+      const first = system.update(18.1, 100, config, [], [], [], []);
+      expect(first.newComets).toHaveLength(1);
+
+      const second = system.update(18.1, 80, config, [], [], [], first.newComets);
+      expect(second.newComets).toHaveLength(0);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
   it('dispose() releases pooled GPU resources for the meteorite pool', () => {
     const system = new SpawnSystem();
     const result = system.update(3.5, -10, testConfig);

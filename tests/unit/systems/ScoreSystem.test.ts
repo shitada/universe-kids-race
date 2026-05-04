@@ -54,6 +54,15 @@ describe('ScoreSystem', () => {
     expect(system.getStageScore()).toBe(100);
   });
 
+  it('adds bonus score without increasing the collected star count', () => {
+    const system = new ScoreSystem();
+
+    system.addBonusScore(1500);
+
+    expect(system.getStageScore()).toBe(1500);
+    expect(system.getStarCount()).toBe(0);
+  });
+
   it('finalizeStage adds stageScore to totalScore and resets stage', () => {
     const system = new ScoreSystem();
     system.addStarScore('NORMAL');
