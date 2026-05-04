@@ -20,8 +20,10 @@ import { ScoreSystem } from '../systems/ScoreSystem';
 import { SpawnSystem } from '../systems/SpawnSystem';
 import { BoostSystem } from '../systems/BoostSystem';
 import { LODSystem } from '../systems/LODSystem';
+import { AdaptiveTutorialSystem, type AdaptiveTutorialEvent } from '../systems/AdaptiveTutorialSystem';
 import { triggerSharedVibration } from '../systems/VibrationSystem';
 import { HUD } from '../../ui/HUD';
+import { AdaptiveTutorialHint } from '../../ui/AdaptiveTutorialHint';
 import { CountdownOverlay } from '../../ui/CountdownOverlay';
 import { StageIntroOverlay } from '../../ui/StageIntroOverlay';
 import { getStageConfig, TOTAL_STAGES } from '../config/StageConfig';
@@ -163,10 +165,8 @@ export class StageScene implements Scene {
   // composes cleanly with this rotation.
   private destinationPlanetSpinTarget: THREE.Object3D | null = null;
   private static readonly DESTINATION_PLANET_SPIN_SPEED = 0.2;
-  private static readonly BOOST_HINT_INITIAL_DELAY = 3.5;
-  private static readonly BOOST_HINT_REPEAT_DELAY = 12;
   private static readonly BOOST_HINT_DURATION = 2.4;
-  private static readonly BOOST_HINT_MESSAGE = '🚀 いまだよ！';
+  private static readonly ADAPTIVE_HINT_DURATION = 3;
   private static readonly SHOOTING_STAR_SCORE_BONUS_DURATION = 6;
 
   // Background stars
@@ -209,9 +209,10 @@ export class StageScene implements Scene {
   private touchGuideIdleTimer = 0;
   private hasSeenMoveInput = false;
   private isActive = false;
-  private boostHintReadyTimer = 0;
   private boostHintDisplayTimer = 0;
-  private boostHintNextTrigger = StageScene.BOOST_HINT_INITIAL_DELAY;
+  private adaptiveHintDisplayTimer = 0;
+  private adaptiveTutorialSystem = new AdaptiveTutorialSystem();
+  private adaptiveTutorialHint = new AdaptiveTutorialHint();
   private prewarmRequestToken = 0;
   private static readonly TOUCH_GUIDE_IDLE_DELAY = 3;
   private visualQualityTier = StageScene.VISUAL_QUALITY_SCALE_BY_TIER.length - 1;
@@ -318,6 +319,9 @@ export class StageScene implements Scene {
     this.assistMessageTimer = 0;
     this.assistDirection = null;
     this.assistDirectionRefreshTimer = 0;
+    this.adaptiveTutorialSystem.reset();
+    this.adaptiveHintDisplayTimer = 0;
+    this.adaptiveTutorialHint.hide();
     this.resetBoostHintState();
 
     const totalScore = context.totalScore ?? 0;
@@ -329,6 +333,7 @@ export class StageScene implements Scene {
     setMeteoriteHighContrastMode(highContrastEnabled);
     this.hud.setHighContrastMode(highContrastEnabled);
     this.scorePopupManager.setHighContrastMode(highContrastEnabled);
+    this.adaptiveTutorialHint.setHighContrastMode(highContrastEnabled);
     this.stageEntryTotalScore = totalScore;
     this.stageEntryTotalStarCount = totalStarCount;
     this.scoreSystem.setTotalScore(totalScore);
@@ -413,6 +418,7 @@ export class StageScene implements Scene {
     });
     this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
     this.hud.hideAssistMessage();
+    this.adaptiveTutorialHint.hide();
     this.touchGuide.show('intro');
     this.syncPauseAvailability();
 
@@ -727,6 +733,7 @@ export class StageScene implements Scene {
     // keep moving so the scene feels alive (Constitution I/IV).
     if (this.isStarting || this.awaitingResume || this.isHomeConfirmOpen || this.isPauseOpen) {
       this.resetBoostHintState();
+      this.hideAdaptiveTutorialHint();
       this.inputSystem.setBoostPressed?.(false);
       if (!this.isHomeConfirmOpen && !this.isPauseOpen) {
         const hadStageIntro = this.stageIntroOverlay?.isActive() ?? false;
@@ -756,6 +763,8 @@ export class StageScene implements Scene {
     const input = this.inputSystem.getState();
     this.playTime += deltaTime;
     this.updateAssistTimers(deltaTime);
+    this.updateAdaptiveHintDisplay(deltaTime);
+    this.updateBoostHintDisplay(deltaTime);
     this.updateTouchGuide(input.moveDirection, deltaTime);
 
     // Capture boost state before changes
@@ -765,6 +774,7 @@ export class StageScene implements Scene {
     // Boost activation
     if (input.boostPressed) {
       if (this.boostSystem.activate()) {
+        this.adaptiveTutorialSystem.recordBoostUsed();
         this.audioManager.playSFX('boost');
         triggerSharedVibration('boost');
         this.audioManager.startBoostSFX();
@@ -787,8 +797,6 @@ export class StageScene implements Scene {
       this.audioManager.playSFX('boostReady');
       this.hud.flashBoostReady();
     }
-
-    this.updateBoostHint(deltaTime);
 
     // Apply boost state to spaceship
     if (this.boostSystem.isActive() && this.spaceship.speedState !== 'BOOST') {
@@ -988,6 +996,7 @@ export class StageScene implements Scene {
 
     // Deactivate passed objects
     this.cleanupPassedObjects(deltaTime);
+    this.updateAdaptiveTutorial(input.moveDirection, deltaTime);
 
     // Camera follow
     this.updateCameraFollow(deltaTime);
@@ -1130,35 +1139,64 @@ export class StageScene implements Scene {
   }
 
   private resetBoostHintState(): void {
-    this.boostHintReadyTimer = 0;
     this.boostHintDisplayTimer = 0;
-    this.boostHintNextTrigger = StageScene.BOOST_HINT_INITIAL_DELAY;
     this.hud?.hideBoostHint();
   }
 
-  private updateBoostHint(deltaTime: number): void {
-    const boostReady = this.boostSystem.isAvailable() && !this.boostSystem.isActive();
-    if (!boostReady) {
-      this.resetBoostHintState();
-      return;
-    }
-
+  private updateBoostHintDisplay(deltaTime: number): void {
     if (this.boostHintDisplayTimer > 0) {
       this.boostHintDisplayTimer = Math.max(0, this.boostHintDisplayTimer - deltaTime);
       if (this.boostHintDisplayTimer === 0) {
         this.hud.hideBoostHint();
       }
     }
+  }
 
-    this.boostHintReadyTimer += deltaTime;
-    if (this.boostHintReadyTimer < this.boostHintNextTrigger) {
+  private updateAdaptiveHintDisplay(deltaTime: number): void {
+    if (this.adaptiveHintDisplayTimer <= 0) {
       return;
     }
 
-    this.hud.showBoostHint(StageScene.BOOST_HINT_MESSAGE);
-    this.boostHintDisplayTimer = StageScene.BOOST_HINT_DURATION;
-    this.boostHintReadyTimer = 0;
-    this.boostHintNextTrigger = StageScene.BOOST_HINT_REPEAT_DELAY;
+    this.adaptiveHintDisplayTimer = Math.max(0, this.adaptiveHintDisplayTimer - deltaTime);
+    if (this.adaptiveHintDisplayTimer === 0) {
+      this.adaptiveTutorialHint.hide();
+    }
+  }
+
+  private hideAdaptiveTutorialHint(): void {
+    this.adaptiveHintDisplayTimer = 0;
+    this.adaptiveTutorialHint.hide();
+  }
+
+  private updateAdaptiveTutorial(moveDirection: number, deltaTime: number): void {
+    const event = this.adaptiveTutorialSystem.update({
+      deltaTime,
+      moveDirection: moveDirection as -1 | 0 | 1,
+      shipX: this.spaceship.position.x,
+      shipZ: this.spaceship.position.z,
+      boostAvailable: this.boostSystem.isAvailable(),
+      boostActive: this.boostSystem.isActive(),
+      meteorites: this.meteorites,
+    });
+
+    if (!event) {
+      return;
+    }
+
+    this.showAdaptiveTutorialEvent(event);
+  }
+
+  private showAdaptiveTutorialEvent(event: AdaptiveTutorialEvent): void {
+    if (event.type === 'boost') {
+      this.hideAdaptiveTutorialHint();
+      this.hud.showBoostHint(event.message);
+      this.boostHintDisplayTimer = StageScene.BOOST_HINT_DURATION;
+      return;
+    }
+
+    this.resetBoostHintState();
+    this.adaptiveTutorialHint.show(event.message, event.type);
+    this.adaptiveHintDisplayTimer = StageScene.ADAPTIVE_HINT_DURATION;
   }
 
   private recordMeteoriteHit(): void {
@@ -1316,9 +1354,13 @@ export class StageScene implements Scene {
 
     const stars = this.stars;
     let starWrite = 0;
+    let missedStarCount = 0;
     for (let read = 0; read < stars.length; read++) {
       const star = stars[read];
       if (star.isCollected || star.position.z > behindThreshold) {
+        if (!star.isCollected && star.position.z > behindThreshold) {
+          missedStarCount += 1;
+        }
         // releaseStar handles scene detach (via recycle) and pool re-use.
         this.spawnSystem.releaseStar(star);
       } else {
@@ -1330,6 +1372,9 @@ export class StageScene implements Scene {
       }
     }
     stars.length = starWrite;
+    if (missedStarCount > 0) {
+      this.adaptiveTutorialSystem.recordMissedStars(missedStarCount);
+    }
 
     const meteorites = this.meteorites;
     let metWrite = 0;
@@ -1616,6 +1661,7 @@ export class StageScene implements Scene {
     this.isOpeningClearReward = false;
     this.pauseOverlay.hide();
     this.touchGuide.hide();
+    this.adaptiveTutorialHint.hide();
     this.hud.hide();
     this.scorePopupManager.dispose();
     this.audioManager.stopBGM();

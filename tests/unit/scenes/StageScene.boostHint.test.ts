@@ -65,6 +65,13 @@ function getBoostButton(): HTMLButtonElement {
   return document.querySelector('#ui-overlay button[aria-label="ブースト"]') as HTMLButtonElement;
 }
 
+function finishStartCountdown(scene: StageScene): void {
+  const internal = scene as unknown as { update(dt: number): void };
+  for (let i = 0; i < 4; i++) {
+    internal.update(1.0);
+  }
+}
+
 describe('StageScene boost hint', () => {
   let originalPathname = '/';
   let originalSearch = '';
@@ -97,16 +104,20 @@ describe('StageScene boost hint', () => {
     window.history.replaceState({}, '', `${originalPathname}${originalSearch}`);
   });
 
-  it('ready状態が続くとブーストヒントを短時間表示し、長時間未使用なら再表示する', () => {
+  it('ブースト用の動的チュートリアルイベントでHUDヒントを表示する', () => {
     const { scene } = createScene();
     scene.enter({ stageNumber: 1 });
-    const internal = scene as unknown as { update(dt: number): void };
+    const internal = scene as unknown as {
+      update(dt: number): void;
+      showAdaptiveTutorialEvent(event: { type: 'boost'; message: string }): void;
+    };
 
-    internal.update(3.4);
-    expect(getBoostHint()?.style.display).toBe('none');
+    internal.showAdaptiveTutorialEvent({
+      type: 'boost',
+      message: 'ブーストを つかってみよう！',
+    });
 
-    internal.update(0.2);
-    expect(getBoostHint()?.textContent).toBe('🚀 いまだよ！');
+    expect(getBoostHint()?.textContent).toBe('ブーストを つかってみよう！');
     expect(getBoostHint()?.style.display).toBe('block');
     expect(getBoostButton().hasAttribute('data-boost-hint-active')).toBe(true);
 
@@ -114,21 +125,21 @@ describe('StageScene boost hint', () => {
     expect(getBoostHint()?.style.display).toBe('none');
     expect(getBoostButton().hasAttribute('data-boost-hint-active')).toBe(false);
 
-    internal.update(9.4);
-    expect(getBoostHint()?.style.display).toBe('none');
-
-    internal.update(0.2);
-    expect(getBoostHint()?.style.display).toBe('block');
-
     scene.exit();
   });
 
-  it('ブースト使用やポーズでヒントを隠し、再び使えるまでは再表示しない', () => {
+  it('ブースト使用やポーズでヒントを隠す', () => {
     const { scene, inputState } = createScene();
     scene.enter({ stageNumber: 1 });
-    const internal = scene as unknown as { update(dt: number): void };
-
-    internal.update(3.6);
+    const internal = scene as unknown as {
+      update(dt: number): void;
+      showAdaptiveTutorialEvent(event: { type: 'boost'; message: string }): void;
+    };
+    finishStartCountdown(scene);
+    internal.showAdaptiveTutorialEvent({
+      type: 'boost',
+      message: 'ブーストを つかってみよう！',
+    });
     expect(getBoostHint()?.style.display).toBe('block');
 
     inputState.boostPressed = true;
@@ -136,17 +147,12 @@ describe('StageScene boost hint', () => {
     expect(getBoostHint()?.style.display).toBe('none');
     expect(getBoostButton().getAttribute('aria-disabled')).toBe('true');
 
-    internal.update(3.1);
-    internal.update(4.8);
-    expect(getBoostHint()?.style.display).toBe('none');
-
-    internal.update(0.2);
-    expect(getBoostHint()?.style.display).toBe('none');
-
-    internal.update(3.6);
-    expect(getBoostHint()?.style.display).toBe('block');
-
     const pauseButton = document.querySelector('#hud button[aria-label="やすむ"]') as HTMLButtonElement;
+    internal.showAdaptiveTutorialEvent({
+      type: 'boost',
+      message: 'ブーストを つかってみよう！',
+    });
+    expect(getBoostHint()?.style.display).toBe('block');
     pauseButton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     pauseButton.dispatchEvent(new Event('pointerup', { bubbles: true }));
     expect(getBoostHint()?.style.display).toBe('none');
