@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#000428"/>
+      <stop offset="100%" stop-color="#004e92"/>
+    </linearGradient>
+    <linearGradient id="ship" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8f8ff"/>
+      <stop offset="100%" stop-color="#b0c4de"/>
+    </linearGradient>
+    <linearGradient id="flame" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ff6b4a"/>
+      <stop offset="60%" stop-color="#ffcf33"/>
+      <stop offset="100%" stop-color="#fff4c7"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="192" height="192" rx="36" fill="url(#bg)"/>
+  <!-- Stars -->
+  <circle cx="30" cy="30" r="2" fill="#fff" opacity="0.9"/>
+  <circle cx="160" cy="25" r="1.5" fill="#fff" opacity="0.7"/>
+  <circle cx="45" cy="80" r="1" fill="#fff" opacity="0.6"/>
+  <circle cx="150" cy="70" r="1.8" fill="#fff" opacity="0.8"/>
+  <circle cx="25" cy="130" r="1.2" fill="#fff" opacity="0.5"/>
+  <circle cx="170" cy="120" r="1.5" fill="#fff" opacity="0.7"/>
+  <circle cx="60" cy="155" r="1" fill="#fff" opacity="0.4"/>
+  <circle cx="140" cy="160" r="2" fill="#fff" opacity="0.6"/>
+  <circle cx="80" cy="30" r="1.5" fill="#ffcf33" opacity="0.9"/>
+  <circle cx="120" cy="50" r="1" fill="#ffcf33" opacity="0.7"/>
+  <!-- Rainbow star -->
+  <g transform="translate(40,50)">
+    <polygon points="0,-12 3.5,-4 12,-4 5,2 7.5,10 0,5.5 -7.5,10 -5,2 -12,-4 -3.5,-4" fill="#ffcf33" opacity="0.9"/>
+  </g>
+  <!-- Rocket body -->
+  <g transform="translate(96,96)">
+    <!-- Flame -->
+    <path d="M-10,30 Q-5,55 0,50 Q5,55 10,30" fill="url(#flame)" opacity="0.9"/>
+    <path d="M-6,30 Q-2,45 0,42 Q2,45 6,30" fill="#fff4c7" opacity="0.7"/>
+    <!-- Body -->
+    <path d="M-18,30 L-18,-10 Q-18,-45 0,-55 Q18,-45 18,-10 L18,30 Z" fill="url(#ship)" stroke="#8090a0" stroke-width="1"/>
+    <!-- Nose cone -->
+    <path d="M-12,-20 Q-12,-42 0,-52 Q12,-42 12,-20" fill="#2f8cff"/>
+    <!-- Window -->
+    <circle cx="0" cy="-8" r="9" fill="#1a1a3e" stroke="#8090a0" stroke-width="1.5"/>
+    <circle cx="0" cy="-8" r="6.5" fill="#2f8cff" opacity="0.6"/>
+    <ellipse cx="-2" cy="-10" rx="2.5" ry="2" fill="#fff" opacity="0.5"/>
+    <!-- Fins -->
+    <path d="M-18,15 L-28,35 L-18,30 Z" fill="#ff6b4a"/>
+    <path d="M18,15 L28,35 L18,30 Z" fill="#ff6b4a"/>
+  </g>
+  <!-- Small planet -->
+  <circle cx="155" cy="145" r="10" fill="#ffcf33" opacity="0.8"/>
+  <circle cx="153" cy="143" r="3" fill="#fff" opacity="0.3"/>
+</svg>
