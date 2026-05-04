@@ -3,6 +3,9 @@ import { HomeConfirmOverlay } from './HomeConfirmOverlay';
 import { attachReleaseConfirmButton } from './attachReleaseConfirmButton';
 import { PauseOverlay } from './PauseOverlay';
 
+type BoostButtonStyleKey = 'opacity' | 'filter' | 'animation' | 'transform';
+type PauseButtonStyleKey = 'opacity' | 'filter' | 'cursor' | 'transform';
+
 export class HUD {
   private pendingTimeouts = new Set<number>();
   private container: HTMLDivElement | null = null;
@@ -49,6 +52,25 @@ export class HUD {
   // be invalidated explicitly.
   private lastCooldownPct = -1;
   private lastReadyState: boolean | null = null;
+  // Differential write caches for boost / pause button visual states.
+  // NOTE: As with updateCooldown(), any future direct style/attribute writes
+  // outside the helper methods below must also invalidate these caches.
+  private lastCooldownBarBoxShadow: string | null = null;
+  private lastBoostButtonAriaDisabled: string | null = null;
+  private lastBoostReadyRingVisible: boolean | null = null;
+  private boostButtonStyleCache: Record<BoostButtonStyleKey, string | null> = {
+    opacity: null,
+    filter: null,
+    animation: null,
+    transform: null,
+  };
+  private lastPauseButtonAriaDisabled: string | null = null;
+  private pauseButtonStyleCache: Record<PauseButtonStyleKey, string | null> = {
+    opacity: null,
+    filter: null,
+    cursor: null,
+    transform: null,
+  };
   // Differential write cache for updateStageProgress (same pattern as
   // updateCooldown). -1 sentinel guarantees the first valid call writes.
   private lastStageProgressPct = -1;
@@ -352,9 +374,7 @@ export class HUD {
       onActivate: () => this.onPauseCallback?.(),
       canActivate: () => this.pauseEnabled,
       onPressChange: (pressed) => {
-        if (this.pauseButton) {
-          this.pauseButton.style.transform = pressed ? 'scale(0.95)' : 'scale(1)';
-        }
+        this.writePauseButtonStyle('transform', pressed ? 'scale(0.95)' : 'scale(1)');
       },
     });
     hudRoot.appendChild(this.pauseButton);
@@ -406,9 +426,9 @@ export class HUD {
         return;
       }
 
-      boostButton.style.transform = 'scale(0.9)';
+      this.writeBoostButtonStyle('transform', 'scale(0.9)');
       this.registerTimeout(() => {
-        boostButton.style.transform = 'scale(1.0)';
+        this.writeBoostButtonStyle('transform', 'scale(1.0)');
       }, 150);
       this.onBoostCallback?.();
     });
@@ -887,7 +907,10 @@ export class HUD {
       // Restore the standard ready-state pulse loop in case the !important
       // flash animation overrode the inline style cascade.
       if (this.lastReadyState === true) {
-        btn.style.animation = 'boostBtnPulse 2s ease-in-out infinite, boostReadyRing 1.15s ease-in-out infinite';
+        this.writeBoostButtonStyle(
+          'animation',
+          'boostBtnPulse 2s ease-in-out infinite, boostReadyRing 1.15s ease-in-out infinite',
+        );
       }
     };
     const onEnd = (ev: AnimationEvent) => {
@@ -928,22 +951,21 @@ export class HUD {
     const ready = this.lastCooldownProgress >= 1.0;
     const enabled = ready && !this.boostLocked;
 
-    this.cooldownBar.style.boxShadow = enabled
+    this.setCooldownBarBoxShadow(enabled
       ? this.highContrastMode
         ? '0 0 0 2px rgba(255, 255, 255, 0.7), 0 0 14px #00ff88'
         : '0 0 10px #00ff88'
-      : 'none';
-    this.boostButton.style.opacity = enabled ? '1' : '0.5';
-    this.boostButton.style.filter = enabled ? 'none' : 'grayscale(0.8)';
-    this.boostButton.style.animation = enabled
-      ? 'boostBtnPulse 2s ease-in-out infinite, boostReadyRing 1.15s ease-in-out infinite'
-      : 'none';
-    if (enabled) {
-      this.boostButton.setAttribute('data-boost-ready-ring', '');
-    } else {
-      this.boostButton.removeAttribute('data-boost-ready-ring');
-    }
-    this.boostButton.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+      : 'none');
+    this.writeBoostButtonStyle('opacity', enabled ? '1' : '0.5');
+    this.writeBoostButtonStyle('filter', enabled ? 'none' : 'grayscale(0.8)');
+    this.writeBoostButtonStyle(
+      'animation',
+      enabled
+        ? 'boostBtnPulse 2s ease-in-out infinite, boostReadyRing 1.15s ease-in-out infinite'
+        : 'none',
+    );
+    this.setBoostReadyRing(enabled);
+    this.setBoostButtonAriaDisabled(enabled ? 'false' : 'true');
 
     if (!enabled) {
       this.clearBoostReadyFlash();
@@ -953,10 +975,50 @@ export class HUD {
 
   private applyPauseButtonState(): void {
     if (!this.pauseButton) return;
-    this.pauseButton.style.opacity = this.pauseEnabled ? '1' : '0.45';
-    this.pauseButton.style.filter = this.pauseEnabled ? 'none' : 'grayscale(0.8)';
-    this.pauseButton.style.cursor = this.pauseEnabled ? 'pointer' : 'default';
-    this.pauseButton.setAttribute('aria-disabled', this.pauseEnabled ? 'false' : 'true');
+    this.writePauseButtonStyle('opacity', this.pauseEnabled ? '1' : '0.45');
+    this.writePauseButtonStyle('filter', this.pauseEnabled ? 'none' : 'grayscale(0.8)');
+    this.writePauseButtonStyle('cursor', this.pauseEnabled ? 'pointer' : 'default');
+    this.setPauseButtonAriaDisabled(this.pauseEnabled ? 'false' : 'true');
+  }
+
+  private writeBoostButtonStyle(property: BoostButtonStyleKey, value: string): void {
+    if (!this.boostButton || this.boostButtonStyleCache[property] === value) return;
+    (this.boostButton.style as CSSStyleDeclaration & Record<BoostButtonStyleKey, string>)[property] = value;
+    this.boostButtonStyleCache[property] = value;
+  }
+
+  private writePauseButtonStyle(property: PauseButtonStyleKey, value: string): void {
+    if (!this.pauseButton || this.pauseButtonStyleCache[property] === value) return;
+    (this.pauseButton.style as CSSStyleDeclaration & Record<PauseButtonStyleKey, string>)[property] = value;
+    this.pauseButtonStyleCache[property] = value;
+  }
+
+  private setCooldownBarBoxShadow(value: string): void {
+    if (!this.cooldownBar || this.lastCooldownBarBoxShadow === value) return;
+    this.cooldownBar.style.boxShadow = value;
+    this.lastCooldownBarBoxShadow = value;
+  }
+
+  private setBoostReadyRing(visible: boolean): void {
+    if (!this.boostButton || this.lastBoostReadyRingVisible === visible) return;
+    if (visible) {
+      this.boostButton.setAttribute('data-boost-ready-ring', '');
+    } else {
+      this.boostButton.removeAttribute('data-boost-ready-ring');
+    }
+    this.lastBoostReadyRingVisible = visible;
+  }
+
+  private setBoostButtonAriaDisabled(value: string): void {
+    if (!this.boostButton || this.lastBoostButtonAriaDisabled === value) return;
+    this.boostButton.setAttribute('aria-disabled', value);
+    this.lastBoostButtonAriaDisabled = value;
+  }
+
+  private setPauseButtonAriaDisabled(value: string): void {
+    if (!this.pauseButton || this.lastPauseButtonAriaDisabled === value) return;
+    this.pauseButton.setAttribute('aria-disabled', value);
+    this.lastPauseButtonAriaDisabled = value;
   }
 
   private createLiveRegions(hudRoot: HTMLElement): void {
@@ -1089,6 +1151,22 @@ export class HUD {
     this.lastCooldownProgress = 1.0;
     this.lastCooldownPct = -1;
     this.lastReadyState = null;
+    this.lastCooldownBarBoxShadow = null;
+    this.lastBoostButtonAriaDisabled = null;
+    this.lastBoostReadyRingVisible = null;
+    this.boostButtonStyleCache = {
+      opacity: null,
+      filter: null,
+      animation: null,
+      transform: null,
+    };
+    this.lastPauseButtonAriaDisabled = null;
+    this.pauseButtonStyleCache = {
+      opacity: null,
+      filter: null,
+      cursor: null,
+      transform: null,
+    };
     this.lastStageProgressPct = -1;
     this.lastStageProgressComplete = null;
     this.lastScore = -1;
