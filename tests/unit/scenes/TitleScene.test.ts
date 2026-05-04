@@ -443,6 +443,33 @@ describe('TitleScene (T009)', () => {
     scene.exit();
   });
 
+  it('opens color settings and persists the high-contrast toggle', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager(true);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager);
+    scene.enter({});
+
+    const settingsButton = document.querySelector('[data-color-settings-button]') as HTMLButtonElement | null;
+    expect(settingsButton?.textContent).toBe('いろのせってい');
+
+    dispatchReleaseConfirm(settingsButton!);
+
+    const panel = document.querySelector('[data-color-accessibility-settings]');
+    const toggle = document.querySelector('[data-color-accessibility-toggle]') as HTMLButtonElement | null;
+    expect(panel).toBeTruthy();
+    expect(toggle?.textContent).toContain('OFF');
+
+    toggle?.click();
+
+    expect(saveManager.save).toHaveBeenCalledWith(expect.objectContaining({
+      colorAccessibility: { highContrast: true },
+    }));
+
+    scene.exit();
+  });
+
   it('anchors the lower title buttons with fixed margins inside #ui-overlay', () => {
     const sceneManager = createMockSceneManager();
     const saveManager = createMockSaveManager();

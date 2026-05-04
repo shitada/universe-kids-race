@@ -1,13 +1,22 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as THREE from 'three';
-import { Star } from '../../../src/game/entities/Star';
+import { Star, setStarHighContrastMode } from '../../../src/game/entities/Star';
 
 describe('Star', () => {
+  afterEach(() => {
+    setStarHighContrastMode(false);
+  });
+
   it('creates a NORMAL star with score 100', () => {
     const star = new Star(0, 0, -10, 'NORMAL');
     expect(star.starType).toBe('NORMAL');
     expect(star.scoreValue).toBe(100);
     expect(star.isCollected).toBe(false);
+  });
+
+  it('uses a hex-prism geometry for stronger shape recognition', () => {
+    const star = new Star(0, 0, -10, 'NORMAL');
+    expect(star.mesh.geometry.type).toBe('ExtrudeGeometry');
   });
 
   it('creates a RAINBOW star with score 500', () => {
@@ -111,6 +120,23 @@ describe('Star', () => {
     // Color/emissive references are mutated in place, not replaced.
     expect(mat.color).toBe(colorRef);
     expect(mat.emissive).toBe(emissiveRef);
+  });
+
+  it('adds a gentle hover while rotating', () => {
+    const star = new Star(0, 1, -10, 'NORMAL');
+    star.update(0.5);
+    expect(star.mesh.position.y).not.toBe(1);
+  });
+
+  it('shows the shared outline only in high contrast mode', () => {
+    setStarHighContrastMode(true);
+    const star = new Star(0, 0, -10, 'NORMAL');
+    const outline = star.mesh.getObjectByName('star-high-contrast-outline');
+    expect(outline?.visible).toBe(true);
+
+    setStarHighContrastMode(false);
+    star.reset(0, 0, -10);
+    expect(outline?.visible).toBe(false);
   });
 
   it('reset() repositions the star and clears transient state', () => {

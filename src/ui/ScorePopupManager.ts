@@ -18,8 +18,13 @@ export class ScorePopupManager {
 
   private root: HTMLDivElement | null = null;
   private pool: PopupEntry[] = [];
+  private highContrastMode = false;
   private nextRecycleIndex = 0;
   private readonly scratch = new THREE.Vector3();
+
+  setHighContrastMode(enabled: boolean): void {
+    this.highContrastMode = enabled;
+  }
 
   show(score: number, worldPosition: WorldPosition, camera: THREE.Camera): void {
     const root = this.ensureRoot();
@@ -37,16 +42,31 @@ export class ScorePopupManager {
     const x = Math.round((this.scratch.x * 0.5 + 0.5) * 100000) / 1000;
     const y = Math.round((-this.scratch.y * 0.5 + 0.5) * 100000) / 1000;
     const entry = this.acquireEntry(root);
-    const color = score >= 500 ? '#ff9cf7' : '#ffe066';
+    const isBonus = score >= 500;
+    const color = isBonus ? '#ff9cf7' : '#ffe066';
     const animationName = entry.useAltAnimation ? 'scorePopupFloatB' : 'scorePopupFloatA';
     entry.useAltAnimation = !entry.useAltAnimation;
     entry.currentAnimationName = animationName;
 
-    entry.el.textContent = `+${score}`;
+    entry.el.textContent = `${isBonus ? '🌈' : '⬢'} +${score}`;
     entry.el.style.left = `${x}%`;
     entry.el.style.top = `${y}%`;
     entry.el.style.color = color;
-    entry.el.style.textShadow = `0 2px 10px ${score >= 500 ? 'rgba(255, 156, 247, 0.55)' : 'rgba(255, 214, 102, 0.55)'}`;
+    entry.el.style.textShadow = `0 2px 10px ${isBonus ? 'rgba(255, 156, 247, 0.55)' : 'rgba(255, 214, 102, 0.55)'}`;
+    entry.el.style.background = this.highContrastMode
+      ? isBonus
+        ? 'rgba(13, 18, 38, 0.92)'
+        : 'rgba(0, 0, 0, 0.82)'
+      : 'transparent';
+    entry.el.style.border = this.highContrastMode
+      ? isBonus
+        ? '3px solid rgba(255, 255, 255, 0.95)'
+        : '2px dashed rgba(255, 255, 255, 0.95)'
+      : 'none';
+    entry.el.style.borderRadius = this.highContrastMode ? '999px' : '0';
+    entry.el.style.padding = this.highContrastMode ? '0.18rem 0.55rem' : '0';
+    entry.el.style.setProperty('-webkit-text-stroke', this.highContrastMode ? '0.6px #061126' : '0');
+    entry.el.setAttribute('data-score-popup-kind', isBonus ? 'bonus' : 'normal');
     entry.el.style.visibility = 'visible';
     entry.el.style.opacity = '1';
     entry.el.style.animationName = animationName;
@@ -150,6 +170,7 @@ export class ScorePopupManager {
     entry.active = false;
     entry.currentAnimationName = 'none';
     entry.el.removeAttribute('data-score-popup-active');
+    entry.el.removeAttribute('data-score-popup-kind');
     entry.el.style.animationName = 'none';
     if (entry.timeoutId !== null) {
       window.clearTimeout(entry.timeoutId);

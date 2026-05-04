@@ -25,6 +25,7 @@ export class HUD {
   private cooldownContainer: HTMLDivElement | null = null;
   private cooldownBar: HTMLDivElement | null = null;
   private stageProgressContainer: HTMLDivElement | null = null;
+  private stageProgressTrack: HTMLDivElement | null = null;
   private stageProgressFill: HTMLDivElement | null = null;
   private stageProgressGoalEl: HTMLDivElement | null = null;
   private onBoostCallback: (() => void) | null = null;
@@ -37,6 +38,7 @@ export class HUD {
   private onPauseResumeCallback: (() => void) | null = null;
   private onMuteCallback: (() => void) | null = null;
   private muted = false;
+  private highContrastMode = false;
   private boostLocked = false;
   private pauseEnabled = true;
   private pauseButtonCleanup: (() => void) | null = null;
@@ -227,6 +229,7 @@ export class HUD {
     // Mute toggle button on HUD root (top-right) — created after stage name
     // and other elements so existing children indices remain stable.
     this.createMuteButton();
+    this.applyColorAccessibilityState();
     this.createLiveRegions(hudRoot);
   }
 
@@ -262,17 +265,20 @@ export class HUD {
     track.setAttribute('data-stage-progress-track', '');
     track.style.flex = '1';
     track.style.height = '14px';
-    track.style.background = 'rgba(255, 255, 255, 0.18)';
+    track.style.background = this.highContrastMode ? 'rgba(6, 12, 28, 0.94)' : 'rgba(255, 255, 255, 0.18)';
     track.style.borderRadius = '7px';
     track.style.overflow = 'hidden';
     track.style.boxShadow = 'inset 0 2px 6px rgba(0, 0, 0, 0.35)';
+    track.style.border = this.highContrastMode ? '3px solid rgba(255, 255, 255, 0.92)' : 'none';
 
     const fill = document.createElement('div');
     fill.setAttribute('data-stage-progress-fill', '');
     fill.style.height = '100%';
     fill.style.width = '0%';
     fill.style.borderRadius = '7px';
-    fill.style.background = `linear-gradient(90deg, #00ddff, ${colorHex})`;
+    fill.style.background = this.highContrastMode
+      ? `repeating-linear-gradient(90deg, #ffffff 0 10px, #00ddff 10px 18px, ${colorHex} 18px 30px)`
+      : `linear-gradient(90deg, #00ddff, ${colorHex})`;
     fill.style.transition = 'width 0.15s linear';
     fill.setAttribute('data-stage-progress-color', colorHex);
     track.appendChild(fill);
@@ -291,6 +297,7 @@ export class HUD {
     hudRoot.appendChild(wrapper);
 
     this.stageProgressContainer = wrapper;
+    this.stageProgressTrack = track;
     this.stageProgressFill = fill;
     this.stageProgressGoalEl = goalIcon;
   }
@@ -487,6 +494,10 @@ export class HUD {
       button[data-boost-shake] {
         animation: boostShake 0.25s ease-in-out 1 !important;
       }
+      @keyframes boostReadyRing {
+        0%, 100% { box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4); }
+        50% { box-shadow: 0 0 0 8px rgba(255, 255, 255, 0), 0 10px 28px rgba(255, 217, 61, 0.7); }
+      }
       @keyframes boostBtnReadyFlash {
         0%   { transform: scale(1.0); }
         40%  { transform: scale(1.18); }
@@ -588,6 +599,67 @@ export class HUD {
   setMuteState(muted: boolean): void {
     this.muted = muted;
     this.muteHandle?.setMuted(muted);
+  }
+
+  setHighContrastMode(enabled: boolean): void {
+    this.highContrastMode = enabled;
+    this.applyColorAccessibilityState();
+  }
+
+  private applyColorAccessibilityState(): void {
+    if (this.stageNameEl) {
+      this.stageNameEl.style.color = this.highContrastMode ? '#fff58f' : '#FFD700';
+      this.stageNameEl.style.textShadow = this.highContrastMode
+        ? '0 0 0 #000, 0 2px 8px rgba(0, 0, 0, 0.9), 0 0 20px rgba(255, 255, 255, 0.25)'
+        : '0 2px 8px rgba(0, 0, 0, 0.7)';
+    }
+    if (this.assistMessageEl) {
+      this.assistMessageEl.style.background = this.highContrastMode
+        ? 'rgba(5, 10, 28, 0.96)'
+        : 'rgba(255, 255, 255, 0.14)';
+      this.assistMessageEl.style.border = this.highContrastMode
+        ? '3px solid rgba(255, 255, 255, 0.95)'
+        : 'none';
+      this.assistMessageEl.style.color = this.highContrastMode ? '#ffffff' : '#fff7bf';
+    }
+    if (this.bestStarContainerEl) {
+      this.bestStarContainerEl.style.color = this.highContrastMode ? '#e6f4ff' : '#9ec5ff';
+      this.bestStarContainerEl.style.opacity = this.highContrastMode ? '1' : '0.7';
+    }
+    if (this.stageProgressTrack) {
+      this.stageProgressTrack.style.background = this.highContrastMode ? 'rgba(6, 12, 28, 0.94)' : 'rgba(255, 255, 255, 0.18)';
+      this.stageProgressTrack.style.border = this.highContrastMode ? '3px solid rgba(255, 255, 255, 0.92)' : 'none';
+    }
+    if (this.stageProgressFill) {
+      const colorHex = this.stageProgressFill.getAttribute('data-stage-progress-color') ?? '#ffd700';
+      this.stageProgressFill.style.background = this.highContrastMode
+        ? `repeating-linear-gradient(90deg, #ffffff 0 10px, #00ddff 10px 18px, ${colorHex} 18px 30px)`
+        : `linear-gradient(90deg, #00ddff, ${colorHex})`;
+    }
+    if (this.stageProgressGoalEl) {
+      const colorHex = this.stageProgressFill?.getAttribute('data-stage-progress-color') ?? '#ffd700';
+      this.stageProgressGoalEl.style.textShadow = this.highContrastMode
+        ? `0 0 0 #000, 0 0 12px #ffffff, 0 0 18px ${colorHex}`
+        : `0 0 8px ${colorHex}`;
+    }
+    if (this.boostButton) {
+      this.boostButton.style.border = this.highContrastMode ? '4px solid rgba(255, 255, 255, 0.95)' : 'none';
+      this.boostButton.style.background = this.highContrastMode
+        ? 'linear-gradient(135deg, #fff27a, #76f0ff, #6BCB77)'
+        : 'linear-gradient(135deg, #FF6B6B, #FFD93D, #6BCB77)';
+      this.boostButton.style.color = this.highContrastMode ? '#0b1535' : '#fff';
+    }
+    if (this.cooldownContainer) {
+      this.cooldownContainer.style.background = this.highContrastMode ? 'rgba(6, 12, 28, 0.94)' : 'rgba(255, 255, 255, 0.2)';
+      this.cooldownContainer.style.border = this.highContrastMode ? '2px solid rgba(255, 255, 255, 0.95)' : 'none';
+      this.cooldownContainer.style.height = this.highContrastMode ? '10px' : '6px';
+    }
+    if (this.cooldownBar) {
+      this.cooldownBar.style.background = this.highContrastMode
+        ? 'repeating-linear-gradient(90deg, #ffffff 0 10px, #00ddff 10px 18px, #00ff88 18px 30px)'
+        : 'linear-gradient(90deg, #00ddff, #00ff88)';
+    }
+    this.applyBoostButtonState();
   }
 
   showAssistMessage(message: string): void {
@@ -815,7 +887,7 @@ export class HUD {
       // Restore the standard ready-state pulse loop in case the !important
       // flash animation overrode the inline style cascade.
       if (this.lastReadyState === true) {
-        btn.style.animation = 'boostBtnPulse 2s ease-in-out infinite';
+        btn.style.animation = 'boostBtnPulse 2s ease-in-out infinite, boostReadyRing 1.15s ease-in-out infinite';
       }
     };
     const onEnd = (ev: AnimationEvent) => {
@@ -856,10 +928,21 @@ export class HUD {
     const ready = this.lastCooldownProgress >= 1.0;
     const enabled = ready && !this.boostLocked;
 
-    this.cooldownBar.style.boxShadow = enabled ? '0 0 10px #00ff88' : 'none';
+    this.cooldownBar.style.boxShadow = enabled
+      ? this.highContrastMode
+        ? '0 0 0 2px rgba(255, 255, 255, 0.7), 0 0 14px #00ff88'
+        : '0 0 10px #00ff88'
+      : 'none';
     this.boostButton.style.opacity = enabled ? '1' : '0.5';
     this.boostButton.style.filter = enabled ? 'none' : 'grayscale(0.8)';
-    this.boostButton.style.animation = enabled ? 'boostBtnPulse 2s ease-in-out infinite' : 'none';
+    this.boostButton.style.animation = enabled
+      ? 'boostBtnPulse 2s ease-in-out infinite, boostReadyRing 1.15s ease-in-out infinite'
+      : 'none';
+    if (enabled) {
+      this.boostButton.setAttribute('data-boost-ready-ring', '');
+    } else {
+      this.boostButton.removeAttribute('data-boost-ready-ring');
+    }
     this.boostButton.setAttribute('aria-disabled', enabled ? 'false' : 'true');
 
     if (!enabled) {
@@ -981,6 +1064,7 @@ export class HUD {
       this.stageProgressContainer.remove();
       this.stageProgressContainer = null;
     }
+    this.stageProgressTrack = null;
     this.stageProgressFill = null;
     this.stageProgressGoalEl = null;
     if (this.container) {

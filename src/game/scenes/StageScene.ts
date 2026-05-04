@@ -5,8 +5,8 @@ import type { InputSystem } from '../systems/InputSystem';
 import type { AudioManager } from '../audio/AudioManager';
 import type { SaveManager } from '../storage/SaveManager';
 import { Spaceship } from '../entities/Spaceship';
-import { Star } from '../entities/Star';
-import { Meteorite } from '../entities/Meteorite';
+import { Star, setStarHighContrastMode } from '../entities/Star';
+import { Meteorite, setMeteoriteHighContrastMode } from '../entities/Meteorite';
 import { CollisionSystem } from '../systems/CollisionSystem';
 import { ScoreSystem } from '../systems/ScoreSystem';
 import { SpawnSystem } from '../systems/SpawnSystem';
@@ -306,6 +306,12 @@ export class StageScene implements Scene {
 
     const totalScore = context.totalScore ?? 0;
     const totalStarCount = context.totalStarCount ?? 0;
+    const saveData = this.saveManager.load();
+    const highContrastEnabled = saveData.colorAccessibility?.highContrast === true;
+    setStarHighContrastMode(highContrastEnabled);
+    setMeteoriteHighContrastMode(highContrastEnabled);
+    this.hud.setHighContrastMode(highContrastEnabled);
+    this.scorePopupManager.setHighContrastMode(highContrastEnabled);
     this.stageEntryTotalScore = totalScore;
     this.stageEntryTotalStarCount = totalStarCount;
     this.scoreSystem.setTotalScore(totalScore);
@@ -392,7 +398,6 @@ export class StageScene implements Scene {
     this.syncPauseAvailability();
 
     // Companions
-    const saveData = this.saveManager.load();
     // Show personal best ⭐ for this stage in the HUD so the child can see
     // their target score during play. enter() runs on every (re)entry so a
     // freshly-updated best (from a prior clear) is reflected immediately.

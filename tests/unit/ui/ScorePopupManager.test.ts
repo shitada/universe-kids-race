@@ -30,7 +30,7 @@ describe('ScorePopupManager', () => {
 
     const popup = document.querySelector<HTMLElement>('[data-score-popup]');
     expect(popup).not.toBeNull();
-    expect(popup?.textContent).toBe('+100');
+    expect(popup?.textContent).toBe('⬢ +100');
     expect(popup?.style.left).toBe('50%');
     expect(popup?.style.top).toBe('50%');
     expect(popup?.style.visibility).toBe('visible');
@@ -62,7 +62,7 @@ describe('ScorePopupManager', () => {
     manager.show(500, { x: 0.1, y: 0, z: 0 }, camera);
 
     expect(document.querySelectorAll('[data-score-popup]')).toHaveLength(6);
-    expect(popup.textContent).toBe('+500');
+    expect(popup.textContent).toBe('🌈 +500');
     expect(popup.style.visibility).toBe('visible');
     expect(popup.style.animationName).not.toBe(firstAnimationName);
   });
@@ -113,6 +113,16 @@ describe('ScorePopupManager', () => {
         Object.defineProperty(HTMLElement.prototype, 'offsetWidth', originalOffsetWidth);
       }
     }
+  });
+
+  it('adds a high-contrast capsule when requested', () => {
+    manager.setHighContrastMode(true);
+    manager.show(500, { x: 0, y: 0, z: 0 }, camera);
+
+    const popup = document.querySelector<HTMLElement>('[data-score-popup]');
+    expect(popup?.style.border).toContain('solid');
+    expect(popup?.style.padding).toBe('0.18rem 0.55rem');
+    expect(popup?.getAttribute('data-score-popup-kind')).toBe('bonus');
   });
 
   it('does nothing when ui-overlay is missing', () => {

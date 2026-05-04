@@ -59,6 +59,19 @@ export class SaveManager {
       // normalized to false so legacy users see the tutorial once.
       data.tutorialShown = data.tutorialShown === true;
 
+      // Validate colorAccessibility (backward compatible; malformed / falsey → missing).
+      const rawColorAccessibility = (data as { colorAccessibility?: unknown }).colorAccessibility;
+      if (rawColorAccessibility && typeof rawColorAccessibility === 'object' && !Array.isArray(rawColorAccessibility)) {
+        const highContrast = (rawColorAccessibility as { highContrast?: unknown }).highContrast === true;
+        if (highContrast) {
+          data.colorAccessibility = { highContrast: true };
+        } else {
+          delete (data as { colorAccessibility?: unknown }).colorAccessibility;
+        }
+      } else {
+        delete (data as { colorAccessibility?: unknown }).colorAccessibility;
+      }
+
       // Validate bestStageStars (backward compatible; missing or malformed → {})
       const rawBest = (data as { bestStageStars?: unknown }).bestStageStars;
       const validatedBest: Record<number, number> = {};
@@ -139,6 +152,9 @@ export class SaveManager {
       const muted = prev.muted === true;
       const lastStablePixelTier = prev.lastStablePixelTier;
       const tutorialShown = prev.tutorialShown === true;
+      const colorAccessibility = prev.colorAccessibility?.highContrast === true
+        ? { highContrast: true as const }
+        : undefined;
       this.clear();
       const next: SaveData = {
         clearedStage: 0,
@@ -147,6 +163,9 @@ export class SaveManager {
         bestStageStars: {},
         tutorialShown,
       };
+      if (colorAccessibility) {
+        next.colorAccessibility = colorAccessibility;
+      }
       if (typeof lastStablePixelTier === 'number') {
         next.lastStablePixelTier = lastStablePixelTier;
       }
@@ -168,6 +187,9 @@ export class SaveManager {
       const prev = this.load();
       const muted = prev.muted === true;
       const lastStablePixelTier = prev.lastStablePixelTier;
+      const colorAccessibility = prev.colorAccessibility?.highContrast === true
+        ? { highContrast: true as const }
+        : undefined;
       this.clear();
       const next: SaveData = {
         clearedStage: 0,
@@ -176,6 +198,9 @@ export class SaveManager {
         bestStageStars: {},
         tutorialShown: false,
       };
+      if (colorAccessibility) {
+        next.colorAccessibility = colorAccessibility;
+      }
       if (typeof lastStablePixelTier === 'number') {
         next.lastStablePixelTier = lastStablePixelTier;
       }

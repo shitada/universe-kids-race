@@ -1,53 +1,61 @@
 import * as THREE from 'three';
 
-// Shared resources for Meteorite instances. All meteorites have identical
-// shape and color, so we reuse a single geometry/material to reduce GC and
-// GPU buffer churn. Do NOT mutate SHARED_MATERIAL or dispose() these from
-// instance dispose() (the generic disposeObject3D path is intentionally
-// bypassed here).
-const SHARED_GEOMETRY = new THREE.DodecahedronGeometry(1.0);
-const SHARED_MATERIAL = new THREE.MeshToonMaterial({ color: 0x887766 });
+const SHARED_GEOMETRY = new THREE.BoxGeometry(1.55, 1.55, 1.55);
+const SHARED_OUTLINE_GEOMETRY = new THREE.EdgesGeometry(SHARED_GEOMETRY);
+const SHARED_MATERIAL = new THREE.MeshToonMaterial({ color: 0x7f7566 });
+const SHARED_OUTLINE_MATERIAL = new THREE.LineBasicMaterial({ color: 0x05060a });
 
-// View-bracket thresholds used by Meteorite.update() to skip per-frame X/Z
-// rotation for meteorites that are far ahead of (or already behind) the
-// spaceship. SpawnSystem pre-spawns meteorites well outside the camera
-// frustum; animating those wastes per-frame cost on iPad Safari. Forward
-// axis is -Z, so "ahead" = z < cameraZ. Mirrors Star.update() pattern.
 const METEORITE_ANIMATION_AHEAD = 60;
 const METEORITE_ANIMATION_BEHIND = 5;
 
+let HIGH_CONTRAST_MODE = false;
+
+export function setMeteoriteHighContrastMode(enabled: boolean): void {
+  HIGH_CONTRAST_MODE = enabled;
+}
+
 export class Meteorite {
   position: { x: number; y: number; z: number };
-  // Constant for every Meteorite instance. CollisionSystem.check() relies on
-  // this invariance to hoist the collision-radius computation out of its hot
-  // loop.
   readonly radius = 1.0;
-  // Set to `false` by StageScene when this meteorite has been consumed by a
-  // collision; CollisionSystem.check() then skips it on subsequent frames so
-  // the same meteorite cannot register a duplicate hit (e.g. while still
-  // within collision range after SLOWDOWN invincibility ends). Reset back to
-  // `true` by `reset()` / `recycle()` when the instance returns to the pool.
   isActive = true;
   mesh: THREE.Mesh;
+  private vibrationTime = 0;
+  private readonly vibrationPhase: number;
 
   constructor(x: number, y: number, z: number) {
     this.position = { x, y, z };
+    this.vibrationPhase = ((Math.abs(x) * 0.23 + Math.abs(y) * 0.41 + Math.abs(z) * 0.07) % 1) * Math.PI * 2;
     this.mesh = this.createMesh();
     this.mesh.position.set(x, y, z);
   }
 
   private createMesh(): THREE.Mesh {
-    // Tag with sharedAssets so disposeObject3D() never disposes the shared
-    // module-scope geometry/material. See src/game/utils/disposeObject3D.ts.
     const mesh = new THREE.Mesh(SHARED_GEOMETRY, SHARED_MATERIAL);
     mesh.userData.sharedAssets = true;
+    this.syncOutlineVisibility(mesh);
     return mesh;
   }
 
+  private attachOutline(mesh: THREE.Mesh): void {
+    const outline = new THREE.LineSegments(SHARED_OUTLINE_GEOMETRY, SHARED_OUTLINE_MATERIAL);
+    outline.name = 'meteorite-high-contrast-outline';
+    outline.scale.setScalar(1.03);
+    outline.userData.sharedAssets = true;
+    mesh.add(outline);
+  }
+
+  private syncOutlineVisibility(mesh: THREE.Mesh = this.mesh): void {
+    let outline = mesh.getObjectByName('meteorite-high-contrast-outline');
+    if (!outline && HIGH_CONTRAST_MODE) {
+      this.attachOutline(mesh);
+      outline = mesh.getObjectByName('meteorite-high-contrast-outline');
+    }
+    if (outline) {
+      outline.visible = HIGH_CONTRAST_MODE;
+    }
+  }
+
   update(deltaTime: number, cameraZ?: number): void {
-    // Skip rotation for meteorites outside the visible Z bracket. cameraZ is
-    // optional for backward-compat with existing tests and any callers that
-    // haven't been migrated; when omitted, animate as before.
     if (
       cameraZ !== undefined &&
       (this.position.z < cameraZ - METEORITE_ANIMATION_AHEAD ||
@@ -55,39 +63,37 @@ export class Meteorite {
     ) {
       return;
     }
+    this.vibrationTime += deltaTime;
     this.mesh.rotation.x += deltaTime * 0.5;
     this.mesh.rotation.z += deltaTime * 0.3;
+    this.mesh.position.x = this.position.x + Math.sin(this.vibrationTime * 11 + this.vibrationPhase) * 0.09;
+    this.mesh.position.y = this.position.y + Math.cos(this.vibrationTime * 8.5 + this.vibrationPhase * 0.7) * 0.06;
+    this.mesh.position.z = this.position.z;
   }
 
-  /** Re-initialize a pooled meteorite for re-use at a new position. */
   reset(x: number, y: number, z: number): void {
     this.position.x = x;
     this.position.y = y;
     this.position.z = z;
     this.mesh.position.set(x, y, z);
     this.mesh.rotation.set(0, 0, 0);
+    this.vibrationTime = 0;
     this.isActive = true;
-    // Ensure visibility is restored when a pooled meteorite is reused; a
-    // previous hit may have set mesh.visible = false (see StageScene meteorite
-    // collision handling).
     this.mesh.visible = true;
+    this.syncOutlineVisibility();
   }
 
-  /**
-   * Detach the mesh from its parent and reset transient state so the
-   * instance can sit idle in a pool until `reset()` is called again.
-   */
   recycle(): void {
     this.mesh.parent?.remove(this.mesh);
     this.mesh.rotation.set(0, 0, 0);
+    this.mesh.position.set(this.position.x, this.position.y, this.position.z);
+    this.vibrationTime = 0;
     this.isActive = true;
-    // Restore visibility before the mesh re-enters the pool so the next
-    // re-add to the scene is guaranteed visible.
     this.mesh.visible = true;
+    this.syncOutlineVisibility();
   }
 
   dispose(): void {
-    // Shared geometry/material are NOT disposed here; only detach from parent.
     this.mesh.parent?.remove(this.mesh);
   }
 }

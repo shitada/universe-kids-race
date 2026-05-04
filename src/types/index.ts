@@ -81,10 +81,15 @@ export type SFXType =
   | 'countdownGo';
 
 // Save data
+export interface ColorAccessibilitySettings {
+  highContrast: boolean;
+}
+
 export interface SaveData {
   clearedStage: number;
   unlockedPlanets: number[];
   muted?: boolean;
+  colorAccessibility?: ColorAccessibilitySettings;
   bestStageStars?: Record<number, number>;
   // Last stable adaptive pixel-ratio tier observed in the previous session.
   // Persisted so the next launch can start at the same tier and avoid the

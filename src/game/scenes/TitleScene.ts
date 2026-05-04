@@ -8,6 +8,7 @@ import { LoadingOverlay } from '../../ui/LoadingOverlay';
 import { LoadFailureOverlay } from '../../ui/LoadFailureOverlay';
 import { TitleResetConfirmOverlay } from '../../ui/TitleResetConfirmOverlay';
 import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButton';
+import { ColorAccessibilitySettings } from '../../ui/ColorAccessibilitySettings';
 import { getStageConfig, getStageMedalStatus, TOTAL_STAGES } from '../config/StageConfig';
 import { PLANET_ENCYCLOPEDIA, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { formatEncyclopediaLabel } from '../../ui/formatEncyclopediaLabel';
@@ -176,6 +177,7 @@ export class TitleScene implements Scene {
   private muteHandle: MuteButtonHandle | null = null;
   private tutorialOverlay = new TutorialOverlay();
   private readonly titleResetConfirmOverlay = new TitleResetConfirmOverlay();
+  private readonly colorAccessibilitySettings = new ColorAccessibilitySettings();
   private encyclopediaOverlay: EncyclopediaOverlayInstance | null = null;
   private encyclopediaOverlayPromise: Promise<EncyclopediaOverlayInstance> | null = null;
   private companionFactory: TitleCompanionFactory | null = null;
@@ -437,6 +439,16 @@ export class TitleScene implements Scene {
     }
   }
 
+  private persistHighContrastSetting(enabled: boolean): void {
+    const data = this.saveManager.load();
+    if (enabled) {
+      data.colorAccessibility = { highContrast: true };
+    } else {
+      delete data.colorAccessibility;
+    }
+    this.saveManager.save(data);
+  }
+
   private createOverlay(): void {
     const uiOverlay = document.getElementById('ui-overlay');
     if (!uiOverlay) return;
@@ -631,6 +643,41 @@ export class TitleScene implements Scene {
       },
     }));
 
+    // Color accessibility button
+    const colorSettingsBtn = document.createElement('button');
+    colorSettingsBtn.setAttribute('data-color-settings-button', '');
+    colorSettingsBtn.textContent = 'いろのせってい';
+    colorSettingsBtn.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: ${compact ? '0.95rem' : '1.15rem'};
+      font-weight: 700;
+      padding: ${compact ? '0.4rem 1rem' : '0.6rem 1.4rem'};
+      border: 3px solid rgba(255, 255, 255, 0.92);
+      border-radius: 1.5rem;
+      background: rgba(8, 16, 52, 0.72);
+      color: #fff;
+      cursor: pointer;
+      touch-action: manipulation;
+      position: absolute;
+      bottom: ${compact ? '1rem' : '2rem'};
+      left: 50%;
+      transform: translateX(-50%) scale(1);
+      transition: transform 0.08s ease-out;
+      white-space: nowrap;
+    `;
+    this.overlayButtonCleanups.add(attachReleaseConfirmButton(colorSettingsBtn, {
+      onActivate: () => {
+        this.ensureTitleAudioInitialized(true);
+        this.colorAccessibilitySettings.show({
+          initialHighContrast: this.saveManager.load().colorAccessibility?.highContrast === true,
+          onToggle: (enabled) => this.persistHighContrastSetting(enabled),
+        });
+      },
+      onPressChange: (pressed) => {
+        colorSettingsBtn.style.transform = pressed ? 'translateX(-50%) scale(0.96)' : 'translateX(-50%) scale(1)';
+      },
+    }));
+
     // Encyclopedia button
     const encyclopediaBtn = document.createElement('button');
     encyclopediaBtn.textContent = formatEncyclopediaLabel(
@@ -707,6 +754,7 @@ export class TitleScene implements Scene {
     this.overlay.appendChild(nextAdventureCard);
     this.overlay.appendChild(playArea);
     this.overlay.appendChild(tutorialBtn);
+    this.overlay.appendChild(colorSettingsBtn);
     this.overlay.appendChild(encyclopediaBtn);
     uiOverlay.appendChild(this.overlay);
 
@@ -823,6 +871,7 @@ export class TitleScene implements Scene {
     this.isOpeningEncyclopedia = false;
     this.tutorialOverlay.hide();
     this.titleResetConfirmOverlay.hide();
+    this.colorAccessibilitySettings.hide();
     this.encyclopediaOverlay?.hide();
     this.loadingOverlay.hide();
     this.loadFailureOverlay.hide();

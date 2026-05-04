@@ -197,6 +197,30 @@ describe('SaveManager', () => {
     });
   });
 
+  describe('colorAccessibility', () => {
+    it('persists high contrast mode when enabled', () => {
+      const manager = new SaveManager();
+      manager.save({
+        clearedStage: 2,
+        unlockedPlanets: [1, 2],
+        colorAccessibility: { highContrast: true },
+      });
+
+      expect(manager.load().colorAccessibility).toEqual({ highContrast: true });
+    });
+
+    it('drops malformed colorAccessibility payloads', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        colorAccessibility: { highContrast: 'yes' },
+      }));
+      const manager = new SaveManager();
+
+      expect(manager.load().colorAccessibility).toBeUndefined();
+    });
+  });
+
   describe('storage failure resilience', () => {
     afterEach(() => {
       vi.restoreAllMocks();
@@ -477,6 +501,7 @@ describe('SaveManager', () => {
         unlockedPlanets: [1, 2, 3, 4],
         muted: true,
         tutorialShown: true,
+        colorAccessibility: { highContrast: true },
         bestStageStars: { 1: 3, 2: 5 },
       });
 
@@ -487,6 +512,7 @@ describe('SaveManager', () => {
         unlockedPlanets: [],
         muted: true,
         tutorialShown: false,
+        colorAccessibility: { highContrast: true },
         bestStageStars: {},
       });
     });
@@ -540,6 +566,7 @@ describe('SaveManager', () => {
         unlockedPlanets: [1, 2, 3, 4, 5, 6],
         muted: true,
         tutorialShown: true,
+        colorAccessibility: { highContrast: true },
         bestStageStars: { 1: 3, 6: 2 },
         lastStablePixelTier: 2,
       });
@@ -551,6 +578,7 @@ describe('SaveManager', () => {
         unlockedPlanets: [],
         muted: true,
         tutorialShown: true,
+        colorAccessibility: { highContrast: true },
         bestStageStars: {},
         lastStablePixelTier: 2,
       });
