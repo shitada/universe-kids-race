@@ -434,8 +434,8 @@ export class TitleScene implements Scene {
       this.loadingOverlay.hide();
       console.error('Failed to load encyclopedia overlay', error);
       this.loadFailureOverlay.show({
-        title: 'ずかんの じゅんびが できなかったよ',
-        message: '「もういちど よむ」を おしてね',
+        title: 'ずかんを もういちど よんでみよう！',
+        message: '「もういちど よむ」を おして つづきを たのしもう！',
         primaryAction: {
           label: 'もういちど よむ',
           onSelect: () => this.openEncyclopedia(),

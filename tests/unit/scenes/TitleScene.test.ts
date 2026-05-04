@@ -621,6 +621,8 @@ describe('TitleScene (T009)', () => {
     expect(loadingOverlay.show).toHaveBeenCalledWith('ずかんを よんでるよ...');
     expect(loadingOverlay.hide).toHaveBeenCalledTimes(1);
     expect(loadFailureOverlay.show).toHaveBeenCalledTimes(1);
+    expect(failureOptions?.title).toBe('ずかんを もういちど よんでみよう！');
+    expect(failureOptions?.message).toBe('「もういちど よむ」を おして つづきを たのしもう！');
     expect(failureOptions?.primaryAction.label).toBe('もういちど よむ');
 
     await failureOptions?.primaryAction.onSelect();

@@ -19,8 +19,8 @@ export class LoadFailureOverlay {
     const uiOverlay = document.getElementById('ui-overlay');
     if (!uiOverlay) return;
 
-    const titleText = options.title ?? 'ちょっと じゅんびに しっぱいしたよ';
-    const messageText = options.message ?? 'ボタンを おして もういちど ためそう！';
+    const titleText = options.title ?? 'もういちど じゅんびを してみよう！';
+    const messageText = options.message ?? 'ボタンを おして もういちど ためしてみよう！';
     let isHandlingAction = false;
     const buttons: HTMLButtonElement[] = [];
 

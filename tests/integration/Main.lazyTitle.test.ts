@@ -349,7 +349,8 @@ describe('Main lazy title bootstrap', () => {
     const failureOverlay = document.querySelector('[data-load-failure-overlay]');
     expect(loaderCalls.title).toBe(1);
     expect(document.querySelector('[data-loading-overlay]')).toBeNull();
-    expect(failureOverlay?.textContent).toContain('タイトルの じゅんびが できなかったよ');
+    expect(failureOverlay?.textContent).toContain('タイトルの じゅんびを もういちど してみよう！');
+    expect(failureOverlay?.textContent).toContain('ボタンを おして もういちど ためしてみよう！');
     expect(document.querySelector('[data-load-failure-secondary]')).toBeNull();
 
     (document.querySelector('[data-load-failure-primary]') as HTMLButtonElement).dispatchEvent(
@@ -388,7 +389,10 @@ describe('Main lazy title bootstrap', () => {
     expect(loadBootstrapModule).toHaveBeenCalledTimes(1);
     expect(document.querySelector('[data-loading-overlay]')).toBeNull();
     expect(document.querySelector('[data-load-failure-overlay]')?.textContent).toContain(
-      'ゲームの じゅんびが できなかったよ',
+      'ゲームの じゅんびを もういちど してみよう！',
+    );
+    expect(document.querySelector('[data-load-failure-overlay]')?.textContent).toContain(
+      'ボタンを おして もういちど ためしてみよう！',
     );
 
     (document.querySelector('[data-load-failure-primary]') as HTMLButtonElement).dispatchEvent(

@@ -177,11 +177,11 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   function getLoadFailureTitle(sceneType: SceneType): string {
     switch (sceneType) {
       case 'title':
-        return 'タイトルの じゅんびが できなかったよ';
+        return 'タイトルの じゅんびを もういちど してみよう！';
       case 'ending':
-        return 'さいごの じゅんびが できなかったよ';
+        return 'さいごの じゅんびを もういちど してみよう！';
       default:
-        return 'たびの じゅんびが できなかったよ';
+        return 'たびの じゅんびを もういちど してみよう！';
     }
   }
 
@@ -266,7 +266,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
 
     loadFailureOverlay.show({
       title: getLoadFailureTitle(sceneType),
-      message: 'ボタンを おして もういちど ためそう！',
+      message: 'ボタンを おして もういちど ためしてみよう！',
       primaryAction: {
         label: 'もういちど',
         onSelect: () =>

@@ -79,8 +79,8 @@ export function startMainBootstrap(options: StartMainBootstrapOptions): Promise<
         console.error('Failed to bootstrap game', error);
         loadingOverlay.hide();
         loadFailureOverlay.show({
-          title: 'ゲームの じゅんびが できなかったよ',
-          message: 'ボタンを おして もういちど ためそう！',
+          title: 'ゲームの じゅんびを もういちど してみよう！',
+          message: 'ボタンを おして もういちど ためしてみよう！',
           primaryAction: {
             label: 'もういちど',
             onSelect: () => startBoot().then(() => undefined),
