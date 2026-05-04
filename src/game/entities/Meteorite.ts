@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { LODLevel } from '../systems/LODSystem';
+import { triggerSharedVibration } from '../systems/VibrationSystem';
 
 interface MeteoriteSharedResources {
   geometry: THREE.BufferGeometry;
@@ -125,6 +126,16 @@ export class Meteorite {
     this.mesh.position.x = this.position.x + Math.sin(this.vibrationTime * 11 + this.vibrationPhase) * 0.09;
     this.mesh.position.y = this.position.y + Math.cos(this.vibrationTime * 8.5 + this.vibrationPhase * 0.7) * 0.06;
     this.mesh.position.z = this.position.z;
+  }
+
+  handleCollision(): void {
+    if (!this.isActive) {
+      return;
+    }
+
+    this.isActive = false;
+    this.mesh.visible = false;
+    triggerSharedVibration('meteoriteHit');
   }
 
   reset(x: number, y: number, z: number): void {

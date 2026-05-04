@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { StarType } from '../../types';
 import type { LODLevel } from '../systems/LODSystem';
+import { triggerSharedVibration } from '../systems/VibrationSystem';
 
 function createHexPrismGeometry(): THREE.BufferGeometry {
   const shape = new THREE.Shape();
@@ -230,8 +231,12 @@ export class Star {
   }
 
   collect(): void {
+    if (this.isCollected) {
+      return;
+    }
     this.isCollected = true;
     this.mesh.visible = false;
+    triggerSharedVibration(this.starType === 'RAINBOW' ? 'rainbowCollect' : 'starCollect');
   }
 
   reset(x: number, y: number, z: number): void {

@@ -13,6 +13,7 @@ import { ScoreSystem } from '../systems/ScoreSystem';
 import { SpawnSystem } from '../systems/SpawnSystem';
 import { BoostSystem } from '../systems/BoostSystem';
 import { LODSystem } from '../systems/LODSystem';
+import { triggerSharedVibration } from '../systems/VibrationSystem';
 import { HUD } from '../../ui/HUD';
 import { CountdownOverlay } from '../../ui/CountdownOverlay';
 import { StageIntroOverlay } from '../../ui/StageIntroOverlay';
@@ -752,6 +753,7 @@ export class StageScene implements Scene {
     if (input.boostPressed) {
       if (this.boostSystem.activate()) {
         this.audioManager.playSFX('boost');
+        triggerSharedVibration('boost');
         this.audioManager.startBoostSFX();
         this.boostFlameEffect.start();
       } else {
@@ -902,12 +904,17 @@ export class StageScene implements Scene {
       // while waiting for the meteorite to scroll past behindThreshold.
       if (collisionResult.meteoriteHit) {
         const hit = collisionResult.meteoriteHit;
-        hit.isActive = false;
-        // Hide the hit meteorite immediately so it does not appear to fly
-        // past the spaceship after collision; mirrors the "stars vanish on
-        // pickup" feedback for UX consistency. Visibility is restored by
-        // Meteorite.reset()/recycle() before the mesh re-enters the pool.
-        hit.mesh.visible = false;
+        if (typeof (hit as Meteorite & { handleCollision?: () => void }).handleCollision === 'function') {
+          hit.handleCollision();
+        } else {
+          hit.isActive = false;
+          // Hide the hit meteorite immediately so it does not appear to fly
+          // past the spaceship after collision; mirrors the "stars vanish on
+          // pickup" feedback for UX consistency. Visibility is restored by
+          // Meteorite.reset()/recycle() before the mesh re-enters the pool.
+          hit.mesh.visible = false;
+          triggerSharedVibration('meteoriteHit');
+        }
         // Subtle orange particle burst at the hit position to signal impact
         // without distracting from gameplay; uses the non-rainbow burst
         // variant for the same low cost as a regular star pickup.
@@ -1324,6 +1331,9 @@ export class StageScene implements Scene {
 
 
   private onStageClear(): void {
+    if (this.isCleared) {
+      return;
+    }
     this.isCleared = true;
     this.clearTimer = 0;
     this.stageClearOverlay.hide();
@@ -1333,6 +1343,7 @@ export class StageScene implements Scene {
     this.syncPauseAvailability();
     const isNewPlanetUnlock = this.saveManager.markStageCleared(this.stageNumber);
     this.audioManager.playSFX('stageClear');
+    triggerSharedVibration('stageClear');
     this.audioManager.stopBoostSFX();
     this.boostFlameEffect.remove();
 

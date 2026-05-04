@@ -25,6 +25,8 @@ export type SpeedState = 'NORMAL' | 'BOOST' | 'SLOWDOWN' | 'RECOVERING';
 // Star types
 export type StarType = 'NORMAL' | 'RAINBOW';
 
+export type VibrationPattern = number | number[];
+
 // Input
 export interface InputState {
   moveDirection: -1 | 0 | 1;
