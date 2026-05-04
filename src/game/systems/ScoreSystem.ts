@@ -47,6 +47,13 @@ export class ScoreSystem {
     return this.starCount;
   }
 
+  getStageStats(): { stageScore: number; collectedStars: number } {
+    return {
+      stageScore: this.stageScore,
+      collectedStars: this.starCount,
+    };
+  }
+
   getTotalScore(): number {
     return this.totalScore;
   }

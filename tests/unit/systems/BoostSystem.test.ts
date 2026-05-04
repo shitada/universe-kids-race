@@ -14,6 +14,7 @@ describe('BoostSystem', () => {
     expect(result).toBe(true);
     expect(system.isActive()).toBe(true);
     expect(system.isAvailable()).toBe(false);
+    expect(system.getActivationCount()).toBe(1);
   });
 
   it('does not activate when already active', () => {
@@ -21,6 +22,7 @@ describe('BoostSystem', () => {
     system.activate();
     const result = system.activate();
     expect(result).toBe(false);
+    expect(system.getActivationCount()).toBe(1);
   });
 
   it('deactivates after duration expires', () => {
@@ -65,6 +67,7 @@ describe('BoostSystem', () => {
     system.reset();
     expect(system.isAvailable()).toBe(true);
     expect(system.isActive()).toBe(false);
+    expect(system.getActivationCount()).toBe(0);
   });
 
   describe('getCooldownProgress()', () => {

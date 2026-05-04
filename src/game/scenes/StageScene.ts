@@ -221,6 +221,7 @@ export class StageScene implements Scene {
   private onPauseRequested: (() => void) | null = null;
   private onResumeRequested: (() => void) | null = null;
   private onExitHomeRequested: (() => void) | null = null;
+  private attemptStatsRecorded = false;
 
   constructor(
     sceneManager: SceneManager,
@@ -311,6 +312,7 @@ export class StageScene implements Scene {
     this.hasSeenMoveInput = false;
     this.touchGuideMode = 'intro';
     this.playTime = 0;
+    this.attemptStatsRecorded = false;
     this.meteoriteHitTimes.length = 0;
     this.assistTimer = 0;
     this.assistMessageTimer = 0;
@@ -1410,6 +1412,7 @@ export class StageScene implements Scene {
 
     // Persist best (highest) star count for this stage.
     this.saveManager.updateBestStageStars(this.stageNumber, earnedStars);
+    this.recordAttemptStats(true);
 
     const bestStarCount = Math.max(previousBest, earnedStars);
     const isBestUpdated = earnedStars > previousBest;
@@ -1585,10 +1588,25 @@ export class StageScene implements Scene {
     this.sceneManager.requestTransition('stage', context);
   }
 
+  private recordAttemptStats(stageCleared: boolean): void {
+    if (this.attemptStatsRecorded) {
+      return;
+    }
+    this.attemptStatsRecorded = true;
+    this.saveManager.recordGameplaySession?.({
+      stageNumber: this.stageNumber,
+      playTimeSeconds: this.playTime,
+      collectedStars: this.scoreSystem.getStarCount(),
+      boostUses: this.boostSystem.getActivationCount(),
+      stageCleared,
+    });
+  }
+
   exit(): void {
     if (!this.initialized) {
       return;
     }
+    this.recordAttemptStats(this.isCleared);
     this.isActive = false;
     this.prewarmRequestToken += 1;
     this.clearRewardRequestToken += 1;

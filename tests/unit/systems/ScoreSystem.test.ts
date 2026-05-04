@@ -63,6 +63,17 @@ describe('ScoreSystem', () => {
     expect(system.getStarCount()).toBe(0);
   });
 
+  it('returns a stage stats snapshot for analytics', () => {
+    const system = new ScoreSystem();
+    system.addStarScore('NORMAL');
+    system.addBonusScore(400);
+
+    expect(system.getStageStats()).toEqual({
+      stageScore: 500,
+      collectedStars: 1,
+    });
+  });
+
   it('finalizeStage adds stageScore to totalScore and resets stage', () => {
     const system = new ScoreSystem();
     system.addStarScore('NORMAL');

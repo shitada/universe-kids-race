@@ -46,6 +46,12 @@ describe('SaveManager', () => {
     const data = manager.load();
     expect(data.clearedStage).toBe(0);
     expect(data.unlockedPlanets).toEqual([]);
+    expect(data.gameplayStats).toEqual({
+      totalPlayTimeSeconds: 0,
+      totalStarsCollected: 0,
+      totalBoostUses: 0,
+      stageClearCounts: {},
+    });
   });
 
   it('saves and loads data', () => {
@@ -269,6 +275,77 @@ describe('SaveManager', () => {
     });
   });
 
+  describe('gameplayStats', () => {
+    it('sanitizes malformed gameplay stats from storage', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 2,
+        unlockedPlanets: [1, 2],
+        gameplayStats: {
+          totalPlayTimeSeconds: 125.5,
+          totalStarsCollected: 18,
+          totalBoostUses: -1,
+          stageClearCounts: {
+            1: 2,
+            2: 1,
+            99: 4,
+            bad: 3,
+          },
+        },
+      }));
+      const manager = new SaveManager();
+
+      expect(manager.load().gameplayStats).toEqual({
+        totalPlayTimeSeconds: 125.5,
+        totalStarsCollected: 18,
+        totalBoostUses: 0,
+        stageClearCounts: { 1: 2, 2: 1 },
+      });
+    });
+
+    it('records play time, stars, boosts, and clears', () => {
+      const manager = new SaveManager();
+
+      manager.recordGameplaySession({
+        stageNumber: 2,
+        playTimeSeconds: 65,
+        collectedStars: 7,
+        boostUses: 3,
+        stageCleared: true,
+      });
+
+      expect(manager.load().gameplayStats).toEqual({
+        totalPlayTimeSeconds: 65,
+        totalStarsCollected: 7,
+        totalBoostUses: 3,
+        stageClearCounts: { 2: 1 },
+      });
+    });
+
+    it('preserves gameplay stats when progress is reset', () => {
+      const manager = new SaveManager();
+      manager.save({
+        clearedStage: 4,
+        unlockedPlanets: [1, 2, 3, 4],
+        muted: true,
+        gameplayStats: {
+          totalPlayTimeSeconds: 180,
+          totalStarsCollected: 14,
+          totalBoostUses: 6,
+          stageClearCounts: { 1: 1, 4: 2 },
+        },
+      });
+
+      manager.resetProgressPreservingSettings();
+
+      expect(manager.load().gameplayStats).toEqual({
+        totalPlayTimeSeconds: 180,
+        totalStarsCollected: 14,
+        totalBoostUses: 6,
+        stageClearCounts: { 1: 1, 4: 2 },
+      });
+    });
+  });
+
   describe('colorAccessibility', () => {
     it('persists high contrast mode when enabled', () => {
       const manager = new SaveManager();
@@ -408,6 +485,12 @@ describe('SaveManager', () => {
         clearedStage: 0,
         unlockedPlanets: [],
         bestStageStars: {},
+        gameplayStats: {
+          totalPlayTimeSeconds: 0,
+          totalStarsCollected: 0,
+          totalBoostUses: 0,
+          stageClearCounts: {},
+        },
         tutorialShown: false,
         muted: true,
         spaceshipCustomization: { bodyColor: 'sky', noseColor: 'sunset', wingColor: 'aqua' },
@@ -503,6 +586,12 @@ describe('SaveManager', () => {
         clearedStage: 3,
         unlockedPlanets: [1, 2, 3],
         bestStageStars: { 1: 3, 3: 2 },
+        gameplayStats: {
+          totalPlayTimeSeconds: 0,
+          totalStarsCollected: 0,
+          totalBoostUses: 0,
+          stageClearCounts: {},
+        },
         muted: true,
         tutorialShown: true,
         spaceshipCustomization: { bodyColor: 'sky', noseColor: 'sunset', wingColor: 'aqua' },
@@ -528,6 +617,12 @@ describe('SaveManager', () => {
         clearedStage: 4,
         unlockedPlanets: [1, 2, 3, 4],
         bestStageStars: { 2: 1, 4: 3 },
+        gameplayStats: {
+          totalPlayTimeSeconds: 0,
+          totalStarsCollected: 0,
+          totalBoostUses: 0,
+          stageClearCounts: {},
+        },
         muted: false,
         tutorialShown: true,
         spaceshipCustomization: { bodyColor: 'sky', noseColor: 'sunset', wingColor: 'aqua' },
@@ -589,6 +684,12 @@ describe('SaveManager', () => {
         tutorialShown: false,
         colorAccessibility: { highContrast: true },
         bestStageStars: {},
+        gameplayStats: {
+          totalPlayTimeSeconds: 0,
+          totalStarsCollected: 0,
+          totalBoostUses: 0,
+          stageClearCounts: {},
+        },
         spaceshipCustomization: { bodyColor: 'sky', noseColor: 'sunset', wingColor: 'aqua' },
       });
     });
@@ -611,6 +712,12 @@ describe('SaveManager', () => {
         muted: false,
         tutorialShown: false,
         bestStageStars: {},
+        gameplayStats: {
+          totalPlayTimeSeconds: 0,
+          totalStarsCollected: 0,
+          totalBoostUses: 0,
+          stageClearCounts: {},
+        },
         spaceshipCustomization: { bodyColor: 'sky', noseColor: 'sunset', wingColor: 'aqua' },
       });
     });
@@ -657,6 +764,12 @@ describe('SaveManager', () => {
         tutorialShown: true,
         colorAccessibility: { highContrast: true },
         bestStageStars: {},
+        gameplayStats: {
+          totalPlayTimeSeconds: 0,
+          totalStarsCollected: 0,
+          totalBoostUses: 0,
+          stageClearCounts: {},
+        },
         spaceshipCustomization: { bodyColor: 'sky', noseColor: 'sunset', wingColor: 'aqua' },
         lastStablePixelTier: 2,
       });
@@ -673,6 +786,12 @@ describe('SaveManager', () => {
         muted: false,
         tutorialShown: false,
         bestStageStars: {},
+        gameplayStats: {
+          totalPlayTimeSeconds: 0,
+          totalStarsCollected: 0,
+          totalBoostUses: 0,
+          stageClearCounts: {},
+        },
         spaceshipCustomization: { bodyColor: 'sky', noseColor: 'sunset', wingColor: 'aqua' },
       });
     });

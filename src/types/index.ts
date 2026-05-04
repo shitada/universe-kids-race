@@ -104,12 +104,20 @@ export const DEFAULT_SPACESHIP_CUSTOMIZATION: SpaceshipCustomization = {
   wingColor: 'aqua',
 };
 
+export interface GameplayStats {
+  totalPlayTimeSeconds: number;
+  totalStarsCollected: number;
+  totalBoostUses: number;
+  stageClearCounts: Record<number, number>;
+}
+
 export interface SaveData {
   clearedStage: number;
   unlockedPlanets: number[];
   muted?: boolean;
   colorAccessibility?: ColorAccessibilitySettings;
   bestStageStars?: Record<number, number>;
+  gameplayStats?: GameplayStats;
   spaceshipCustomization?: SpaceshipCustomization;
   // Last stable adaptive pixel-ratio tier observed in the previous session.
   // Persisted so the next launch can start at the same tier and avoid the

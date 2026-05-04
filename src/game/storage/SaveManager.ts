@@ -1,5 +1,6 @@
 import {
   DEFAULT_SPACESHIP_CUSTOMIZATION,
+  type GameplayStats,
   SPACESHIP_COLOR_KEYS,
   type SaveData,
   type SpaceshipColorKey,
@@ -9,11 +10,22 @@ import { TOTAL_STAGES } from '../config/StageConfig';
 
 const STORAGE_KEY = 'universe-kids-race-save';
 const SESSION_KEY = 'universe-kids-race-session';
+
+function createDefaultGameplayStats(): GameplayStats {
+  return {
+    totalPlayTimeSeconds: 0,
+    totalStarsCollected: 0,
+    totalBoostUses: 0,
+    stageClearCounts: {},
+  };
+}
+
 const DEFAULT_DATA: SaveData = {
   clearedStage: 0,
   unlockedPlanets: [],
   muted: false,
   bestStageStars: {},
+  gameplayStats: createDefaultGameplayStats(),
   tutorialShown: false,
   spaceshipCustomization: { ...DEFAULT_SPACESHIP_CUSTOMIZATION },
 };
@@ -25,6 +37,7 @@ function defaults(): SaveData {
     ...DEFAULT_DATA,
     unlockedPlanets: [],
     bestStageStars: {},
+    gameplayStats: createDefaultGameplayStats(),
     tutorialShown: false,
     spaceshipCustomization: { ...DEFAULT_SPACESHIP_CUSTOMIZATION },
   };
@@ -64,6 +77,43 @@ function sameCustomization(a: SpaceshipCustomization, b: SpaceshipCustomization)
   return a.bodyColor === b.bodyColor && a.noseColor === b.noseColor && a.wingColor === b.wingColor;
 }
 
+function normalizeGameplayStats(value: unknown): GameplayStats {
+  const raw = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Partial<Record<keyof GameplayStats, unknown>>
+    : {};
+  const normalized = createDefaultGameplayStats();
+
+  if (typeof raw.totalPlayTimeSeconds === 'number' && Number.isFinite(raw.totalPlayTimeSeconds) && raw.totalPlayTimeSeconds >= 0) {
+    normalized.totalPlayTimeSeconds = raw.totalPlayTimeSeconds;
+  }
+  if (typeof raw.totalStarsCollected === 'number' && Number.isInteger(raw.totalStarsCollected) && raw.totalStarsCollected >= 0) {
+    normalized.totalStarsCollected = raw.totalStarsCollected;
+  }
+  if (typeof raw.totalBoostUses === 'number' && Number.isInteger(raw.totalBoostUses) && raw.totalBoostUses >= 0) {
+    normalized.totalBoostUses = raw.totalBoostUses;
+  }
+
+  const rawStageClearCounts = raw.stageClearCounts;
+  if (rawStageClearCounts && typeof rawStageClearCounts === 'object' && !Array.isArray(rawStageClearCounts)) {
+    for (const [key, count] of Object.entries(rawStageClearCounts)) {
+      const stageNumber = Number(key);
+      if (
+        Number.isInteger(stageNumber) &&
+        stageNumber >= 1 &&
+        stageNumber <= TOTAL_STAGES &&
+        String(stageNumber) === key &&
+        typeof count === 'number' &&
+        Number.isInteger(count) &&
+        count >= 0
+      ) {
+        normalized.stageClearCounts[stageNumber] = count;
+      }
+    }
+  }
+
+  return normalized;
+}
+
 function sanitizeSaveData(data: SaveData): SaveData {
   const sanitized: SaveData = {
     clearedStage: Number.isInteger(data.clearedStage) && data.clearedStage >= 0 && data.clearedStage <= TOTAL_STAGES
@@ -76,6 +126,7 @@ function sanitizeSaveData(data: SaveData): SaveData {
       : [],
     muted: data.muted === true,
     bestStageStars: {},
+    gameplayStats: normalizeGameplayStats(data.gameplayStats),
     tutorialShown: data.tutorialShown === true,
     spaceshipCustomization: normalizeSpaceshipCustomization(data.spaceshipCustomization),
   };
@@ -156,6 +207,7 @@ export class SaveManager {
         }
       }
       data.bestStageStars = validatedBest;
+      data.gameplayStats = normalizeGameplayStats((data as { gameplayStats?: unknown }).gameplayStats);
 
       data.spaceshipCustomization = normalizeSpaceshipCustomization(
         (data as { spaceshipCustomization?: unknown }).spaceshipCustomization,
@@ -214,6 +266,7 @@ export class SaveManager {
       const colorAccessibility = prev.colorAccessibility?.highContrast === true
         ? { highContrast: true as const }
         : undefined;
+      const gameplayStats = normalizeGameplayStats(prev.gameplayStats);
       const spaceshipCustomization = normalizeSpaceshipCustomization(prev.spaceshipCustomization);
       this.clear();
       const next: SaveData = {
@@ -221,6 +274,7 @@ export class SaveManager {
         unlockedPlanets: [],
         muted,
         bestStageStars: {},
+        gameplayStats,
         tutorialShown,
         spaceshipCustomization,
       };
@@ -246,6 +300,7 @@ export class SaveManager {
       const colorAccessibility = prev.colorAccessibility?.highContrast === true
         ? { highContrast: true as const }
         : undefined;
+      const gameplayStats = normalizeGameplayStats(prev.gameplayStats);
       const spaceshipCustomization = normalizeSpaceshipCustomization(prev.spaceshipCustomization);
       this.clear();
       const next: SaveData = {
@@ -253,6 +308,7 @@ export class SaveManager {
         unlockedPlanets: [],
         muted,
         bestStageStars: {},
+        gameplayStats,
         tutorialShown: false,
         spaceshipCustomization,
       };
@@ -358,6 +414,47 @@ export class SaveManager {
       this.save(data);
     } catch (e) {
       console.warn('SaveManager.saveLastStablePixelTier failed:', e);
+    }
+  }
+
+  recordGameplaySession(session: {
+    stageNumber: number;
+    playTimeSeconds: number;
+    collectedStars: number;
+    boostUses: number;
+    stageCleared?: boolean;
+  }): void {
+    const { stageNumber, playTimeSeconds, collectedStars, boostUses, stageCleared = false } = session;
+    if (!Number.isInteger(stageNumber) || stageNumber < 1 || stageNumber > TOTAL_STAGES) {
+      return;
+    }
+    if (
+      !Number.isFinite(playTimeSeconds) ||
+      playTimeSeconds < 0 ||
+      !Number.isInteger(collectedStars) ||
+      collectedStars < 0 ||
+      !Number.isInteger(boostUses) ||
+      boostUses < 0
+    ) {
+      return;
+    }
+    if (!stageCleared && playTimeSeconds === 0 && collectedStars === 0 && boostUses === 0) {
+      return;
+    }
+
+    try {
+      const data = this.load();
+      const stats = normalizeGameplayStats(data.gameplayStats);
+      stats.totalPlayTimeSeconds += playTimeSeconds;
+      stats.totalStarsCollected += collectedStars;
+      stats.totalBoostUses += boostUses;
+      if (stageCleared) {
+        stats.stageClearCounts[stageNumber] = (stats.stageClearCounts[stageNumber] ?? 0) + 1;
+      }
+      data.gameplayStats = stats;
+      this.save(data);
+    } catch (e) {
+      console.warn('SaveManager.recordGameplaySession failed:', e);
     }
   }
 

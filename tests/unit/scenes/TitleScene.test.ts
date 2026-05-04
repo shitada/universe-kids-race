@@ -228,6 +228,36 @@ describe('TitleScene (T009)', () => {
     scene.exit();
   });
 
+  it('"あそびの きろく" button opens the stats overlay', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager({
+      gameplayStats: {
+        totalPlayTimeSeconds: 125,
+        totalStarsCollected: 9,
+        totalBoostUses: 3,
+        stageClearCounts: { 1: 2 },
+      },
+    });
+    const audioManager = createMockAudioManager(false);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager);
+    scene.enter({});
+
+    const statsButton = findButtonByText('あそびの きろく');
+    expect(statsButton).toBeTruthy();
+
+    dispatchReleaseConfirm(statsButton!);
+
+    const overlay = document.querySelector('[data-stats-overlay]') as HTMLDivElement | null;
+    expect(audioManager.initSync).toHaveBeenCalledTimes(1);
+    expect(audioManager.playBGM).toHaveBeenCalledTimes(1);
+    expect(overlay?.textContent).toContain('あそびの きろく');
+    expect(overlay?.textContent).toContain('2ふん 5びょう');
+    expect(overlay?.textContent).toContain('9こ');
+
+    scene.exit();
+  });
+
   it('"あそぶ" button cancels when the finger leaves on another element', () => {
     const sceneManager = createMockSceneManager();
     const saveManager = createMockSaveManager();

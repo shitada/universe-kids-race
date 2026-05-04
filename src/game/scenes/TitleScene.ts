@@ -15,6 +15,7 @@ import { TitleResetConfirmOverlay } from '../../ui/TitleResetConfirmOverlay';
 import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButton';
 import { ColorAccessibilitySettings } from '../../ui/ColorAccessibilitySettings';
 import { SpaceshipCustomizer } from '../../ui/SpaceshipCustomizer';
+import { StatsOverlay } from '../../ui/StatsOverlay';
 import { getStageConfig, getStageMedalStatus, TOTAL_STAGES } from '../config/StageConfig';
 import { PLANET_ENCYCLOPEDIA, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { formatEncyclopediaLabel } from '../../ui/formatEncyclopediaLabel';
@@ -185,6 +186,7 @@ export class TitleScene implements Scene {
   private readonly titleResetConfirmOverlay = new TitleResetConfirmOverlay();
   private readonly colorAccessibilitySettings = new ColorAccessibilitySettings();
   private readonly spaceshipCustomizer = new SpaceshipCustomizer();
+  private readonly statsOverlay = new StatsOverlay();
   private encyclopediaOverlay: EncyclopediaOverlayInstance | null = null;
   private encyclopediaOverlayPromise: Promise<EncyclopediaOverlayInstance> | null = null;
   private companionFactory: TitleCompanionFactory | null = null;
@@ -650,6 +652,35 @@ export class TitleScene implements Scene {
       },
     }));
 
+    const statsButton = document.createElement('button');
+    statsButton.setAttribute('data-stats-button', '');
+    statsButton.textContent = 'あそびの きろく';
+    statsButton.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: ${compact ? '1rem' : '1.2rem'};
+      font-weight: 900;
+      padding: ${compact ? '0.65rem 1.2rem' : '0.8rem 1.8rem'};
+      min-width: min(76vw, 20rem);
+      border: 3px solid rgba(255, 230, 109, 0.85);
+      border-radius: 1.7rem;
+      background: rgba(12, 22, 72, 0.82);
+      color: #fff;
+      cursor: pointer;
+      touch-action: manipulation;
+      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.26);
+      transform: scale(1);
+      transition: transform 0.08s ease-out;
+    `;
+    this.overlayButtonCleanups.add(attachReleaseConfirmButton(statsButton, {
+      onActivate: () => {
+        this.ensureTitleAudioInitialized(true);
+        this.statsOverlay.show(this.saveManager.load().gameplayStats, () => {});
+      },
+      onPressChange: (pressed) => {
+        statsButton.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+      },
+    }));
+
     // Tutorial button
     const tutorialBtn = document.createElement('button');
     tutorialBtn.textContent = 'あそびかた';
@@ -762,6 +793,7 @@ export class TitleScene implements Scene {
     playArea.appendChild(button);
     playArea.appendChild(playButtonHint);
     playArea.appendChild(customizeButton);
+    playArea.appendChild(statsButton);
 
     if (hasSavedProgress(initialSaveData)) {
       const resetButton = document.createElement('button');
@@ -917,6 +949,7 @@ export class TitleScene implements Scene {
     this.titleResetConfirmOverlay.hide();
     this.colorAccessibilitySettings.hide();
     this.spaceshipCustomizer.hide();
+    this.statsOverlay.hide();
     this.encyclopediaOverlay?.hide();
     this.loadingOverlay.hide();
     this.loadFailureOverlay.hide();
