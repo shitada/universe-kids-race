@@ -11,6 +11,15 @@ interface PopupEntry {
   currentAnimationName: 'scorePopupFloatA' | 'scorePopupFloatB' | 'none';
 }
 
+type PopupKind = 'normal' | 'bonus' | 'shooting-star';
+
+interface PopupVisualStyle {
+  text: string;
+  kind: PopupKind;
+  color: string;
+  shadow: string;
+}
+
 export class ScorePopupManager {
   private static readonly STYLE_ID = 'score-popup-animations';
   private static readonly POOL_SIZE = 6;
@@ -27,6 +36,38 @@ export class ScorePopupManager {
   }
 
   show(score: number, worldPosition: WorldPosition, camera: THREE.Camera): void {
+    const isBonus = score >= 500;
+    this.showPopup(
+      {
+        text: `${isBonus ? '🌈' : '⬢'} +${score}`,
+        kind: isBonus ? 'bonus' : 'normal',
+        color: isBonus ? '#ff9cf7' : '#ffe066',
+        shadow: isBonus ? 'rgba(255, 156, 247, 0.55)' : 'rgba(255, 214, 102, 0.55)',
+      },
+      worldPosition,
+      camera,
+    );
+  }
+
+  showLabel(text: string, worldPosition: WorldPosition, camera: THREE.Camera, kind: PopupKind = 'normal'): void {
+    const style =
+      kind === 'shooting-star'
+        ? {
+            text,
+            kind,
+            color: 'rgb(255, 244, 179)',
+            shadow: 'rgba(191, 231, 255, 0.75)',
+          }
+        : {
+            text,
+            kind,
+            color: '#ffe066',
+            shadow: 'rgba(255, 214, 102, 0.55)',
+          };
+    this.showPopup(style, worldPosition, camera);
+  }
+
+  private showPopup(style: PopupVisualStyle, worldPosition: WorldPosition, camera: THREE.Camera): void {
     const root = this.ensureRoot();
     if (!root) return;
 
@@ -42,31 +83,29 @@ export class ScorePopupManager {
     const x = Math.round((this.scratch.x * 0.5 + 0.5) * 100000) / 1000;
     const y = Math.round((-this.scratch.y * 0.5 + 0.5) * 100000) / 1000;
     const entry = this.acquireEntry(root);
-    const isBonus = score >= 500;
-    const color = isBonus ? '#ff9cf7' : '#ffe066';
     const animationName = entry.useAltAnimation ? 'scorePopupFloatB' : 'scorePopupFloatA';
     entry.useAltAnimation = !entry.useAltAnimation;
     entry.currentAnimationName = animationName;
 
-    entry.el.textContent = `${isBonus ? '🌈' : '⬢'} +${score}`;
+    entry.el.textContent = style.text;
     entry.el.style.left = `${x}%`;
     entry.el.style.top = `${y}%`;
-    entry.el.style.color = color;
-    entry.el.style.textShadow = `0 2px 10px ${isBonus ? 'rgba(255, 156, 247, 0.55)' : 'rgba(255, 214, 102, 0.55)'}`;
+    entry.el.style.color = style.color;
+    entry.el.style.textShadow = `0 2px 10px ${style.shadow}`;
     entry.el.style.background = this.highContrastMode
-      ? isBonus
+      ? style.kind === 'bonus' || style.kind === 'shooting-star'
         ? 'rgba(13, 18, 38, 0.92)'
         : 'rgba(0, 0, 0, 0.82)'
       : 'transparent';
     entry.el.style.border = this.highContrastMode
-      ? isBonus
+      ? style.kind === 'bonus' || style.kind === 'shooting-star'
         ? '3px solid rgba(255, 255, 255, 0.95)'
         : '2px dashed rgba(255, 255, 255, 0.95)'
       : 'none';
     entry.el.style.borderRadius = this.highContrastMode ? '999px' : '0';
     entry.el.style.padding = this.highContrastMode ? '0.18rem 0.55rem' : '0';
     entry.el.style.setProperty('-webkit-text-stroke', this.highContrastMode ? '0.6px #061126' : '0');
-    entry.el.setAttribute('data-score-popup-kind', isBonus ? 'bonus' : 'normal');
+    entry.el.setAttribute('data-score-popup-kind', style.kind);
     entry.el.style.visibility = 'visible';
     entry.el.style.opacity = '1';
     entry.el.style.animationName = animationName;

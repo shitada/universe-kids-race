@@ -906,18 +906,17 @@ export class StageScene implements Scene {
 
     if (collisionResult.shootingStarHit) {
       const shootingStar = collisionResult.shootingStarHit;
+      this.scoreSystem.addBonusScore(shootingStar.scoreBonus);
       this.scoreSystem.activateShootingStarBonus(
         Math.max(StageScene.SHOOTING_STAR_SCORE_BONUS_DURATION, shootingStar.bonusDuration),
       );
       this.audioManager.playSFX('shootingStarCollect');
-      this.particleBurstManager.emit(
+      this.scorePopupManager.showLabel('☆ながれぼし☆', shootingStar.position, this.camera, 'shooting-star');
+      this.particleBurstManager.emitShootingStar(
         this.threeScene,
         shootingStar.position.x,
         shootingStar.position.y,
         shootingStar.position.z,
-        0xffffff,
-        50,
-        true,
       );
     }
 

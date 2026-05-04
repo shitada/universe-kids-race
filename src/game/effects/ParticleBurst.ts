@@ -14,6 +14,8 @@ export interface ParticleBurstOptions {
   isRainbow: boolean;
 }
 
+type ParticleBurstStyle = 'default' | 'shootingStar';
+
 const MAX_PARTICLES_PER_BURST = 50;
 const MAX_BURSTS = 10;
 const PARTICLE_COMPONENT_COUNT = MAX_PARTICLES_PER_BURST * 3;
@@ -122,12 +124,14 @@ export class ParticleBurst {
     color: number,
     particleCount: number,
     isRainbow: boolean,
+    style: ParticleBurstStyle = 'default',
   ): void {
     if (this.disposed) return;
     this.ensureBuffers();
     const count = Math.min(Math.max(0, particleCount), MAX_PARTICLES_PER_BURST);
     this.count = count;
-    this.maxLifetime = isRainbow ? 0.8 : 0.5;
+    const isShootingStarBurst = style === 'shootingStar';
+    this.maxLifetime = isShootingStarBurst ? 1.05 : (isRainbow ? 0.8 : 0.5);
     this.elapsed = 0;
 
     const positions = this.positions;
@@ -135,10 +139,10 @@ export class ParticleBurst {
     const velocities = this.velocities;
     this.baseColor.set(color);
     const baseColor = this.baseColor;
-    const speedMin = isRainbow ? 8 : 5;
-    const speedMax = isRainbow ? 15 : 10;
-    const initialSize = isRainbow ? 0.5 : 0.3;
-    const tempColor = isRainbow ? this.tempColor : null;
+    const speedMin = isShootingStarBurst ? 4 : (isRainbow ? 8 : 5);
+    const speedMax = isShootingStarBurst ? 12 : (isRainbow ? 15 : 10);
+    const initialSize = isShootingStarBurst ? 0.62 : (isRainbow ? 0.5 : 0.3);
+    const tempColor = isRainbow || isShootingStarBurst ? this.tempColor : null;
 
     for (let i = 0; i < count; i++) {
       const i3 = i * 3;
@@ -158,7 +162,17 @@ export class ParticleBurst {
       velocities[i3 + 1] = sinPhi * sinTheta * speed;
       velocities[i3 + 2] = cosPhi * speed;
 
-      if (isRainbow && tempColor) {
+      if (tempColor && isShootingStarBurst) {
+        const mix = Math.random();
+        tempColor.setRGB(
+          0.75 + mix * 0.25,
+          0.86 + Math.random() * 0.14,
+          0.7 + Math.random() * 0.3,
+        );
+        colors[i3] = tempColor.r;
+        colors[i3 + 1] = tempColor.g;
+        colors[i3 + 2] = tempColor.b;
+      } else if (isRainbow && tempColor) {
         tempColor.setHSL(Math.random(), 1, 0.5);
         colors[i3] = tempColor.r;
         colors[i3 + 1] = tempColor.g;
@@ -197,6 +211,7 @@ export class ParticleBurst {
       options.color,
       options.particleCount,
       options.isRainbow,
+      'default',
     );
   }
 
@@ -368,6 +383,7 @@ export class ParticleBurstManager {
     color: number,
     particleCount: number,
     isRainbow: boolean,
+    style: ParticleBurstStyle = 'default',
   ): void {
     let slot: ParticleBurst | null = null;
     for (const burst of this.pool) {
@@ -397,7 +413,11 @@ export class ParticleBurstManager {
       }
     }
 
-    slot.reset(scene, x, y, z, color, this.scaleParticleCount(particleCount), isRainbow);
+    slot.reset(scene, x, y, z, color, this.scaleParticleCount(particleCount), isRainbow, style);
+  }
+
+  emitShootingStar(scene: THREE.Scene, x: number, y: number, z: number): void {
+    this.emit(scene, x, y, z, 0xfff4b3, 42, true, 'shootingStar');
   }
 
   setQualityTier(tier: number): void {

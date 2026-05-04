@@ -117,6 +117,17 @@ describe('ParticleBurstManager', () => {
     expect(scene.children.length).toBeLessThanOrEqual(10);
   });
 
+  it('emits a dedicated stardust burst for a shooting star pickup', () => {
+    const manager = new ParticleBurstManager();
+
+    manager.emitShootingStar(scene, 1, 2, 3);
+
+    const points = scene.children.find((child) => (child as THREE.Points).isPoints) as THREE.Points | undefined;
+    expect(points).toBeDefined();
+    expect(points?.geometry.drawRange.count).toBeGreaterThanOrEqual(30);
+    expect((points?.material as THREE.PointsMaterial).size).toBeGreaterThan(0.5);
+  });
+
   it('recycles oldest burst on overflow', () => {
     const manager = new ParticleBurstManager();
     for (let i = 0; i < 11; i++) {

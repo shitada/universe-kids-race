@@ -254,9 +254,10 @@ describe('SpawnSystem', () => {
     expect(second.newStars).toHaveLength(0);
   });
 
-  it('spawns a rare shooting star after its random delay elapses', () => {
+  it('spawns a rare shooting star only inside the stage event window', () => {
     const config: StageConfig = {
       ...testConfig,
+      stageLength: 4500,
       meteoriteInterval: 999,
       starDensity: 1,
       destinationReading: 'つき',
@@ -265,15 +266,17 @@ describe('SpawnSystem', () => {
       displayName: 'つき',
       planetColor: 0xcccccc,
     };
-    const randomValues = [0, 0.5, 0, 0];
+    const randomValues = [0.01, 0, 0, 0, 0];
     const randomSpy = vi.spyOn(Math, 'random').mockImplementation(() => randomValues.shift() ?? 0.5);
 
     try {
       const system = new SpawnSystem();
-      const result = system.update(8.1, 100, config, [], [], []);
+      expect(system.update(29.9, 100, config, [], [], []).newShootingStars).toHaveLength(0);
+      const result = system.update(0.2, 100, config, [], [], []);
 
       expect(result.newShootingStars).toHaveLength(1);
-      expect(Math.abs(result.newShootingStars[0].position.x)).toBeGreaterThanOrEqual(8);
+      expect(result.newShootingStars[0].position.x).toBeGreaterThan(0);
+      expect(result.newShootingStars[0].position.y).toBeGreaterThanOrEqual(0);
       expect(result.newShootingStars[0].position.z).toBeLessThan(100);
     } finally {
       randomSpy.mockRestore();
@@ -291,25 +294,51 @@ describe('SpawnSystem', () => {
       displayName: 'つき',
       planetColor: 0xcccccc,
     };
-    const randomValues = [0, 0.5, 0, 0, 0, 0.5, 0, 0];
+    const randomValues = [0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25];
     const randomSpy = vi.spyOn(Math, 'random').mockImplementation(() => {
       return randomValues.shift() ?? 0.5;
     });
 
     try {
       const system = new SpawnSystem();
-      const first = system.update(8.1, 100, config, [], [], []);
+      const first = system.update(0.3, 100, config, [], [], [], [], { meteoShowerActive: true });
       expect(first.newShootingStars).toHaveLength(1);
       const shootingStar = first.newShootingStars[0];
       const poolSize = system.getShootingStarPoolSize();
 
       system.releaseShootingStar(shootingStar);
       system.reset();
-      const second = system.update(8.1, 100, config, [], [], []);
+      const second = system.update(0.3, 100, config, [], [], [], [], { meteoShowerActive: true });
 
       expect(second.newShootingStars).toHaveLength(1);
       expect(second.newShootingStars[0]).toBe(shootingStar);
       expect(system.getShootingStarPoolSize()).toBe(poolSize);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
+  it('does not spawn a comet in the same frame as a rare shooting star', () => {
+    const config: StageConfig = {
+      ...testConfig,
+      stageLength: 4500,
+      meteoriteInterval: 999,
+      starDensity: 1,
+      destinationReading: 'つき',
+      medalThresholds: [5, 10, 15],
+      emoji: '🌙',
+      displayName: 'つき',
+      planetColor: 0xcccccc,
+    };
+    const randomValues = [0.01, 0, 0, 0, 0];
+    const randomSpy = vi.spyOn(Math, 'random').mockImplementation(() => randomValues.shift() ?? 0.5);
+
+    try {
+      const system = new SpawnSystem();
+      const result = system.update(30.1, 100, config, [], [], [], []);
+
+      expect(result.newShootingStars).toHaveLength(1);
+      expect(result.newComets).toHaveLength(0);
     } finally {
       randomSpy.mockRestore();
     }

@@ -45,7 +45,7 @@ describe('StageScene shooting star bonus integration', () => {
     document.body.innerHTML = '<div id="hud"></div><div id="ui-overlay"></div>';
   });
 
-  it('activates double score before applying a same-frame star pickup', () => {
+  it('adds the shooting star bonus score, special popup, and same-frame star bonus', () => {
     const { scene, audioManager } = createScene();
     scene.enter({ stageNumber: 1 });
 
@@ -75,9 +75,10 @@ describe('StageScene shooting star bonus integration', () => {
     internal.update(0.016);
 
     expect(internal.scoreSystem.getScoreMultiplier()).toBe(2);
-    expect(internal.scoreSystem.getStageScore()).toBe(200);
+    expect(internal.scoreSystem.getStageScore()).toBe(700);
     expect(audioManager.playSFX).toHaveBeenCalledWith('shootingStarCollect');
     expect(audioManager.playSFX).toHaveBeenCalledWith('starCollect');
     expect(internal.shootingStars).toHaveLength(0);
+    expect(document.querySelector('[data-score-popup-kind="shooting-star"]')?.textContent).toBe('☆ながれぼし☆');
   });
 });

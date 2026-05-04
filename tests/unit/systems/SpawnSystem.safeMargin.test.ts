@@ -106,10 +106,15 @@ describe('SpawnSystem safe margin (Constitution I)', () => {
     // For meteorite spawn the consumption order inside update() is:
     //   z-jitter, x, y [, x', y' on reroll ...]
     //
+    // SpawnSystem now also samples a stage-level rare-event plan on first update().
+    // We prepend a few neutral 0.5 values so the meteorite sequence below remains
+    // valid whether that plan consumes 1 call or future refactors consume a couple
+    // more setup calls before the meteorite branch runs.
+    //
     // z = spaceshipZ(100) - spawnAheadDistance(80) - random*20 = 20 - 0.5*20 = 10
     // first attempt: x=0.5→0, y=0.5→0 collides with star at (0,0,10)
     // reroll: x=0.95→6.3, y=0.5→0 → safe
-    const seq = [0.5, 0.5, 0.5, 0.95, 0.5];
+    const seq = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.95, 0.5];
     let i = 0;
     const randSpy = vi.spyOn(Math, 'random').mockImplementation(() => {
       const v = seq[i] ?? 0.95;

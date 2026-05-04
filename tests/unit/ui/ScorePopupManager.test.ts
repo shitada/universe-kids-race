@@ -125,6 +125,15 @@ describe('ScorePopupManager', () => {
     expect(popup?.getAttribute('data-score-popup-kind')).toBe('bonus');
   });
 
+  it('shows a special message popup for a shooting star event', () => {
+    manager.showLabel('☆ながれぼし☆', { x: 0, y: 0, z: 0 }, camera, 'shooting-star');
+
+    const popup = document.querySelector<HTMLElement>('[data-score-popup]');
+    expect(popup?.textContent).toBe('☆ながれぼし☆');
+    expect(popup?.getAttribute('data-score-popup-kind')).toBe('shooting-star');
+    expect(popup?.style.color).toBe('rgb(255, 244, 179)');
+  });
+
   it('does nothing when ui-overlay is missing', () => {
     document.getElementById('ui-overlay')?.remove();
 
