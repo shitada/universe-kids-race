@@ -131,6 +131,15 @@ function sanitizeSaveData(data: SaveData): SaveData {
     spaceshipCustomization: normalizeSpaceshipCustomization(data.spaceshipCustomization),
   };
 
+  const discoveredConstellations = Array.isArray(data.discoveredConstellations)
+    ? [...new Set(data.discoveredConstellations.filter(
+      (value): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= TOTAL_STAGES,
+    ))]
+    : [];
+  if (discoveredConstellations.length > 0) {
+    sanitized.discoveredConstellations = discoveredConstellations;
+  }
+
   if (data.colorAccessibility?.highContrast === true) {
     sanitized.colorAccessibility = { highContrast: true };
   }
@@ -207,6 +216,19 @@ export class SaveManager {
         }
       }
       data.bestStageStars = validatedBest;
+      const rawConstellations = (data as { discoveredConstellations?: unknown }).discoveredConstellations;
+      if (Array.isArray(rawConstellations)) {
+        const validConstellations = [...new Set(rawConstellations.filter(
+          (value): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= TOTAL_STAGES,
+        ))];
+        if (validConstellations.length > 0) {
+          data.discoveredConstellations = validConstellations;
+        } else {
+          delete (data as { discoveredConstellations?: unknown }).discoveredConstellations;
+        }
+      } else {
+        delete (data as { discoveredConstellations?: unknown }).discoveredConstellations;
+      }
       data.gameplayStats = normalizeGameplayStats((data as { gameplayStats?: unknown }).gameplayStats);
 
       data.spaceshipCustomization = normalizeSpaceshipCustomization(
@@ -369,6 +391,26 @@ export class SaveManager {
       return !wasUnlocked;
     } catch (e) {
       console.warn('SaveManager.markStageCleared failed:', e);
+      return false;
+    }
+  }
+
+  markConstellationDiscovered(stageNumber: number): boolean {
+    if (!Number.isInteger(stageNumber) || stageNumber < 1 || stageNumber > TOTAL_STAGES) {
+      return false;
+    }
+    try {
+      const data = this.load();
+      const discoveredConstellations = [...(data.discoveredConstellations ?? [])];
+      if (discoveredConstellations.includes(stageNumber)) {
+        return false;
+      }
+      discoveredConstellations.push(stageNumber);
+      data.discoveredConstellations = discoveredConstellations;
+      this.save(data);
+      return true;
+    } catch (e) {
+      console.warn('SaveManager.markConstellationDiscovered failed:', e);
       return false;
     }
   }

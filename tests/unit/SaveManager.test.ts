@@ -162,6 +162,31 @@ describe('SaveManager', () => {
     });
   });
 
+  describe('discoveredConstellations', () => {
+    it('defaults to empty array when the field is missing', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({ clearedStage: 1, unlockedPlanets: [1] }));
+      const manager = new SaveManager();
+      expect(manager.load().discoveredConstellations ?? []).toEqual([]);
+    });
+
+    it('sanitizes invalid constellation stage numbers', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        discoveredConstellations: [0, 1, 1.5, 4, 99, 'bad'],
+      }));
+      const manager = new SaveManager();
+      expect(manager.load().discoveredConstellations ?? []).toEqual([1, 4]);
+    });
+
+    it('marks a constellation as discovered once per stage', () => {
+      const manager = new SaveManager();
+      expect(manager.markConstellationDiscovered(1)).toBe(true);
+      expect(manager.markConstellationDiscovered(1)).toBe(false);
+      expect(manager.load().discoveredConstellations ?? []).toEqual([1]);
+    });
+  });
+
   describe('muted persistence', () => {
     it('defaults muted to false when no save exists', () => {
       const manager = new SaveManager();

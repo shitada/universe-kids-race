@@ -118,6 +118,7 @@ export interface SaveData {
   muted?: boolean;
   colorAccessibility?: ColorAccessibilitySettings;
   bestStageStars?: Record<number, number>;
+  discoveredConstellations?: number[];
   gameplayStats?: GameplayStats;
   spaceshipCustomization?: SpaceshipCustomization;
   // Last stable adaptive pixel-ratio tier observed in the previous session.
@@ -142,4 +143,21 @@ export interface PlanetEncyclopediaEntry {
   trivia: string;
   planetColor: number;
   companionShape: CompanionShape;
+}
+
+export interface ConstellationPoint {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface ConstellationDefinition {
+  id: string;
+  stageNumber: number;
+  name: string;
+  reading: string;
+  encyclopediaLabel: string;
+  hintMessage: string;
+  celebrationMessage: string;
+  points: readonly ConstellationPoint[];
 }

@@ -369,6 +369,7 @@ export class TitleScene implements Scene {
         });
       },
       saveData.bestStageStars ?? {},
+      saveData.discoveredConstellations ?? [],
     );
   }
 

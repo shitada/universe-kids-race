@@ -130,6 +130,9 @@ export class Star {
   starType: StarType;
   scoreValue: number;
   isCollected = false;
+  constellationId: string | null = null;
+  constellationStageNumber: number | null = null;
+  constellationOrder: number | null = null;
   mesh: THREE.Mesh;
   private readonly rainbowMaterials: RainbowStarMaterials | null;
   private hueOffset = 0;
@@ -239,6 +242,18 @@ export class Star {
     triggerSharedVibration(this.starType === 'RAINBOW' ? 'rainbowCollect' : 'starCollect');
   }
 
+  setConstellationMarker(id: string, stageNumber: number, order: number): void {
+    this.constellationId = id;
+    this.constellationStageNumber = stageNumber;
+    this.constellationOrder = order;
+  }
+
+  clearConstellationMarker(): void {
+    this.constellationId = null;
+    this.constellationStageNumber = null;
+    this.constellationOrder = null;
+  }
+
   reset(x: number, y: number, z: number): void {
     this.position.x = x;
     this.position.y = y;
@@ -249,6 +264,7 @@ export class Star {
     this.isCollected = false;
     this.hueOffset = 0;
     this.spinTime = 0;
+    this.clearConstellationMarker();
     this.applyLOD('near');
     this.syncOutlineVisibility();
     if (this.starType === 'RAINBOW' && this.rainbowMaterials) {
@@ -268,6 +284,7 @@ export class Star {
     this.isCollected = false;
     this.hueOffset = 0;
     this.spinTime = 0;
+    this.clearConstellationMarker();
     this.applyLOD('near');
     this.syncOutlineVisibility();
   }

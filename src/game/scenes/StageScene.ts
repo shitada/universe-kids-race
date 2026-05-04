@@ -32,17 +32,21 @@ import { ParticleBurstManager } from '../effects/ParticleBurst';
 import { AirShield } from '../effects/AirShield';
 import { BoostLinesEffect } from '../effects/BoostLinesEffect';
 import { BoostFlameEffect } from '../effects/BoostFlameEffect';
+import { ConstellationLineEffect } from '../effects/ConstellationLineEffect';
 import { MeteoShowerEffect } from '../effects/MeteoShowerEffect';
 import { PlanetRingEffect } from '../effects/PlanetRingEffect';
 import { CompanionManager } from '../entities/CompanionManager';
+import { getConstellationForStage } from '../config/ConstellationData';
 import { followCameraZ } from '../utils/followCameraZ';
 import { getViewportSize } from '../utils/getViewportSize';
 import { ScorePopupManager } from '../../ui/ScorePopupManager';
 import { getNextPlanetEncyclopediaEntry, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { TouchGuideOverlay, type TouchGuideMode } from '../../ui/TouchGuideOverlay';
+import { ConstellationHintOverlay } from '../../ui/ConstellationHintOverlay';
 import { attachReleaseConfirmButton } from '../../ui/attachReleaseConfirmButton';
 import { PauseOverlay } from '../../ui/PauseOverlay';
 import { StageClearOverlay } from '../../ui/StageClearOverlay';
+import { ConstellationSystem } from '../systems/ConstellationSystem';
 import {
   __resetStageSceneSharedAssetCachesForTest,
   __stageSceneSharedAssetCachesForTest,
@@ -129,6 +133,9 @@ export class StageScene implements Scene {
   private scorePopupManager = new ScorePopupManager();
   private particleBurstManager = new ParticleBurstManager();
   private planetRingEffect = new PlanetRingEffect();
+  private constellationLineEffect = new ConstellationLineEffect();
+  private constellationSystem = new ConstellationSystem();
+  private constellationHintOverlay = new ConstellationHintOverlay();
   private airShield!: AirShield;
   private meteoShowerEffect!: MeteoShowerEffect;
 
@@ -285,6 +292,8 @@ export class StageScene implements Scene {
     this.boostFlameEffect = new BoostFlameEffect();
     this.boostFlameEffect.init(this.threeScene);
 
+    this.constellationLineEffect.init(this.threeScene);
+
     this.meteoShowerEffect = new MeteoShowerEffect();
     this.meteoShowerEffect.init(this.threeScene);
 
@@ -350,6 +359,7 @@ export class StageScene implements Scene {
     this.hud.setHighContrastMode(highContrastEnabled);
     this.scorePopupManager.setHighContrastMode(highContrastEnabled);
     this.adaptiveTutorialHint.setHighContrastMode(highContrastEnabled);
+    this.constellationHintOverlay.setHighContrastMode(highContrastEnabled);
     this.stageEntryTotalScore = totalScore;
     this.stageEntryTotalStarCount = totalStarCount;
     this.scoreSystem.setTotalScore(totalScore);
@@ -386,6 +396,15 @@ export class StageScene implements Scene {
     this.spawnSystem.setMeteoriteIntervalMultiplier(1);
     this.boostSystem.reset();
     this.scoreSystem.resetStage();
+    this.constellationSystem.reset(getConstellationForStage(this.stageNumber));
+    this.constellationLineEffect.clear();
+    this.spawnConstellationStars();
+    const constellation = this.constellationSystem.getDefinition();
+    if (constellation) {
+      this.constellationHintOverlay.showHint(constellation.hintMessage);
+    } else {
+      this.constellationHintOverlay.hide();
+    }
 
     // HUD
     const stageName = `ステージ${this.stageConfig.stageNumber}: ${this.stageConfig.emoji} ${this.stageConfig.displayName}`;
@@ -725,6 +744,9 @@ export class StageScene implements Scene {
     this.shootingStars.length = 0;
     this.comets.length = 0;
     this.hud?.hideAssistMessage();
+    this.constellationHintOverlay.hide();
+    this.constellationLineEffect.clear();
+    this.constellationSystem.reset();
     this.resetBoostHintState();
   }
 
@@ -736,6 +758,8 @@ export class StageScene implements Scene {
     if (this.isCleared) {
       this.resetBoostHintState();
       this.clearTimer += deltaTime;
+      this.constellationHintOverlay.tick(deltaTime);
+      this.constellationLineEffect.update(deltaTime);
       this.planetRingEffect.update(deltaTime);
       this.particleBurstManager.update(this.threeScene, deltaTime);
       // Keep companion entrance animation progressing during clear screen
@@ -783,6 +807,8 @@ export class StageScene implements Scene {
       );
       this.airShield.update(deltaTime);
       this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
+      this.constellationHintOverlay.tick(deltaTime);
+      this.constellationLineEffect.update(deltaTime);
       return;
     }
 
@@ -971,6 +997,7 @@ export class StageScene implements Scene {
           false,
         );
       }
+      this.handleConstellationStarCollected(star);
     }
 
     // Note: Score/SFX/particle emit above already consumed the collected
@@ -1102,6 +1129,8 @@ export class StageScene implements Scene {
     // Particle effects
     this.particleBurstManager.update(this.threeScene, deltaTime);
     this.scoreSystem.update(deltaTime);
+    this.constellationLineEffect.update(deltaTime);
+    this.constellationHintOverlay.tick(deltaTime);
 
     // HUD update
     this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
@@ -1499,6 +1528,54 @@ export class StageScene implements Scene {
     comets.length = cometWrite;
   }
 
+  private spawnConstellationStars(): void {
+    const constellation = this.constellationSystem.getDefinition();
+    if (!constellation) {
+      return;
+    }
+
+    for (let order = 0; order < constellation.points.length; order++) {
+      const point = constellation.points[order];
+      const star = this.spawnSystem.acquireStar(point.x, point.y, point.z, 'RAINBOW');
+      star.setConstellationMarker(constellation.id, constellation.stageNumber, order);
+      this.stars.push(star);
+      this.threeScene.add(star.mesh);
+    }
+  }
+
+  private handleConstellationStarCollected(star: Star): void {
+    const result = this.constellationSystem.registerCollectedStar(star);
+    if (!result.advanced) {
+      return;
+    }
+
+    if (result.lineSegment) {
+      this.constellationLineEffect.addSegment(result.lineSegment.from, result.lineSegment.to);
+    }
+
+    if (!result.completed) {
+      return;
+    }
+
+    const constellation = this.constellationSystem.getDefinition();
+    if (!constellation) {
+      return;
+    }
+
+    this.saveManager.markConstellationDiscovered?.(this.stageNumber);
+    this.constellationHintOverlay.showCelebration(constellation.celebrationMessage);
+    this.audioManager.playSFX('rainbowCollect');
+    this.particleBurstManager.emit(
+      this.threeScene,
+      star.position.x,
+      star.position.y,
+      star.position.z,
+      0x8ae8ff,
+      42,
+      true,
+    );
+  }
+
 
   private onStageClear(): void {
     if (this.isCleared) {
@@ -1616,6 +1693,7 @@ export class StageScene implements Scene {
       }, {
         bestStageStars: { [this.stageNumber]: starCount },
         backLabel: 'クリアへ もどる',
+        discoveredConstellations: this.saveManager.load().discoveredConstellations ?? [],
         zIndex: 50,
       });
       if (!didOpen) {
@@ -1751,6 +1829,7 @@ export class StageScene implements Scene {
     this.pauseOverlay.hide();
     this.touchGuide.hide();
     this.adaptiveTutorialHint.hide();
+    this.constellationHintOverlay.hide();
     this.hud.hide();
     this.scorePopupManager.dispose();
     this.audioManager.stopBGM();

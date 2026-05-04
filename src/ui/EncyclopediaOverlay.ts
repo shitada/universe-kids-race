@@ -1,5 +1,6 @@
 import type { PlanetEncyclopediaEntry } from '../types';
 import { getPlanetEncyclopediaEntry, PLANET_ENCYCLOPEDIA } from '../game/config/PlanetEncyclopedia';
+import { CONSTELLATION_DATA, getConstellationForStage } from '../game/config/ConstellationData';
 import { createCompanionPreviewController, type CompanionPreviewController } from './CompanionPreview';
 import { attachReleaseConfirmButton } from './attachReleaseConfirmButton';
 import { createStageMedalDisplay } from './stageMedalDisplay';
@@ -8,6 +9,7 @@ interface DetailOverlayOptions {
   bestStageStars?: Record<number, number>;
   backLabel?: string;
   zIndex?: number;
+  discoveredConstellations?: number[];
 }
 
 interface EncyclopediaOverlayDependencies {
@@ -23,6 +25,7 @@ export class EncyclopediaOverlay {
   private isShowingDetail = false;
   private onSelectStage: ((stageNumber: number) => void) | null = null;
   private bestStageStars: Record<number, number> = {};
+  private discoveredConstellations: number[] = [];
   private detailBackLabel = 'もどる';
   private detailPreviewController: CompanionPreviewController | null = null;
   private readonly createPreviewController: () => CompanionPreviewController;
@@ -39,10 +42,12 @@ export class EncyclopediaOverlay {
     onClose: () => void,
     onSelectStage?: (stageNumber: number) => void,
     bestStageStars?: Record<number, number>,
+    discoveredConstellations: number[] = [],
   ): void {
     if (this.overlayEl) return;
     this.onSelectStage = onSelectStage ?? null;
     this.bestStageStars = bestStageStars ?? {};
+    this.discoveredConstellations = discoveredConstellations;
     this.detailBackLabel = 'もどる';
 
     const uiOverlay = document.getElementById('ui-overlay');
@@ -102,6 +107,7 @@ export class EncyclopediaOverlay {
     }
 
     content.appendChild(grid);
+    content.appendChild(this.createConstellationSection(isCompactHeight));
 
     // Back button
     const backBtn = document.createElement('button');
@@ -145,6 +151,7 @@ export class EncyclopediaOverlay {
 
     this.onSelectStage = null;
     this.bestStageStars = options.bestStageStars ?? {};
+    this.discoveredConstellations = options.discoveredConstellations ?? [];
     this.detailBackLabel = options.backLabel ?? 'もどる';
 
     const uiOverlay = document.getElementById('ui-overlay');
@@ -192,8 +199,83 @@ export class EncyclopediaOverlay {
     this.isShowingDetail = false;
     this.onSelectStage = null;
     this.bestStageStars = {};
+    this.discoveredConstellations = [];
     this.detailBackLabel = 'もどる';
     this.disposeDetailPreview();
+  }
+
+  private createConstellationSection(isCompactHeight: boolean): HTMLDivElement {
+    const section = document.createElement('div');
+    section.setAttribute('data-constellation-gallery', '');
+    section.style.cssText = `
+      width: min(100%, 820px);
+      margin-top: ${isCompactHeight ? '1rem' : '1.4rem'};
+      display: flex;
+      flex-direction: column;
+      gap: ${isCompactHeight ? '0.55rem' : '0.75rem'};
+    `;
+
+    const title = document.createElement('div');
+    title.textContent = 'ほしざずかん';
+    title.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: ${isCompactHeight ? '1.1rem' : '1.25rem'};
+      font-weight: 900;
+      color: #9be7ff;
+      text-align: center;
+    `;
+    section.appendChild(title);
+
+    const grid = document.createElement('div');
+    grid.style.cssText = `
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(${isCompactHeight ? '110px' : '140px'}, 1fr));
+      gap: ${isCompactHeight ? '0.6rem' : '0.8rem'};
+      width: 100%;
+    `;
+
+    for (const constellation of CONSTELLATION_DATA) {
+      const discovered = this.discoveredConstellations.includes(constellation.stageNumber);
+      const card = document.createElement('div');
+      card.setAttribute('data-constellation-card', '');
+      card.setAttribute('data-stage', String(constellation.stageNumber));
+      card.style.cssText = `
+        min-height: ${isCompactHeight ? '84px' : '96px'};
+        border-radius: 16px;
+        padding: ${isCompactHeight ? '0.7rem' : '0.85rem'};
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        background: ${discovered ? 'linear-gradient(135deg, rgba(98, 220, 255, 0.35), rgba(71, 100, 255, 0.2))' : 'rgba(255, 255, 255, 0.08)'};
+        color: ${discovered ? '#fff' : '#9aa7c8'};
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.24);
+      `;
+
+      const stage = document.createElement('div');
+      stage.textContent = `ステージ ${constellation.stageNumber}`;
+      stage.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: ${isCompactHeight ? '0.75rem' : '0.82rem'};
+        font-weight: 700;
+      `;
+      card.appendChild(stage);
+
+      const label = document.createElement('div');
+      label.textContent = discovered ? constellation.name : '？？？';
+      label.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: ${isCompactHeight ? '0.95rem' : '1rem'};
+        font-weight: 900;
+        margin-top: 0.2rem;
+        text-align: center;
+      `;
+      card.appendChild(label);
+      grid.appendChild(card);
+    }
+
+    section.appendChild(grid);
+    return section;
   }
 
   private createCard(entry: PlanetEncyclopediaEntry, isUnlocked: boolean, isCompactHeight: boolean): HTMLDivElement {
@@ -411,6 +493,26 @@ export class EncyclopediaOverlay {
     });
     medalDisplay.style.marginTop = '0.4rem';
     detailCard.appendChild(medalDisplay);
+
+    const constellation = getConstellationForStage(entry.stageNumber);
+    if (constellation) {
+      const constellationInfo = document.createElement('div');
+      const discovered = this.discoveredConstellations.includes(entry.stageNumber);
+      constellationInfo.setAttribute('data-detail-constellation', '');
+      constellationInfo.style.cssText = `
+        margin-top: 0.8rem;
+        padding: 0.8rem 1rem;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.14);
+        color: #fff;
+        text-align: center;
+        font-family: 'Zen Maru Gothic', sans-serif;
+      `;
+      constellationInfo.textContent = discovered
+        ? `✨ みつけた ほしざ: ${constellation.encyclopediaLabel}`
+        : `💫 このステージの ほしざ: ${constellation.name}`;
+      detailCard.appendChild(constellationInfo);
+    }
 
     if (this.onSelectStage) {
       const playBtn = document.createElement('button');

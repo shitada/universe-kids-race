@@ -77,6 +77,15 @@ describe('EncyclopediaOverlay', () => {
     expect(cards.length).toBe(11);
   });
 
+  it('renders a constellation gallery section with hidden and discovered entries', () => {
+    overlay.show([1], () => {}, undefined, undefined, [1]);
+
+    const cards = uiOverlay.querySelectorAll('[data-constellation-card]');
+    expect(cards.length).toBeGreaterThan(0);
+    expect(uiOverlay.querySelector('[data-constellation-card][data-stage="1"]')?.textContent).toContain('おおぐまざ');
+    expect(uiOverlay.querySelector('[data-constellation-card][data-stage="4"]')?.textContent).toContain('？？？');
+  });
+
   it('unlocked card shows emoji and name', () => {
     overlay.show([1], () => {});
     const cards = uiOverlay.querySelectorAll('[data-card]');

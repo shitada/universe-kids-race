@@ -345,6 +345,12 @@ export class SpawnSystem {
     this.normalStarPool.release(star);
   }
 
+  acquireStar(x: number, y: number, z: number, starType: 'NORMAL' | 'RAINBOW' = 'NORMAL'): Star {
+    return starType === 'RAINBOW'
+      ? this.rainbowStarPool.acquire(x, y, z)
+      : this.normalStarPool.acquire(x, y, z);
+  }
+
   releaseMeteorite(met: Meteorite): void {
     this.meteoritePool.release(met);
   }
