@@ -77,7 +77,7 @@ describe('SpawnSystem', () => {
     }
   });
 
-  it('stars include roughly 10% rainbow type', () => {
+  it('stars include NORMAL/RAINBOW types and keep rainbow stars rare', () => {
     const system = new SpawnSystem();
     // Generate many stars across multiple frames (per-frame spawn count is
     // capped to prevent frame time spikes; total density is unchanged).
@@ -145,8 +145,33 @@ describe('SpawnSystem', () => {
     expect(system.getMeteoritePoolSize()).toBe(initialPoolSize);
   });
 
+  it('spawns a rainbow star only when the spawn roll is below the 5% threshold', () => {
+    const lowDensityConfig = { ...testConfig, starDensity: 1 };
+    const rainbowRandoms = [0.5, 0.04, 0.5, 0.5];
+    const rainbowSpy = vi.spyOn(Math, 'random').mockImplementation(() => rainbowRandoms.shift() ?? 0.5);
+    try {
+      const system = new SpawnSystem();
+      const result = system.update(0.016, -10, lowDensityConfig);
+      expect(result.newStars).toHaveLength(1);
+      expect(result.newStars[0].starType).toBe('RAINBOW');
+    } finally {
+      rainbowSpy.mockRestore();
+    }
+
+    const normalRandoms = [0.5, 0.06, 0.5, 0.5];
+    const normalSpy = vi.spyOn(Math, 'random').mockImplementation(() => normalRandoms.shift() ?? 0.5);
+    try {
+      const system = new SpawnSystem();
+      const result = system.update(0.016, -10, lowDensityConfig);
+      expect(result.newStars).toHaveLength(1);
+      expect(result.newStars[0].starType).toBe('NORMAL');
+    } finally {
+      normalSpy.mockRestore();
+    }
+  });
+
   it('releaseStar pools RAINBOW stars instead of disposing the material', () => {
-    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.05); // < 0.1 → RAINBOW
+    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.01); // < 0.05 → RAINBOW
     try {
       const system = new SpawnSystem();
       const result = system.update(0.016, -10, testConfig);
@@ -165,7 +190,7 @@ describe('SpawnSystem', () => {
   });
 
   it('re-uses the same RAINBOW Star mesh and material after releaseStar', () => {
-    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.05); // < 0.1 → RAINBOW
+    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.01); // < 0.05 → RAINBOW
     try {
       const system = new SpawnSystem();
       const first = system.update(0.016, -10, testConfig);
@@ -193,7 +218,7 @@ describe('SpawnSystem', () => {
   });
 
   it('reused RAINBOW star resumes hue animation from the initial color', () => {
-    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.05);
+    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.01);
     try {
       const system = new SpawnSystem();
       const first = system.update(0.016, -10, testConfig);
@@ -412,7 +437,7 @@ describe('SpawnSystem', () => {
   });
 
   it('dispose() disposes the per-instance material of pooled RAINBOW stars', () => {
-    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.05);
+    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.01);
     try {
       const system = new SpawnSystem();
       const result = system.update(0.016, -10, testConfig);

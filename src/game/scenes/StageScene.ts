@@ -41,6 +41,7 @@ import { BoostFlameEffect } from '../effects/BoostFlameEffect';
 import { ConstellationLineEffect } from '../effects/ConstellationLineEffect';
 import { MeteoShowerEffect } from '../effects/MeteoShowerEffect';
 import { PlanetRingEffect } from '../effects/PlanetRingEffect';
+import { RainbowTrailEffect } from '../effects/RainbowTrailEffect';
 import { StageSpecialEffects } from '../effects/StageSpecialEffects';
 import { CompanionManager } from '../entities/CompanionManager';
 import { getConstellationForStage } from '../config/ConstellationData';
@@ -163,6 +164,7 @@ export class StageScene implements Scene {
   private airShield!: AirShield;
   private meteoShowerEffect!: MeteoShowerEffect;
   private stageSpecialEffects!: StageSpecialEffects;
+  private rainbowTrailEffect!: RainbowTrailEffect;
 
   private stageConfig!: StageConfig;
   private stageNumber = 1;
@@ -317,6 +319,9 @@ export class StageScene implements Scene {
     this.boostFlameEffect = new BoostFlameEffect();
     this.boostFlameEffect.init(this.threeScene);
 
+    this.rainbowTrailEffect = new RainbowTrailEffect();
+    this.threeScene.add(this.rainbowTrailEffect.group);
+
     this.constellationLineEffect.init(this.threeScene);
 
     this.meteoShowerEffect = new MeteoShowerEffect();
@@ -409,6 +414,7 @@ export class StageScene implements Scene {
     this.airShield.reset(0, 0, 0);
     this.boostLinesEffect.update(false, 0, 0);
     this.boostFlameEffect.remove();
+    this.rainbowTrailEffect.clear();
     this.companionManager?.resetUnlockedPlanets([]);
     this.createBackground();
     this.applyVisualQualityTier();
@@ -775,6 +781,7 @@ export class StageScene implements Scene {
     this.meteoShowerAnnouncementTimer = 0;
     this.stageSpecialEventSystem.reset();
     this.stageSpecialEffects.clear();
+    this.rainbowTrailEffect.clear();
     this.stageSpecialAnnouncementTimer = 0;
     this.stageSpecialAnnouncementMessage = '';
     this.stars.length = 0;
@@ -1023,6 +1030,7 @@ export class StageScene implements Scene {
       this.scoreSystem.addStarScore(star.starType);
       if (star.starType === 'RAINBOW') {
         this.audioManager.playSFX('rainbowCollect');
+        this.rainbowTrailEffect.start(this.spaceship.position);
         this.particleBurstManager.emit(
           this.threeScene,
           star.position.x,
@@ -1108,6 +1116,7 @@ export class StageScene implements Scene {
 
     // Camera follow
     this.updateCameraFollow(deltaTime);
+    this.rainbowTrailEffect.update(deltaTime, this.spaceship.position);
 
     for (const star of collisionResult.starCollisions) {
       this.scorePopupManager.show(star.scoreValue, star.position, this.camera);
@@ -1676,6 +1685,7 @@ export class StageScene implements Scene {
     this.meteoShowerEffect.clear();
     this.stageSpecialEventSystem.reset();
     this.stageSpecialEffects.clear();
+    this.rainbowTrailEffect.clear();
     this.resetBoostHintState();
     this.touchGuide.hide();
     this.syncPauseAvailability();

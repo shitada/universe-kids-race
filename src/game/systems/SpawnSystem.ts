@@ -49,6 +49,7 @@ export class SpawnSystem {
   private static readonly SAFE_XY_DISTANCE = 2.5;
   private static readonly SAFE_Z_BAND = 3.0;
   private static readonly MAX_REROLL = 4;
+  private static readonly RAINBOW_STAR_SPAWN_CHANCE = 0.05;
 
   // Constitution I (子供ファースト) / III (左右移動のみ): 宇宙船は Y=0 固定で
   // X しか動かせない (Spaceship.update は y を変更しない)。CollisionSystem の
@@ -179,7 +180,7 @@ export class SpawnSystem {
       if (spawned >= SpawnSystem.MAX_STAR_SPAWNS_PER_FRAME) break;
       this.lastStarSpawnZ -= starSpacing;
       const z = this.lastStarSpawnZ;
-      const isRainbow = Math.random() < 0.1;
+      const isRainbow = Math.random() < SpawnSystem.RAINBOW_STAR_SPAWN_CHANCE;
       let x = (Math.random() - 0.5) * 14;
       let y = (Math.random() - 0.5) * 2 * SpawnSystem.STAR_SPAWN_Y_HALF_RANGE;
       let safe = this.isXySafeAgainstEntities(x, y, z, existingMeteorites, result.newMeteorites);
