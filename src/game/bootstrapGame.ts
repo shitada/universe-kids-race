@@ -17,7 +17,6 @@ import { resolveInitialPixelTier } from './utils/resolveInitialPixelTier';
 import { MemoryHealthMonitor, type MemoryHealthAlert } from './utils/MemoryHealthMonitor';
 import { GameStateBackup } from './storage/GameStateBackup';
 import { InterruptionSystem } from './systems/InterruptionSystem';
-import { FrameRateAdaptationSystem } from './systems/FrameRateAdaptationSystem';
 import { setSharedVisualFeedbackIntensity } from './systems/VisualFeedbackSystem';
 import { ContextLossOverlay } from '../ui/ContextLossOverlay';
 import { ResumeOverlay } from '../ui/ResumeOverlay';
@@ -175,21 +174,6 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
     {},
     initialPixelTier,
   );
-  const frameRateAdaptationSystem = new FrameRateAdaptationSystem(
-    2,
-    ({ level, previousLevel, direction }) => {
-      currentPerformanceAdaptation.value = level;
-      (stageScene as (StageScene & {
-        setPerformanceAdaptationLevel?: (value: number) => void;
-        showFrameRateHint?: (value: number) => void;
-      }) | null)?.setPerformanceAdaptationLevel?.(level);
-      if (direction === 'degraded' && level > previousLevel) {
-        (stageScene as (StageScene & {
-          showFrameRateHint?: (value: number) => void;
-        }) | null)?.showFrameRateHint?.(level);
-      }
-    },
-  );
   const thermalPreventionSystem = new ThermalPreventionSystem({
     onMilestoneReached: ({ level, totalPlayTimeMs }) => {
       if (disposed) {
@@ -197,11 +181,13 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
       }
 
       if (!isRestReminderEnabled()) {
-        frameRateAdaptationSystem.setPreventiveLevel(0);
+        currentPerformanceAdaptation.value = 0;
+        syncStagePerformanceProfile();
         return;
       }
 
-      frameRateAdaptationSystem.setPreventiveLevel(level);
+      currentPerformanceAdaptation.value = level;
+      syncStagePerformanceProfile();
       if (
         sceneManager.getCurrentType() !== 'stage' ||
         stageScene?.isPlaying() !== true ||
@@ -246,9 +232,9 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
       });
     },
   });
-  frameRateAdaptationSystem.setPreventiveLevel(
-    isRestReminderEnabled() ? thermalPreventionSystem.getPreventiveLevel() : 0,
-  );
+  currentPerformanceAdaptation.value = isRestReminderEnabled()
+    ? thermalPreventionSystem.getPreventiveLevel()
+    : 0;
 
   renderer.setClearColor(0x000020);
   inputSystem.setup(canvas);
@@ -320,9 +306,9 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   sceneManager.registerSceneFactory('stage', async () => {
     const { StageScene } = await loadStageSceneModule();
     stageScene = new StageScene(sceneManager, inputSystem, audioManager, saveManager);
-    frameRateAdaptationSystem.setPreventiveLevel(
-      isRestReminderEnabled() ? thermalPreventionSystem.getPreventiveLevel() : 0,
-    );
+    currentPerformanceAdaptation.value = isRestReminderEnabled()
+      ? thermalPreventionSystem.getPreventiveLevel()
+      : 0;
     (stageScene as StageScene & {
       setPauseHandlers?: (handlers: {
         onPauseRequested?: () => void;
@@ -425,7 +411,6 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
     },
     (fps: number, sampleTimeMs: number, diagnostics) => {
       pixelRatioController.sample(fps, sampleTimeMs);
-      frameRateAdaptationSystem.sample(fps, sampleTimeMs, diagnostics);
       const performanceMemory = getPerformanceMemory();
       const report = memoryHealthMonitor.sample({
         jsHeapUsedBytes: performanceMemory?.usedJSHeapSize,
@@ -458,7 +443,6 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   function restoreViewportAfterPause(): void {
     const now = performance.now();
     pixelRatioController.notifyResume(now);
-    frameRateAdaptationSystem.notifyResume(now);
     const { width, height } = updateViewportSizeCache();
     resizeCoalescer.schedule(width, height);
     resizeCoalescer.flush();

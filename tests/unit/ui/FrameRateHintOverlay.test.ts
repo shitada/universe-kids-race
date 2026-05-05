@@ -22,8 +22,8 @@ describe('FrameRateHintOverlay', () => {
 
     const root = document.querySelector<HTMLElement>('[data-frame-rate-hint-overlay]');
     expect(root).not.toBeNull();
-    expect(root?.textContent).toContain('うちゅうせんを かるくしたよ');
-    expect(root?.textContent).toContain('ほしと きらきら');
+    expect(root?.textContent).toContain('じどうで かるくしたよ');
+    expect(root?.textContent).toContain('なめらかに');
 
     vi.advanceTimersByTime(2600);
 
@@ -37,6 +37,6 @@ describe('FrameRateHintOverlay', () => {
 
     const root = document.querySelector<HTMLElement>('[data-frame-rate-hint-overlay]');
     expect(document.querySelectorAll('[data-frame-rate-hint-overlay]')).toHaveLength(1);
-    expect(root?.textContent).toContain('もっと かるくしたよ');
+    expect(root?.textContent).toContain('もっと じどうで かるくしたよ');
   });
 });

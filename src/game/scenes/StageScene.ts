@@ -70,6 +70,8 @@ import { SeasonalEventSystem } from '../systems/SeasonalEventSystem';
 import { MonthlyEncounterSystem } from '../systems/MonthlyEncounterSystem';
 import { followCameraZ } from '../utils/followCameraZ';
 import { getViewportSize } from '../utils/getViewportSize';
+import { FrameRateMonitor } from '../utils/FrameRateMonitor';
+import { AutoPerformanceManager } from '../utils/AutoPerformanceManager';
 import { ScorePopupManager } from '../../ui/ScorePopupManager';
 import {
   DEFAULT_COLOR_VISION_SUPPORT_MODE,
@@ -179,6 +181,7 @@ export class StageScene implements Scene {
   private static readonly ASSIST_DIRECTION_SIDE_RANGE = 7.5;
   private static readonly ASSIST_DIRECTION_DIFF_THRESHOLD = 1.1;
   private static readonly ASSIST_DIRECTION_DIFF_RATIO = 0.28;
+  private static readonly AUTO_PERFORMANCE_LEVEL_MAX = StageScene.VISUAL_QUALITY_SCALE_BY_TIER.length - 1;
 
   private threeScene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
@@ -348,7 +351,10 @@ export class StageScene implements Scene {
   private static readonly TOUCH_GUIDE_IDLE_DELAY = 3;
   private visualQualityTier = StageScene.VISUAL_QUALITY_SCALE_BY_TIER.length - 1;
   private performanceAdaptationLevel = 0;
+  private autoPerformanceAdaptationLevel = 0;
   private frameRateHintOverlay = new FrameRateHintOverlay();
+  private readonly frameRateMonitor = new FrameRateMonitor(60);
+  private readonly autoPerformanceManager: AutoPerformanceManager;
   private readonly scheduleIdleTask: (callback: () => void) => void;
   private readonly loadEncyclopediaOverlay: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
   private clearRewardRequestToken = 0;
@@ -384,6 +390,16 @@ export class StageScene implements Scene {
     });
     this.scheduleIdleTask = options.scheduleIdleTask ?? scheduleIdleTask;
     this.seasonalEventSystem = new SeasonalEventSystem(options.seasonalEventDateProvider);
+    this.autoPerformanceManager = new AutoPerformanceManager(
+      StageScene.AUTO_PERFORMANCE_LEVEL_MAX,
+      ({ level, direction }) => {
+        this.autoPerformanceAdaptationLevel = level;
+        this.applyVisualQualityTier();
+        if (direction === 'degraded') {
+          this.showFrameRateHint(this.getCombinedPerformanceAdaptationLevel());
+        }
+      },
+    );
     this.loadEncyclopediaOverlay =
       options.loadEncyclopediaOverlay ??
       (() => import('../../ui/EncyclopediaOverlay'));
@@ -514,6 +530,8 @@ export class StageScene implements Scene {
     this.touchGuideMode = 'intro';
     this.playTime = 0;
     this.attemptStatsRecorded = false;
+    this.frameRateMonitor.reset();
+    this.autoPerformanceManager.reset(true);
     this.meteoriteHitTimes.length = 0;
     this.meteoShowerAnnouncementTimer = 0;
     this.spaceWeatherAnnouncementTimer = 0;
@@ -1020,6 +1038,7 @@ export class StageScene implements Scene {
     if (!this.initialized) {
       return;
     }
+    this.updateAutoPerformanceMonitoring(deltaTime);
     if (this.isCleared) {
       this.resetBoostHintState();
       this.clearTimer += deltaTime;
@@ -2818,6 +2837,8 @@ export class StageScene implements Scene {
     this.seasonalEventSystem.clear();
     this.scoreSystem.setEventStarMultiplier?.(1);
     this.frameRateHintOverlay.dispose();
+    this.frameRateMonitor.reset();
+    this.autoPerformanceManager.reset(true);
     this.resetStageObjects();
     if (this.bgStars) {
       this.bgStars.parent?.remove(this.bgStars);
@@ -2896,6 +2917,27 @@ export class StageScene implements Scene {
   }
 
   private getEffectiveVisualQualityTier(): number {
-    return StageScene.clampVisualQualityTier(this.visualQualityTier - this.performanceAdaptationLevel);
+    return StageScene.clampVisualQualityTier(this.visualQualityTier - this.getCombinedPerformanceAdaptationLevel());
+  }
+
+  private getCombinedPerformanceAdaptationLevel(): number {
+    return StageScene.clampPerformanceAdaptationLevel(
+      this.performanceAdaptationLevel + this.autoPerformanceAdaptationLevel,
+    );
+  }
+
+  private updateAutoPerformanceMonitoring(deltaTime: number): void {
+    if (!this.isPlaying()) {
+      this.frameRateMonitor.reset();
+      this.autoPerformanceManager.resetStabilityTimers();
+      return;
+    }
+
+    this.frameRateMonitor.update(deltaTime);
+    this.autoPerformanceManager.sample(
+      deltaTime,
+      this.frameRateMonitor.getFps(),
+      this.frameRateMonitor.getSampleCount(),
+    );
   }
 }

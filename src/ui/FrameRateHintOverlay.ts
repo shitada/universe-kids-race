@@ -6,11 +6,11 @@ const DISPLAY_DURATION_MS = 2600;
 
 const HINT_COPY = {
   gentle: {
-    title: 'うちゅうせんを かるくしたよ ⭐',
-    detail: 'ほしと きらきらを すこし やさしく したよ',
+    title: 'じどうで かるくしたよ ⭐',
+    detail: 'ほしと きらきらを すこし やさしくして なめらかに したよ',
   },
   stronger: {
-    title: 'もっと かるくしたよ 🚀',
+    title: 'もっと じどうで かるくしたよ 🚀',
     detail: 'なめらかに あそべるように えんしゅつを ぎゅっと したよ',
   },
 } as const;
