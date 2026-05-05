@@ -66,4 +66,36 @@ describe('FrameRateAdaptationSystem', () => {
     expect(system.getCurrentLevel()).toBe(1);
     expect(onLevelChange).toHaveBeenCalledTimes(1);
   });
+
+  it('raises the effective level immediately when preventive throttling is enabled', () => {
+    const onLevelChange = vi.fn();
+    const system = new FrameRateAdaptationSystem(2, onLevelChange);
+
+    system.setPreventiveLevel(1);
+
+    expect(system.getCurrentLevel()).toBe(1);
+    expect(onLevelChange).toHaveBeenCalledWith({
+      previousLevel: 0,
+      level: 1,
+      direction: 'degraded',
+    });
+  });
+
+  it('stacks reactive degradation on top of the preventive level up to the max tier', () => {
+    const onLevelChange = vi.fn();
+    const system = new FrameRateAdaptationSystem(2, onLevelChange);
+
+    system.setPreventiveLevel(1);
+    let now = 50_000;
+    system.sample(45, now);
+    now += T.downscaleSustainMs;
+    system.sample(45, now);
+
+    expect(system.getCurrentLevel()).toBe(2);
+    expect(onLevelChange).toHaveBeenLastCalledWith({
+      previousLevel: 1,
+      level: 2,
+      direction: 'degraded',
+    });
+  });
 });

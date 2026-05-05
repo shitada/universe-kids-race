@@ -26,9 +26,11 @@ import { OrientationHintOverlay } from '../ui/OrientationHintOverlay';
 import { LoadingOverlay } from '../ui/LoadingOverlay';
 import { LoadFailureOverlay } from '../ui/LoadFailureOverlay';
 import { MemoryPressureOverlay } from '../ui/MemoryPressureOverlay';
+import { PlayTimeRestOverlay } from '../ui/PlayTimeRestOverlay';
 import { createOrientationHintHandler } from './utils/createOrientationHintHandler';
 import { createRetryableModuleLoader } from './utils/createRetryableModuleLoader';
 import type { SceneType } from '../types';
+import { ThermalPreventionSystem } from './systems/ThermalPreventionSystem';
 
 export interface BootstrapGameOptions {
   canvas: HTMLCanvasElement;
@@ -182,6 +184,48 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
       }
     },
   );
+  const thermalPreventionSystem = new ThermalPreventionSystem({
+    onMilestoneReached: ({ level, totalPlayTimeMs }) => {
+      if (disposed) {
+        return;
+      }
+
+      frameRateAdaptationSystem.setPreventiveLevel(level);
+      if (
+        sceneManager.getCurrentType() !== 'stage' ||
+        stageScene?.isPlaying() !== true ||
+        memoryPressureOverlay.isVisible() ||
+        isPortraitLocked
+      ) {
+        return;
+      }
+
+      interruptionSystem.clear();
+      gameLoop.pause();
+      audioManager.suspend();
+      resumeOverlay.hide();
+      resumeGentlyOverlay.hide();
+      playTimeRestOverlay.show({
+        level,
+        totalPlayTimeMs,
+        onContinue: () => {
+          if (memoryPressureOverlay.isVisible()) {
+            return;
+          }
+          resumeGame();
+          stageScene?.requestResumeCountdown();
+        },
+        onRest: () => {
+          if (memoryPressureOverlay.isVisible()) {
+            return;
+          }
+          resumeGame();
+          void sceneManager.requestTransition('title');
+        },
+      });
+    },
+  });
+  frameRateAdaptationSystem.setPreventiveLevel(thermalPreventionSystem.getPreventiveLevel());
 
   renderer.setClearColor(0x000020);
   inputSystem.setup(canvas);
@@ -325,6 +369,9 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   gameLoop.start(
     (deltaTime: number) => {
       sceneManager.update(deltaTime);
+      if (sceneManager.getCurrentType() === 'stage' && stageScene?.isPlaying() === true) {
+        thermalPreventionSystem.updateActivePlay(deltaTime);
+      }
     },
     () => {
       const scene = sceneManager.getCurrentThreeScene();
@@ -377,6 +424,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   const resumeOverlay = new ResumeOverlay();
   const resumeGentlyOverlay = new ResumeGentlyOverlay();
   const memoryPressureOverlay = new MemoryPressureOverlay();
+  const playTimeRestOverlay = new PlayTimeRestOverlay();
   let isPortraitLocked = false;
 
   function handleMemoryPressure(alert: MemoryHealthAlert): void {
@@ -388,6 +436,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
     gameLoop.pause();
     audioManager.suspend();
     resumeOverlay.hide();
+    playTimeRestOverlay.hide();
     if (isMemoryHealthDebugEnabled) {
       console.warn('[bootstrapGame] memory health alert', alert.reason, alert.sample);
     }
@@ -405,12 +454,14 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
 
     if (sceneManager.getCurrentType() !== 'stage' || !gameLoop.isPaused()) {
       resumeOverlay.hide();
+      playTimeRestOverlay.hide();
       resumeGame();
       return;
     }
 
     if (stageScene?.isUserPaused() === true) {
       resumeOverlay.hide();
+      playTimeRestOverlay.hide();
       return;
     }
 
@@ -436,7 +487,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
     }),
     isGamePaused: () => gameLoop.isPaused(),
     isPortraitLocked: () => isPortraitLocked,
-    isBlockingOverlayVisible: () => memoryPressureOverlay.isVisible(),
+    isBlockingOverlayVisible: () => memoryPressureOverlay.isVisible() || playTimeRestOverlay.isVisible(),
     pauseGame: () => {
       gameLoop.pause();
       audioManager.suspend();
@@ -474,6 +525,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
       isPortraitLocked = true;
       interruptionSystem.handlePortrait();
       orientationHintOverlay.show();
+      playTimeRestOverlay.hide();
       gameLoop.pause();
       audioManager.suspend();
     },
@@ -489,6 +541,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   const contextLossOverlay = new ContextLossOverlay();
   const unsubscribeContextLoss = createWebGLContextLossHandler(canvas, {
     onLost: () => {
+      playTimeRestOverlay.hide();
       gameLoop.pause();
       audioManager.suspend();
       contextLossOverlay.show(() => {
@@ -545,6 +598,9 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
       resumeOverlay.dispose();
       resumeGentlyOverlay.hide();
       resumeGentlyOverlay.dispose();
+      playTimeRestOverlay.hide();
+      playTimeRestOverlay.dispose();
+      thermalPreventionSystem.flush();
       memoryPressureOverlay.hide();
       memoryPressureOverlay.dispose();
       contextLossOverlay.hide();
