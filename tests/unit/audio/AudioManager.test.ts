@@ -1039,6 +1039,23 @@ describe('AudioManager', () => {
     });
   });
 
+  describe('playSFX("shootingStarCollect")', () => {
+    it('creates a bright triangle arpeggio for the rare pickup', () => {
+      vi.stubGlobal('AudioContext', MockAudioContext);
+      const am = new AudioManager();
+      am.initSync();
+      const ctx = (am as any).ctx;
+
+      am.playSFX('shootingStarCollect');
+
+      const osc = ctx.createOscillator.mock.results[0].value;
+      expect(osc.type).toBe('triangle');
+      expect(osc.frequency.value).toBe(659);
+      expect(ctx.createOscillator).toHaveBeenCalledTimes(4);
+      am.dispose();
+    });
+  });
+
   describe('ensureResumed() (T001)', () => {
     it('does not throw when ctx is null', () => {
       const am = new AudioManager();

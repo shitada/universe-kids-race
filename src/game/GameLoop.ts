@@ -5,18 +5,19 @@ const FPS_SAMPLE_INTERVAL_MS = 100;
 export class GameLoop {
   private running = false;
   private paused = false;
+  private pausedAt: number | null = null;
   private lastTime = 0;
   private lastFpsSampleAt = 0;
   private animationId = 0;
   private updateCallback: ((deltaTime: number) => void) | null = null;
   private renderCallback: (() => void) | null = null;
-  private fpsSampleCallback: ((fps: number) => void) | null = null;
+  private fpsSampleCallback: ((fps: number, sampleTimeMs: number) => void) | null = null;
   private readonly monitor = new FrameRateMonitor();
 
   start(
     onUpdate: (deltaTime: number) => void,
     onRender: () => void,
-    onFpsSample?: (fps: number) => void,
+    onFpsSample?: (fps: number, sampleTimeMs: number) => void,
   ): void {
     if (this.running) return;
     this.updateCallback = onUpdate;
@@ -24,6 +25,7 @@ export class GameLoop {
     this.fpsSampleCallback = onFpsSample ?? null;
     this.running = true;
     this.paused = false;
+    this.pausedAt = null;
     this.monitor.reset();
     this.lastTime = performance.now();
     this.lastFpsSampleAt = this.lastTime;
@@ -33,6 +35,7 @@ export class GameLoop {
   stop(): void {
     this.running = false;
     this.paused = false;
+    this.pausedAt = null;
     if (this.animationId) {
       cancelAnimationFrame(this.animationId);
       this.animationId = 0;
@@ -46,6 +49,7 @@ export class GameLoop {
     if (!this.running) return;
     this.running = false;
     this.paused = true;
+    this.pausedAt = performance.now();
     if (this.animationId) {
       cancelAnimationFrame(this.animationId);
       this.animationId = 0;
@@ -57,6 +61,7 @@ export class GameLoop {
     if (!this.updateCallback || !this.renderCallback) return;
     this.paused = false;
     this.running = true;
+    this.pausedAt = null;
     this.monitor.reset();
     this.lastTime = performance.now();
     this.lastFpsSampleAt = this.lastTime;
@@ -70,6 +75,13 @@ export class GameLoop {
   /** True after `pause()` was called and before `resume()` / `stop()`. */
   isPaused(): boolean {
     return this.paused;
+  }
+
+  getPausedDuration(now = performance.now()): number | null {
+    if (!this.paused || this.pausedAt === null) {
+      return null;
+    }
+    return Math.max(0, now - this.pausedAt);
   }
 
   getFps(): number {
@@ -90,7 +102,7 @@ export class GameLoop {
     // capped 100ms value that masquerades as a sustained 10fps sample.
     this.monitor.update(rawDeltaTime);
     if (this.fpsSampleCallback && now - this.lastFpsSampleAt >= FPS_SAMPLE_INTERVAL_MS) {
-      this.fpsSampleCallback(this.monitor.getFps());
+      this.fpsSampleCallback(this.monitor.getFps(), now);
       this.lastFpsSampleAt = now;
     }
 

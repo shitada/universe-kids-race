@@ -1,14 +1,23 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as THREE from 'three';
-import { Meteorite } from '../../../src/game/entities/Meteorite';
+import { Meteorite, setMeteoriteHighContrastMode } from '../../../src/game/entities/Meteorite';
 
 describe('Meteorite', () => {
+  afterEach(() => {
+    setMeteoriteHighContrastMode(false);
+  });
+
   it('creates with position and active state', () => {
     const met = new Meteorite(2, 1, -30);
     expect(met.position.x).toBe(2);
     expect(met.position.y).toBe(1);
     expect(met.position.z).toBe(-30);
     expect(met.isActive).toBe(true);
+  });
+
+  it('uses a square silhouette for easier recognition', () => {
+    const met = new Meteorite(0, 0, 0);
+    expect(met.mesh.geometry.type).toBe('BoxGeometry');
   });
 
   it('has a radius for collision', () => {
@@ -54,6 +63,25 @@ describe('Meteorite', () => {
     }
   });
 
+  it('switches meteorites across shared LOD resources', () => {
+    const a = new Meteorite(0, 0, 0);
+    const b = new Meteorite(0, 0, 0);
+    const nearGeometry = a.mesh.geometry;
+
+    a.applyLOD('mid');
+    b.applyLOD('mid');
+    expect(a.getLODLevel()).toBe('mid');
+    expect(a.mesh.geometry).toBe(b.mesh.geometry);
+    expect(a.mesh.material).toBe(b.mesh.material);
+    expect(a.mesh.geometry).not.toBe(nearGeometry);
+
+    a.applyLOD('far');
+    b.applyLOD('far');
+    expect(a.getLODLevel()).toBe('far');
+    expect(a.mesh.geometry).toBe(b.mesh.geometry);
+    expect(a.mesh.material).toBe(b.mesh.material);
+  });
+
   it('disposing one meteorite does not break a sibling created afterwards', () => {
     const a = new Meteorite(0, 0, 0);
     a.dispose();
@@ -61,6 +89,23 @@ describe('Meteorite', () => {
     expect(b.mesh.geometry).toBe(a.mesh.geometry);
     expect(b.mesh.material).toBe(a.mesh.material);
     expect((b.mesh.geometry as THREE.BufferGeometry).attributes.position).toBeDefined();
+  });
+
+  it('adds a heavy vibration while active', () => {
+    const met = new Meteorite(2, 1, -30);
+    met.update(0.5);
+    expect(met.mesh.position.x).not.toBe(2);
+  });
+
+  it('shows the shared outline only in high contrast mode', () => {
+    setMeteoriteHighContrastMode(true);
+    const met = new Meteorite(0, 0, 0);
+    const outline = met.mesh.getObjectByName('meteorite-high-contrast-outline');
+    expect(outline?.visible).toBe(true);
+
+    setMeteoriteHighContrastMode(false);
+    met.reset(0, 0, 0);
+    expect(outline?.visible).toBe(false);
   });
 
   it('reset() repositions the meteorite and re-activates it', () => {

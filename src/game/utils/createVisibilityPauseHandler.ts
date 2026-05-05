@@ -27,9 +27,9 @@
  */
 export interface VisibilityPauseHandlerOptions {
   /** Called when the page becomes hidden / loses focus. Must be idempotent. */
-  onHide: () => void;
+  onHide: (meta: { source: 'visibilitychange' | 'pagehide' | 'blur' }) => void;
   /** Called when the page becomes visible / regains focus. Must be idempotent. */
-  onShow: () => void;
+  onShow: (meta: { source: 'visibilitychange' | 'pageshow' | 'focus'; persisted?: boolean }) => void;
   /** Injection point for tests. Defaults to global `document`. */
   doc?: Pick<Document, 'addEventListener' | 'removeEventListener'> & {
     readonly hidden: boolean;
@@ -46,20 +46,21 @@ export function createVisibilityPauseHandler(
   const { onHide, onShow } = options;
 
   const visibilityListener = (): void => {
-    if (doc.hidden) onHide();
-    else onShow();
+    if (doc.hidden) onHide({ source: 'visibilitychange' });
+    else onShow({ source: 'visibilitychange' });
   };
   const pagehideListener = (): void => {
-    onHide();
+    onHide({ source: 'pagehide' });
   };
   const blurListener = (): void => {
-    onHide();
+    onHide({ source: 'blur' });
   };
   const pageshowListener = (event: Event): void => {
-    if ((event as PageTransitionEvent).persisted) onShow();
+    const persisted = (event as PageTransitionEvent).persisted;
+    if (persisted) onShow({ source: 'pageshow', persisted });
   };
   const focusListener = (): void => {
-    onShow();
+    onShow({ source: 'focus' });
   };
 
   doc.addEventListener('visibilitychange', visibilityListener as EventListener);

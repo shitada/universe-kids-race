@@ -51,13 +51,14 @@ export class StageClearOverlay {
       pointer-events: auto;
       touch-action: manipulation;
       z-index: 40;
-      padding: 1.2rem;
+      padding: 0.9rem;
       box-sizing: border-box;
       text-align: center;
       overflow-x: hidden;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
+      overflow-y: hidden;
+      gap: 0.3rem;
     `;
+    overlay.style.overflowY = 'hidden';
     this.overlayEl = overlay;
 
     this.appendClearCelebrationBurst();
@@ -65,11 +66,11 @@ export class StageClearOverlay {
       position: relative;
       z-index: 1;
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: 3rem;
+      font-size: clamp(2.3rem, 8vmin, 3rem);
       font-weight: 900;
       color: #FFD700;
       text-shadow: 0 0 20px rgba(255, 215, 0, 0.6);
-      margin-bottom: 1rem;
+      margin-bottom: 0.5rem;
     `));
 
     if (options.isBestUpdated) {
@@ -78,10 +79,10 @@ export class StageClearOverlay {
         position: relative;
         z-index: 1;
         font-family: 'Zen Maru Gothic', sans-serif;
-        font-size: 1.2rem;
+        font-size: clamp(1rem, 3.8vmin, 1.15rem);
         font-weight: 700;
         color: #FFD700;
-        margin-bottom: 0.6rem;
+        margin-bottom: 0.35rem;
         text-shadow: 0 0 12px rgba(255, 215, 0, 0.6);
         animation: bestStageStarsPop 0.6s ease-out;
       `));
@@ -91,7 +92,7 @@ export class StageClearOverlay {
       position: relative;
       z-index: 1;
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: 1.5rem;
+      font-size: clamp(1.15rem, 4.2vmin, 1.35rem);
       font-weight: 700;
       color: #fff;
     `));
@@ -103,65 +104,16 @@ export class StageClearOverlay {
     }
 
     if (options.rewardEntry) {
-      overlay.appendChild(this.createHeading(`${options.rewardEntry.emoji} ${options.rewardEntry.name}の ずかんカード ゲット！`, `
+      overlay.appendChild(this.createHeading(`${options.rewardEntry.emoji} ${options.rewardEntry.name}の ずかんカード ゲット！ なかまに なったよ！`, `
         position: relative;
         z-index: 1;
         font-family: 'Zen Maru Gothic', sans-serif;
-        font-size: 1.2rem;
+        font-size: clamp(0.95rem, 3.2vmin, 1.08rem);
         font-weight: 700;
         color: #FFD700;
-        margin-top: 1rem;
+        margin-top: 0.45rem;
         text-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
       `));
-      overlay.appendChild(this.createHeading(`${options.rewardEntry.emoji} ${options.rewardEntry.name}が なかまに なったよ！`, `
-        position: relative;
-        z-index: 1;
-        font-family: 'Zen Maru Gothic', sans-serif;
-        font-size: 1.2rem;
-        font-weight: 700;
-        color: #FFD700;
-        margin-top: 0.5rem;
-        text-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
-      `));
-
-      const rewardButton = document.createElement('button');
-      rewardButton.setAttribute('data-stage-clear-card', '');
-      rewardButton.textContent = 'カードをみる';
-      rewardButton.style.cssText = `
-        position: relative;
-        z-index: 1;
-        margin-top: 1rem;
-        min-width: min(72vw, 280px);
-        min-height: 72px;
-        padding: 0.9rem 1.6rem;
-        border: none;
-        border-radius: 999px;
-        font-family: 'Zen Maru Gothic', sans-serif;
-        font-size: clamp(1.3rem, 4.4vmin, 1.7rem);
-        font-weight: 900;
-        color: #fff;
-        background: rgba(255, 255, 255, 0.18);
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
-        cursor: pointer;
-        touch-action: manipulation;
-        transform: scale(1);
-        transition: transform 0.08s ease-out, opacity 0.18s ease-out;
-      `;
-      rewardButton.addEventListener('pointerdown', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        if (this.isRewardOpen) return;
-        rewardButton.style.transform = 'scale(0.96)';
-        options.onReward?.();
-      });
-      const releaseRewardButton = (): void => {
-        rewardButton.style.transform = 'scale(1)';
-      };
-      rewardButton.addEventListener('pointerup', releaseRewardButton);
-      rewardButton.addEventListener('pointercancel', releaseRewardButton);
-      rewardButton.addEventListener('pointerleave', releaseRewardButton);
-      this.rewardButton = rewardButton;
-      overlay.appendChild(rewardButton);
     }
 
     overlay.appendChild(this.createActionButtons(options));
@@ -224,9 +176,9 @@ export class StageClearOverlay {
       display: flex;
       align-items: stretch;
       justify-content: center;
-      gap: 0.8rem;
+      gap: 0.65rem;
       flex-wrap: wrap;
-      margin-top: 0.9rem;
+      margin-top: 0.55rem;
     `;
 
     const currentMedal = createStageMedalDisplay(stageNumber, starCount, {
@@ -235,8 +187,8 @@ export class StageClearOverlay {
       size: 'hero',
       scope: 'stage-clear-current',
     });
-    currentMedal.style.minWidth = '150px';
-    currentMedal.style.padding = '0.75rem 0.9rem';
+    currentMedal.style.minWidth = '136px';
+    currentMedal.style.padding = '0.65rem 0.8rem';
     currentMedal.style.borderRadius = '20px';
     currentMedal.style.background = 'rgba(255, 255, 255, 0.12)';
 
@@ -246,8 +198,8 @@ export class StageClearOverlay {
       size: 'hero',
       scope: 'stage-clear-best',
     });
-    bestMedal.style.minWidth = '150px';
-    bestMedal.style.padding = '0.75rem 0.9rem';
+    bestMedal.style.minWidth = '136px';
+    bestMedal.style.padding = '0.65rem 0.8rem';
     bestMedal.style.borderRadius = '20px';
     bestMedal.style.background = 'rgba(255, 255, 255, 0.12)';
 
@@ -259,9 +211,9 @@ export class StageClearOverlay {
     const nextAdventureCard = document.createElement('section');
     nextAdventureCard.setAttribute('data-stage-clear-next-preview', '');
     nextAdventureCard.style.cssText = `
-      margin-top: 1.1rem;
-      width: min(88vw, 420px);
-      padding: 1rem 1.1rem 1.15rem;
+      margin-top: 0.8rem;
+      width: min(88vw, 400px);
+      padding: 0.8rem 0.95rem 0.95rem;
       border-radius: 28px;
       background: linear-gradient(180deg, rgba(30, 46, 112, 0.92), rgba(12, 22, 66, 0.96));
       border: 2px solid rgba(255, 255, 255, 0.18);
@@ -274,14 +226,14 @@ export class StageClearOverlay {
 
     const nextAdventureLabel = this.createHeading('つぎのぼうけん', `
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: 1rem;
+      font-size: 0.95rem;
       font-weight: 700;
       color: #b9d7ff;
       letter-spacing: 0.08em;
     `);
     const nextAdventureTitle = this.createHeading(`つぎは ${nextEntry.reading}！`, `
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: clamp(1.5rem, 5.2vmin, 2.05rem);
+      font-size: clamp(1.25rem, 4.6vmin, 1.7rem);
       font-weight: 900;
       color: #fff4a3;
       text-shadow: 0 0 14px rgba(255, 230, 120, 0.25);
@@ -292,14 +244,14 @@ export class StageClearOverlay {
     nextAdventureEmoji.textContent = nextEntry.emoji;
     nextAdventureEmoji.setAttribute('data-stage-clear-next-emoji', '');
     nextAdventureEmoji.style.cssText = `
-      font-size: clamp(3.2rem, 13vmin, 4.8rem);
+      font-size: clamp(2.6rem, 11vmin, 3.9rem);
       line-height: 1;
       filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.24));
     `;
 
     const nextAdventureName = this.createHeading(nextEntry.reading, `
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: clamp(1.35rem, 4.8vmin, 1.8rem);
+      font-size: clamp(1.2rem, 4.2vmin, 1.55rem);
       font-weight: 800;
       color: #ffffff;
     `);
@@ -307,10 +259,10 @@ export class StageClearOverlay {
 
     const nextAdventureTrivia = this.createHeading(nextEntry.trivia, `
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: clamp(1.02rem, 3.9vmin, 1.2rem);
+      font-size: clamp(0.95rem, 3.4vmin, 1.05rem);
       font-weight: 700;
       color: #dfeaff;
-      line-height: 1.45;
+      line-height: 1.35;
     `);
     nextAdventureTrivia.setAttribute('data-stage-clear-next-trivia', '');
 
@@ -325,15 +277,24 @@ export class StageClearOverlay {
   }
 
   private createActionButtons(options: StageClearOverlayShowOptions): HTMLDivElement {
+    const hasRewardButton = Boolean(options.rewardEntry && options.onReward);
     const actionButtons = document.createElement('div');
+    actionButtons.setAttribute('data-stage-clear-actions', '');
     actionButtons.style.cssText = `
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0.9rem;
-      width: 100%;
-      margin-top: 1.4rem;
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: repeat(${hasRewardButton ? 3 : 2}, minmax(0, 1fr));
+      align-items: stretch;
+      justify-content: center;
+      gap: clamp(0.4rem, 1.8vmin, 0.7rem);
+      width: min(100%, ${hasRewardButton ? '42rem' : '30rem'});
+      margin-top: 0.7rem;
     `;
+
+    if (hasRewardButton) {
+      actionButtons.appendChild(this.createRewardButton(options));
+    }
 
     const retryButton = document.createElement('button');
     retryButton.setAttribute('data-stage-clear-retry', '');
@@ -341,13 +302,14 @@ export class StageClearOverlay {
     retryButton.textContent = 'もういちど';
     retryButton.disabled = true;
     retryButton.style.cssText = `
-      min-width: min(72vw, 300px);
-      min-height: 88px;
-      padding: 0.95rem 1.7rem;
+      width: 100%;
+      min-width: 0;
+      min-height: 58px;
+      padding: 0.65rem 0.7rem;
       border: none;
       border-radius: 999px;
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: clamp(1.35rem, 4.6vmin, 1.9rem);
+      font-size: clamp(0.95rem, 3.4vmin, 1.24rem);
       font-weight: 900;
       color: #fff;
       background: rgba(255, 255, 255, 0.2);
@@ -369,13 +331,14 @@ export class StageClearOverlay {
     continueButton.textContent = options.continueLabel;
     continueButton.disabled = true;
     continueButton.style.cssText = `
-      min-width: min(78vw, 320px);
-      min-height: 88px;
-      padding: 1rem 1.8rem;
+      width: 100%;
+      min-width: 0;
+      min-height: 58px;
+      padding: 0.65rem 0.7rem;
       border: none;
       border-radius: 999px;
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: clamp(1.5rem, 5vmin, 2.1rem);
+      font-size: clamp(1rem, 3.6vmin, 1.3rem);
       font-weight: 900;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
       opacity: 0;
@@ -396,6 +359,46 @@ export class StageClearOverlay {
 
     actionButtons.append(retryButton, continueButton);
     return actionButtons;
+  }
+
+  private createRewardButton(options: StageClearOverlayShowOptions): HTMLButtonElement {
+    const rewardButton = document.createElement('button');
+    rewardButton.setAttribute('data-stage-clear-card', '');
+    rewardButton.textContent = 'カードをみる';
+    rewardButton.style.cssText = `
+      width: 100%;
+      min-width: 0;
+      min-height: 58px;
+      padding: 0.65rem 0.7rem;
+      border: none;
+      border-radius: 999px;
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: clamp(0.95rem, 3.4vmin, 1.24rem);
+      font-weight: 900;
+      color: #fff;
+      background: rgba(255, 255, 255, 0.18);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+      cursor: pointer;
+      touch-action: manipulation;
+      transform: scale(1);
+      transition: transform 0.08s ease-out, opacity 0.18s ease-out;
+    `;
+
+    this.buttonCleanups.add(attachReleaseConfirmButton(rewardButton, {
+      canActivate: () => !this.isRewardOpen,
+      onActivate: () => {
+        if (this.isRewardOpen) return;
+        options.onReward?.();
+      },
+      onPressChange: (pressed) => {
+        rewardButton.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+      },
+      preventDefaultOnPointerDown: true,
+      preventDefaultOnClick: true,
+      stopPropagation: true,
+    }));
+    this.rewardButton = rewardButton;
+    return rewardButton;
   }
 
   private attachActionHandlers(button: HTMLButtonElement, onActivate: () => void): void {

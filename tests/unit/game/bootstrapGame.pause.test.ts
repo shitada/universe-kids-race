@@ -18,6 +18,7 @@ interface SetupResult {
     pause: ReturnType<typeof vi.fn>;
     resume: ReturnType<typeof vi.fn>;
     stop: ReturnType<typeof vi.fn>;
+    start: ReturnType<typeof vi.fn>;
   };
   audioManagerInstance: {
     suspend: ReturnType<typeof vi.fn>;
@@ -55,6 +56,21 @@ interface SetupResult {
     show: ReturnType<typeof vi.fn>;
     hide: ReturnType<typeof vi.fn>;
   };
+  resumeGentlyOverlayInstance: {
+    show: ReturnType<typeof vi.fn>;
+    hide: ReturnType<typeof vi.fn>;
+    dispose: ReturnType<typeof vi.fn>;
+  };
+  memoryPressureOverlayInstance: {
+    show: ReturnType<typeof vi.fn>;
+    hide: ReturnType<typeof vi.fn>;
+    isVisible: ReturnType<typeof vi.fn>;
+  };
+  memoryHealthMonitorInstance: {
+    sample: ReturnType<typeof vi.fn>;
+    reset: ReturnType<typeof vi.fn>;
+  };
+  runFpsSample: (fps?: number) => void;
 }
 
 async function setup(
@@ -106,6 +122,10 @@ async function setup(
   let resizeCoalescerInstance: SetupResult['resizeCoalescerInstance'] | null = null;
   let contextLossOverlayInstance: SetupResult['contextLossOverlayInstance'] | null = null;
   let resumeOverlayInstance: SetupResult['resumeOverlayInstance'] | null = null;
+  let resumeGentlyOverlayInstance: SetupResult['resumeGentlyOverlayInstance'] | null = null;
+  let memoryPressureOverlayInstance: SetupResult['memoryPressureOverlayInstance'] | null = null;
+  let memoryHealthMonitorInstance: SetupResult['memoryHealthMonitorInstance'] | null = null;
+  let fpsSampleCallback: ((fps: number) => void) | undefined;
 
   class MockSceneManager {
     private factories = new Map<string, () => Promise<unknown> | unknown>();
@@ -170,7 +190,9 @@ async function setup(
       constructor() {
         gameLoopInstance = this as unknown as SetupResult['gameLoopInstance'];
       }
-      start = vi.fn();
+      start = vi.fn((_onUpdate, _onRender, onFpsSample?: (fps: number) => void) => {
+        fpsSampleCallback = onFpsSample;
+      });
       pause = vi.fn(() => {
         this.paused = true;
       });
@@ -233,6 +255,22 @@ async function setup(
     },
   }));
 
+  let nextMemoryAlert: { reason: 'js-heap-growth-trend'; sample: { textureCount: number; geometryCount: number } } | null =
+    null;
+  vi.doMock('../../../src/game/utils/MemoryHealthMonitor', () => ({
+    MemoryHealthMonitor: class {
+      constructor() {
+        memoryHealthMonitorInstance = this as unknown as SetupResult['memoryHealthMonitorInstance'];
+      }
+      sample = vi.fn(() => ({
+        sampled: true,
+        latestSample: null,
+        alert: nextMemoryAlert,
+      }));
+      reset = vi.fn();
+    },
+  }));
+
   vi.doMock('../../../src/game/utils/ResizeCoalescer', () => ({
     createResizeCoalescer: (callback: (width: number, height: number) => void) => {
       const instance = {
@@ -270,6 +308,12 @@ async function setup(
       render: vi.fn(),
       dispose: vi.fn(),
       forceContextLoss: vi.fn(),
+      info: {
+        memory: {
+          textures: 0,
+          geometries: 0,
+        },
+      },
     }),
   }));
 
@@ -290,6 +334,7 @@ async function setup(
     ContextLossOverlay: class {
       show = vi.fn();
       hide = vi.fn();
+      dispose = vi.fn();
       constructor() {
         contextLossOverlayInstance = this as unknown as SetupResult['contextLossOverlayInstance'];
       }
@@ -306,10 +351,39 @@ async function setup(
     },
   }));
 
+  vi.doMock('../../../src/ui/ResumeGentlyOverlay', () => ({
+    ResumeGentlyOverlay: class {
+      show = vi.fn();
+      hide = vi.fn();
+      dispose = vi.fn();
+      constructor() {
+        resumeGentlyOverlayInstance = this as unknown as SetupResult['resumeGentlyOverlayInstance'];
+      }
+    },
+  }));
+
+  vi.doMock('../../../src/ui/MemoryPressureOverlay', () => ({
+    MemoryPressureOverlay: class {
+      private visible = false;
+      show = vi.fn(() => {
+        this.visible = true;
+      });
+      hide = vi.fn(() => {
+        this.visible = false;
+      });
+      isVisible = vi.fn(() => this.visible);
+      dispose = vi.fn();
+      constructor() {
+        memoryPressureOverlayInstance = this as unknown as SetupResult['memoryPressureOverlayInstance'];
+      }
+    },
+  }));
+
   vi.doMock('../../../src/ui/OrientationHintOverlay', () => ({
     OrientationHintOverlay: class {
       show = vi.fn();
       hide = vi.fn();
+      dispose = vi.fn();
     },
   }));
 
@@ -317,6 +391,7 @@ async function setup(
     LoadingOverlay: class {
       show = vi.fn();
       hide = vi.fn();
+      dispose = vi.fn();
     },
   }));
 
@@ -324,6 +399,7 @@ async function setup(
     LoadFailureOverlay: class {
       show = vi.fn();
       hide = vi.fn();
+      dispose = vi.fn();
     },
   }));
 
@@ -418,6 +494,12 @@ async function setup(
     resizeCoalescerInstance: resizeCoalescerInstance!,
     contextLossOverlayInstance: contextLossOverlayInstance!,
     resumeOverlayInstance: resumeOverlayInstance!,
+    resumeGentlyOverlayInstance: resumeGentlyOverlayInstance!,
+    memoryPressureOverlayInstance: memoryPressureOverlayInstance!,
+    memoryHealthMonitorInstance: memoryHealthMonitorInstance!,
+    runFpsSample: (fps = 60) => {
+      fpsSampleCallback?.(fps);
+    },
   };
 }
 
@@ -517,6 +599,37 @@ describe('bootstrapGame manual pause wiring', () => {
     expect(orders).toEqual([...orders].sort((a, b) => a - b));
   });
 
+  it('pauses the game and shows the rest overlay when memory health turns unhealthy', async () => {
+    const {
+      gameLoopInstance,
+      audioManagerInstance,
+      memoryPressureOverlayInstance,
+      memoryHealthMonitorInstance,
+      resumeOverlayInstance,
+      runFpsSample,
+    } = await setup();
+
+    memoryHealthMonitorInstance.sample.mockReturnValue({
+      sampled: true,
+      latestSample: null,
+      alert: {
+        reason: 'js-heap-growth-trend',
+        sample: {
+          textureCount: 12,
+          geometryCount: 8,
+        },
+      },
+    });
+
+    runFpsSample();
+
+    expect(memoryHealthMonitorInstance.sample).toHaveBeenCalledTimes(1);
+    expect(gameLoopInstance.pause).toHaveBeenCalled();
+    expect(audioManagerInstance.suspend).toHaveBeenCalled();
+    expect(resumeOverlayInstance.hide).toHaveBeenCalled();
+    expect(memoryPressureOverlayInstance.show).toHaveBeenCalledTimes(1);
+  });
+
   it('does not auto-resume after context restore while manual pause is active', async () => {
     const {
       contextLossCallbacks,
@@ -560,5 +673,13 @@ describe('bootstrapGame manual pause wiring', () => {
     expect(gameLoopInstance.resume).not.toHaveBeenCalled();
     expect(audioManagerInstance.ensureResumed).not.toHaveBeenCalled();
     expect(resumeOverlayInstance.show).not.toHaveBeenCalled();
+  });
+
+  it('resets memory monitoring after WebGL context restore', async () => {
+    const { contextLossCallbacks, memoryHealthMonitorInstance } = await setup();
+
+    contextLossCallbacks.onRestored();
+
+    expect(memoryHealthMonitorInstance.reset).toHaveBeenCalledTimes(1);
   });
 });

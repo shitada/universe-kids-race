@@ -1,6 +1,8 @@
 import type { StageConfig } from '../../types';
 import { Star } from '../entities/Star';
 import { Meteorite } from '../entities/Meteorite';
+import { ShootingStar } from '../entities/ShootingStar';
+import { Comet } from '../entities/Comet';
 import { EntityPool } from '../utils/EntityPool';
 
 /**
@@ -14,6 +16,12 @@ import { EntityPool } from '../utils/EntityPool';
 export interface SpawnResult {
   newStars: Star[];
   newMeteorites: Meteorite[];
+  newShootingStars: ShootingStar[];
+  newComets: Comet[];
+}
+
+export interface SpawnModifiers {
+  meteoShowerActive?: boolean;
 }
 
 /**
@@ -41,6 +49,7 @@ export class SpawnSystem {
   private static readonly SAFE_XY_DISTANCE = 2.5;
   private static readonly SAFE_Z_BAND = 3.0;
   private static readonly MAX_REROLL = 4;
+  private static readonly RAINBOW_STAR_SPAWN_CHANCE = 0.05;
 
   // Constitution I (子供ファースト) / III (左右移動のみ): 宇宙船は Y=0 固定で
   // X しか動かせない (Spaceship.update は y を変更しない)。CollisionSystem の
@@ -52,9 +61,32 @@ export class SpawnSystem {
   // ばらつきを保ちつつフェアな回避経路を確保）。
   private static readonly STAR_SPAWN_Y_HALF_RANGE = 1.0;
   private static readonly METEORITE_SPAWN_Y_HALF_RANGE = 0.8;
+  private static readonly SHOOTING_STAR_STAGE_EVENT_CHANCE = 0.015;
+  private static readonly SHOOTING_STAR_EVENT_START_BUFFER = 30;
+  private static readonly SHOOTING_STAR_EVENT_END_BUFFER = 30;
+  private static readonly SHOOTING_STAR_MIN_EVENT_BUFFER = 6;
+  private static readonly SHOOTING_STAR_SPAWN_X = 9.2;
+  private static readonly SHOOTING_STAR_SPAWN_Y_MIN = 0.2;
+  private static readonly SHOOTING_STAR_SPAWN_Y_RANGE = 0.75;
+  private static readonly METEO_SHOWER_SHOOTING_STAR_INTERVAL = 0.28;
+  private static readonly METEO_SHOWER_MAX_SPAWNS_PER_FRAME = 2;
+  private static readonly METEO_SHOWER_SPAWN_X = 10.5;
+  private static readonly METEO_SHOWER_SPAWN_Y_HALF_RANGE = 1.2;
+  private static readonly COMET_MIN_DELAY = 18;
+  private static readonly COMET_DELAY_RANGE = 10;
+  private static readonly COMET_SPAWN_X = 9.5;
+  private static readonly COMET_SPAWN_Y_HALF_RANGE = 0.3;
 
   private lastStarSpawnZ = 0;
   private meteoriteTimer = 0;
+  private stageElapsedTime = 0;
+  private meteoShowerShootingStarTimer = 0;
+  private rareShootingStarSpawnTime = Number.POSITIVE_INFINITY;
+  private rareShootingStarWindowEnd = Number.NEGATIVE_INFINITY;
+  private rareShootingStarSpawned = false;
+  private shootingStarStageKey = '';
+  private cometTimer = 0;
+  private nextCometDelay = SpawnSystem.COMET_MIN_DELAY;
   private spawnAheadDistance = 80;
   private meteoriteIntervalMultiplier = 1;
 
@@ -65,6 +97,8 @@ export class SpawnSystem {
   private readonly result: SpawnResult = {
     newStars: [],
     newMeteorites: [],
+    newShootingStars: [],
+    newComets: [],
   };
 
   // NORMAL stars, RAINBOW stars, and meteorites are all pooled to eliminate
@@ -90,6 +124,18 @@ export class SpawnSystem {
     (met) => met.recycle(),
     (met) => met.dispose(),
   );
+  private readonly shootingStarPool = new EntityPool<ShootingStar, readonly [number, number, number, -1 | 1]>(
+    (x, y, z, direction) => new ShootingStar(x, y, z, direction),
+    (shootingStar, x, y, z, direction) => shootingStar.reset(x, y, z, direction),
+    (shootingStar) => shootingStar.recycle(),
+    (shootingStar) => shootingStar.dispose(),
+  );
+  private readonly cometPool = new EntityPool<Comet, readonly [number, number, number, -1 | 1]>(
+    (x, y, z, direction) => new Comet(x, y, z, direction),
+    (comet, x, y, z, direction) => comet.reset(x, y, z, direction),
+    (comet) => comet.recycle(),
+    (comet) => comet.dispose(),
+  );
 
   /**
    * Advances the spawner by `deltaTime` and returns any newly spawned stars
@@ -113,10 +159,17 @@ export class SpawnSystem {
     config: StageConfig,
     existingStars: readonly Star[] = [],
     existingMeteorites: readonly Meteorite[] = [],
+    existingShootingStars: readonly ShootingStar[] = [],
+    existingComets: readonly Comet[] = [],
+    modifiers: SpawnModifiers = {},
   ): SpawnResult {
     const result = this.result;
     result.newStars.length = 0;
     result.newMeteorites.length = 0;
+    result.newShootingStars.length = 0;
+    result.newComets.length = 0;
+    this.ensureRareShootingStarPlan(config);
+    this.stageElapsedTime += deltaTime;
 
     // Spawn stars ahead based on density
     const starSpacing = 100 / config.starDensity;
@@ -127,7 +180,7 @@ export class SpawnSystem {
       if (spawned >= SpawnSystem.MAX_STAR_SPAWNS_PER_FRAME) break;
       this.lastStarSpawnZ -= starSpacing;
       const z = this.lastStarSpawnZ;
-      const isRainbow = Math.random() < 0.1;
+      const isRainbow = Math.random() < SpawnSystem.RAINBOW_STAR_SPAWN_CHANCE;
       let x = (Math.random() - 0.5) * 14;
       let y = (Math.random() - 0.5) * 2 * SpawnSystem.STAR_SPAWN_Y_HALF_RANGE;
       let safe = this.isXySafeAgainstEntities(x, y, z, existingMeteorites, result.newMeteorites);
@@ -169,7 +222,63 @@ export class SpawnSystem {
       }
     }
 
+    if (modifiers.meteoShowerActive) {
+      this.meteoShowerShootingStarTimer += deltaTime;
+      let spawnedMeteoShowerStars = 0;
+      while (
+        this.meteoShowerShootingStarTimer >= SpawnSystem.METEO_SHOWER_SHOOTING_STAR_INTERVAL &&
+        spawnedMeteoShowerStars < SpawnSystem.METEO_SHOWER_MAX_SPAWNS_PER_FRAME
+      ) {
+        this.meteoShowerShootingStarTimer -= SpawnSystem.METEO_SHOWER_SHOOTING_STAR_INTERVAL;
+        result.newShootingStars.push(this.spawnShootingStar(spaceshipZ, true, spawnedMeteoShowerStars));
+        spawnedMeteoShowerStars++;
+      }
+    } else {
+      this.meteoShowerShootingStarTimer = 0;
+      if (
+        this.shouldSpawnRareShootingStar(existingShootingStars, existingComets)
+      ) {
+        result.newShootingStars.push(this.spawnShootingStar(spaceshipZ, false, 0));
+        this.rareShootingStarSpawned = true;
+      }
+    }
+
+    this.cometTimer += deltaTime;
+    if (
+      this.cometTimer >= this.nextCometDelay &&
+      !this.hasActiveShootingStar(existingShootingStars) &&
+      !this.hasActiveComet(existingComets) &&
+      result.newShootingStars.length === 0
+    ) {
+      const direction = Math.random() < 0.5 ? 1 : -1;
+      const x = direction === 1 ? -SpawnSystem.COMET_SPAWN_X : SpawnSystem.COMET_SPAWN_X;
+      const y = (Math.random() - 0.5) * 2 * SpawnSystem.COMET_SPAWN_Y_HALF_RANGE;
+      const z = spaceshipZ - this.spawnAheadDistance - 14 - Math.random() * 18;
+      const comet = this.cometPool.acquire(x, y, z, direction);
+      result.newComets.push(comet);
+      this.cometTimer = 0;
+      this.nextCometDelay = SpawnSystem.sampleCometDelay();
+    }
+
     return result;
+  }
+
+  private hasActiveShootingStar(existingShootingStars: readonly ShootingStar[]): boolean {
+    for (const shootingStar of existingShootingStars) {
+      if (!shootingStar.isCollected) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private hasActiveComet(existingComets: readonly Comet[]): boolean {
+    for (const comet of existingComets) {
+      if (!comet.isCollected) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -237,13 +346,35 @@ export class SpawnSystem {
     this.normalStarPool.release(star);
   }
 
+  acquireStar(x: number, y: number, z: number, starType: 'NORMAL' | 'RAINBOW' = 'NORMAL'): Star {
+    return starType === 'RAINBOW'
+      ? this.rainbowStarPool.acquire(x, y, z)
+      : this.normalStarPool.acquire(x, y, z);
+  }
+
   releaseMeteorite(met: Meteorite): void {
     this.meteoritePool.release(met);
+  }
+
+  releaseShootingStar(shootingStar: ShootingStar): void {
+    this.shootingStarPool.release(shootingStar);
+  }
+
+  releaseComet(comet: Comet): void {
+    this.cometPool.release(comet);
   }
 
   reset(): void {
     this.lastStarSpawnZ = 0;
     this.meteoriteTimer = 0;
+    this.stageElapsedTime = 0;
+    this.meteoShowerShootingStarTimer = 0;
+    this.rareShootingStarSpawnTime = Number.POSITIVE_INFINITY;
+    this.rareShootingStarWindowEnd = Number.NEGATIVE_INFINITY;
+    this.rareShootingStarSpawned = false;
+    this.shootingStarStageKey = '';
+    this.cometTimer = 0;
+    this.nextCometDelay = SpawnSystem.COMET_MIN_DELAY;
     this.meteoriteIntervalMultiplier = 1;
   }
 
@@ -264,6 +395,8 @@ export class SpawnSystem {
     this.normalStarPool.releaseAll();
     this.rainbowStarPool.releaseAll();
     this.meteoritePool.releaseAll();
+    this.shootingStarPool.releaseAll();
+    this.cometPool.releaseAll();
   }
 
   /** Permanently free all pooled GPU resources. Call from scene teardown. */
@@ -271,6 +404,8 @@ export class SpawnSystem {
     this.normalStarPool.dispose();
     this.rainbowStarPool.dispose();
     this.meteoritePool.dispose();
+    this.shootingStarPool.dispose();
+    this.cometPool.dispose();
   }
 
   /** Test/diagnostic helper: number of NORMAL stars allocated by the pool. */
@@ -288,11 +423,93 @@ export class SpawnSystem {
     return this.meteoritePool.getPoolSize();
   }
 
+  getShootingStarPoolSize(): number {
+    return this.shootingStarPool.getPoolSize();
+  }
+
+  getCometPoolSize(): number {
+    return this.cometPool.getPoolSize();
+  }
+
   setMeteoriteIntervalMultiplier(multiplier: number): void {
     this.meteoriteIntervalMultiplier = Number.isFinite(multiplier) && multiplier >= 1 ? multiplier : 1;
   }
 
   getMeteoriteIntervalMultiplier(): number {
     return this.meteoriteIntervalMultiplier;
+  }
+
+  private static sampleCometDelay(): number {
+    return SpawnSystem.COMET_MIN_DELAY + Math.random() * SpawnSystem.COMET_DELAY_RANGE;
+  }
+
+  private ensureRareShootingStarPlan(config: StageConfig): void {
+    const stageKey = `${config.stageNumber}:${config.stageLength}`;
+    if (this.shootingStarStageKey === stageKey) {
+      return;
+    }
+
+    this.shootingStarStageKey = stageKey;
+    this.stageElapsedTime = 0;
+    this.rareShootingStarSpawned = false;
+    this.rareShootingStarSpawnTime = Number.POSITIVE_INFINITY;
+    this.rareShootingStarWindowEnd = Number.NEGATIVE_INFINITY;
+
+    if (Math.random() >= SpawnSystem.SHOOTING_STAR_STAGE_EVENT_CHANCE) {
+      return;
+    }
+
+    const estimatedStageDuration = config.stageLength / 50;
+    const eventStartBuffer = Math.min(
+      SpawnSystem.SHOOTING_STAR_EVENT_START_BUFFER,
+      Math.max(SpawnSystem.SHOOTING_STAR_MIN_EVENT_BUFFER, estimatedStageDuration / 3),
+    );
+    const eventEndBuffer = Math.min(
+      SpawnSystem.SHOOTING_STAR_EVENT_END_BUFFER,
+      Math.max(SpawnSystem.SHOOTING_STAR_MIN_EVENT_BUFFER, estimatedStageDuration / 3),
+    );
+    const windowStart = eventStartBuffer;
+    const windowEnd = Math.max(windowStart, estimatedStageDuration - eventEndBuffer);
+
+    this.rareShootingStarWindowEnd = windowEnd;
+    this.rareShootingStarSpawnTime = windowStart + Math.random() * Math.max(0, windowEnd - windowStart);
+  }
+
+  private shouldSpawnRareShootingStar(
+    existingShootingStars: readonly ShootingStar[],
+    existingComets: readonly Comet[],
+  ): boolean {
+    if (this.rareShootingStarSpawned) {
+      return false;
+    }
+    if (!Number.isFinite(this.rareShootingStarSpawnTime)) {
+      return false;
+    }
+    if (this.stageElapsedTime < this.rareShootingStarSpawnTime) {
+      return false;
+    }
+    if (this.stageElapsedTime > this.rareShootingStarWindowEnd) {
+      this.rareShootingStarSpawned = true;
+      return false;
+    }
+    if (this.hasActiveShootingStar(existingShootingStars) || this.hasActiveComet(existingComets)) {
+      return false;
+    }
+    return true;
+  }
+
+  private spawnShootingStar(spaceshipZ: number, meteoShowerActive: boolean, index: number): ShootingStar {
+    const direction = meteoShowerActive
+      ? ((index + Math.round(Math.random())) % 2 === 0 ? 1 : -1)
+      : -1;
+    const spawnX = meteoShowerActive ? SpawnSystem.METEO_SHOWER_SPAWN_X : SpawnSystem.SHOOTING_STAR_SPAWN_X;
+    const xJitter = meteoShowerActive ? Math.random() * 1.8 : 0;
+    const zJitter = meteoShowerActive ? Math.random() * 8 + index * 1.8 : Math.random() * 12;
+    const x = direction === 1 ? -(spawnX + xJitter) : spawnX + xJitter;
+    const y = meteoShowerActive
+      ? (Math.random() - 0.5) * 2 * SpawnSystem.METEO_SHOWER_SPAWN_Y_HALF_RANGE
+      : SpawnSystem.SHOOTING_STAR_SPAWN_Y_MIN + Math.random() * SpawnSystem.SHOOTING_STAR_SPAWN_Y_RANGE;
+    const z = spaceshipZ - this.spawnAheadDistance - 8 - zJitter;
+    return this.shootingStarPool.acquire(x, y, z, direction);
   }
 }

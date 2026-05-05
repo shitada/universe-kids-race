@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
+  getSpecialStarEncyclopediaEntry,
   getNextPlanetEncyclopediaEntry,
   getPlanetEncyclopediaEntry,
   PLANET_ENCYCLOPEDIA,
+  SPECIAL_STAR_ENCYCLOPEDIA,
 } from '../../../src/game/config/PlanetEncyclopedia';
 
 describe('PlanetEncyclopedia', () => {
@@ -62,5 +64,16 @@ describe('PlanetEncyclopedia', () => {
     expect(getNextPlanetEncyclopediaEntry(4)?.name).toBe('木星');
     expect(getNextPlanetEncyclopediaEntry(10)?.name).toBe('地球');
     expect(getNextPlanetEncyclopediaEntry(11)).toBeUndefined();
+  });
+
+  it('defines three special shooting star encyclopedia entries', () => {
+    expect(SPECIAL_STAR_ENCYCLOPEDIA).toHaveLength(3);
+    expect(SPECIAL_STAR_ENCYCLOPEDIA.map((entry) => entry.id)).toEqual(['rainbow', 'gold', 'silver']);
+  });
+
+  it('can look up a special shooting star encyclopedia entry by id', () => {
+    expect(getSpecialStarEncyclopediaEntry('rainbow')?.name).toBe('にじりゅうせい');
+    expect(getSpecialStarEncyclopediaEntry('gold')?.emoji).toBe('🥇');
+    expect(getSpecialStarEncyclopediaEntry('silver')?.trivia).toContain('ぎんいろ');
   });
 });

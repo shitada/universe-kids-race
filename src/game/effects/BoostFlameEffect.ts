@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import type { MotionSensitivity } from '../../types';
+import { getMotionSensitivityProfile } from '../accessibility/motionSensitivity';
 
 /**
  * ブースト中に船尾から噴出する炎パーティクルのエフェクト。
@@ -29,6 +31,7 @@ export class BoostFlameEffect {
   private emitting = false;
   private maxAliveIndex = -1;
   private qualityTier = BoostFlameEffect.VISUAL_QUALITY_SCALE_BY_TIER.length - 1;
+  private motionSensitivity: MotionSensitivity = 'strong';
 
   init(scene: THREE.Scene): void {
     if (this.points) return;
@@ -124,6 +127,10 @@ export class BoostFlameEffect {
     this.qualityTier = BoostFlameEffect.clampQualityTier(tier);
   }
 
+  setMotionSensitivity(sensitivity: MotionSensitivity): void {
+    this.motionSensitivity = sensitivity;
+  }
+
   /**
    * Emit a burst of particles for the current frame at `shipPos`.
    * `progress` is the BoostSystem duration progress in [0, 1]; emission
@@ -137,12 +144,21 @@ export class BoostFlameEffect {
     const emitCount = progress < FADE_START
       ? 8
       : Math.max(0, Math.round(8 * (1.0 - progress) / (1.0 - FADE_START)));
+    const motionProfile = getMotionSensitivityProfile(this.motionSensitivity);
     const scaledEmitCount = emitCount <= 0
       ? 0
-      : Math.max(1, Math.round(emitCount * BoostFlameEffect.getQualityScale(this.qualityTier)));
+      : Math.max(
+        1,
+        Math.round(
+          emitCount
+          * BoostFlameEffect.getQualityScale(this.qualityTier)
+          * motionProfile.particleDensityScale,
+        ),
+      );
     const sizeFraction = progress < FADE_START
       ? 1.0
       : (1.0 - progress) / (1.0 - FADE_START);
+    const sizedFraction = sizeFraction * motionProfile.effectSizeScale;
 
     let maxEmittedIdx = -1;
     for (let p = 0; p < scaledEmitCount; p++) {
@@ -150,8 +166,8 @@ export class BoostFlameEffect {
       const i3 = idx * 3;
       const i2 = idx * 2;
 
-      this.positions[i3] = shipPos.x + (Math.random() - 0.5) * sizeFraction;
-      this.positions[i3 + 1] = shipPos.y + (Math.random() - 0.5) * sizeFraction;
+      this.positions[i3] = shipPos.x + (Math.random() - 0.5) * sizedFraction;
+      this.positions[i3 + 1] = shipPos.y + (Math.random() - 0.5) * sizedFraction;
       this.positions[i3 + 2] = shipPos.z + 2;
 
       const t = Math.random();
@@ -160,8 +176,8 @@ export class BoostFlameEffect {
       this.colors[i3 + 2] = 0;
 
       this.lifetimes[idx] = BoostFlameEffect.LIFETIME;
-      this.velocities[i2] = 3 + Math.random() * 2;
-      this.velocities[i2 + 1] = (Math.random() - 0.5);
+      this.velocities[i2] = (3 + Math.random() * 2) * motionProfile.animationSpeedScale;
+      this.velocities[i2 + 1] = (Math.random() - 0.5) * motionProfile.animationSpeedScale;
 
       if (idx > maxEmittedIdx) maxEmittedIdx = idx;
       this.index++;
@@ -188,7 +204,7 @@ export class BoostFlameEffect {
 
     // Scale particle size during fade phase
     if (this.points) {
-      const desiredSize = BoostFlameEffect.BASE_SIZE * sizeFraction;
+      const desiredSize = BoostFlameEffect.BASE_SIZE * sizedFraction;
       if (desiredSize !== this.lastSize) {
         (this.points.material as THREE.PointsMaterial).size = desiredSize;
         this.lastSize = desiredSize;

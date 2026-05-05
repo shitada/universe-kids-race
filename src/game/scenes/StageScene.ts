@@ -1,33 +1,77 @@
 import * as THREE from 'three';
-import type { AssistDirection, Scene, SceneContext, StageConfig } from '../../types';
+import {
+  DEFAULT_SPACESHIP_CUSTOMIZATION,
+  type AssistDirection,
+  type MotionSensitivity,
+  type Scene,
+  type SceneContext,
+  type StageConfig,
+} from '../../types';
 import type { SceneManager } from '../SceneManager';
 import type { InputSystem } from '../systems/InputSystem';
 import type { AudioManager } from '../audio/AudioManager';
 import type { SaveManager } from '../storage/SaveManager';
 import { Spaceship } from '../entities/Spaceship';
-import { Star } from '../entities/Star';
-import { Meteorite } from '../entities/Meteorite';
+import { Star, setStarHighContrastMode } from '../entities/Star';
+import { Meteorite, setMeteoriteHighContrastMode } from '../entities/Meteorite';
+import { ShootingStar } from '../entities/ShootingStar';
+import { Comet } from '../entities/Comet';
+import { SpecialShootingStar } from '../entities/SpecialShootingStar';
 import { CollisionSystem } from '../systems/CollisionSystem';
 import { ScoreSystem } from '../systems/ScoreSystem';
 import { SpawnSystem } from '../systems/SpawnSystem';
 import { BoostSystem } from '../systems/BoostSystem';
+import { LODSystem } from '../systems/LODSystem';
+import { AdaptiveTutorialSystem, type AdaptiveTutorialEvent } from '../systems/AdaptiveTutorialSystem';
+import { MeteoShowerEventSystem } from '../systems/MeteoShowerEventSystem';
+import { SpaceWeatherEventSystem } from '../systems/SpaceWeatherEventSystem';
+import { StageSpecialEventSystem } from '../systems/StageSpecialEventSystem';
+import { SpecialStarSpawnSystem } from '../systems/SpecialStarSpawnSystem';
+import {
+  setSharedVibrationFallbackHandler,
+  setSharedVibrationIntensity,
+  triggerSharedVibration,
+  type VibrationEvent,
+} from '../systems/VibrationSystem';
 import { HUD } from '../../ui/HUD';
+import { AdaptiveTutorialHint } from '../../ui/AdaptiveTutorialHint';
 import { CountdownOverlay } from '../../ui/CountdownOverlay';
 import { StageIntroOverlay } from '../../ui/StageIntroOverlay';
 import { getStageConfig, TOTAL_STAGES } from '../config/StageConfig';
+import { getStageAtmosphereConfig } from '../config/StageAtmosphereConfig';
 import { ParticleBurstManager } from '../effects/ParticleBurst';
 import { AirShield } from '../effects/AirShield';
 import { BoostLinesEffect } from '../effects/BoostLinesEffect';
 import { BoostFlameEffect } from '../effects/BoostFlameEffect';
+import { ConstellationLineEffect } from '../effects/ConstellationLineEffect';
+import { MeteoShowerEffect } from '../effects/MeteoShowerEffect';
+import { PlanetRingEffect } from '../effects/PlanetRingEffect';
+import { RainbowTrailEffect } from '../effects/RainbowTrailEffect';
+import { SpaceWeatherEffect } from '../effects/SpaceWeatherEffect';
+import { StageAtmosphereEffect } from '../effects/StageAtmosphereEffect';
+import { SeasonalEventEffects } from '../effects/SeasonalEventEffects';
+import { StageSpecialEffects } from '../effects/StageSpecialEffects';
+import { ScorePopupEffect } from '../effects/ScorePopupEffect';
 import { CompanionManager } from '../entities/CompanionManager';
+import { getConstellationForStage } from '../config/ConstellationData';
+import { getStageSpecialEventConfig } from '../config/StageSpecialEvents';
+import { SeasonalEventSystem } from '../systems/SeasonalEventSystem';
 import { followCameraZ } from '../utils/followCameraZ';
 import { getViewportSize } from '../utils/getViewportSize';
 import { ScorePopupManager } from '../../ui/ScorePopupManager';
-import { getNextPlanetEncyclopediaEntry, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
+import {
+  getNextPlanetEncyclopediaEntry,
+  getPlanetEncyclopediaEntry,
+  getSpecialStarEncyclopediaEntry,
+} from '../config/PlanetEncyclopedia';
 import { TouchGuideOverlay, type TouchGuideMode } from '../../ui/TouchGuideOverlay';
+import { ConstellationHintOverlay } from '../../ui/ConstellationHintOverlay';
 import { attachReleaseConfirmButton } from '../../ui/attachReleaseConfirmButton';
 import { PauseOverlay } from '../../ui/PauseOverlay';
+import { SeasonalEventNotice } from '../../ui/SeasonalEventNotice';
 import { StageClearOverlay } from '../../ui/StageClearOverlay';
+import { FrameRateHintOverlay } from '../../ui/FrameRateHintOverlay';
+import { ConstellationSystem } from '../systems/ConstellationSystem';
 import {
   __resetStageSceneSharedAssetCachesForTest,
   __stageSceneSharedAssetCachesForTest,
@@ -35,9 +79,29 @@ import {
   createStageBackground as buildStageBackground,
   prewarmStageVisualAssets,
 } from './stageVisualAssets';
+import { SPECIAL_STAR_CONFIG } from '../config/SpecialStarConfig';
+import {
+  DEFAULT_MOTION_SENSITIVITY,
+  getMotionSensitivityProfile,
+} from '../accessibility/motionSensitivity';
 
 const BG_STAR_PARALLAX = 1.0;
 const BG_STAR_COUNT = 2000;
+
+interface CameraShakeProfile {
+  duration: number;
+  amplitudeX: number;
+  amplitudeY: number;
+  frequency: number;
+}
+
+const CAMERA_SHAKE_PROFILES: Record<VibrationEvent, CameraShakeProfile> = {
+  starCollect: { duration: 0.09, amplitudeX: 0.04, amplitudeY: 0.025, frequency: 34 },
+  rainbowCollect: { duration: 0.12, amplitudeX: 0.07, amplitudeY: 0.04, frequency: 32 },
+  meteoriteHit: { duration: 0.28, amplitudeX: 0.18, amplitudeY: 0.12, frequency: 42 },
+  boost: { duration: 0.14, amplitudeX: 0.08, amplitudeY: 0.045, frequency: 28 },
+  stageClear: { duration: 0.3, amplitudeX: 0.1, amplitudeY: 0.06, frequency: 22 },
+};
 
 function scheduleIdleTask(callback: () => void): void {
   const requestIdle = (window as Window & {
@@ -63,6 +127,7 @@ type EncyclopediaOverlayInstance = InstanceType<EncyclopediaOverlayCtor>;
 interface StageSceneOptions {
   scheduleIdleTask?: (callback: () => void) => void;
   loadEncyclopediaOverlay?: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
+  seasonalEventDateProvider?: () => Date;
 }
 
 interface StagePauseHandlers {
@@ -101,15 +166,36 @@ export class StageScene implements Scene {
   private spaceship!: Spaceship;
   private stars: Star[] = [];
   private meteorites: Meteorite[] = [];
+  private shootingStars: ShootingStar[] = [];
+  private comets: Comet[] = [];
+  private specialShootingStars: SpecialShootingStar[] = [];
 
   private collisionSystem = new CollisionSystem();
   private scoreSystem = new ScoreSystem();
   private spawnSystem = new SpawnSystem();
   private boostSystem = new BoostSystem();
+  private lodSystem = new LODSystem();
+  private meteoShowerEventSystem = new MeteoShowerEventSystem();
+  private stageSpecialEventSystem = new StageSpecialEventSystem();
+  private spaceWeatherEventSystem = new SpaceWeatherEventSystem();
+  private specialStarSpawnSystem = new SpecialStarSpawnSystem();
+  private readonly seasonalEventSystem: SeasonalEventSystem;
   private hud!: HUD;
   private scorePopupManager = new ScorePopupManager();
+  private scorePopupEffect = new ScorePopupEffect();
   private particleBurstManager = new ParticleBurstManager();
+  private planetRingEffect = new PlanetRingEffect();
+  private constellationLineEffect = new ConstellationLineEffect();
+  private constellationSystem = new ConstellationSystem();
+  private constellationHintOverlay = new ConstellationHintOverlay();
   private airShield!: AirShield;
+  private meteoShowerEffect!: MeteoShowerEffect;
+  private spaceWeatherEffect!: SpaceWeatherEffect;
+  private stageSpecialEffects!: StageSpecialEffects;
+  private seasonalEventEffects = new SeasonalEventEffects();
+  private rainbowTrailEffect!: RainbowTrailEffect;
+  private stageAtmosphereEffect = new StageAtmosphereEffect();
+  private seasonalEventNotice = new SeasonalEventNotice();
 
   private stageConfig!: StageConfig;
   private stageNumber = 1;
@@ -137,10 +223,10 @@ export class StageScene implements Scene {
   private cameraShakeTimer = 0;
   private cameraShakeElapsed = 0;
   private readonly cameraShakeOffset = new THREE.Vector3();
-  private static readonly CAMERA_SHAKE_DURATION = 0.28;
-  private static readonly CAMERA_SHAKE_AMPLITUDE_X = 0.18;
-  private static readonly CAMERA_SHAKE_AMPLITUDE_Y = 0.12;
-  private static readonly CAMERA_SHAKE_FREQUENCY = 42;
+  private cameraShakeProfile: CameraShakeProfile = CAMERA_SHAKE_PROFILES.meteoriteHit;
+  private motionSensitivity: MotionSensitivity = DEFAULT_MOTION_SENSITIVITY;
+  private readonly cameraPositionTarget = new THREE.Vector3(0, 5, 10);
+  private readonly cameraLookAtTarget = new THREE.Vector3(0, 0, -10);
 
   // Destination planet
   private destinationPlanet: THREE.Group | null = null;
@@ -150,10 +236,12 @@ export class StageScene implements Scene {
   // composes cleanly with this rotation.
   private destinationPlanetSpinTarget: THREE.Object3D | null = null;
   private static readonly DESTINATION_PLANET_SPIN_SPEED = 0.2;
-  private static readonly BOOST_HINT_INITIAL_DELAY = 3.5;
-  private static readonly BOOST_HINT_REPEAT_DELAY = 12;
   private static readonly BOOST_HINT_DURATION = 2.4;
-  private static readonly BOOST_HINT_MESSAGE = '🚀 いまだよ！';
+  private static readonly ADAPTIVE_HINT_DURATION = 3;
+  private static readonly SHOOTING_STAR_SCORE_BONUS_DURATION = 6;
+  private static readonly METEO_SHOWER_MESSAGE = 'りゅうせいぐんだ！ ✨';
+  private static readonly METEO_SHOWER_MESSAGE_DURATION = 2.4;
+  private static readonly STAGE_SPECIAL_MESSAGE_DURATION = 2.8;
 
   // Background stars
   private bgStars: THREE.Points | null = null;
@@ -195,18 +283,27 @@ export class StageScene implements Scene {
   private touchGuideIdleTimer = 0;
   private hasSeenMoveInput = false;
   private isActive = false;
-  private boostHintReadyTimer = 0;
   private boostHintDisplayTimer = 0;
-  private boostHintNextTrigger = StageScene.BOOST_HINT_INITIAL_DELAY;
+  private adaptiveHintDisplayTimer = 0;
+  private adaptiveTutorialSystem = new AdaptiveTutorialSystem();
+  private adaptiveTutorialHint = new AdaptiveTutorialHint();
+  private meteoShowerAnnouncementTimer = 0;
+  private spaceWeatherAnnouncementTimer = 0;
+  private spaceWeatherAnnouncementMessage = '';
+  private stageSpecialAnnouncementTimer = 0;
+  private stageSpecialAnnouncementMessage = '';
   private prewarmRequestToken = 0;
   private static readonly TOUCH_GUIDE_IDLE_DELAY = 3;
   private visualQualityTier = StageScene.VISUAL_QUALITY_SCALE_BY_TIER.length - 1;
+  private performanceAdaptationLevel = 0;
+  private frameRateHintOverlay = new FrameRateHintOverlay();
   private readonly scheduleIdleTask: (callback: () => void) => void;
   private readonly loadEncyclopediaOverlay: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
   private clearRewardRequestToken = 0;
   private onPauseRequested: (() => void) | null = null;
   private onResumeRequested: (() => void) | null = null;
   private onExitHomeRequested: (() => void) | null = null;
+  private attemptStatsRecorded = false;
 
   constructor(
     sceneManager: SceneManager,
@@ -219,7 +316,14 @@ export class StageScene implements Scene {
     this.inputSystem = inputSystem;
     this.audioManager = audioManager;
     this.saveManager = saveManager;
+    this.scoreSystem.setScoreGainListener((event) => {
+      if (!event.worldPosition) {
+        return;
+      }
+      this.scorePopupEffect.emit(event.worldPosition, event.amount);
+    });
     this.scheduleIdleTask = options.scheduleIdleTask ?? scheduleIdleTask;
+    this.seasonalEventSystem = new SeasonalEventSystem(options.seasonalEventDateProvider);
     this.loadEncyclopediaOverlay =
       options.loadEncyclopediaOverlay ??
       (() => import('../../ui/EncyclopediaOverlay'));
@@ -260,6 +364,25 @@ export class StageScene implements Scene {
     this.boostFlameEffect = new BoostFlameEffect();
     this.boostFlameEffect.init(this.threeScene);
 
+    this.rainbowTrailEffect = new RainbowTrailEffect();
+    this.threeScene.add(this.rainbowTrailEffect.group);
+
+    this.constellationLineEffect.init(this.threeScene);
+
+    this.meteoShowerEffect = new MeteoShowerEffect();
+    this.meteoShowerEffect.init(this.threeScene);
+
+    this.spaceWeatherEffect = new SpaceWeatherEffect();
+    this.spaceWeatherEffect.init(this.threeScene);
+
+    this.stageSpecialEffects = new StageSpecialEffects();
+    this.stageSpecialEffects.init(this.threeScene);
+
+    this.seasonalEventEffects.init(this.threeScene);
+
+    this.stageAtmosphereEffect.init(this.threeScene);
+    this.scorePopupEffect.init(this.threeScene);
+
     this.hud = new HUD();
     this.initialized = true;
     this.applyVisualQualityTier();
@@ -268,6 +391,18 @@ export class StageScene implements Scene {
   setVisualQualityTier(tier: number): void {
     this.visualQualityTier = StageScene.clampVisualQualityTier(tier);
     this.applyVisualQualityTier();
+  }
+
+  setPerformanceAdaptationLevel(level: number): void {
+    this.performanceAdaptationLevel = StageScene.clampPerformanceAdaptationLevel(level);
+    this.applyVisualQualityTier();
+  }
+
+  showFrameRateHint(level: number): void {
+    if (!this.isActive) {
+      return;
+    }
+    this.frameRateHintOverlay.show({ level });
   }
 
   enter(context: SceneContext): void {
@@ -288,6 +423,7 @@ export class StageScene implements Scene {
     this.damageTimer = 0;
     this.elapsedTime = 0;
     this.destinationPlanetSpinTarget = null;
+    this.planetRingEffect.clear();
     this.isHomeConfirmOpen = false;
     this.shouldResumeAfterHomeConfirm = false;
     this.isPauseOpen = false;
@@ -297,15 +433,43 @@ export class StageScene implements Scene {
     this.hasSeenMoveInput = false;
     this.touchGuideMode = 'intro';
     this.playTime = 0;
+    this.attemptStatsRecorded = false;
     this.meteoriteHitTimes.length = 0;
+    this.meteoShowerAnnouncementTimer = 0;
+    this.spaceWeatherAnnouncementTimer = 0;
+    this.spaceWeatherAnnouncementMessage = '';
+    this.stageSpecialAnnouncementTimer = 0;
+    this.stageSpecialAnnouncementMessage = '';
     this.assistTimer = 0;
     this.assistMessageTimer = 0;
     this.assistDirection = null;
     this.assistDirectionRefreshTimer = 0;
+    this.adaptiveTutorialSystem.reset();
+    this.adaptiveHintDisplayTimer = 0;
+    this.adaptiveTutorialHint.hide();
+    this.meteoShowerEventSystem.reset();
+    this.spaceWeatherEventSystem.reset();
+    this.stageSpecialEventSystem.setStage(getStageSpecialEventConfig(this.stageNumber));
+    this.meteoShowerEffect.clear();
+    this.spaceWeatherEffect.clear();
+    this.stageSpecialEffects.clear();
     this.resetBoostHintState();
 
     const totalScore = context.totalScore ?? 0;
     const totalStarCount = context.totalStarCount ?? 0;
+    const saveData = this.saveManager.load();
+    this.spaceship.applyCustomization(saveData.spaceshipCustomization ?? DEFAULT_SPACESHIP_CUSTOMIZATION);
+    const highContrastEnabled = saveData.colorAccessibility?.highContrast === true;
+    this.motionSensitivity = saveData.colorAccessibility?.motionSensitivity ?? DEFAULT_MOTION_SENSITIVITY;
+    setSharedVibrationIntensity(saveData.vibrationSettings?.intensity ?? 'medium');
+    setSharedVibrationFallbackHandler((event) => this.handleVibrationFallback(event));
+    setStarHighContrastMode(highContrastEnabled);
+    setMeteoriteHighContrastMode(highContrastEnabled);
+    this.hud.setHighContrastMode(highContrastEnabled);
+    this.scorePopupManager.setHighContrastMode(highContrastEnabled);
+    this.adaptiveTutorialHint.setHighContrastMode(highContrastEnabled);
+    this.constellationHintOverlay.setHighContrastMode(highContrastEnabled);
+    this.seasonalEventNotice.setHighContrastMode(highContrastEnabled);
     this.stageEntryTotalScore = totalScore;
     this.stageEntryTotalStarCount = totalStarCount;
     this.scoreSystem.setTotalScore(totalScore);
@@ -321,13 +485,22 @@ export class StageScene implements Scene {
     this.airShield.reset(0, 0, 0);
     this.boostLinesEffect.update(false, 0, 0);
     this.boostFlameEffect.remove();
+    this.rainbowTrailEffect.clear();
     this.companionManager?.resetUnlockedPlanets([]);
     this.createBackground();
+    this.stageAtmosphereEffect.start(getStageAtmosphereConfig(this.stageNumber));
+    this.applyMotionSensitivity();
     this.applyVisualQualityTier();
+    const seasonalEvent = this.seasonalEventSystem.refresh();
+    if (seasonalEvent) {
+      this.seasonalEventEffects.start(seasonalEvent);
+      this.seasonalEventNotice.show(seasonalEvent);
+    }
 
     // Camera behind spaceship
     this.camera.position.set(0, 5, 10);
     this.camera.lookAt(0, 0, -10);
+    this.cameraLookAtTarget.set(0, 0, -10);
 
     // Destination planet
     this.createDestinationPlanet();
@@ -336,10 +509,23 @@ export class StageScene implements Scene {
     // Clear systems
     this.stars.length = 0;
     this.meteorites.length = 0;
+    this.shootingStars.length = 0;
+    this.comets.length = 0;
+    this.specialShootingStars.length = 0;
     this.spawnSystem.reset();
     this.spawnSystem.setMeteoriteIntervalMultiplier(1);
+    this.specialStarSpawnSystem.reset();
     this.boostSystem.reset();
     this.scoreSystem.resetStage();
+    this.constellationSystem.reset(getConstellationForStage(this.stageNumber));
+    this.constellationLineEffect.clear();
+    this.spawnConstellationStars();
+    const constellation = this.constellationSystem.getDefinition();
+    if (constellation) {
+      this.constellationHintOverlay.showHint(constellation.hintMessage);
+    } else {
+      this.constellationHintOverlay.hide();
+    }
 
     // HUD
     const stageName = `ステージ${this.stageConfig.stageNumber}: ${this.stageConfig.emoji} ${this.stageConfig.displayName}`;
@@ -388,11 +574,11 @@ export class StageScene implements Scene {
     });
     this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
     this.hud.hideAssistMessage();
+    this.adaptiveTutorialHint.hide();
     this.touchGuide.show('intro');
     this.syncPauseAvailability();
 
     // Companions
-    const saveData = this.saveManager.load();
     // Show personal best ⭐ for this stage in the HUD so the child can see
     // their target score during play. enter() runs on every (re)entry so a
     // freshly-updated best (from a prior clear) is reflected immediately.
@@ -667,12 +853,38 @@ export class StageScene implements Scene {
     this.isOpeningClearReward = false;
     this.removeDestinationPlanet();
     this.resetCameraShake();
+    this.planetRingEffect.clear();
+    this.scorePopupEffect.clear();
     this.particleBurstManager.clear(this.threeScene);
     this.spawnSystem.recycleAll();
     this.spawnSystem.setMeteoriteIntervalMultiplier(1);
+    this.meteoShowerEventSystem.reset();
+    this.meteoShowerEffect.clear();
+    this.meteoShowerAnnouncementTimer = 0;
+    this.spaceWeatherEventSystem.reset();
+    this.spaceWeatherEffect.clear();
+    this.spaceWeatherAnnouncementTimer = 0;
+    this.spaceWeatherAnnouncementMessage = '';
+    this.stageSpecialEventSystem.reset();
+    this.stageSpecialEffects.clear();
+    this.seasonalEventSystem.clear();
+    this.seasonalEventEffects.clear();
+    this.stageAtmosphereEffect.clear();
+    this.rainbowTrailEffect.clear();
+    this.stageSpecialAnnouncementTimer = 0;
+    this.stageSpecialAnnouncementMessage = '';
+    this.seasonalEventNotice.hide();
     this.stars.length = 0;
     this.meteorites.length = 0;
+    this.shootingStars.length = 0;
+    this.comets.length = 0;
+    this.specialShootingStars.length = 0;
+    this.specialStarSpawnSystem.recycleAll();
+    this.specialStarSpawnSystem.reset();
     this.hud?.hideAssistMessage();
+    this.constellationHintOverlay.hide();
+    this.constellationLineEffect.clear();
+    this.constellationSystem.reset();
     this.resetBoostHintState();
   }
 
@@ -684,6 +896,12 @@ export class StageScene implements Scene {
     if (this.isCleared) {
       this.resetBoostHintState();
       this.clearTimer += deltaTime;
+      this.seasonalEventNotice.tick(deltaTime);
+      this.constellationHintOverlay.tick(deltaTime);
+      this.constellationLineEffect.update(deltaTime);
+      this.planetRingEffect.update(deltaTime);
+      this.scorePopupEffect.update(deltaTime);
+      this.particleBurstManager.update(this.threeScene, deltaTime);
       // Keep companion entrance animation progressing during clear screen
       this.companionManager?.update(
         deltaTime,
@@ -691,7 +909,13 @@ export class StageScene implements Scene {
         this.spaceship.position.y,
         this.spaceship.position.z,
       );
+      if (this.destinationPlanetSpinTarget) {
+        this.destinationPlanetSpinTarget.rotation.y +=
+          deltaTime * StageScene.DESTINATION_PLANET_SPIN_SPEED;
+      }
+      this.seasonalEventEffects.update(deltaTime, this.spaceship.position.x, this.spaceship.position.z);
       this.revealClearActionButtonsIfReady();
+      this.stageAtmosphereEffect.update(deltaTime, this.camera, this.spaceship.position.x, this.spaceship.position.z);
       return;
     }
 
@@ -701,6 +925,8 @@ export class StageScene implements Scene {
     // keep moving so the scene feels alive (Constitution I/IV).
     if (this.isStarting || this.awaitingResume || this.isHomeConfirmOpen || this.isPauseOpen) {
       this.resetBoostHintState();
+      this.hideAdaptiveTutorialHint();
+      this.seasonalEventNotice.tick(deltaTime);
       this.inputSystem.setBoostPressed?.(false);
       if (!this.isHomeConfirmOpen && !this.isPauseOpen) {
         const hadStageIntro = this.stageIntroOverlay?.isActive() ?? false;
@@ -724,12 +950,22 @@ export class StageScene implements Scene {
       );
       this.airShield.update(deltaTime);
       this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
+      this.constellationHintOverlay.tick(deltaTime);
+      this.constellationLineEffect.update(deltaTime);
+      this.seasonalEventEffects.update(deltaTime, this.spaceship.position.x, this.spaceship.position.z);
+      this.stageAtmosphereEffect.update(deltaTime, this.camera, this.spaceship.position.x, this.spaceship.position.z);
       return;
     }
 
     const input = this.inputSystem.getState();
     this.playTime += deltaTime;
+    this.seasonalEventNotice.tick(deltaTime);
     this.updateAssistTimers(deltaTime);
+    this.updateMeteoShowerAnnouncement(deltaTime);
+    this.updateSpaceWeatherAnnouncement(deltaTime);
+    this.updateStageSpecialAnnouncement(deltaTime);
+    this.updateAdaptiveHintDisplay(deltaTime);
+    this.updateBoostHintDisplay(deltaTime);
     this.updateTouchGuide(input.moveDirection, deltaTime);
 
     // Capture boost state before changes
@@ -739,7 +975,9 @@ export class StageScene implements Scene {
     // Boost activation
     if (input.boostPressed) {
       if (this.boostSystem.activate()) {
+        this.adaptiveTutorialSystem.recordBoostUsed();
         this.audioManager.playSFX('boost');
+        triggerSharedVibration('boost');
         this.audioManager.startBoostSFX();
         this.boostFlameEffect.start();
       } else {
@@ -761,8 +999,6 @@ export class StageScene implements Scene {
       this.hud.flashBoostReady();
     }
 
-    this.updateBoostHint(deltaTime);
-
     // Apply boost state to spaceship
     if (this.boostSystem.isActive() && this.spaceship.speedState !== 'BOOST') {
       this.spaceship.activateBoost();
@@ -777,6 +1013,33 @@ export class StageScene implements Scene {
 
     // Update spaceship
     this.spaceship.update(deltaTime);
+    this.seasonalEventEffects.update(deltaTime, this.spaceship.position.x, this.spaceship.position.z);
+
+    const progress = this.spaceship.getProgress(this.stageConfig.stageLength);
+
+    const stageSpecialEventState = this.stageSpecialEventSystem.update(progress, deltaTime);
+    if (stageSpecialEventState.started && stageSpecialEventState.event) {
+      this.stageSpecialEffects.start(stageSpecialEventState.event);
+      this.showStageSpecialAnnouncement(stageSpecialEventState.event.message);
+    }
+
+    const meteoShowerState = this.meteoShowerEventSystem.update(deltaTime);
+    if (meteoShowerState.started) {
+      this.audioManager.playSFX('meteorShowerStart');
+      this.meteoShowerEffect.start();
+      this.showMeteoShowerAnnouncement();
+    }
+
+    const spaceWeatherState = this.spaceWeatherEventSystem.update(deltaTime);
+    this.scoreSystem.setEventStarMultiplier?.(
+      spaceWeatherState.active && spaceWeatherState.event
+        ? spaceWeatherState.event.starScoreMultiplier
+        : 1,
+    );
+    if (spaceWeatherState.started && spaceWeatherState.event) {
+      this.spaceWeatherEffect.start(spaceWeatherState.event);
+      this.showSpaceWeatherAnnouncement(spaceWeatherState.event.message);
+    }
 
     // Spawn
     const spawnResult = this.spawnSystem.update(
@@ -785,6 +1048,9 @@ export class StageScene implements Scene {
       this.stageConfig,
       this.stars,
       this.meteorites,
+      this.shootingStars,
+      this.comets,
+      { meteoShowerActive: meteoShowerState.active },
     );
     for (const star of spawnResult.newStars) {
       this.stars.push(star);
@@ -794,6 +1060,28 @@ export class StageScene implements Scene {
       this.meteorites.push(met);
       this.threeScene.add(met.mesh);
     }
+    for (const shootingStar of spawnResult.newShootingStars) {
+      this.shootingStars.push(shootingStar);
+      this.threeScene.add(shootingStar.mesh);
+    }
+    for (const comet of spawnResult.newComets) {
+      this.comets.push(comet);
+      this.threeScene.add(comet.mesh);
+    }
+    const specialStarSpawnResult = this.specialStarSpawnSystem.update(
+      deltaTime,
+      this.spaceship.position.z,
+      this.specialShootingStars,
+      this.shootingStars,
+      this.comets,
+    );
+    for (const specialStar of specialStarSpawnResult.newSpecialStars) {
+      this.specialShootingStars.push(specialStar);
+      this.threeScene.add(specialStar.mesh);
+    }
+
+    this.lodSystem.update(this.spaceship.position, this.stars);
+    this.lodSystem.update(this.spaceship.position, this.meteorites);
 
     // Note: star.update() (rainbow hue / Y rotation) is folded into the
     // retain branch of cleanupPassedObjects() below so this.stars is walked
@@ -812,13 +1100,104 @@ export class StageScene implements Scene {
 
     // Collision (with companion star attraction bonus)
     const companionBonus = this.companionManager?.getStarAttractionBonus() ?? 0;
-    const collisionResult = this.collisionSystem.check(this.spaceship, this.stars, this.meteorites, companionBonus);
+    const collisionResult = this.collisionSystem.check(
+      this.spaceship,
+      this.stars,
+      this.meteorites,
+      companionBonus,
+      this.shootingStars,
+      this.comets,
+      this.specialShootingStars,
+    );
+
+    if (collisionResult.shootingStarHit) {
+      const shootingStar = collisionResult.shootingStarHit;
+      this.scoreSystem.addBonusScore(shootingStar.scoreBonus, shootingStar.position);
+      this.scoreSystem.activateShootingStarBonus(
+        Math.max(StageScene.SHOOTING_STAR_SCORE_BONUS_DURATION, shootingStar.bonusDuration),
+      );
+      this.audioManager.playSFX('shootingStarCollect');
+      this.scorePopupManager.showLabel('☆ながれぼし☆', shootingStar.position, this.camera, 'shooting-star');
+      this.particleBurstManager.emitShootingStar(
+        this.threeScene,
+        shootingStar.position.x,
+        shootingStar.position.y,
+        shootingStar.position.z,
+      );
+    }
+
+    if (collisionResult.cometHit) {
+      const comet = collisionResult.cometHit;
+      this.scoreSystem.addBonusScore(comet.scoreBonus, comet.position);
+      this.scoreSystem.activateShootingStarBonus(comet.bonusDuration);
+      this.audioManager.playSFX('cometCollect');
+      this.particleBurstManager.emit(
+        this.threeScene,
+        comet.position.x,
+        comet.position.y,
+        comet.position.z,
+        0xbdefff,
+        50,
+        true,
+      );
+      this.particleBurstManager.emit(
+        this.threeScene,
+        comet.position.x,
+        comet.position.y,
+        comet.position.z,
+        0xffffff,
+        50,
+        true,
+      );
+    }
+
+    if (collisionResult.specialShootingStarHit) {
+      const specialStar = collisionResult.specialShootingStarHit;
+      const encyclopediaEntry = getSpecialStarEncyclopediaEntry(specialStar.specialType);
+      const isNewDiscovery = this.saveManager.markSpecialStarDiscovered?.(specialStar.specialType) ?? false;
+      this.scoreSystem.addBonusScore(specialStar.scoreBonus, specialStar.position);
+      this.audioManager.playSFX('shootingStarCollect');
+      triggerSharedVibration('rainbowCollect');
+      this.particleBurstManager.emitShootingStar(
+        this.threeScene,
+        specialStar.position.x,
+        specialStar.position.y,
+        specialStar.position.z,
+      );
+      this.particleBurstManager.emit(
+        this.threeScene,
+        specialStar.position.x,
+        specialStar.position.y,
+        specialStar.position.z,
+        SPECIAL_STAR_CONFIG[specialStar.specialType].visual.trailColor,
+        50,
+        true,
+      );
+      this.particleBurstManager.emit(
+        this.threeScene,
+        specialStar.position.x,
+        specialStar.position.y,
+        specialStar.position.z,
+        SPECIAL_STAR_CONFIG[specialStar.specialType].visual.auraColor,
+        50,
+        true,
+      );
+      this.scorePopupManager.showLabel(
+        isNewDiscovery && encyclopediaEntry
+          ? `${encyclopediaEntry.emoji} ${encyclopediaEntry.reading}`
+          : SPECIAL_STAR_CONFIG[specialStar.specialType].label,
+        specialStar.position,
+        this.camera,
+        'special-star',
+      );
+    }
 
     // Star collection
     for (const star of collisionResult.starCollisions) {
-      this.scoreSystem.addStarScore(star.starType);
+      this.scoreSystem.addStarScore(star.starType, star.position);
       if (star.starType === 'RAINBOW') {
         this.audioManager.playSFX('rainbowCollect');
+        this.rainbowTrailEffect.start(this.spaceship.position);
         this.particleBurstManager.emit(
           this.threeScene,
           star.position.x,
@@ -840,6 +1219,7 @@ export class StageScene implements Scene {
           false,
         );
       }
+      this.handleConstellationStarCollected(star);
     }
 
     // Note: Score/SFX/particle emit above already consumed the collected
@@ -859,12 +1239,17 @@ export class StageScene implements Scene {
       // while waiting for the meteorite to scroll past behindThreshold.
       if (collisionResult.meteoriteHit) {
         const hit = collisionResult.meteoriteHit;
-        hit.isActive = false;
-        // Hide the hit meteorite immediately so it does not appear to fly
-        // past the spaceship after collision; mirrors the "stars vanish on
-        // pickup" feedback for UX consistency. Visibility is restored by
-        // Meteorite.reset()/recycle() before the mesh re-enters the pool.
-        hit.mesh.visible = false;
+        if (typeof (hit as Meteorite & { handleCollision?: () => void }).handleCollision === 'function') {
+          hit.handleCollision();
+        } else {
+          hit.isActive = false;
+          // Hide the hit meteorite immediately so it does not appear to fly
+          // past the spaceship after collision; mirrors the "stars vanish on
+          // pickup" feedback for UX consistency. Visibility is restored by
+          // Meteorite.reset()/recycle() before the mesh re-enters the pool.
+          hit.mesh.visible = false;
+          triggerSharedVibration('meteoriteHit');
+        }
         // Subtle orange particle burst at the hit position to signal impact
         // without distracting from gameplay; uses the non-rainbow burst
         // variant for the same low cost as a regular star pickup.
@@ -883,7 +1268,7 @@ export class StageScene implements Scene {
       this.recordMeteoriteHit();
       this.boostSystem.cancel();
       this.damageTimer = StageScene.DAMAGE_FLASH_DURATION;
-      this.startCameraShake();
+      this.startCameraShake('meteoriteHit');
       this.audioManager.playSFX('meteoriteHit');
       this.audioManager.stopBoostSFX();
       this.boostFlameEffect.remove();
@@ -894,9 +1279,12 @@ export class StageScene implements Scene {
 
     // Deactivate passed objects
     this.cleanupPassedObjects(deltaTime);
+    this.updateAdaptiveTutorial(input.moveDirection, deltaTime);
 
     // Camera follow
     this.updateCameraFollow(deltaTime);
+    this.stageAtmosphereEffect.update(deltaTime, this.camera, this.spaceship.position.x, this.spaceship.position.z);
+    this.rainbowTrailEffect.update(deltaTime, this.spaceship.position);
 
     for (const star of collisionResult.starCollisions) {
       this.scorePopupManager.show(star.scoreValue, star.position, this.camera);
@@ -922,6 +1310,24 @@ export class StageScene implements Scene {
     if (this.bgStars) {
       followCameraZ(this.bgStars, this.spaceship.position.z, BG_STAR_PARALLAX);
     }
+    this.meteoShowerEffect.update(
+      meteoShowerState.active,
+      deltaTime,
+      this.spaceship.position.x,
+      this.spaceship.position.z,
+    );
+    this.stageSpecialEffects.update(
+      stageSpecialEventState.active,
+      deltaTime,
+      this.spaceship.position.x,
+      this.spaceship.position.z,
+    );
+    this.spaceWeatherEffect.update(
+      spaceWeatherState.active,
+      deltaTime,
+      this.spaceship.position.x,
+      this.spaceship.position.z,
+    );
 
     // Boost visual effects
     this.boostLinesEffect.update(
@@ -957,14 +1363,17 @@ export class StageScene implements Scene {
     this.airShield.update(deltaTime);
 
     // Particle effects
+    this.scorePopupEffect.update(deltaTime);
     this.particleBurstManager.update(this.threeScene, deltaTime);
+    this.scoreSystem.update(deltaTime);
+    this.constellationLineEffect.update(deltaTime);
+    this.constellationHintOverlay.tick(deltaTime);
 
     // HUD update
     this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
     this.hud.updateCooldown(this.boostSystem.getCooldownProgress());
 
     // Check stage clear
-    const progress = this.spaceship.getProgress(this.stageConfig.stageLength);
     this.hud.updateStageProgress(progress);
     if (progress >= 1) {
       this.onStageClear();
@@ -1029,41 +1438,142 @@ export class StageScene implements Scene {
     if (this.assistMessageTimer > 0) {
       this.assistMessageTimer = Math.max(0, this.assistMessageTimer - deltaTime);
       if (this.assistMessageTimer === 0) {
-        this.hud.hideAssistMessage();
+        this.syncAssistMessage();
       }
     }
   }
 
-  private resetBoostHintState(): void {
-    this.boostHintReadyTimer = 0;
-    this.boostHintDisplayTimer = 0;
-    this.boostHintNextTrigger = StageScene.BOOST_HINT_INITIAL_DELAY;
-    this.hud?.hideBoostHint();
-  }
-
-  private updateBoostHint(deltaTime: number): void {
-    const boostReady = this.boostSystem.isAvailable() && !this.boostSystem.isActive();
-    if (!boostReady) {
-      this.resetBoostHintState();
+  private updateMeteoShowerAnnouncement(deltaTime: number): void {
+    if (this.meteoShowerAnnouncementTimer <= 0) {
       return;
     }
 
+    this.meteoShowerAnnouncementTimer = Math.max(0, this.meteoShowerAnnouncementTimer - deltaTime);
+    if (this.meteoShowerAnnouncementTimer === 0) {
+      this.syncAssistMessage();
+    }
+  }
+
+  private updateSpaceWeatherAnnouncement(deltaTime: number): void {
+    if (this.spaceWeatherAnnouncementTimer <= 0) {
+      return;
+    }
+
+    this.spaceWeatherAnnouncementTimer = Math.max(0, this.spaceWeatherAnnouncementTimer - deltaTime);
+    if (this.spaceWeatherAnnouncementTimer === 0) {
+      this.spaceWeatherAnnouncementMessage = '';
+      this.syncAssistMessage();
+    }
+  }
+
+  private showMeteoShowerAnnouncement(): void {
+    this.meteoShowerAnnouncementTimer = StageScene.METEO_SHOWER_MESSAGE_DURATION;
+    this.syncAssistMessage();
+  }
+
+  private showSpaceWeatherAnnouncement(message: string): void {
+    this.spaceWeatherAnnouncementMessage = message;
+    this.spaceWeatherAnnouncementTimer = StageScene.STAGE_SPECIAL_MESSAGE_DURATION;
+    this.syncAssistMessage();
+  }
+
+  private updateStageSpecialAnnouncement(deltaTime: number): void {
+    if (this.stageSpecialAnnouncementTimer <= 0) {
+      return;
+    }
+
+    this.stageSpecialAnnouncementTimer = Math.max(0, this.stageSpecialAnnouncementTimer - deltaTime);
+    if (this.stageSpecialAnnouncementTimer === 0) {
+      this.stageSpecialAnnouncementMessage = '';
+      this.syncAssistMessage();
+    }
+  }
+
+  private showStageSpecialAnnouncement(message: string): void {
+    this.stageSpecialAnnouncementMessage = message;
+    this.stageSpecialAnnouncementTimer = StageScene.STAGE_SPECIAL_MESSAGE_DURATION;
+    this.syncAssistMessage();
+  }
+
+  private syncAssistMessage(): void {
+    if (this.meteoShowerAnnouncementTimer > 0) {
+      this.hud.showAssistMessage(StageScene.METEO_SHOWER_MESSAGE);
+      return;
+    }
+    if (this.stageSpecialAnnouncementTimer > 0 && this.stageSpecialAnnouncementMessage) {
+      this.hud.showAssistMessage(this.stageSpecialAnnouncementMessage);
+      return;
+    }
+    if (this.spaceWeatherAnnouncementTimer > 0 && this.spaceWeatherAnnouncementMessage) {
+      this.hud.showAssistMessage(this.spaceWeatherAnnouncementMessage);
+      return;
+    }
+    if (this.assistMessageTimer > 0) {
+      this.hud.showAssistMessage(StageScene.ASSIST_MESSAGE);
+      return;
+    }
+    this.hud.hideAssistMessage();
+  }
+
+  private resetBoostHintState(): void {
+    this.boostHintDisplayTimer = 0;
+    this.hud?.hideBoostHint();
+  }
+
+  private updateBoostHintDisplay(deltaTime: number): void {
     if (this.boostHintDisplayTimer > 0) {
       this.boostHintDisplayTimer = Math.max(0, this.boostHintDisplayTimer - deltaTime);
       if (this.boostHintDisplayTimer === 0) {
         this.hud.hideBoostHint();
       }
     }
+  }
 
-    this.boostHintReadyTimer += deltaTime;
-    if (this.boostHintReadyTimer < this.boostHintNextTrigger) {
+  private updateAdaptiveHintDisplay(deltaTime: number): void {
+    if (this.adaptiveHintDisplayTimer <= 0) {
       return;
     }
 
-    this.hud.showBoostHint(StageScene.BOOST_HINT_MESSAGE);
-    this.boostHintDisplayTimer = StageScene.BOOST_HINT_DURATION;
-    this.boostHintReadyTimer = 0;
-    this.boostHintNextTrigger = StageScene.BOOST_HINT_REPEAT_DELAY;
+    this.adaptiveHintDisplayTimer = Math.max(0, this.adaptiveHintDisplayTimer - deltaTime);
+    if (this.adaptiveHintDisplayTimer === 0) {
+      this.adaptiveTutorialHint.hide();
+    }
+  }
+
+  private hideAdaptiveTutorialHint(): void {
+    this.adaptiveHintDisplayTimer = 0;
+    this.adaptiveTutorialHint.hide();
+  }
+
+  private updateAdaptiveTutorial(moveDirection: number, deltaTime: number): void {
+    const event = this.adaptiveTutorialSystem.update({
+      deltaTime,
+      moveDirection: moveDirection as -1 | 0 | 1,
+      shipX: this.spaceship.position.x,
+      shipZ: this.spaceship.position.z,
+      boostAvailable: this.boostSystem.isAvailable(),
+      boostActive: this.boostSystem.isActive(),
+      meteorites: this.meteorites,
+    });
+
+    if (!event) {
+      return;
+    }
+
+    this.showAdaptiveTutorialEvent(event);
+  }
+
+  private showAdaptiveTutorialEvent(event: AdaptiveTutorialEvent): void {
+    if (event.type === 'boost') {
+      this.hideAdaptiveTutorialHint();
+      this.hud.showBoostHint(event.message);
+      this.boostHintDisplayTimer = StageScene.BOOST_HINT_DURATION;
+      return;
+    }
+
+    this.resetBoostHintState();
+    this.adaptiveTutorialHint.show(event.message, event.type);
+    this.adaptiveHintDisplayTimer = StageScene.ADAPTIVE_HINT_DURATION;
   }
 
   private recordMeteoriteHit(): void {
@@ -1170,12 +1680,21 @@ export class StageScene implements Scene {
   private resetCameraShake(): void {
     this.cameraShakeTimer = 0;
     this.cameraShakeElapsed = 0;
+    this.cameraShakeProfile = CAMERA_SHAKE_PROFILES.meteoriteHit;
     this.cameraShakeOffset.set(0, 0, 0);
   }
 
-  private startCameraShake(): void {
-    this.cameraShakeTimer = StageScene.CAMERA_SHAKE_DURATION;
+  private startCameraShake(event: VibrationEvent = 'meteoriteHit'): void {
+    this.cameraShakeProfile = CAMERA_SHAKE_PROFILES[event];
+    this.cameraShakeTimer = this.cameraShakeProfile.duration;
     this.cameraShakeElapsed = 0;
+  }
+
+  private handleVibrationFallback(event: VibrationEvent): void {
+    if (event === 'meteoriteHit') {
+      return;
+    }
+    this.startCameraShake(event);
   }
 
   private updateCameraShake(deltaTime: number): void {
@@ -1192,27 +1711,36 @@ export class StageScene implements Scene {
       return;
     }
 
-    const decay = this.cameraShakeTimer / StageScene.CAMERA_SHAKE_DURATION;
-    const phase = this.cameraShakeElapsed * StageScene.CAMERA_SHAKE_FREQUENCY;
+    const decay = this.cameraShakeTimer / this.cameraShakeProfile.duration;
+    const phase = this.cameraShakeElapsed * this.cameraShakeProfile.frequency;
+    const motionProfile = getMotionSensitivityProfile(this.motionSensitivity);
     this.cameraShakeOffset.set(
-      Math.sin(phase) * StageScene.CAMERA_SHAKE_AMPLITUDE_X * decay,
-      Math.cos(phase * 0.8) * StageScene.CAMERA_SHAKE_AMPLITUDE_Y * decay,
+      Math.sin(phase) * this.cameraShakeProfile.amplitudeX * decay * motionProfile.cameraShakeScale,
+      Math.cos(phase * 0.8) * this.cameraShakeProfile.amplitudeY * decay * motionProfile.cameraShakeScale,
       0,
     );
   }
 
   private updateCameraFollow(deltaTime: number): void {
     this.updateCameraShake(deltaTime);
-    this.camera.position.set(
-      this.spaceship.position.x * 0.3 + this.cameraShakeOffset.x,
-      5 + this.cameraShakeOffset.y,
-      this.spaceship.position.z + 12,
-    );
-    this.camera.lookAt(
+    const motionProfile = getMotionSensitivityProfile(this.motionSensitivity);
+    const targetX = this.spaceship.position.x * 0.3 + this.cameraShakeOffset.x;
+    const targetY = 5 + this.cameraShakeOffset.y;
+    const targetZ = this.spaceship.position.z + 12;
+    const followResponsiveness = motionProfile.cameraFollowResponsiveness;
+    if (followResponsiveness >= 1) {
+      this.camera.position.set(targetX, targetY, targetZ);
+    } else {
+      const frameScaledLerp = 1 - Math.pow(1 - followResponsiveness, Math.max(1, deltaTime * 60));
+      this.cameraPositionTarget.set(targetX, targetY, targetZ);
+      this.camera.position.lerp(this.cameraPositionTarget, frameScaledLerp);
+    }
+    this.cameraLookAtTarget.set(
       this.spaceship.position.x * 0.5,
       0,
       this.spaceship.position.z - 20,
     );
+    this.camera.lookAt(this.cameraLookAtTarget);
   }
 
   private cleanupPassedObjects(deltaTime: number): void {
@@ -1221,9 +1749,13 @@ export class StageScene implements Scene {
 
     const stars = this.stars;
     let starWrite = 0;
+    let missedStarCount = 0;
     for (let read = 0; read < stars.length; read++) {
       const star = stars[read];
       if (star.isCollected || star.position.z > behindThreshold) {
+        if (!star.isCollected && star.position.z > behindThreshold) {
+          missedStarCount += 1;
+        }
         // releaseStar handles scene detach (via recycle) and pool re-use.
         this.spawnSystem.releaseStar(star);
       } else {
@@ -1235,6 +1767,9 @@ export class StageScene implements Scene {
       }
     }
     stars.length = starWrite;
+    if (missedStarCount > 0) {
+      this.adaptiveTutorialSystem.recordMissedStars(missedStarCount);
+    }
 
     const meteorites = this.meteorites;
     let metWrite = 0;
@@ -1262,21 +1797,138 @@ export class StageScene implements Scene {
       }
     }
     meteorites.length = metWrite;
+
+    const shootingStars = this.shootingStars;
+    let shootingWrite = 0;
+    for (let read = 0; read < shootingStars.length; read++) {
+      const shootingStar = shootingStars[read];
+      if (shootingStar.isCollected || shootingStar.position.z > behindThreshold) {
+        this.spawnSystem.releaseShootingStar(shootingStar);
+      } else {
+        shootingStar.update(deltaTime, shipZ);
+        if (shootingWrite !== read) shootingStars[shootingWrite] = shootingStar;
+        shootingWrite++;
+      }
+    }
+    shootingStars.length = shootingWrite;
+
+    const comets = this.comets;
+    let cometWrite = 0;
+    for (let read = 0; read < comets.length; read++) {
+      const comet = comets[read];
+      if (comet.isCollected || comet.position.z > behindThreshold) {
+        this.spawnSystem.releaseComet(comet);
+      } else {
+        comet.update(deltaTime, shipZ);
+        if (cometWrite !== read) comets[cometWrite] = comet;
+        cometWrite++;
+      }
+    }
+    comets.length = cometWrite;
+
+    const specialShootingStars = this.specialShootingStars;
+    let specialWrite = 0;
+    for (let read = 0; read < specialShootingStars.length; read++) {
+      const specialStar = specialShootingStars[read];
+      if (specialStar.isCollected || specialStar.position.z > behindThreshold) {
+        this.specialStarSpawnSystem.releaseSpecialStar(specialStar);
+      } else {
+        specialStar.update(deltaTime, shipZ);
+        if (specialWrite !== read) specialShootingStars[specialWrite] = specialStar;
+        specialWrite++;
+      }
+    }
+    specialShootingStars.length = specialWrite;
+  }
+
+  private spawnConstellationStars(): void {
+    const constellation = this.constellationSystem.getDefinition();
+    if (!constellation) {
+      return;
+    }
+
+    for (let order = 0; order < constellation.points.length; order++) {
+      const point = constellation.points[order];
+      const star = this.spawnSystem.acquireStar(point.x, point.y, point.z, 'RAINBOW');
+      star.setConstellationMarker(constellation.id, constellation.stageNumber, order);
+      this.stars.push(star);
+      this.threeScene.add(star.mesh);
+    }
+  }
+
+  private handleConstellationStarCollected(star: Star): void {
+    const result = this.constellationSystem.registerCollectedStar(star);
+    if (!result.advanced) {
+      return;
+    }
+
+    if (result.lineSegment) {
+      this.constellationLineEffect.addSegment(result.lineSegment.from, result.lineSegment.to);
+    }
+
+    if (!result.completed) {
+      return;
+    }
+
+    const constellation = this.constellationSystem.getDefinition();
+    if (!constellation) {
+      return;
+    }
+
+    this.saveManager.markConstellationDiscovered?.(this.stageNumber);
+    this.constellationHintOverlay.showCelebration(constellation.celebrationMessage);
+    this.audioManager.playSFX('rainbowCollect');
+    this.particleBurstManager.emit(
+      this.threeScene,
+      star.position.x,
+      star.position.y,
+      star.position.z,
+      0x8ae8ff,
+      42,
+      true,
+    );
   }
 
 
   private onStageClear(): void {
+    if (this.isCleared) {
+      return;
+    }
     this.isCleared = true;
     this.clearTimer = 0;
     this.stageClearOverlay.hide();
     this.resetAssistNavigation();
+    this.meteoShowerAnnouncementTimer = 0;
+    this.spaceWeatherAnnouncementTimer = 0;
+    this.spaceWeatherAnnouncementMessage = '';
+    this.stageSpecialAnnouncementTimer = 0;
+    this.stageSpecialAnnouncementMessage = '';
+    this.meteoShowerEventSystem.reset();
+    this.meteoShowerEffect.clear();
+    this.spaceWeatherEventSystem.reset();
+    this.spaceWeatherEffect.clear();
+    this.scoreSystem.setEventStarMultiplier?.(1);
+    this.stageSpecialEventSystem.reset();
+    this.stageSpecialEffects.clear();
+    this.rainbowTrailEffect.clear();
     this.resetBoostHintState();
     this.touchGuide.hide();
     this.syncPauseAvailability();
     const isNewPlanetUnlock = this.saveManager.markStageCleared(this.stageNumber);
     this.audioManager.playSFX('stageClear');
+    triggerSharedVibration('stageClear');
     this.audioManager.stopBoostSFX();
     this.boostFlameEffect.remove();
+    if (this.destinationPlanet) {
+      const planetRadius = this.getDestinationPlanetEffectRadius(this.destinationPlanet);
+      this.planetRingEffect.start(
+        this.threeScene,
+        this.destinationPlanet,
+        planetRadius,
+        this.stageConfig.planetColor,
+        this.particleBurstManager,
+      );
+    }
 
     // Capture previous best BEFORE updating, so we can show "じこベスト
     // こうしん" feedback only when the child actually improved.
@@ -1285,6 +1937,7 @@ export class StageScene implements Scene {
 
     // Persist best (highest) star count for this stage.
     this.saveManager.updateBestStageStars(this.stageNumber, earnedStars);
+    this.recordAttemptStats(true);
 
     const bestStarCount = Math.max(previousBest, earnedStars);
     const isBestUpdated = earnedStars > previousBest;
@@ -1363,6 +2016,7 @@ export class StageScene implements Scene {
       }, {
         bestStageStars: { [this.stageNumber]: starCount },
         backLabel: 'クリアへ もどる',
+        discoveredConstellations: this.saveManager.load().discoveredConstellations ?? [],
         zIndex: 50,
       });
       if (!didOpen) {
@@ -1428,6 +2082,15 @@ export class StageScene implements Scene {
     this.stageClearOverlay.enableContinue();
   }
 
+  private getDestinationPlanetEffectRadius(planet: THREE.Object3D): number {
+    const bounds = new THREE.Box3().setFromObject(planet);
+    if (bounds.isEmpty()) {
+      return 15;
+    }
+    const size = bounds.getSize(new THREE.Vector3());
+    return Math.max(size.x, size.y, size.z) * 0.5;
+  }
+
   private handleStageComplete(): void {
     const { totalScore, totalStarCount } = this.scoreSystem.finalizeStage();
 
@@ -1460,10 +2123,25 @@ export class StageScene implements Scene {
     this.sceneManager.requestTransition('stage', context);
   }
 
+  private recordAttemptStats(stageCleared: boolean): void {
+    if (this.attemptStatsRecorded) {
+      return;
+    }
+    this.attemptStatsRecorded = true;
+    this.saveManager.recordGameplaySession?.({
+      stageNumber: this.stageNumber,
+      playTimeSeconds: this.playTime,
+      collectedStars: this.scoreSystem.getStarCount(),
+      boostUses: this.boostSystem.getActivationCount(),
+      stageCleared,
+    });
+  }
+
   exit(): void {
     if (!this.initialized) {
       return;
     }
+    this.recordAttemptStats(this.isCleared);
     this.isActive = false;
     this.prewarmRequestToken += 1;
     this.clearRewardRequestToken += 1;
@@ -1473,8 +2151,13 @@ export class StageScene implements Scene {
     this.isOpeningClearReward = false;
     this.pauseOverlay.hide();
     this.touchGuide.hide();
+    this.adaptiveTutorialHint.hide();
+    this.constellationHintOverlay.hide();
+    this.seasonalEventNotice.dispose();
+    this.frameRateHintOverlay.hide();
     this.hud.hide();
     this.scorePopupManager.dispose();
+    setSharedVibrationFallbackHandler(null);
     this.audioManager.stopBGM();
     this.audioManager.stopBoostSFX();
     if (this.stageIntroOverlay) {
@@ -1498,6 +2181,15 @@ export class StageScene implements Scene {
     this.boostFlameEffect.remove();
     this.boostLinesEffect.update(false, this.spaceship.position.x, this.spaceship.position.z);
     this.airShield.reset(this.spaceship.position.x, this.spaceship.position.y, this.spaceship.position.z);
+    this.planetRingEffect.clear();
+    this.meteoShowerEffect.clear();
+    this.spaceWeatherEffect.clear();
+    this.stageSpecialEffects.clear();
+    this.seasonalEventEffects.clear();
+    this.spaceWeatherEventSystem.reset();
+    this.seasonalEventSystem.clear();
+    this.scoreSystem.setEventStarMultiplier?.(1);
+    this.frameRateHintOverlay.dispose();
     this.resetStageObjects();
     if (this.bgStars) {
       this.bgStars.parent?.remove(this.bgStars);
@@ -1521,26 +2213,42 @@ export class StageScene implements Scene {
   }
 
   private applyVisualQualityTier(): void {
-    const clampedTier = StageScene.clampVisualQualityTier(this.visualQualityTier);
-    this.particleBurstManager.setQualityTier(clampedTier);
+    const effectiveTier = this.getEffectiveVisualQualityTier();
+    this.particleBurstManager.setQualityTier(effectiveTier);
+    this.lodSystem.setQualityTier(effectiveTier);
     if (!this.initialized) {
       if (this.bgStars) {
         this.bgStars.geometry.setDrawRange(0, this.getBackgroundStarDrawCount());
       }
       return;
     }
-    this.boostLinesEffect.setQualityTier(clampedTier);
-    this.boostFlameEffect.setQualityTier(clampedTier);
+    this.boostLinesEffect.setQualityTier(effectiveTier);
+    this.boostFlameEffect.setQualityTier(effectiveTier);
+    this.stageAtmosphereEffect.setQualityTier(effectiveTier);
     if (this.bgStars) {
       this.bgStars.geometry.setDrawRange(0, this.getBackgroundStarDrawCount());
     }
   }
 
   private getBackgroundStarDrawCount(): number {
+    const motionProfile = getMotionSensitivityProfile(this.motionSensitivity);
     return Math.max(
       1,
-      Math.round(StageScene.BG_STAR_COUNT * StageScene.getVisualQualityScale(this.visualQualityTier)),
+      Math.round(
+        StageScene.BG_STAR_COUNT
+        * StageScene.getVisualQualityScale(this.getEffectiveVisualQualityTier())
+        * motionProfile.particleDensityScale,
+      ),
     );
+  }
+
+  private applyMotionSensitivity(): void {
+    if (!this.initialized) {
+      return;
+    }
+    this.boostLinesEffect.setMotionSensitivity(this.motionSensitivity);
+    this.boostFlameEffect.setMotionSensitivity(this.motionSensitivity);
+    this.stageAtmosphereEffect.setMotionSensitivity(this.motionSensitivity);
   }
 
   private static clampVisualQualityTier(tier: number): number {
@@ -1548,7 +2256,16 @@ export class StageScene implements Scene {
     return Math.max(0, Math.min(maxTier, Math.round(tier)));
   }
 
+  private static clampPerformanceAdaptationLevel(level: number): number {
+    const maxLevel = StageScene.VISUAL_QUALITY_SCALE_BY_TIER.length - 1;
+    return Math.max(0, Math.min(maxLevel, Math.round(level)));
+  }
+
   private static getVisualQualityScale(tier: number): number {
     return StageScene.VISUAL_QUALITY_SCALE_BY_TIER[StageScene.clampVisualQualityTier(tier)];
+  }
+
+  private getEffectiveVisualQualityTier(): number {
+    return StageScene.clampVisualQualityTier(this.visualQualityTier - this.performanceAdaptationLevel);
   }
 }

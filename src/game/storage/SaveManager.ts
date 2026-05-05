@@ -1,20 +1,56 @@
-import type { SaveData } from '../../types';
+import {
+  DEFAULT_SPACESHIP_CUSTOMIZATION,
+  type GameplayStats,
+  SPECIAL_SHOOTING_STAR_TYPES,
+  SPACESHIP_COLOR_KEYS,
+  type SaveData,
+  type SpecialShootingStarType,
+  type SpaceshipColorKey,
+  type SpaceshipCustomization,
+  type VibrationIntensity,
+} from '../../types';
+import {
+  DEFAULT_MOTION_SENSITIVITY,
+  normalizeMotionSensitivity,
+} from '../accessibility/motionSensitivity';
 import { TOTAL_STAGES } from '../config/StageConfig';
 
 const STORAGE_KEY = 'universe-kids-race-save';
 const SESSION_KEY = 'universe-kids-race-session';
-const DEFAULT_DATA: SaveData = { clearedStage: 0, unlockedPlanets: [], muted: false, bestStageStars: {}, tutorialShown: false };
+
+function createDefaultGameplayStats(): GameplayStats {
+  return {
+    totalPlayTimeSeconds: 0,
+    totalStarsCollected: 0,
+    totalBoostUses: 0,
+    stageClearCounts: {},
+  };
+}
+
+const DEFAULT_DATA: SaveData = {
+  clearedStage: 0,
+  unlockedPlanets: [],
+  muted: false,
+  vibrationSettings: { intensity: 'medium' },
+  bestStageStars: {},
+  gameplayStats: createDefaultGameplayStats(),
+  tutorialShown: false,
+  spaceshipCustomization: { ...DEFAULT_SPACESHIP_CUSTOMIZATION },
+};
 
 export type SessionState = 'fresh' | 'existing' | 'unavailable';
 
 function defaults(): SaveData {
-  return { ...DEFAULT_DATA, unlockedPlanets: [], bestStageStars: {}, tutorialShown: false };
+  return {
+    ...DEFAULT_DATA,
+    unlockedPlanets: [],
+    bestStageStars: {},
+    gameplayStats: createDefaultGameplayStats(),
+    tutorialShown: false,
+    spaceshipCustomization: { ...DEFAULT_SPACESHIP_CUSTOMIZATION },
+  };
 }
 
-// Returns a deep copy of SaveData. Uses structuredClone when available
-// (modern iPad Safari, Node 17+, jsdom v22+), falling back to JSON round-trip
-// for older test runners. Used to ensure callers can never mutate the
-// in-memory cache held by SaveManager.
 function cloneSaveData(src: SaveData): SaveData {
   const sc = (globalThis as { structuredClone?: (v: unknown) => unknown }).structuredClone;
   if (typeof sc === 'function') {
@@ -23,12 +59,166 @@ function cloneSaveData(src: SaveData): SaveData {
   return JSON.parse(JSON.stringify(src)) as SaveData;
 }
 
+function isSpaceshipColorKey(value: unknown): value is SpaceshipColorKey {
+  return typeof value === 'string' && (SPACESHIP_COLOR_KEYS as readonly string[]).includes(value);
+}
+
+function normalizeSpaceshipCustomization(value: unknown): SpaceshipCustomization {
+  const customization = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Partial<Record<keyof SpaceshipCustomization, unknown>>
+    : {};
+
+  return {
+    bodyColor: isSpaceshipColorKey(customization.bodyColor)
+      ? customization.bodyColor
+      : DEFAULT_SPACESHIP_CUSTOMIZATION.bodyColor,
+    noseColor: isSpaceshipColorKey(customization.noseColor)
+      ? customization.noseColor
+      : DEFAULT_SPACESHIP_CUSTOMIZATION.noseColor,
+    wingColor: isSpaceshipColorKey(customization.wingColor)
+      ? customization.wingColor
+      : DEFAULT_SPACESHIP_CUSTOMIZATION.wingColor,
+  };
+}
+
+function sameCustomization(a: SpaceshipCustomization, b: SpaceshipCustomization): boolean {
+  return a.bodyColor === b.bodyColor && a.noseColor === b.noseColor && a.wingColor === b.wingColor;
+}
+
+function normalizeGameplayStats(value: unknown): GameplayStats {
+  const raw = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Partial<Record<keyof GameplayStats, unknown>>
+    : {};
+  const normalized = createDefaultGameplayStats();
+
+  if (typeof raw.totalPlayTimeSeconds === 'number' && Number.isFinite(raw.totalPlayTimeSeconds) && raw.totalPlayTimeSeconds >= 0) {
+    normalized.totalPlayTimeSeconds = raw.totalPlayTimeSeconds;
+  }
+  if (typeof raw.totalStarsCollected === 'number' && Number.isInteger(raw.totalStarsCollected) && raw.totalStarsCollected >= 0) {
+    normalized.totalStarsCollected = raw.totalStarsCollected;
+  }
+  if (typeof raw.totalBoostUses === 'number' && Number.isInteger(raw.totalBoostUses) && raw.totalBoostUses >= 0) {
+    normalized.totalBoostUses = raw.totalBoostUses;
+  }
+
+  const rawStageClearCounts = raw.stageClearCounts;
+  if (rawStageClearCounts && typeof rawStageClearCounts === 'object' && !Array.isArray(rawStageClearCounts)) {
+    for (const [key, count] of Object.entries(rawStageClearCounts)) {
+      const stageNumber = Number(key);
+      if (
+        Number.isInteger(stageNumber) &&
+        stageNumber >= 1 &&
+        stageNumber <= TOTAL_STAGES &&
+        String(stageNumber) === key &&
+        typeof count === 'number' &&
+        Number.isInteger(count) &&
+        count >= 0
+      ) {
+        normalized.stageClearCounts[stageNumber] = count;
+      }
+    }
+  }
+
+  return normalized;
+}
+
+function normalizeVibrationIntensity(value: unknown): VibrationIntensity {
+  switch (value) {
+    case 'off':
+    case 'weak':
+    case 'strong':
+      return value;
+    default:
+      return 'medium';
+  }
+}
+
+function normalizeColorAccessibilitySettings(value: unknown): SaveData['colorAccessibility'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const highContrast = (value as { highContrast?: unknown }).highContrast === true;
+  const motionSensitivity = normalizeMotionSensitivity(
+    (value as { motionSensitivity?: unknown }).motionSensitivity,
+  );
+
+  if (!highContrast && motionSensitivity === DEFAULT_MOTION_SENSITIVITY) {
+    return undefined;
+  }
+
+  return {
+    ...(highContrast ? { highContrast: true } : {}),
+    ...(motionSensitivity !== DEFAULT_MOTION_SENSITIVITY ? { motionSensitivity } : {}),
+  };
+}
+
+function normalizeSpecialShootingStars(value: unknown): SpecialShootingStarType[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return [...new Set(value.filter(
+    (entry): entry is SpecialShootingStarType =>
+      typeof entry === 'string' && (SPECIAL_SHOOTING_STAR_TYPES as readonly string[]).includes(entry),
+  ))];
+}
+
+function sanitizeSaveData(data: SaveData): SaveData {
+  const sanitized: SaveData = {
+    clearedStage: Number.isInteger(data.clearedStage) && data.clearedStage >= 0 && data.clearedStage <= TOTAL_STAGES
+      ? data.clearedStage
+      : 0,
+    unlockedPlanets: Array.isArray(data.unlockedPlanets)
+      ? [...new Set(data.unlockedPlanets.filter(
+        (value): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= TOTAL_STAGES,
+      ))]
+      : [],
+    muted: data.muted === true,
+    bestStageStars: {},
+    gameplayStats: normalizeGameplayStats(data.gameplayStats),
+    tutorialShown: data.tutorialShown === true,
+    spaceshipCustomization: normalizeSpaceshipCustomization(data.spaceshipCustomization),
+    vibrationSettings: {
+      intensity: normalizeVibrationIntensity(data.vibrationSettings?.intensity),
+    },
+  };
+
+  const discoveredConstellations = Array.isArray(data.discoveredConstellations)
+    ? [...new Set(data.discoveredConstellations.filter(
+      (value): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= TOTAL_STAGES,
+    ))]
+    : [];
+  if (discoveredConstellations.length > 0) {
+    sanitized.discoveredConstellations = discoveredConstellations;
+  }
+
+  const discoveredSpecialStars = normalizeSpecialShootingStars(data.discoveredSpecialStars);
+  if (discoveredSpecialStars.length > 0) {
+    sanitized.discoveredSpecialStars = discoveredSpecialStars;
+  }
+
+  const colorAccessibility = normalizeColorAccessibilitySettings(data.colorAccessibility);
+  if (colorAccessibility) {
+    sanitized.colorAccessibility = colorAccessibility;
+  }
+
+  if (data.bestStageStars && typeof data.bestStageStars === 'object') {
+    for (const [key, value] of Object.entries(data.bestStageStars)) {
+      const stage = Number(key);
+      if (Number.isInteger(stage) && stage >= 1 && stage <= TOTAL_STAGES && Number.isInteger(value) && value >= 0) {
+        (sanitized.bestStageStars as Record<number, number>)[stage] = value;
+      }
+    }
+  }
+
+  if (typeof data.lastStablePixelTier === 'number' && Number.isInteger(data.lastStablePixelTier) && data.lastStablePixelTier >= 0) {
+    sanitized.lastStablePixelTier = data.lastStablePixelTier;
+  }
+
+  return sanitized;
+}
+
 export class SaveManager {
-  // In-memory cache of the validated SaveData. Populated lazily on the first
-  // load() call and invalidated on save()/clear()/reset paths. This avoids
-  // the per-call cost of localStorage.getItem + JSON.parse + full revalidation
-  // (Constitution IV: 60fps on iPad Safari). Single-tab game; cross-tab
-  // storage events are out of scope (YAGNI).
   private cached: SaveData | null = null;
 
   private loadFromStorage(): SaveData {
@@ -40,7 +230,6 @@ export class SaveManager {
         return defaults();
       }
 
-      // Validate unlockedPlanets
       if (!Array.isArray(data.unlockedPlanets)) {
         data.unlockedPlanets = [];
       } else {
@@ -51,15 +240,21 @@ export class SaveManager {
         )];
       }
 
-      // Validate muted (default false; backward compatible with saves missing the field)
       data.muted = data.muted === true;
-
-      // Validate tutorialShown (default false; backward compatible with saves
-      // predating the first-run onboarding feature). Any non-boolean value is
-      // normalized to false so legacy users see the tutorial once.
       data.tutorialShown = data.tutorialShown === true;
+      data.vibrationSettings = {
+        intensity: normalizeVibrationIntensity((data as { vibrationSettings?: { intensity?: unknown } }).vibrationSettings?.intensity),
+      };
 
-      // Validate bestStageStars (backward compatible; missing or malformed → {})
+      const colorAccessibility = normalizeColorAccessibilitySettings(
+        (data as { colorAccessibility?: unknown }).colorAccessibility,
+      );
+      if (colorAccessibility) {
+        data.colorAccessibility = colorAccessibility;
+      } else {
+        delete (data as { colorAccessibility?: unknown }).colorAccessibility;
+      }
+
       const rawBest = (data as { bestStageStars?: unknown }).bestStageStars;
       const validatedBest: Record<number, number> = {};
       if (rawBest && typeof rawBest === 'object' && !Array.isArray(rawBest)) {
@@ -79,10 +274,33 @@ export class SaveManager {
         }
       }
       data.bestStageStars = validatedBest;
+      const rawConstellations = (data as { discoveredConstellations?: unknown }).discoveredConstellations;
+      if (Array.isArray(rawConstellations)) {
+        const validConstellations = [...new Set(rawConstellations.filter(
+          (value): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= TOTAL_STAGES,
+        ))];
+        if (validConstellations.length > 0) {
+          data.discoveredConstellations = validConstellations;
+        } else {
+          delete (data as { discoveredConstellations?: unknown }).discoveredConstellations;
+        }
+      } else {
+        delete (data as { discoveredConstellations?: unknown }).discoveredConstellations;
+      }
+      const discoveredSpecialStars = normalizeSpecialShootingStars(
+        (data as { discoveredSpecialStars?: unknown }).discoveredSpecialStars,
+      );
+      if (discoveredSpecialStars.length > 0) {
+        data.discoveredSpecialStars = discoveredSpecialStars;
+      } else {
+        delete (data as { discoveredSpecialStars?: unknown }).discoveredSpecialStars;
+      }
+      data.gameplayStats = normalizeGameplayStats((data as { gameplayStats?: unknown }).gameplayStats);
 
-      // Validate lastStablePixelTier (backward compatible; missing/invalid → undefined).
-      // No upper bound check here because MAX_TIER is a runtime concept derived
-      // from devicePixelRatio in main.ts; callers clamp on read.
+      data.spaceshipCustomization = normalizeSpaceshipCustomization(
+        (data as { spaceshipCustomization?: unknown }).spaceshipCustomization,
+      );
+
       const rawTier = (data as { lastStablePixelTier?: unknown }).lastStablePixelTier;
       if (
         typeof rawTier === 'number' &&
@@ -109,11 +327,10 @@ export class SaveManager {
 
   save(data: SaveData): void {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      this.cached = cloneSaveData(data);
+      const sanitized = sanitizeSaveData(data);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
+      this.cached = cloneSaveData(sanitized);
     } catch (e) {
-      // On failure, conservatively invalidate the cache so the next load()
-      // re-reads from storage and reflects whatever actually persisted.
       this.cached = null;
       console.warn('SaveManager.save failed:', e);
     }
@@ -128,25 +345,32 @@ export class SaveManager {
     }
   }
 
-  // Resets only gameplay progress (clearedStage, unlockedPlanets,
-  // bestStageStars) while preserving stable settings and onboarding state.
-  // Used for the title-screen "さいしょから" flow so mute preference,
-  // tutorial read-state, and the adaptive pixel-ratio hint survive while
-  // progress returns to defaults.
   resetProgressPreservingSettings(): void {
     try {
       const prev = this.load();
       const muted = prev.muted === true;
+      const vibrationSettings = {
+        intensity: normalizeVibrationIntensity(prev.vibrationSettings?.intensity),
+      };
       const lastStablePixelTier = prev.lastStablePixelTier;
       const tutorialShown = prev.tutorialShown === true;
+      const colorAccessibility = normalizeColorAccessibilitySettings(prev.colorAccessibility);
+      const gameplayStats = normalizeGameplayStats(prev.gameplayStats);
+      const spaceshipCustomization = normalizeSpaceshipCustomization(prev.spaceshipCustomization);
       this.clear();
       const next: SaveData = {
         clearedStage: 0,
         unlockedPlanets: [],
         muted,
+        vibrationSettings,
         bestStageStars: {},
+        gameplayStats,
         tutorialShown,
+        spaceshipCustomization,
       };
+      if (colorAccessibility) {
+        next.colorAccessibility = colorAccessibility;
+      }
       if (typeof lastStablePixelTier === 'number') {
         next.lastStablePixelTier = lastStablePixelTier;
       }
@@ -158,24 +382,31 @@ export class SaveManager {
     }
   }
 
-  // Resets session-scoped progress and onboarding data while preserving
-  // stable preferences needed across Safari swipe-to-close on shared iPads.
-  // Used on Safari new-session detection so gameplay progress and the
-  // auto-shown tutorial both return to first-run defaults, while mute
-  // preference and adaptive pixel-ratio hint survive.
   resetSessionDataPreservingMuted(): void {
     try {
       const prev = this.load();
       const muted = prev.muted === true;
+      const vibrationSettings = {
+        intensity: normalizeVibrationIntensity(prev.vibrationSettings?.intensity),
+      };
       const lastStablePixelTier = prev.lastStablePixelTier;
+      const colorAccessibility = normalizeColorAccessibilitySettings(prev.colorAccessibility);
+      const gameplayStats = normalizeGameplayStats(prev.gameplayStats);
+      const spaceshipCustomization = normalizeSpaceshipCustomization(prev.spaceshipCustomization);
       this.clear();
       const next: SaveData = {
         clearedStage: 0,
         unlockedPlanets: [],
         muted,
+        vibrationSettings,
         bestStageStars: {},
+        gameplayStats,
         tutorialShown: false,
+        spaceshipCustomization,
       };
+      if (colorAccessibility) {
+        next.colorAccessibility = colorAccessibility;
+      }
       if (typeof lastStablePixelTier === 'number') {
         next.lastStablePixelTier = lastStablePixelTier;
       }
@@ -187,9 +418,6 @@ export class SaveManager {
     }
   }
 
-  // Updates the best (highest) star count for the given stage. Only persists
-  // if the new count exceeds the previously stored value, so replays that
-  // earn fewer stars never overwrite a child's best record.
   updateBestStageStars(stageNumber: number, starCount: number): void {
     if (
       !Number.isInteger(stageNumber) ||
@@ -237,9 +465,46 @@ export class SaveManager {
     }
   }
 
-  // Marks the first-run tutorial overlay as shown so subsequent TitleScene
-  // entries don't auto-display it. Idempotent: calling it after the flag is
-  // already true short-circuits to avoid an unnecessary localStorage write.
+  markConstellationDiscovered(stageNumber: number): boolean {
+    if (!Number.isInteger(stageNumber) || stageNumber < 1 || stageNumber > TOTAL_STAGES) {
+      return false;
+    }
+    try {
+      const data = this.load();
+      const discoveredConstellations = [...(data.discoveredConstellations ?? [])];
+      if (discoveredConstellations.includes(stageNumber)) {
+        return false;
+      }
+      discoveredConstellations.push(stageNumber);
+      data.discoveredConstellations = discoveredConstellations;
+      this.save(data);
+      return true;
+    } catch (e) {
+      console.warn('SaveManager.markConstellationDiscovered failed:', e);
+      return false;
+    }
+  }
+
+  markSpecialStarDiscovered(specialStarId: SpecialShootingStarType): boolean {
+    if (!(SPECIAL_SHOOTING_STAR_TYPES as readonly string[]).includes(specialStarId)) {
+      return false;
+    }
+    try {
+      const data = this.load();
+      const discoveredSpecialStars = [...(data.discoveredSpecialStars ?? [])];
+      if (discoveredSpecialStars.includes(specialStarId)) {
+        return false;
+      }
+      discoveredSpecialStars.push(specialStarId);
+      data.discoveredSpecialStars = discoveredSpecialStars;
+      this.save(data);
+      return true;
+    } catch (e) {
+      console.warn('SaveManager.markSpecialStarDiscovered failed:', e);
+      return false;
+    }
+  }
+
   markTutorialShown(): void {
     try {
       const data = this.load();
@@ -253,12 +518,21 @@ export class SaveManager {
     }
   }
 
-  // Persists the last observed stable adaptive pixel-ratio tier so the next
-  // launch can start at this level instead of MAX_TIER, avoiding the initial
-  // downscale hitch on slower iPads (Constitution IV: 60fps on iPad Safari).
-  // Validates the value (non-negative integer); negative / non-integer inputs
-  // are ignored. The controller (caller) is responsible for upper-bound
-  // clamping via its own maxTier knowledge.
+  saveSpaceshipCustomization(customization: SpaceshipCustomization): void {
+    try {
+      const data = this.load();
+      const normalized = normalizeSpaceshipCustomization(customization);
+      const current = normalizeSpaceshipCustomization(data.spaceshipCustomization);
+      if (sameCustomization(current, normalized)) {
+        return;
+      }
+      data.spaceshipCustomization = normalized;
+      this.save(data);
+    } catch (e) {
+      console.warn('SaveManager.saveSpaceshipCustomization failed:', e);
+    }
+  }
+
   saveLastStablePixelTier(tier: number): void {
     if (!Number.isInteger(tier) || tier < 0) {
       return;
@@ -275,9 +549,47 @@ export class SaveManager {
     }
   }
 
-  // Returns whether this launch is a fresh session, an existing live session,
-  // or a sessionStorage-unavailable fallback case. Also marks the session as
-  // active when sessionStorage is fully usable.
+  recordGameplaySession(session: {
+    stageNumber: number;
+    playTimeSeconds: number;
+    collectedStars: number;
+    boostUses: number;
+    stageCleared?: boolean;
+  }): void {
+    const { stageNumber, playTimeSeconds, collectedStars, boostUses, stageCleared = false } = session;
+    if (!Number.isInteger(stageNumber) || stageNumber < 1 || stageNumber > TOTAL_STAGES) {
+      return;
+    }
+    if (
+      !Number.isFinite(playTimeSeconds) ||
+      playTimeSeconds < 0 ||
+      !Number.isInteger(collectedStars) ||
+      collectedStars < 0 ||
+      !Number.isInteger(boostUses) ||
+      boostUses < 0
+    ) {
+      return;
+    }
+    if (!stageCleared && playTimeSeconds === 0 && collectedStars === 0 && boostUses === 0) {
+      return;
+    }
+
+    try {
+      const data = this.load();
+      const stats = normalizeGameplayStats(data.gameplayStats);
+      stats.totalPlayTimeSeconds += playTimeSeconds;
+      stats.totalStarsCollected += collectedStars;
+      stats.totalBoostUses += boostUses;
+      if (stageCleared) {
+        stats.stageClearCounts[stageNumber] = (stats.stageClearCounts[stageNumber] ?? 0) + 1;
+      }
+      data.gameplayStats = stats;
+      this.save(data);
+    } catch (e) {
+      console.warn('SaveManager.recordGameplaySession failed:', e);
+    }
+  }
+
   getSessionState(): SessionState {
     try {
       const fresh = !sessionStorage.getItem(SESSION_KEY);

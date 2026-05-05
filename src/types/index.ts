@@ -25,6 +25,11 @@ export type SpeedState = 'NORMAL' | 'BOOST' | 'SLOWDOWN' | 'RECOVERING';
 // Star types
 export type StarType = 'NORMAL' | 'RAINBOW';
 
+export type VibrationPattern = number | number[];
+export type VibrationIntensity = 'off' | 'weak' | 'medium' | 'strong';
+export const MOTION_SENSITIVITY_LEVELS = ['strong', 'medium', 'gentle', 'minimal'] as const;
+export type MotionSensitivity = (typeof MOTION_SENSITIVITY_LEVELS)[number];
+
 // Input
 export interface InputState {
   moveDirection: -1 | 0 | 1;
@@ -45,6 +50,28 @@ export interface StageConfig {
   emoji: string;
   displayName: string;
   planetColor: number;
+}
+
+export type StageAtmosphereParticlePattern =
+  | 'sparkle'
+  | 'mist'
+  | 'dust'
+  | 'ember'
+  | 'ring'
+  | 'aurora'
+  | 'crystal'
+  | 'flare'
+  | 'homecoming';
+
+export interface StageAtmosphereConfig {
+  stageNumber: number;
+  gradientTopColor: number;
+  gradientBottomColor: number;
+  particlePrimaryColor: number;
+  particleSecondaryColor: number;
+  particlePattern: StageAtmosphereParticlePattern;
+  particleCount: number;
+  particleSize: number;
 }
 
 export type StageMedalTier = 'none' | 'bronze' | 'silver' | 'gold';
@@ -72,6 +99,9 @@ export interface StageMedalStatus {
 export type SFXType =
   | 'starCollect'
   | 'rainbowCollect'
+  | 'shootingStarCollect'
+  | 'cometCollect'
+  | 'meteorShowerStart'
   | 'meteoriteHit'
   | 'boost'
   | 'stageClear'
@@ -81,11 +111,48 @@ export type SFXType =
   | 'countdownGo';
 
 // Save data
+export interface ColorAccessibilitySettings {
+  highContrast?: boolean;
+  motionSensitivity?: MotionSensitivity;
+}
+
+export interface VibrationSettings {
+  intensity: VibrationIntensity;
+}
+
+export const SPACESHIP_COLOR_KEYS = ['sky', 'sunset', 'aqua'] as const;
+export type SpaceshipColorKey = (typeof SPACESHIP_COLOR_KEYS)[number];
+
+export interface SpaceshipCustomization {
+  bodyColor: SpaceshipColorKey;
+  noseColor: SpaceshipColorKey;
+  wingColor: SpaceshipColorKey;
+}
+
+export const DEFAULT_SPACESHIP_CUSTOMIZATION: SpaceshipCustomization = {
+  bodyColor: 'sky',
+  noseColor: 'sunset',
+  wingColor: 'aqua',
+};
+
+export interface GameplayStats {
+  totalPlayTimeSeconds: number;
+  totalStarsCollected: number;
+  totalBoostUses: number;
+  stageClearCounts: Record<number, number>;
+}
+
 export interface SaveData {
   clearedStage: number;
   unlockedPlanets: number[];
   muted?: boolean;
+  colorAccessibility?: ColorAccessibilitySettings;
+  vibrationSettings?: VibrationSettings;
   bestStageStars?: Record<number, number>;
+  discoveredConstellations?: number[];
+  discoveredSpecialStars?: SpecialShootingStarType[];
+  gameplayStats?: GameplayStats;
+  spaceshipCustomization?: SpaceshipCustomization;
   // Last stable adaptive pixel-ratio tier observed in the previous session.
   // Persisted so the next launch can start at the same tier and avoid the
   // initial-frame downscale hitch on slower iPads (Constitution IV).
@@ -108,4 +175,98 @@ export interface PlanetEncyclopediaEntry {
   trivia: string;
   planetColor: number;
   companionShape: CompanionShape;
+}
+
+export const SPECIAL_SHOOTING_STAR_TYPES = ['rainbow', 'gold', 'silver'] as const;
+export type SpecialShootingStarType = (typeof SPECIAL_SHOOTING_STAR_TYPES)[number];
+
+export interface SpecialStarEncyclopediaEntry {
+  id: SpecialShootingStarType;
+  name: string;
+  reading: string;
+  encyclopediaLabel: string;
+  emoji: string;
+  trivia: string;
+  accentColor: number;
+}
+
+export interface ConstellationPoint {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface ConstellationDefinition {
+  id: string;
+  stageNumber: number;
+  name: string;
+  reading: string;
+  encyclopediaLabel: string;
+  hintMessage: string;
+  celebrationMessage: string;
+  points: readonly ConstellationPoint[];
+}
+
+export type StageSpecialEffectStyle =
+  | 'rabbit'
+  | 'twinkle'
+  | 'veil'
+  | 'dust'
+  | 'halo'
+  | 'ring'
+  | 'aurora'
+  | 'bubble'
+  | 'crystal'
+  | 'flare'
+  | 'homecoming';
+
+export interface StageSpecialEventConfig {
+  stageNumber: number;
+  id: string;
+  style: StageSpecialEffectStyle;
+  startProgress: number;
+  duration: number;
+  message: string;
+  accentColor: number;
+}
+
+export interface StageSpecialEventState {
+  active: boolean;
+  started: boolean;
+  ended: boolean;
+  timeRemaining: number;
+  event: StageSpecialEventConfig | null;
+}
+
+export type SeasonalEventId = 'tanabata' | 'christmas' | 'new-year';
+
+export interface SeasonalEventConfig {
+  id: SeasonalEventId;
+  title: string;
+  emoji: string;
+  noticeMessage: string;
+  accentColor: number;
+  startMonth: number;
+  startDay: number;
+  endMonth: number;
+  endDay: number;
+}
+
+export type SpaceWeatherEventId = 'meteor-shower' | 'aurora-storm' | 'comet-approach';
+
+export interface SpaceWeatherEventConfig {
+  id: SpaceWeatherEventId;
+  title: string;
+  message: string;
+  accentColor: number;
+  duration: number;
+  starScoreMultiplier: number;
+}
+
+export interface SpaceWeatherEventState {
+  active: boolean;
+  started: boolean;
+  ended: boolean;
+  timeRemaining: number;
+  event: SpaceWeatherEventConfig | null;
 }

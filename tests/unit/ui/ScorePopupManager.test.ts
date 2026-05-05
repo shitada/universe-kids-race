@@ -30,7 +30,7 @@ describe('ScorePopupManager', () => {
 
     const popup = document.querySelector<HTMLElement>('[data-score-popup]');
     expect(popup).not.toBeNull();
-    expect(popup?.textContent).toBe('+100');
+    expect(popup?.textContent).toBe('⬢ +100');
     expect(popup?.style.left).toBe('50%');
     expect(popup?.style.top).toBe('50%');
     expect(popup?.style.visibility).toBe('visible');
@@ -62,7 +62,7 @@ describe('ScorePopupManager', () => {
     manager.show(500, { x: 0.1, y: 0, z: 0 }, camera);
 
     expect(document.querySelectorAll('[data-score-popup]')).toHaveLength(6);
-    expect(popup.textContent).toBe('+500');
+    expect(popup.textContent).toBe('🌈 +500');
     expect(popup.style.visibility).toBe('visible');
     expect(popup.style.animationName).not.toBe(firstAnimationName);
   });
@@ -76,9 +76,9 @@ describe('ScorePopupManager', () => {
     expect(style).not.toBeNull();
     expect(styleText).toContain('@keyframes scorePopupFloatA');
     expect(styleText).toContain('@keyframes scorePopupFloatB');
-    expect(styleText).toContain('translate3d(-50%, -105%, 0) scale(1.04)');
-    expect(styleText).toContain('translate3d(-43%, -84%, 0) scale(1.02)');
-    expect(styleText).toContain('translate3d(-38%, -105%, 0) scale(1.04)');
+    expect(styleText).toContain('scale(1.16)');
+    expect(styleText).toContain('scale(0.96)');
+    expect(styleText).toContain('translate3d(-38%, -105%, 0) scale(1.03)');
   });
 
   it('avoids layout reads when showing and replaying a popup', () => {
@@ -113,6 +113,25 @@ describe('ScorePopupManager', () => {
         Object.defineProperty(HTMLElement.prototype, 'offsetWidth', originalOffsetWidth);
       }
     }
+  });
+
+  it('adds a high-contrast capsule when requested', () => {
+    manager.setHighContrastMode(true);
+    manager.show(500, { x: 0, y: 0, z: 0 }, camera);
+
+    const popup = document.querySelector<HTMLElement>('[data-score-popup]');
+    expect(popup?.style.border).toContain('solid');
+    expect(popup?.style.padding).toBe('0.18rem 0.55rem');
+    expect(popup?.getAttribute('data-score-popup-kind')).toBe('bonus');
+  });
+
+  it('shows a special message popup for a shooting star event', () => {
+    manager.showLabel('☆ながれぼし☆', { x: 0, y: 0, z: 0 }, camera, 'shooting-star');
+
+    const popup = document.querySelector<HTMLElement>('[data-score-popup]');
+    expect(popup?.textContent).toBe('☆ながれぼし☆');
+    expect(popup?.getAttribute('data-score-popup-kind')).toBe('shooting-star');
+    expect(popup?.style.color).toBe('rgb(255, 244, 179)');
   });
 
   it('does nothing when ui-overlay is missing', () => {

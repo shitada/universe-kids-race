@@ -47,9 +47,21 @@ describe('Spaceship shared resources', () => {
     expect(bodyMat).toBeInstanceOf(THREE.MeshToonMaterial);
     expect(noseMat).toBeInstanceOf(THREE.MeshToonMaterial);
     expect(wingMat).toBeInstanceOf(THREE.MeshToonMaterial);
-    expect(bodyMat.color.getHex()).toBe(0x4488ff);
+    expect(bodyMat.color.getHex()).toBe(0x6ecbff);
     expect(noseMat.color.getHex()).toBe(0xff6644);
-    expect(wingMat.color.getHex()).toBe(0x44aaff);
+    expect(wingMat.color.getHex()).toBe(0x00c28a);
+  });
+
+  it('reuses pooled materials for ships with the same customization', () => {
+    const a = new Spaceship({ bodyColor: 'aqua', noseColor: 'sky', wingColor: 'sunset' });
+    const b = new Spaceship({ bodyColor: 'aqua', noseColor: 'sky', wingColor: 'sunset' });
+
+    const [aBody, aNose, aWings] = a.mesh.children as THREE.Mesh[];
+    const [bBody, bNose, bWings] = b.mesh.children as THREE.Mesh[];
+
+    expect(aBody.material).toBe(bBody.material);
+    expect(aNose.material).toBe(bNose.material);
+    expect(aWings.material).toBe(bWings.material);
   });
 
   it('does not dispose shared geometry/material when an instance is disposed', () => {

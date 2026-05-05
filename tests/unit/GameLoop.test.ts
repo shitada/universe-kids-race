@@ -65,6 +65,24 @@ describe('GameLoop', () => {
     loop.stop();
   });
 
+  it('passes the sample timestamp to the fps callback', () => {
+    const loop = new GameLoop();
+    const sampleTimes: number[] = [];
+    loop.start(
+      () => {},
+      () => {},
+      (_fps, sampleTimeMs) => sampleTimes.push(sampleTimeMs),
+    );
+
+    for (let i = 0; i < 7; i += 1) {
+      advance(16);
+    }
+
+    expect(sampleTimes.length).toBe(1);
+    expect(sampleTimes[0]).toBe(nowValue);
+    loop.stop();
+  });
+
   it('exposes the current fps via getFps()', () => {
     const loop = new GameLoop();
     loop.start(
@@ -259,6 +277,21 @@ describe('GameLoop', () => {
     loop.stop();
     expect(loop.isPaused()).toBe(false);
     expect(loop.isRunning()).toBe(false);
+  });
+
+  it('tracks paused duration only while paused', () => {
+    const loop = new GameLoop();
+    expect(loop.getPausedDuration()).toBeNull();
+
+    loop.start(() => {}, () => {});
+    advance(16);
+    loop.pause();
+    nowValue += 2500;
+
+    expect(loop.getPausedDuration()).toBe(2500);
+
+    loop.resume();
+    expect(loop.getPausedDuration()).toBeNull();
   });
 
   it('caps updateCallback deltaTime at 100ms but feeds raw deltaTime to the FPS monitor', () => {

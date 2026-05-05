@@ -104,6 +104,22 @@ describe('BoostFlameEffect', () => {
     fx.dispose();
   });
 
+  it('setMotionSensitivity softens flame density and size', () => {
+    const scene = new THREE.Scene();
+    const fx = new BoostFlameEffect();
+    fx.init(scene);
+    fx.start();
+
+    const geometry = fx.getObject()!.geometry as THREE.BufferGeometry;
+    fx.setMotionSensitivity('minimal');
+    fx.emit(SHIP, 0);
+
+    expect(geometry.drawRange.count).toBe(3);
+    expect((fx.getObject()!.material as THREE.PointsMaterial).size).toBeCloseTo(0.28, 5);
+
+    fx.dispose();
+  });
+
   it('emit during fade phase (progress>=0.83) reduces emission count and size', () => {
     const scene = new THREE.Scene();
     const fx = new BoostFlameEffect();

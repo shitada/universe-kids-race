@@ -236,6 +236,20 @@ describe('Spaceship', () => {
     });
   });
 
+  describe('customization', () => {
+    it('applies a saved customization to each ship part', () => {
+      const ship = new Spaceship();
+
+      ship.applyCustomization({ bodyColor: 'aqua', noseColor: 'sky', wingColor: 'sunset' });
+
+      const [body, nose, wings] = ship.mesh.children as THREE.Mesh[];
+      expect((body.material as THREE.MeshToonMaterial).color.getHex()).toBe(0x00c28a);
+      expect((nose.material as THREE.MeshToonMaterial).color.getHex()).toBe(0x6ecbff);
+      expect((wings.material as THREE.MeshToonMaterial).color.getHex()).toBe(0xff6644);
+      expect(ship.getCustomization()).toEqual({ bodyColor: 'aqua', noseColor: 'sky', wingColor: 'sunset' });
+    });
+  });
+
   describe('getSpeedStateRemainingRatio', () => {
     it('returns 0 in NORMAL state', () => {
       const ship = new Spaceship();

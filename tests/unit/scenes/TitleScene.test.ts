@@ -52,7 +52,9 @@ function createMockSaveManager(overrides: Partial<ReturnType<SaveManager['load']
   };
   return {
     load: vi.fn(() => ({ ...saveData, unlockedPlanets: [...saveData.unlockedPlanets] })),
-    save: vi.fn(),
+    save: vi.fn((nextData) => {
+      Object.assign(saveData, nextData);
+    }),
     clear: vi.fn(),
     resetProgressPreservingSettings: vi.fn(),
     markTutorialShown: vi.fn(),
@@ -226,6 +228,36 @@ describe('TitleScene (T009)', () => {
     scene.exit();
   });
 
+  it('"あそびの きろく" button opens the stats overlay', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager({
+      gameplayStats: {
+        totalPlayTimeSeconds: 125,
+        totalStarsCollected: 9,
+        totalBoostUses: 3,
+        stageClearCounts: { 1: 2 },
+      },
+    });
+    const audioManager = createMockAudioManager(false);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager);
+    scene.enter({});
+
+    const statsButton = findButtonByText('あそびの きろく');
+    expect(statsButton).toBeTruthy();
+
+    dispatchReleaseConfirm(statsButton!);
+
+    const overlay = document.querySelector('[data-stats-overlay]') as HTMLDivElement | null;
+    expect(audioManager.initSync).toHaveBeenCalledTimes(1);
+    expect(audioManager.playBGM).toHaveBeenCalledTimes(1);
+    expect(overlay?.textContent).toContain('あそびの きろく');
+    expect(overlay?.textContent).toContain('2ふん 5びょう');
+    expect(overlay?.textContent).toContain('9こ');
+
+    scene.exit();
+  });
+
   it('"あそぶ" button cancels when the finger leaves on another element', () => {
     const sceneManager = createMockSceneManager();
     const saveManager = createMockSaveManager();
@@ -261,6 +293,33 @@ describe('TitleScene (T009)', () => {
 
     expect(audioManager.initSync).toHaveBeenCalledTimes(1);
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
+
+    scene.exit();
+  });
+
+  it('opens the spaceship customizer and saves the chosen colors', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager(true);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager);
+    scene.enter({});
+
+    const customizeButton = findButtonByText('うちゅうせんをかざろう');
+    expect(customizeButton).toBeTruthy();
+    dispatchReleaseConfirm(customizeButton!);
+
+    const bodyOption = document.querySelector('[data-spaceship-color-option="bodyColor:sunset"]') as HTMLButtonElement | null;
+    const doneButton = document.querySelector('[data-spaceship-customizer-done]') as HTMLButtonElement | null;
+    expect(bodyOption).toBeTruthy();
+    expect(doneButton).toBeTruthy();
+
+    dispatchReleaseConfirm(bodyOption!);
+    dispatchReleaseConfirm(doneButton!);
+
+    expect(saveManager.save).toHaveBeenCalledWith(expect.objectContaining({
+      spaceshipCustomization: expect.objectContaining({ bodyColor: 'sunset' }),
+    }));
 
     scene.exit();
   });
@@ -443,7 +502,48 @@ describe('TitleScene (T009)', () => {
     scene.exit();
   });
 
-  it('anchors the lower title buttons with fixed margins inside #ui-overlay', () => {
+  it('opens color settings and persists the high-contrast toggle', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager(true);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager);
+    scene.enter({});
+
+    const settingsButton = document.querySelector('[data-color-settings-button]') as HTMLButtonElement | null;
+    expect(settingsButton?.textContent).toBe('みやすさ・しんどう');
+
+    dispatchReleaseConfirm(settingsButton!);
+
+    const panel = document.querySelector('[data-color-accessibility-settings]');
+    const toggle = document.querySelector('[data-color-accessibility-toggle]') as HTMLButtonElement | null;
+    expect(panel).toBeTruthy();
+    expect(toggle?.textContent).toContain('OFF');
+
+    toggle?.click();
+
+    expect(saveManager.save).toHaveBeenCalledWith(expect.objectContaining({
+      colorAccessibility: { highContrast: true },
+    }));
+
+    const strongButton = document.querySelector('[data-vibration-intensity-button="strong"]') as HTMLButtonElement | null;
+    strongButton?.click();
+
+    expect(saveManager.save).toHaveBeenCalledWith(expect.objectContaining({
+      vibrationSettings: { intensity: 'strong' },
+    }));
+
+    const minimalMotionButton = document.querySelector('[data-motion-sensitivity-button="minimal"]') as HTMLButtonElement | null;
+    minimalMotionButton?.click();
+
+    expect(saveManager.save).toHaveBeenCalledWith(expect.objectContaining({
+      colorAccessibility: { highContrast: true, motionSensitivity: 'minimal' },
+    }));
+
+    scene.exit();
+  });
+
+  it('keeps lower title buttons in a non-overlapping footer row', () => {
     const sceneManager = createMockSceneManager();
     const saveManager = createMockSaveManager();
     const audioManager = createMockAudioManager(true);
@@ -455,14 +555,21 @@ describe('TitleScene (T009)', () => {
     const encyclopediaButton = Array.from(document.querySelectorAll('button')).find(
       (button) => button.textContent?.startsWith('ずかん'),
     ) as HTMLButtonElement | undefined;
+    const footerActions = document.querySelector('[data-title-footer-actions]') as HTMLElement | null;
 
     expect(tutorialButton).toBeTruthy();
     expect(encyclopediaButton).toBeTruthy();
-    expect(tutorialButton?.style.bottom).toBe('2rem');
-    expect(tutorialButton?.style.right).toBe('2rem');
+    expect(footerActions).not.toBeNull();
+    expect(footerActions?.style.display).toBe('grid');
+    expect(footerActions?.contains(tutorialButton ?? null)).toBe(true);
+    expect(footerActions?.contains(encyclopediaButton ?? null)).toBe(true);
+    expect(tutorialButton?.style.position).toBe('');
+    expect(tutorialButton?.style.bottom).toBe('');
+    expect(tutorialButton?.style.right).toBe('');
     expect(tutorialButton?.style.cssText).not.toContain('env(');
-    expect(encyclopediaButton?.style.bottom).toBe('2rem');
-    expect(encyclopediaButton?.style.left).toBe('2rem');
+    expect(encyclopediaButton?.style.position).toBe('');
+    expect(encyclopediaButton?.style.bottom).toBe('');
+    expect(encyclopediaButton?.style.left).toBe('');
     expect(encyclopediaButton?.style.cssText).not.toContain('env(');
 
     scene.exit();
@@ -535,6 +642,8 @@ describe('TitleScene (T009)', () => {
     expect(loadingOverlay.show).toHaveBeenCalledWith('ずかんを よんでるよ...');
     expect(loadingOverlay.hide).toHaveBeenCalledTimes(1);
     expect(loadFailureOverlay.show).toHaveBeenCalledTimes(1);
+    expect(failureOptions?.title).toBe('ずかんを もういちど よんでみよう！');
+    expect(failureOptions?.message).toBe('「もういちど よむ」を おして つづきを たのしもう！');
     expect(failureOptions?.primaryAction.label).toBe('もういちど よむ');
 
     await failureOptions?.primaryAction.onSelect();

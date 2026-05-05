@@ -1,76 +1,210 @@
 import * as THREE from 'three';
 import type { StarType } from '../../types';
+import type { LODLevel } from '../systems/LODSystem';
+import { triggerSharedVibration } from '../systems/VibrationSystem';
 
-// Shared resources for Star instances. NORMAL stars share both geometry and
-// material to reduce GC and draw-call setup cost. RAINBOW stars share only the
-// geometry; their material is per-instance because hue is animated per-frame.
-// Do NOT mutate SHARED_NORMAL_MATERIAL; do NOT dispose() these from instance
-// dispose() (see disposeObject3D for the generic path that is intentionally
-// bypassed by Star.dispose()).
-const SHARED_GEOMETRY = new THREE.OctahedronGeometry(0.6);
-const SHARED_NORMAL_MATERIAL = new THREE.MeshToonMaterial({
-  color: 0xffdd00,
-  emissive: 0xffdd00,
-  emissiveIntensity: 0.4,
-});
+function createHexPrismGeometry(): THREE.BufferGeometry {
+  const shape = new THREE.Shape();
+  const radius = 0.62;
+  for (let i = 0; i < 6; i++) {
+    const angle = (Math.PI * 2 * i) / 6 - Math.PI / 6;
+    const x = Math.cos(angle) * radius;
+    const y = Math.sin(angle) * radius;
+    if (i === 0) {
+      shape.moveTo(x, y);
+    } else {
+      shape.lineTo(x, y);
+    }
+  }
+  shape.closePath();
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth: 0.24,
+    bevelEnabled: false,
+    curveSegments: 1,
+  });
+  geometry.center();
+  return geometry;
+}
 
-// Initial color for a RAINBOW star. The per-instance MeshToonMaterial mutates
-// `color` / `emissive` in place to animate hue; reset() restores this baseline
-// so a pooled instance does not leak the previous lifetime's hue.
+function createMidStarGeometry(): THREE.BufferGeometry {
+  const geometry = new THREE.CylinderGeometry(0.62, 0.62, 0.24, 6, 1, false);
+  geometry.rotateX(Math.PI / 2);
+  geometry.center();
+  return geometry;
+}
+
+interface StarSharedResources {
+  geometry: THREE.BufferGeometry;
+  material: THREE.Material;
+  outlineGeometry: THREE.BufferGeometry;
+  outlineScale: number;
+}
+
+interface RainbowStarMaterials {
+  near: THREE.MeshToonMaterial;
+  mid: THREE.MeshToonMaterial;
+  far: THREE.MeshBasicMaterial;
+}
+
+const SHARED_STAR_RESOURCES: Record<LODLevel, StarSharedResources> = (() => {
+  const nearGeometry = createHexPrismGeometry();
+  const midGeometry = createMidStarGeometry();
+  const farGeometry = new THREE.PlaneGeometry(1.18, 1.18);
+
+  return {
+    near: {
+      geometry: nearGeometry,
+      material: new THREE.MeshToonMaterial({
+        color: 0xffdd00,
+        emissive: 0xffdd00,
+        emissiveIntensity: 0.45,
+      }),
+      outlineGeometry: new THREE.EdgesGeometry(nearGeometry),
+      outlineScale: 1.04,
+    },
+    mid: {
+      geometry: midGeometry,
+      material: new THREE.MeshToonMaterial({
+        color: 0xffdd00,
+        emissive: 0xffdd00,
+        emissiveIntensity: 0.35,
+      }),
+      outlineGeometry: new THREE.EdgesGeometry(midGeometry),
+      outlineScale: 1.03,
+    },
+    far: {
+      geometry: farGeometry,
+      material: new THREE.MeshBasicMaterial({
+        color: 0xffdd00,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.95,
+      }),
+      outlineGeometry: new THREE.EdgesGeometry(farGeometry),
+      outlineScale: 1.05,
+    },
+  };
+})();
+const SHARED_OUTLINE_MATERIAL = new THREE.LineBasicMaterial({ color: 0x101020 });
+
+// Initial color for a RAINBOW star. The per-instance materials mutate in place
+// so pooled instances can keep reusing the same GPU resources without leaking
+// hue from the previous lifetime.
 const RAINBOW_INITIAL_COLOR = 0xff0000;
 
-// View-bracket thresholds used by Star.update() to skip per-frame Y-rotation
-// and rainbow hue updates for stars that are far ahead of (or already behind)
-// the spaceship. SpawnSystem pre-spawns stars at shipZ - 80 (well outside the
-// camera frustum); animating those wastes per-frame cost on iPad Safari.
-// Forward axis is -Z, so "ahead" = z < cameraZ. behind matches the very small
-// window before cleanupPassedObjects() releases the star at shipZ + 30.
+// View-bracket thresholds used by Star.update() to skip per-frame animation
+// for stars that are far ahead of (or already behind) the spaceship.
 const STAR_ANIMATION_AHEAD = 60;
 const STAR_ANIMATION_BEHIND = 5;
 
+let HIGH_CONTRAST_MODE = false;
+
+function createRainbowMaterials(): RainbowStarMaterials {
+  return {
+    near: new THREE.MeshToonMaterial({
+      color: RAINBOW_INITIAL_COLOR,
+      emissive: RAINBOW_INITIAL_COLOR,
+      emissiveIntensity: 0.45,
+    }),
+    mid: new THREE.MeshToonMaterial({
+      color: RAINBOW_INITIAL_COLOR,
+      emissive: RAINBOW_INITIAL_COLOR,
+      emissiveIntensity: 0.35,
+    }),
+    far: new THREE.MeshBasicMaterial({
+      color: RAINBOW_INITIAL_COLOR,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.95,
+    }),
+  };
+}
+
+export function setStarHighContrastMode(enabled: boolean): void {
+  HIGH_CONTRAST_MODE = enabled;
+}
+
 export class Star {
   position: { x: number; y: number; z: number };
-  // Constant for every Star instance. CollisionSystem.check() relies on this
-  // invariance to hoist the collision-radius computation out of its hot loop.
   readonly radius = 0.6;
   starType: StarType;
   scoreValue: number;
   isCollected = false;
+  constellationId: string | null = null;
+  constellationStageNumber: number | null = null;
+  constellationOrder: number | null = null;
   mesh: THREE.Mesh;
+  private readonly rainbowMaterials: RainbowStarMaterials | null;
   private hueOffset = 0;
+  private spinTime = 0;
+  private readonly wobblePhase: number;
+  private lodLevel: LODLevel = 'near';
 
   constructor(x: number, y: number, z: number, starType: StarType = 'NORMAL') {
     this.position = { x, y, z };
     this.starType = starType;
     this.scoreValue = starType === 'RAINBOW' ? 500 : 100;
+    this.rainbowMaterials = starType === 'RAINBOW' ? createRainbowMaterials() : null;
+    this.wobblePhase = ((Math.abs(x) * 0.17 + Math.abs(y) * 0.29 + Math.abs(z) * 0.05) % 1) * Math.PI * 2;
     this.mesh = this.createMesh();
     this.mesh.position.set(x, y, z);
   }
 
   private createMesh(): THREE.Mesh {
-    // Both branches reuse SHARED_GEOMETRY at module scope. RAINBOW additionally
-    // uses a per-instance material (mutated per-frame for hue animation), but
-    // we still tag the mesh so disposeObject3D() never disposes the shared
-    // geometry. The per-instance RAINBOW material is disposed by Star.dispose().
-    if (this.starType === 'RAINBOW') {
-      const mat = new THREE.MeshToonMaterial({
-        color: RAINBOW_INITIAL_COLOR,
-        emissive: RAINBOW_INITIAL_COLOR,
-        emissiveIntensity: 0.4,
-      });
-      const mesh = new THREE.Mesh(SHARED_GEOMETRY, mat);
-      mesh.userData.sharedAssets = true;
-      return mesh;
-    }
-    const mesh = new THREE.Mesh(SHARED_GEOMETRY, SHARED_NORMAL_MATERIAL);
+    const mesh = new THREE.Mesh(
+      SHARED_STAR_RESOURCES[this.lodLevel].geometry,
+      this.getCurrentMaterial(),
+    );
     mesh.userData.sharedAssets = true;
+    this.syncOutlineVisibility(mesh);
     return mesh;
   }
 
+  private getCurrentMaterial(): THREE.Material {
+    if (this.starType === 'RAINBOW') {
+      return this.rainbowMaterials?.[this.lodLevel] ?? SHARED_STAR_RESOURCES.near.material;
+    }
+    return SHARED_STAR_RESOURCES[this.lodLevel].material;
+  }
+
+  private attachOutline(mesh: THREE.Mesh): void {
+    const resources = SHARED_STAR_RESOURCES[this.lodLevel];
+    const outline = new THREE.LineSegments(resources.outlineGeometry, SHARED_OUTLINE_MATERIAL);
+    outline.name = 'star-high-contrast-outline';
+    outline.scale.setScalar(resources.outlineScale);
+    outline.userData.sharedAssets = true;
+    mesh.add(outline);
+  }
+
+  private syncOutlineVisibility(mesh: THREE.Mesh = this.mesh): void {
+    let outline = mesh.getObjectByName('star-high-contrast-outline') as THREE.LineSegments | null;
+    if (!outline && HIGH_CONTRAST_MODE) {
+      this.attachOutline(mesh);
+      outline = mesh.getObjectByName('star-high-contrast-outline') as THREE.LineSegments | null;
+    }
+    if (outline) {
+      const resources = SHARED_STAR_RESOURCES[this.lodLevel];
+      outline.geometry = resources.outlineGeometry;
+      outline.scale.setScalar(resources.outlineScale);
+      outline.visible = HIGH_CONTRAST_MODE;
+    }
+  }
+
+  getLODLevel(): LODLevel {
+    return this.lodLevel;
+  }
+
+  applyLOD(level: LODLevel): void {
+    if (this.lodLevel === level) {
+      return;
+    }
+    this.lodLevel = level;
+    this.mesh.geometry = SHARED_STAR_RESOURCES[level].geometry;
+    this.mesh.material = this.getCurrentMaterial();
+    this.syncOutlineVisibility();
+  }
+
   update(deltaTime: number, cameraZ?: number): void {
-    // Skip rotation / hue animation for stars outside the visible Z bracket.
-    // cameraZ is optional for backward-compat with existing tests and any
-    // callers that haven't been migrated; when omitted, animate as before.
     if (
       cameraZ !== undefined &&
       (this.position.z < cameraZ - STAR_ANIMATION_AHEAD ||
@@ -79,30 +213,47 @@ export class Star {
       return;
     }
 
-    // Rotate
+    this.spinTime += deltaTime;
     this.mesh.rotation.y += deltaTime * 2;
+    this.mesh.rotation.z = Math.sin(this.spinTime * 3.2 + this.wobblePhase) * 0.16;
+    this.mesh.position.y = this.position.y + Math.sin(this.spinTime * 2.4 + this.wobblePhase) * 0.05;
 
-    // Rainbow hue animation
     if (this.starType === 'RAINBOW' && !this.isCollected) {
       this.hueOffset += deltaTime * 0.5;
       const hue = this.hueOffset % 1;
-      const mat = this.mesh.material as THREE.MeshToonMaterial;
-      // emissive は color と完全同期するため、HSL→RGB 変換は1回に抑え copy で再利用する
-      mat.color.setHSL(hue, 1, 0.5);
-      mat.emissive.copy(mat.color);
+      const materials = this.rainbowMaterials;
+      if (!materials) {
+        return;
+      }
+      materials.near.color.setHSL(hue, 1, 0.5);
+      materials.near.emissive.copy(materials.near.color);
+      materials.mid.color.copy(materials.near.color);
+      materials.mid.emissive.copy(materials.near.color);
+      materials.far.color.copy(materials.near.color);
     }
   }
 
   collect(): void {
+    if (this.isCollected) {
+      return;
+    }
     this.isCollected = true;
     this.mesh.visible = false;
+    triggerSharedVibration(this.starType === 'RAINBOW' ? 'rainbowCollect' : 'starCollect');
   }
 
-  /**
-   * Re-initialize a pooled star for re-use at a new position. For RAINBOW
-   * stars this also restores the initial hue so the per-instance material
-   * does not leak the previous lifetime's animated color.
-   */
+  setConstellationMarker(id: string, stageNumber: number, order: number): void {
+    this.constellationId = id;
+    this.constellationStageNumber = stageNumber;
+    this.constellationOrder = order;
+  }
+
+  clearConstellationMarker(): void {
+    this.constellationId = null;
+    this.constellationStageNumber = null;
+    this.constellationOrder = null;
+  }
+
   reset(x: number, y: number, z: number): void {
     this.position.x = x;
     this.position.y = y;
@@ -112,34 +263,37 @@ export class Star {
     this.mesh.visible = true;
     this.isCollected = false;
     this.hueOffset = 0;
-    if (this.starType === 'RAINBOW') {
-      const mat = this.mesh.material as THREE.MeshToonMaterial;
-      mat.color.setHex(RAINBOW_INITIAL_COLOR);
-      mat.emissive.setHex(RAINBOW_INITIAL_COLOR);
+    this.spinTime = 0;
+    this.clearConstellationMarker();
+    this.applyLOD('near');
+    this.syncOutlineVisibility();
+    if (this.starType === 'RAINBOW' && this.rainbowMaterials) {
+      this.rainbowMaterials.near.color.setHex(RAINBOW_INITIAL_COLOR);
+      this.rainbowMaterials.near.emissive.setHex(RAINBOW_INITIAL_COLOR);
+      this.rainbowMaterials.mid.color.setHex(RAINBOW_INITIAL_COLOR);
+      this.rainbowMaterials.mid.emissive.setHex(RAINBOW_INITIAL_COLOR);
+      this.rainbowMaterials.far.color.setHex(RAINBOW_INITIAL_COLOR);
     }
   }
 
-  /**
-   * Detach the mesh from its parent and reset transient state so the
-   * instance can sit idle in a pool until `reset()` is called again.
-   * Shared geometry/material are preserved.
-   */
   recycle(): void {
     this.mesh.parent?.remove(this.mesh);
     this.mesh.rotation.set(0, 0, 0);
+    this.mesh.position.set(this.position.x, this.position.y, this.position.z);
     this.mesh.visible = true;
     this.isCollected = false;
     this.hueOffset = 0;
+    this.spinTime = 0;
+    this.clearConstellationMarker();
+    this.applyLOD('near');
+    this.syncOutlineVisibility();
   }
 
   dispose(): void {
-    // Shared geometry and (NORMAL) material are NOT disposed here; only the
-    // per-instance RAINBOW material is. Detach from parent so the mesh is GC'd.
-    // This is invoked by the SpawnSystem RAINBOW pool's disposeFn at scene
-    // teardown; per-spawn RAINBOW exits go through the pool, not here.
-    if (this.starType === 'RAINBOW') {
-      const mat = this.mesh.material as THREE.Material;
-      mat.dispose();
+    if (this.rainbowMaterials) {
+      this.rainbowMaterials.near.dispose();
+      this.rainbowMaterials.mid.dispose();
+      this.rainbowMaterials.far.dispose();
     }
     this.mesh.parent?.remove(this.mesh);
   }

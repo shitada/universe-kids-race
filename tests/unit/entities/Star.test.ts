@@ -1,13 +1,22 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as THREE from 'three';
-import { Star } from '../../../src/game/entities/Star';
+import { Star, setStarHighContrastMode } from '../../../src/game/entities/Star';
 
 describe('Star', () => {
+  afterEach(() => {
+    setStarHighContrastMode(false);
+  });
+
   it('creates a NORMAL star with score 100', () => {
     const star = new Star(0, 0, -10, 'NORMAL');
     expect(star.starType).toBe('NORMAL');
     expect(star.scoreValue).toBe(100);
     expect(star.isCollected).toBe(false);
+  });
+
+  it('uses a hex-prism geometry for stronger shape recognition', () => {
+    const star = new Star(0, 0, -10, 'NORMAL');
+    expect(star.mesh.geometry.type).toBe('ExtrudeGeometry');
   });
 
   it('creates a RAINBOW star with score 500', () => {
@@ -77,6 +86,38 @@ describe('Star', () => {
     expect(rainbow1.mesh.material).not.toBe(rainbow2.mesh.material);
   });
 
+  it('switches NORMAL stars across shared LOD resources', () => {
+    const a = new Star(0, 0, -10, 'NORMAL');
+    const b = new Star(0, 0, -10, 'NORMAL');
+    const nearGeometry = a.mesh.geometry;
+
+    a.applyLOD('mid');
+    b.applyLOD('mid');
+    expect(a.getLODLevel()).toBe('mid');
+    expect(a.mesh.geometry).toBe(b.mesh.geometry);
+    expect(a.mesh.material).toBe(b.mesh.material);
+    expect(a.mesh.geometry).not.toBe(nearGeometry);
+
+    a.applyLOD('far');
+    b.applyLOD('far');
+    expect(a.getLODLevel()).toBe('far');
+    expect(a.mesh.geometry).toBe(b.mesh.geometry);
+    expect(a.mesh.material).toBe(b.mesh.material);
+  });
+
+  it('keeps rainbow color in sync when switching LOD levels', () => {
+    const star = new Star(0, 0, -10, 'RAINBOW');
+    star.update(0.5);
+    const nearColor = (star.mesh.material as THREE.MeshToonMaterial).color.getHex();
+
+    star.applyLOD('far');
+    expect(star.getLODLevel()).toBe('far');
+    expect((star.mesh.material as THREE.MeshBasicMaterial).color.getHex()).toBe(nearColor);
+
+    star.applyLOD('mid');
+    expect((star.mesh.material as THREE.MeshToonMaterial).color.getHex()).toBe(nearColor);
+  });
+
   it('disposing one star does not affect a sibling star created afterwards', () => {
     const a = new Star(0, 0, -10, 'NORMAL');
     a.dispose();
@@ -111,6 +152,23 @@ describe('Star', () => {
     // Color/emissive references are mutated in place, not replaced.
     expect(mat.color).toBe(colorRef);
     expect(mat.emissive).toBe(emissiveRef);
+  });
+
+  it('adds a gentle hover while rotating', () => {
+    const star = new Star(0, 1, -10, 'NORMAL');
+    star.update(0.5);
+    expect(star.mesh.position.y).not.toBe(1);
+  });
+
+  it('shows the shared outline only in high contrast mode', () => {
+    setStarHighContrastMode(true);
+    const star = new Star(0, 0, -10, 'NORMAL');
+    const outline = star.mesh.getObjectByName('star-high-contrast-outline');
+    expect(outline?.visible).toBe(true);
+
+    setStarHighContrastMode(false);
+    star.reset(0, 0, -10);
+    expect(outline?.visible).toBe(false);
   });
 
   it('reset() repositions the star and clears transient state', () => {

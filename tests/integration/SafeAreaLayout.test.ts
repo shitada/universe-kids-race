@@ -99,8 +99,8 @@ describe('safe-area root layout integration', () => {
     expect(overlayRoot.contains(tutorialButton ?? null)).toBe(true);
     expect(overlayRoot.contains(encyclopediaButton ?? null)).toBe(true);
     expect(muteButton?.style.right).toBe('1rem');
-    expect(tutorialButton?.style.right).toBe('2rem');
-    expect(encyclopediaButton?.style.left).toBe('2rem');
+    expect(tutorialButton?.style.right).toBe('');
+    expect(encyclopediaButton?.style.left).toBe('');
     expect(`${muteButton?.style.cssText}${tutorialButton?.style.cssText}${encyclopediaButton?.style.cssText}`).not.toContain('env(');
 
     scene.exit();

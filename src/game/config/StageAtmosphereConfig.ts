@@ -1,0 +1,122 @@
+import type { StageAtmosphereConfig } from '../../types';
+
+export const STAGE_ATMOSPHERE_CONFIGS: readonly StageAtmosphereConfig[] = [
+  {
+    stageNumber: 1,
+    gradientTopColor: 0xf4f8ff,
+    gradientBottomColor: 0x4a547d,
+    particlePrimaryColor: 0xf7fbff,
+    particleSecondaryColor: 0xbfd2ff,
+    particlePattern: 'sparkle',
+    particleCount: 32,
+    particleSize: 0.32,
+  },
+  {
+    stageNumber: 2,
+    gradientTopColor: 0xcfd7e6,
+    gradientBottomColor: 0x544d5e,
+    particlePrimaryColor: 0xe8edf5,
+    particleSecondaryColor: 0x8d95a8,
+    particlePattern: 'dust',
+    particleCount: 28,
+    particleSize: 0.3,
+  },
+  {
+    stageNumber: 3,
+    gradientTopColor: 0xffe3b0,
+    gradientBottomColor: 0x8d5a31,
+    particlePrimaryColor: 0xfff2cf,
+    particleSecondaryColor: 0xf2b968,
+    particlePattern: 'mist',
+    particleCount: 30,
+    particleSize: 0.34,
+  },
+  {
+    stageNumber: 4,
+    gradientTopColor: 0xffb26b,
+    gradientBottomColor: 0x6d1f16,
+    particlePrimaryColor: 0xffd08c,
+    particleSecondaryColor: 0xff6a3d,
+    particlePattern: 'ember',
+    particleCount: 36,
+    particleSize: 0.36,
+  },
+  {
+    stageNumber: 5,
+    gradientTopColor: 0xffdbb8,
+    gradientBottomColor: 0x8f4e2c,
+    particlePrimaryColor: 0xfff1dd,
+    particleSecondaryColor: 0xf2ab61,
+    particlePattern: 'mist',
+    particleCount: 42,
+    particleSize: 0.38,
+  },
+  {
+    stageNumber: 6,
+    gradientTopColor: 0xf8e1a2,
+    gradientBottomColor: 0x5c3e26,
+    particlePrimaryColor: 0xfff6d7,
+    particleSecondaryColor: 0xffc96c,
+    particlePattern: 'ring',
+    particleCount: 54,
+    particleSize: 0.34,
+  },
+  {
+    stageNumber: 7,
+    gradientTopColor: 0xd6fbff,
+    gradientBottomColor: 0x2c7d9a,
+    particlePrimaryColor: 0xe5ffff,
+    particleSecondaryColor: 0x9de6ff,
+    particlePattern: 'aurora',
+    particleCount: 38,
+    particleSize: 0.34,
+  },
+  {
+    stageNumber: 8,
+    gradientTopColor: 0x91b8ff,
+    gradientBottomColor: 0x0f2b73,
+    particlePrimaryColor: 0xe0efff,
+    particleSecondaryColor: 0x58a9ff,
+    particlePattern: 'mist',
+    particleCount: 40,
+    particleSize: 0.32,
+  },
+  {
+    stageNumber: 9,
+    gradientTopColor: 0xf1efff,
+    gradientBottomColor: 0x5f628b,
+    particlePrimaryColor: 0xffffff,
+    particleSecondaryColor: 0xb5d8ff,
+    particlePattern: 'crystal',
+    particleCount: 26,
+    particleSize: 0.3,
+  },
+  {
+    stageNumber: 10,
+    gradientTopColor: 0xfff2a0,
+    gradientBottomColor: 0x9f2c00,
+    particlePrimaryColor: 0xfff9d6,
+    particleSecondaryColor: 0xff8d2f,
+    particlePattern: 'flare',
+    particleCount: 46,
+    particleSize: 0.42,
+  },
+  {
+    stageNumber: 11,
+    gradientTopColor: 0x88d5ff,
+    gradientBottomColor: 0x143a6f,
+    particlePrimaryColor: 0xffffff,
+    particleSecondaryColor: 0x8ee4a6,
+    particlePattern: 'homecoming',
+    particleCount: 36,
+    particleSize: 0.34,
+  },
+];
+
+export function getStageAtmosphereConfig(stageNumber: number): StageAtmosphereConfig {
+  const config = STAGE_ATMOSPHERE_CONFIGS[stageNumber - 1];
+  if (!config) {
+    throw new Error(`Invalid stage atmosphere number: ${stageNumber}`);
+  }
+  return config;
+}

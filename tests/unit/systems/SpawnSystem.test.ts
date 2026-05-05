@@ -77,7 +77,7 @@ describe('SpawnSystem', () => {
     }
   });
 
-  it('stars include roughly 10% rainbow type', () => {
+  it('stars include NORMAL/RAINBOW types and keep rainbow stars rare', () => {
     const system = new SpawnSystem();
     // Generate many stars across multiple frames (per-frame spawn count is
     // capped to prevent frame time spikes; total density is unchanged).
@@ -145,8 +145,33 @@ describe('SpawnSystem', () => {
     expect(system.getMeteoritePoolSize()).toBe(initialPoolSize);
   });
 
+  it('spawns a rainbow star only when the spawn roll is below the 5% threshold', () => {
+    const lowDensityConfig = { ...testConfig, starDensity: 1 };
+    const rainbowRandoms = [0.5, 0.04, 0.5, 0.5];
+    const rainbowSpy = vi.spyOn(Math, 'random').mockImplementation(() => rainbowRandoms.shift() ?? 0.5);
+    try {
+      const system = new SpawnSystem();
+      const result = system.update(0.016, -10, lowDensityConfig);
+      expect(result.newStars).toHaveLength(1);
+      expect(result.newStars[0].starType).toBe('RAINBOW');
+    } finally {
+      rainbowSpy.mockRestore();
+    }
+
+    const normalRandoms = [0.5, 0.06, 0.5, 0.5];
+    const normalSpy = vi.spyOn(Math, 'random').mockImplementation(() => normalRandoms.shift() ?? 0.5);
+    try {
+      const system = new SpawnSystem();
+      const result = system.update(0.016, -10, lowDensityConfig);
+      expect(result.newStars).toHaveLength(1);
+      expect(result.newStars[0].starType).toBe('NORMAL');
+    } finally {
+      normalSpy.mockRestore();
+    }
+  });
+
   it('releaseStar pools RAINBOW stars instead of disposing the material', () => {
-    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.05); // < 0.1 → RAINBOW
+    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.01); // < 0.05 → RAINBOW
     try {
       const system = new SpawnSystem();
       const result = system.update(0.016, -10, testConfig);
@@ -165,7 +190,7 @@ describe('SpawnSystem', () => {
   });
 
   it('re-uses the same RAINBOW Star mesh and material after releaseStar', () => {
-    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.05); // < 0.1 → RAINBOW
+    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.01); // < 0.05 → RAINBOW
     try {
       const system = new SpawnSystem();
       const first = system.update(0.016, -10, testConfig);
@@ -193,7 +218,7 @@ describe('SpawnSystem', () => {
   });
 
   it('reused RAINBOW star resumes hue animation from the initial color', () => {
-    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.05);
+    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.01);
     try {
       const system = new SpawnSystem();
       const first = system.update(0.016, -10, testConfig);
@@ -254,6 +279,148 @@ describe('SpawnSystem', () => {
     expect(second.newStars).toHaveLength(0);
   });
 
+  it('spawns a rare shooting star only inside the stage event window', () => {
+    const config: StageConfig = {
+      ...testConfig,
+      stageLength: 4500,
+      meteoriteInterval: 999,
+      starDensity: 1,
+      destinationReading: 'つき',
+      medalThresholds: [5, 10, 15],
+      emoji: '🌙',
+      displayName: 'つき',
+      planetColor: 0xcccccc,
+    };
+    const randomValues = [0.01, 0, 0, 0, 0];
+    const randomSpy = vi.spyOn(Math, 'random').mockImplementation(() => randomValues.shift() ?? 0.5);
+
+    try {
+      const system = new SpawnSystem();
+      expect(system.update(29.9, 100, config, [], [], []).newShootingStars).toHaveLength(0);
+      const result = system.update(0.2, 100, config, [], [], []);
+
+      expect(result.newShootingStars).toHaveLength(1);
+      expect(result.newShootingStars[0].position.x).toBeGreaterThan(0);
+      expect(result.newShootingStars[0].position.y).toBeGreaterThanOrEqual(0);
+      expect(result.newShootingStars[0].position.z).toBeLessThan(100);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
+  it('reuses the same shooting star instance after releaseShootingStar', () => {
+    const config: StageConfig = {
+      ...testConfig,
+      meteoriteInterval: 999,
+      starDensity: 1,
+      destinationReading: 'つき',
+      medalThresholds: [5, 10, 15],
+      emoji: '🌙',
+      displayName: 'つき',
+      planetColor: 0xcccccc,
+    };
+    const randomValues = [0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25];
+    const randomSpy = vi.spyOn(Math, 'random').mockImplementation(() => {
+      return randomValues.shift() ?? 0.5;
+    });
+
+    try {
+      const system = new SpawnSystem();
+      const first = system.update(0.3, 100, config, [], [], [], [], { meteoShowerActive: true });
+      expect(first.newShootingStars).toHaveLength(1);
+      const shootingStar = first.newShootingStars[0];
+      const poolSize = system.getShootingStarPoolSize();
+
+      system.releaseShootingStar(shootingStar);
+      system.reset();
+      const second = system.update(0.3, 100, config, [], [], [], [], { meteoShowerActive: true });
+
+      expect(second.newShootingStars).toHaveLength(1);
+      expect(second.newShootingStars[0]).toBe(shootingStar);
+      expect(system.getShootingStarPoolSize()).toBe(poolSize);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
+  it('does not spawn a comet in the same frame as a rare shooting star', () => {
+    const config: StageConfig = {
+      ...testConfig,
+      stageLength: 4500,
+      meteoriteInterval: 999,
+      starDensity: 1,
+      destinationReading: 'つき',
+      medalThresholds: [5, 10, 15],
+      emoji: '🌙',
+      displayName: 'つき',
+      planetColor: 0xcccccc,
+    };
+    const randomValues = [0.01, 0, 0, 0, 0];
+    const randomSpy = vi.spyOn(Math, 'random').mockImplementation(() => randomValues.shift() ?? 0.5);
+
+    try {
+      const system = new SpawnSystem();
+      const result = system.update(30.1, 100, config, [], [], [], []);
+
+      expect(result.newShootingStars).toHaveLength(1);
+      expect(result.newComets).toHaveLength(0);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
+  it('spawns a comet after a longer rare-event delay elapses', () => {
+    const config: StageConfig = {
+      ...testConfig,
+      meteoriteInterval: 999,
+      starDensity: 1,
+      destinationReading: 'つき',
+      medalThresholds: [5, 10, 15],
+      emoji: '🌙',
+      displayName: 'つき',
+      planetColor: 0xcccccc,
+    };
+    const randomValues = [0.5, 0, 0, 0.5, 0, 0];
+    const randomSpy = vi.spyOn(Math, 'random').mockImplementation(() => randomValues.shift() ?? 0.5);
+
+    try {
+      const system = new SpawnSystem();
+      const result = system.update(18.1, 100, config, [], [], [], []);
+
+      expect(result.newComets).toHaveLength(1);
+      expect(Math.abs(result.newComets[0].position.x)).toBeGreaterThanOrEqual(9);
+      expect(result.newComets[0].position.z).toBeLessThan(100);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
+  it('does not spawn a comet while another comet is still active', () => {
+    const config: StageConfig = {
+      ...testConfig,
+      meteoriteInterval: 999,
+      starDensity: 1,
+      destinationReading: 'つき',
+      medalThresholds: [5, 10, 15],
+      emoji: '🌙',
+      displayName: 'つき',
+      planetColor: 0xcccccc,
+    };
+    const randomValues = [0.5, 0, 0, 0.5, 0, 0, 0.5, 0, 0, 0.5, 0, 0];
+    const randomSpy = vi.spyOn(Math, 'random').mockImplementation(() => randomValues.shift() ?? 0.5);
+
+    try {
+      const system = new SpawnSystem();
+      const first = system.update(18.1, 100, config, [], [], [], []);
+      expect(first.newComets).toHaveLength(1);
+
+      const second = system.update(18.1, 80, config, [], [], [], first.newComets);
+      expect(second.newComets).toHaveLength(0);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
   it('dispose() releases pooled GPU resources for the meteorite pool', () => {
     const system = new SpawnSystem();
     const result = system.update(3.5, -10, testConfig);
@@ -270,7 +437,7 @@ describe('SpawnSystem', () => {
   });
 
   it('dispose() disposes the per-instance material of pooled RAINBOW stars', () => {
-    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.05);
+    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.01);
     try {
       const system = new SpawnSystem();
       const result = system.update(0.016, -10, testConfig);

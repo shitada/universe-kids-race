@@ -3,6 +3,7 @@ export class BoostSystem {
   private available = true;
   private durationTimer = 0;
   private cooldownTimer = 0;
+  private activationCount = 0;
 
   private static readonly DURATION = 3.0;
   private static readonly COOLDOWN = 5.0;
@@ -12,6 +13,7 @@ export class BoostSystem {
     this.active = true;
     this.available = false;
     this.durationTimer = BoostSystem.DURATION;
+    this.activationCount += 1;
     return true;
   }
 
@@ -57,10 +59,15 @@ export class BoostSystem {
     return 1.0 - this.durationTimer / BoostSystem.DURATION;
   }
 
+  getActivationCount(): number {
+    return this.activationCount;
+  }
+
   reset(): void {
     this.active = false;
     this.available = true;
     this.durationTimer = 0;
     this.cooldownTimer = 0;
+    this.activationCount = 0;
   }
 }

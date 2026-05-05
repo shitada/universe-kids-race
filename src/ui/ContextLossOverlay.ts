@@ -120,4 +120,8 @@ export class ContextLossOverlay {
   isVisible(): boolean {
     return this.overlayEl !== null;
   }
+
+  dispose(): void {
+    this.hide();
+  }
 }

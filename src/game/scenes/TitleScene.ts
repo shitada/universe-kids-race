@@ -1,5 +1,11 @@
 import * as THREE from 'three';
-import type { SaveData, Scene, SceneContext } from '../../types';
+import {
+  DEFAULT_SPACESHIP_CUSTOMIZATION,
+  type MotionSensitivity,
+  type SaveData,
+  type Scene,
+  type SceneContext,
+} from '../../types';
 import type { SceneManager } from '../SceneManager';
 import type { SaveManager } from '../storage/SaveManager';
 import type { AudioManager } from '../audio/AudioManager';
@@ -8,6 +14,9 @@ import { LoadingOverlay } from '../../ui/LoadingOverlay';
 import { LoadFailureOverlay } from '../../ui/LoadFailureOverlay';
 import { TitleResetConfirmOverlay } from '../../ui/TitleResetConfirmOverlay';
 import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButton';
+import { ColorAccessibilitySettings } from '../../ui/ColorAccessibilitySettings';
+import { SpaceshipCustomizer } from '../../ui/SpaceshipCustomizer';
+import { StatsOverlay } from '../../ui/StatsOverlay';
 import { getStageConfig, getStageMedalStatus, TOTAL_STAGES } from '../config/StageConfig';
 import { PLANET_ENCYCLOPEDIA, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
 import { formatEncyclopediaLabel } from '../../ui/formatEncyclopediaLabel';
@@ -15,6 +24,8 @@ import { getViewportSize } from '../utils/getViewportSize';
 import { attachReleaseConfirmButton } from '../../ui/attachReleaseConfirmButton';
 import { createStageMedalDisplay } from '../../ui/stageMedalDisplay';
 import { prewarmStageVisualAssets } from './stageVisualAssets';
+import { setSharedVibrationIntensity } from '../systems/VibrationSystem';
+import { DEFAULT_MOTION_SENSITIVITY } from '../accessibility/motionSensitivity';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // SHARED background-star resources for TitleScene
@@ -176,6 +187,9 @@ export class TitleScene implements Scene {
   private muteHandle: MuteButtonHandle | null = null;
   private tutorialOverlay = new TutorialOverlay();
   private readonly titleResetConfirmOverlay = new TitleResetConfirmOverlay();
+  private readonly colorAccessibilitySettings = new ColorAccessibilitySettings();
+  private readonly spaceshipCustomizer = new SpaceshipCustomizer();
+  private readonly statsOverlay = new StatsOverlay();
   private encyclopediaOverlay: EncyclopediaOverlayInstance | null = null;
   private encyclopediaOverlayPromise: Promise<EncyclopediaOverlayInstance> | null = null;
   private companionFactory: TitleCompanionFactory | null = null;
@@ -358,6 +372,7 @@ export class TitleScene implements Scene {
         });
       },
       saveData.bestStageStars ?? {},
+      saveData.discoveredConstellations ?? [],
     );
   }
 
@@ -423,8 +438,8 @@ export class TitleScene implements Scene {
       this.loadingOverlay.hide();
       console.error('Failed to load encyclopedia overlay', error);
       this.loadFailureOverlay.show({
-        title: 'ずかんの じゅんびが できなかったよ',
-        message: '「もういちど よむ」を おしてね',
+        title: 'ずかんを もういちど よんでみよう！',
+        message: '「もういちど よむ」を おして つづきを たのしもう！',
         primaryAction: {
           label: 'もういちど よむ',
           onSelect: () => this.openEncyclopedia(),
@@ -437,11 +452,54 @@ export class TitleScene implements Scene {
     }
   }
 
+  private persistHighContrastSetting(enabled: boolean): void {
+    const data = this.saveManager.load();
+    const currentMotionSensitivity =
+      data.colorAccessibility?.motionSensitivity ?? DEFAULT_MOTION_SENSITIVITY;
+    data.colorAccessibility = this.buildColorAccessibilitySettings(enabled, currentMotionSensitivity);
+    if (!data.colorAccessibility) {
+      delete data.colorAccessibility;
+    }
+    this.saveManager.save(data);
+  }
+
+  private persistVibrationIntensitySetting(intensity: 'off' | 'weak' | 'medium' | 'strong'): void {
+    const data = this.saveManager.load();
+    data.vibrationSettings = { intensity };
+    this.saveManager.save(data);
+    setSharedVibrationIntensity(intensity);
+  }
+
+  private persistMotionSensitivitySetting(sensitivity: MotionSensitivity): void {
+    const data = this.saveManager.load();
+    const highContrastEnabled = data.colorAccessibility?.highContrast === true;
+    data.colorAccessibility = this.buildColorAccessibilitySettings(highContrastEnabled, sensitivity);
+    if (!data.colorAccessibility) {
+      delete data.colorAccessibility;
+    }
+    this.saveManager.save(data);
+  }
+
+  private buildColorAccessibilitySettings(
+    highContrastEnabled: boolean,
+    motionSensitivity: MotionSensitivity,
+  ): SaveData['colorAccessibility'] {
+    if (!highContrastEnabled && motionSensitivity === DEFAULT_MOTION_SENSITIVITY) {
+      return undefined;
+    }
+
+    return {
+      ...(highContrastEnabled ? { highContrast: true } : {}),
+      ...(motionSensitivity !== DEFAULT_MOTION_SENSITIVITY ? { motionSensitivity } : {}),
+    };
+  }
+
   private createOverlay(): void {
     const uiOverlay = document.getElementById('ui-overlay');
     if (!uiOverlay) return;
     const initialSaveData = this.saveManager.load();
     const nextAdventure = getNextAdventurePreview(initialSaveData);
+    const savedProgress = hasSavedProgress(initialSaveData);
 
     this.overlay = document.createElement('div');
     this.overlay.style.cssText = `
@@ -449,12 +507,16 @@ export class TitleScene implements Scene {
       flex-direction: column;
       align-items: center;
       justify-content: center;
+      gap: 0;
       width: 100%;
       height: 100%;
       pointer-events: auto;
+      padding: 0.8rem 1rem;
+      box-sizing: border-box;
+      overflow: hidden;
     `;
 
-    const compact = window.innerHeight <= 500;
+    const compact = window.innerHeight <= 720;
 
     const title = document.createElement('div');
     title.textContent = 'うちゅうの たび';
@@ -464,7 +526,7 @@ export class TitleScene implements Scene {
       font-weight: 900;
       color: #FFD700;
       text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
-      margin-bottom: ${compact ? '0.6rem' : '2rem'};
+      margin-bottom: ${compact ? '0.35rem' : '1.1rem'};
     `;
 
     const nextAdventureCard = document.createElement('div');
@@ -472,9 +534,9 @@ export class TitleScene implements Scene {
     nextAdventureCard.setAttribute('data-next-stage-number', String(nextAdventure.startStage));
     nextAdventureCard.setAttribute('data-next-stage-destination', nextAdventure.destination);
     nextAdventureCard.style.cssText = `
-      width: min(${compact ? '60vw' : '70vw'}, ${compact ? '18rem' : '26rem'});
-      padding: ${compact ? '0.5rem 0.8rem' : '1rem 1.4rem'};
-      margin-bottom: ${compact ? '0.6rem' : '1.25rem'};
+      width: min(${compact ? '64vw' : '70vw'}, ${compact ? '20rem' : '26rem'});
+      padding: ${compact ? '0.5rem 0.8rem' : '0.8rem 1.2rem'};
+      margin-bottom: ${compact ? '0.45rem' : '0.85rem'};
       border-radius: ${compact ? '1rem' : '1.5rem'};
       background: rgba(255, 255, 255, 0.14);
       box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
@@ -529,7 +591,7 @@ export class TitleScene implements Scene {
       size: 'regular',
       scope: 'title-next-adventure',
     });
-    medalDisplay.style.marginTop = '0.7rem';
+    medalDisplay.style.marginTop = compact ? '0.35rem' : '0.55rem';
 
     nextAdventureCard.appendChild(nextAdventureHeading);
     nextAdventureCard.appendChild(nextAdventureStatus);
@@ -542,7 +604,8 @@ export class TitleScene implements Scene {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 0.65rem;
+      gap: ${compact ? '0.42rem' : '0.55rem'};
+      width: min(94vw, ${savedProgress ? '44rem' : '34rem'});
     `;
 
     const button = document.createElement('button');
@@ -595,29 +658,116 @@ export class TitleScene implements Scene {
       text-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
     `;
 
+    const secondaryActions = document.createElement('div');
+    secondaryActions.setAttribute('data-title-secondary-actions', '');
+    secondaryActions.style.cssText = `
+      display: grid;
+      grid-template-columns: repeat(${savedProgress ? 3 : 2}, minmax(0, 1fr));
+      gap: ${compact ? '0.45rem' : '0.55rem'};
+      width: 100%;
+      align-items: stretch;
+    `;
+
+    const customizeButton = document.createElement('button');
+    customizeButton.setAttribute('data-spaceship-customizer-button', '');
+    customizeButton.textContent = 'うちゅうせんをかざろう';
+    customizeButton.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: ${compact ? '0.9rem' : '1.05rem'};
+      font-weight: 900;
+      padding: ${compact ? '0.55rem 0.65rem' : '0.7rem 0.85rem'};
+      min-width: 0;
+      width: 100%;
+      min-height: ${compact ? '48px' : '56px'};
+      border: 3px solid rgba(255, 255, 255, 0.92);
+      border-radius: 1.7rem;
+      background: rgba(8, 16, 52, 0.76);
+      color: #fff;
+      cursor: pointer;
+      touch-action: manipulation;
+      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.26);
+      transform: scale(1);
+      transition: transform 0.08s ease-out;
+    `;
+    this.overlayButtonCleanups.add(attachReleaseConfirmButton(customizeButton, {
+      onActivate: () => {
+        const saveData = this.saveManager.load();
+        this.spaceshipCustomizer.show({
+          initialCustomization: saveData.spaceshipCustomization ?? DEFAULT_SPACESHIP_CUSTOMIZATION,
+          onComplete: (spaceshipCustomization) => {
+            const nextSaveData = this.saveManager.load();
+            nextSaveData.spaceshipCustomization = spaceshipCustomization;
+            this.saveManager.save(nextSaveData);
+          },
+        });
+      },
+      onPressChange: (pressed) => {
+        customizeButton.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+      },
+    }));
+
+    const statsButton = document.createElement('button');
+    statsButton.setAttribute('data-stats-button', '');
+    statsButton.textContent = 'あそびの きろく';
+    statsButton.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: ${compact ? '0.9rem' : '1.05rem'};
+      font-weight: 900;
+      padding: ${compact ? '0.55rem 0.65rem' : '0.7rem 0.85rem'};
+      min-width: 0;
+      width: 100%;
+      min-height: ${compact ? '48px' : '56px'};
+      border: 3px solid rgba(255, 230, 109, 0.85);
+      border-radius: 1.7rem;
+      background: rgba(12, 22, 72, 0.82);
+      color: #fff;
+      cursor: pointer;
+      touch-action: manipulation;
+      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.26);
+      transform: scale(1);
+      transition: transform 0.08s ease-out;
+    `;
+    this.overlayButtonCleanups.add(attachReleaseConfirmButton(statsButton, {
+      onActivate: () => {
+        this.ensureTitleAudioInitialized(true);
+        this.statsOverlay.show(this.saveManager.load().gameplayStats, () => {});
+      },
+      onPressChange: (pressed) => {
+        statsButton.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+      },
+    }));
+
+    const footerActions = document.createElement('div');
+    footerActions.setAttribute('data-title-footer-actions', '');
+    footerActions.style.cssText = `
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: ${compact ? '0.45rem' : '0.65rem'};
+      width: min(94vw, 42rem);
+      margin-top: ${compact ? '0.5rem' : '0.8rem'};
+      align-items: stretch;
+    `;
+
     // Tutorial button
     const tutorialBtn = document.createElement('button');
     tutorialBtn.textContent = 'あそびかた';
     tutorialBtn.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: ${compact ? '0.95rem' : '1.2rem'};
+      font-size: ${compact ? '0.82rem' : '1rem'};
       font-weight: 700;
-      padding: ${compact ? '0.4rem 1rem' : '0.6rem 1.5rem'};
+      padding: ${compact ? '0.45rem 0.55rem' : '0.55rem 0.8rem'};
+      min-height: ${compact ? '42px' : '48px'};
+      min-width: 0;
+      width: 100%;
       border: none;
       border-radius: 1.5rem;
       background: rgba(255, 255, 255, 0.15);
       color: #fff;
       cursor: pointer;
       touch-action: manipulation;
-      position: absolute;
-      bottom: ${compact ? '1rem' : '2rem'};
-      right: ${compact ? '1rem' : '2rem'};
       transform: scale(1);
       transition: transform 0.08s ease-out;
     `;
-    tutorialBtn.style.position = 'absolute';
-    tutorialBtn.style.bottom = compact ? '1rem' : '2rem';
-    tutorialBtn.style.right = compact ? '1rem' : '2rem';
     this.overlayButtonCleanups.add(attachReleaseConfirmButton(tutorialBtn, {
       onActivate: () => {
         this.ensureTitleAudioInitialized(true);
@@ -631,6 +781,46 @@ export class TitleScene implements Scene {
       },
     }));
 
+    // Color accessibility button
+    const colorSettingsBtn = document.createElement('button');
+    colorSettingsBtn.setAttribute('data-color-settings-button', '');
+    colorSettingsBtn.textContent = 'みやすさ・しんどう';
+    colorSettingsBtn.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: ${compact ? '0.82rem' : '1rem'};
+      font-weight: 700;
+      padding: ${compact ? '0.45rem 0.55rem' : '0.55rem 0.8rem'};
+      min-height: ${compact ? '42px' : '48px'};
+      min-width: 0;
+      width: 100%;
+      border: 3px solid rgba(255, 255, 255, 0.92);
+      border-radius: 1.5rem;
+      background: rgba(8, 16, 52, 0.72);
+      color: #fff;
+      cursor: pointer;
+      touch-action: manipulation;
+      transform: scale(1);
+      transition: transform 0.08s ease-out;
+      white-space: nowrap;
+    `;
+    this.overlayButtonCleanups.add(attachReleaseConfirmButton(colorSettingsBtn, {
+      onActivate: () => {
+        this.ensureTitleAudioInitialized(true);
+        this.colorAccessibilitySettings.show({
+          initialHighContrast: this.saveManager.load().colorAccessibility?.highContrast === true,
+          initialVibrationIntensity: this.saveManager.load().vibrationSettings?.intensity ?? 'medium',
+          initialMotionSensitivity:
+            this.saveManager.load().colorAccessibility?.motionSensitivity ?? DEFAULT_MOTION_SENSITIVITY,
+          onToggle: (enabled) => this.persistHighContrastSetting(enabled),
+          onVibrationIntensityChange: (intensity) => this.persistVibrationIntensitySetting(intensity),
+          onMotionSensitivityChange: (sensitivity) => this.persistMotionSensitivitySetting(sensitivity),
+        });
+      },
+      onPressChange: (pressed) => {
+        colorSettingsBtn.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+      },
+    }));
+
     // Encyclopedia button
     const encyclopediaBtn = document.createElement('button');
     encyclopediaBtn.textContent = formatEncyclopediaLabel(
@@ -639,9 +829,12 @@ export class TitleScene implements Scene {
     );
     encyclopediaBtn.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: ${compact ? '0.95rem' : '1.2rem'};
+      font-size: ${compact ? '0.82rem' : '1rem'};
       font-weight: 700;
-      padding: ${compact ? '0.4rem 1rem' : '0.6rem 1.5rem'};
+      padding: ${compact ? '0.45rem 0.55rem' : '0.55rem 0.8rem'};
+      min-height: ${compact ? '42px' : '48px'};
+      min-width: 0;
+      width: 100%;
       border: none;
       border-radius: 1.5rem;
       background: rgba(255, 255, 255, 0.15);
@@ -649,15 +842,9 @@ export class TitleScene implements Scene {
       cursor: pointer;
       touch-action: manipulation;
       white-space: nowrap;
-      position: absolute;
-      bottom: ${compact ? '1rem' : '2rem'};
-      left: ${compact ? '1rem' : '2rem'};
       transform: scale(1);
       transition: transform 0.08s ease-out;
     `;
-    encyclopediaBtn.style.position = 'absolute';
-    encyclopediaBtn.style.bottom = compact ? '1rem' : '2rem';
-    encyclopediaBtn.style.left = compact ? '1rem' : '2rem';
     this.encyclopediaBtn = encyclopediaBtn;
     this.overlayButtonCleanups.add(attachReleaseConfirmButton(encyclopediaBtn, {
       onActivate: () => {
@@ -671,16 +858,21 @@ export class TitleScene implements Scene {
 
     playArea.appendChild(button);
     playArea.appendChild(playButtonHint);
+    secondaryActions.appendChild(customizeButton);
+    secondaryActions.appendChild(statsButton);
 
-    if (hasSavedProgress(initialSaveData)) {
+    if (savedProgress) {
       const resetButton = document.createElement('button');
       resetButton.setAttribute('data-reset-progress-button', '');
       resetButton.textContent = 'さいしょから';
       resetButton.style.cssText = `
         font-family: 'Zen Maru Gothic', sans-serif;
-        font-size: 1.15rem;
+        font-size: ${compact ? '0.9rem' : '1.05rem'};
         font-weight: 900;
-        padding: 0.8rem 1.8rem;
+        padding: ${compact ? '0.55rem 0.65rem' : '0.7rem 0.85rem'};
+        min-width: 0;
+        width: 100%;
+        min-height: ${compact ? '48px' : '56px'};
         border: 2px solid rgba(255, 230, 109, 0.65);
         border-radius: 1.5rem;
         background: rgba(0, 0, 64, 0.32);
@@ -700,14 +892,16 @@ export class TitleScene implements Scene {
           () => {},
         );
       });
-      playArea.appendChild(resetButton);
+      secondaryActions.appendChild(resetButton);
     }
+
+    playArea.appendChild(secondaryActions);
+    footerActions.append(encyclopediaBtn, colorSettingsBtn, tutorialBtn);
 
     this.overlay.appendChild(title);
     this.overlay.appendChild(nextAdventureCard);
     this.overlay.appendChild(playArea);
-    this.overlay.appendChild(tutorialBtn);
-    this.overlay.appendChild(encyclopediaBtn);
+    this.overlay.appendChild(footerActions);
     uiOverlay.appendChild(this.overlay);
 
     // First touch anywhere on overlay initializes audio (iPad Safari requirement).
@@ -823,6 +1017,9 @@ export class TitleScene implements Scene {
     this.isOpeningEncyclopedia = false;
     this.tutorialOverlay.hide();
     this.titleResetConfirmOverlay.hide();
+    this.colorAccessibilitySettings.hide();
+    this.spaceshipCustomizer.hide();
+    this.statsOverlay.hide();
     this.encyclopediaOverlay?.hide();
     this.loadingOverlay.hide();
     this.loadFailureOverlay.hide();

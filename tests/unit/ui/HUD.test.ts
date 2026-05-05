@@ -559,6 +559,26 @@ describe('HUD', () => {
       expect(animationSpy.count).toBe(0);
     });
 
+    it('does not rewrite boost button styles when setBoostLocked keeps the same visual state', () => {
+      hud.show('Test');
+      hud.updateCooldown(1.0);
+      const bar = document.querySelector('[data-cooldown-bar]') as HTMLElement;
+      const boostBtn = document.getElementById('ui-overlay')!.querySelector('button') as HTMLButtonElement;
+      const boxShadowSpy = spyStyleSetter(bar, 'boxShadow');
+      const opacitySpy = spyStyleSetter(boostBtn, 'opacity');
+      const filterSpy = spyStyleSetter(boostBtn, 'filter');
+      const animationSpy = spyStyleSetter(boostBtn, 'animation');
+
+      hud.setBoostLocked(false);
+      hud.setBoostLocked(false);
+      hud.setBoostLocked(false);
+
+      expect(boxShadowSpy.count).toBe(0);
+      expect(opacitySpy.count).toBe(0);
+      expect(filterSpy.count).toBe(0);
+      expect(animationSpy.count).toBe(0);
+    });
+
     it('updates boxShadow and animation exactly once per ready-state transition', () => {
       hud.show('Test');
       const bar = document.querySelector('[data-cooldown-bar]') as HTMLElement;
@@ -607,6 +627,52 @@ describe('HUD', () => {
       const boostBtn = document.getElementById('ui-overlay')!.querySelector('button') as HTMLButtonElement;
       expect(bar.style.width).toBe('50%');
       expect(boostBtn.style.opacity).toBe('0.5');
+    });
+  });
+
+  describe('button state differential writes (perf)', () => {
+    function spyStyleSetter(el: HTMLElement, prop: string): { count: number; values: string[] } {
+      const tracker = { count: 0, values: [] as string[] };
+      let current = (el.style as unknown as Record<string, string>)[prop] ?? '';
+      Object.defineProperty(el.style, prop, {
+        configurable: true,
+        get() { return current; },
+        set(v: string) {
+          tracker.count++;
+          tracker.values.push(v);
+          current = v;
+        },
+      });
+      return tracker;
+    }
+
+    it('does not rewrite pause button styles when setPauseEnabled keeps the same state', () => {
+      hud.show('Test');
+      const pauseBtn = getPauseButton();
+      const opacitySpy = spyStyleSetter(pauseBtn, 'opacity');
+      const filterSpy = spyStyleSetter(pauseBtn, 'filter');
+      const cursorSpy = spyStyleSetter(pauseBtn, 'cursor');
+
+      hud.setPauseEnabled(true);
+      hud.setPauseEnabled(true);
+      hud.setPauseEnabled(true);
+
+      expect(opacitySpy.count).toBe(0);
+      expect(filterSpy.count).toBe(0);
+      expect(cursorSpy.count).toBe(0);
+    });
+
+    it('does not rewrite pause button transform for repeated pressed=true updates', () => {
+      hud.show('Test');
+      const pauseBtn = getPauseButton();
+
+      pauseBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      const transformSpy = spyStyleSetter(pauseBtn, 'transform');
+
+      pauseBtn.dispatchEvent(new Event('pointerenter', { bubbles: true }));
+      pauseBtn.dispatchEvent(new Event('pointerenter', { bubbles: true }));
+
+      expect(transformSpy.count).toBe(0);
     });
   });
 

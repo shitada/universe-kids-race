@@ -51,6 +51,53 @@ describe('ParticleBurst', () => {
     burst.dispose(scene);
     expect(scene.children.length).toBe(0);
   });
+
+  it('returns typed-array buffers on deactivate and reuses them across burst instances', () => {
+    const firstBurst = new ParticleBurst();
+    firstBurst.reset(scene, 0, 0, 0, 0xffdd00, 20, false);
+    const firstPoints = scene.children[0] as THREE.Points;
+    const firstPositionAttr = firstPoints.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const firstColorAttr = firstPoints.geometry.getAttribute('color') as THREE.BufferAttribute;
+    const firstPositionArray = firstPositionAttr.array;
+    const firstColorArray = firstColorAttr.array;
+
+    firstBurst.deactivate(scene);
+    expect((firstPoints.geometry.getAttribute('position') as THREE.BufferAttribute).array).toHaveLength(0);
+    expect((firstPoints.geometry.getAttribute('color') as THREE.BufferAttribute).array).toHaveLength(0);
+
+    const secondBurst = new ParticleBurst();
+    secondBurst.reset(scene, 1, 1, 1, 0x00ff00, 10, false);
+    const secondPoints = scene.children[0] as THREE.Points;
+    const secondPositionAttr = secondPoints.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const secondColorAttr = secondPoints.geometry.getAttribute('color') as THREE.BufferAttribute;
+
+    expect(secondPositionAttr.array).toBe(firstPositionArray);
+    expect(secondColorAttr.array).toBe(firstColorArray);
+  });
+
+  it('returns typed-array buffers when a burst expires during update', () => {
+    const firstBurst = new ParticleBurst();
+    firstBurst.reset(scene, 0, 0, 0, 0xffdd00, 20, false);
+    const firstPoints = scene.children[0] as THREE.Points;
+    const firstPositionAttr = firstPoints.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const firstColorAttr = firstPoints.geometry.getAttribute('color') as THREE.BufferAttribute;
+    const firstPositionArray = firstPositionAttr.array;
+    const firstColorArray = firstColorAttr.array;
+
+    const expired = firstBurst.update(1.0);
+    expect(expired).toBe(true);
+    expect((firstPoints.geometry.getAttribute('position') as THREE.BufferAttribute).array).toHaveLength(0);
+    expect((firstPoints.geometry.getAttribute('color') as THREE.BufferAttribute).array).toHaveLength(0);
+
+    const secondBurst = new ParticleBurst();
+    secondBurst.reset(scene, 2, 0, 0, 0xffaa44, 12, false);
+    const secondPoints = scene.children[1] as THREE.Points;
+    const secondPositionAttr = secondPoints.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const secondColorAttr = secondPoints.geometry.getAttribute('color') as THREE.BufferAttribute;
+
+    expect(secondPositionAttr.array).toBe(firstPositionArray);
+    expect(secondColorAttr.array).toBe(firstColorArray);
+  });
 });
 
 describe('ParticleBurstManager', () => {
@@ -68,6 +115,17 @@ describe('ParticleBurstManager', () => {
     // Should not crash even with more than 10
     // Scene children count should be ≤ 10 (oldest recycled)
     expect(scene.children.length).toBeLessThanOrEqual(10);
+  });
+
+  it('emits a dedicated stardust burst for a shooting star pickup', () => {
+    const manager = new ParticleBurstManager();
+
+    manager.emitShootingStar(scene, 1, 2, 3);
+
+    const points = scene.children.find((child) => (child as THREE.Points).isPoints) as THREE.Points | undefined;
+    expect(points).toBeDefined();
+    expect(points?.geometry.drawRange.count).toBeGreaterThanOrEqual(30);
+    expect((points?.material as THREE.PointsMaterial).size).toBeGreaterThan(0.5);
   });
 
   it('recycles oldest burst on overflow', () => {

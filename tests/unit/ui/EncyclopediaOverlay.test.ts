@@ -77,6 +77,18 @@ describe('EncyclopediaOverlay', () => {
     expect(cards.length).toBe(11);
   });
 
+  it('renders a constellation gallery section with hidden and discovered entries', () => {
+    overlay.show([1], () => {}, undefined, undefined, [1]);
+
+    const cards = uiOverlay.querySelectorAll('[data-constellation-card]');
+    const pictures = uiOverlay.querySelectorAll('[data-constellation-picture]');
+    expect(cards.length).toBeGreaterThan(0);
+    expect(pictures.length).toBe(cards.length);
+    expect(uiOverlay.textContent).toContain('せいざずかん');
+    expect(uiOverlay.querySelector('[data-constellation-card][data-stage="1"]')?.textContent).toContain('おおぐまざ');
+    expect(uiOverlay.querySelector('[data-constellation-card][data-stage="4"]')?.textContent).toContain('？？？');
+  });
+
   it('unlocked card shows emoji and name', () => {
     overlay.show([1], () => {});
     const cards = uiOverlay.querySelectorAll('[data-card]');
@@ -324,23 +336,25 @@ describe('EncyclopediaOverlay', () => {
     expect(detail).not.toBeNull();
   });
 
-  it('uses a compact scrollable gallery layout on low viewport heights', () => {
+  it('uses a compact no-scroll gallery layout on low viewport heights', () => {
     setViewportHeight(520);
 
     overlay.show([1], () => {});
 
     const galleryContent = uiOverlay.querySelector('[data-gallery-content]') as HTMLElement | null;
+    const galleryMain = uiOverlay.querySelector('[data-gallery-main]') as HTMLElement | null;
     const grid = uiOverlay.querySelector('[data-gallery-grid]') as HTMLElement | null;
     const backBtn = uiOverlay.querySelector('[data-gallery-back]') as HTMLButtonElement | null;
 
     expect(galleryContent).not.toBeNull();
-    expect(galleryContent?.style.maxHeight).toContain('calc');
-    expect(galleryContent?.style.overflowY).toBe('auto');
-    expect(grid?.style.gridTemplateColumns).toContain('minmax(110px, 1fr)');
+    expect(galleryContent?.style.maxHeight).toBe('720px');
+    expect(galleryContent?.style.overflow).toBe('hidden');
+    expect(galleryMain?.style.display).toBe('grid');
+    expect(grid?.style.gridTemplateColumns).toContain('minmax(86px, 1fr)');
     expect(backBtn).not.toBeNull();
   });
 
-  it('keeps detail actions inside compact scrollable containers on low viewport heights', () => {
+  it('keeps detail actions inside compact no-scroll containers on low viewport heights', () => {
     setViewportHeight(520);
 
     overlay.show([1], () => {}, () => {});
@@ -353,11 +367,13 @@ describe('EncyclopediaOverlay', () => {
     const playBtn = uiOverlay.querySelector('[data-detail-play]') as HTMLButtonElement | null;
 
     expect(detailContent).not.toBeNull();
-    expect(detailContent?.style.maxHeight).toContain('calc');
-    expect(detailContent?.style.overflowY).toBe('auto');
+    expect(detailContent?.style.maxHeight).toBe('720px');
+    expect(detailContent?.style.overflow).toBe('hidden');
+    expect(detailCard?.style.overflowY).toBe('hidden');
     expect(detailCard).not.toBeNull();
     expect(backBtn).not.toBeNull();
     expect(playBtn).not.toBeNull();
+    expect(uiOverlay.textContent).toContain('せいざ');
   });
 
   describe('bestStageStars display', () => {
