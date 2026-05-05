@@ -58,6 +58,7 @@ import { SeasonalEventEffects } from '../effects/SeasonalEventEffects';
 import { StageSpecialEffects } from '../effects/StageSpecialEffects';
 import { ScorePopupEffect } from '../effects/ScorePopupEffect';
 import { MonthlyEncounterEffect } from '../effects/MonthlyEncounterEffect';
+import { LovelyStarBurstEffect } from '../effects/LovelyStarBurstEffect';
 import { CompanionManager } from '../entities/CompanionManager';
 import { getConstellationForStage } from '../config/ConstellationData';
 import { getStageSpecialEventConfig } from '../config/StageSpecialEvents';
@@ -208,6 +209,7 @@ export class StageScene implements Scene {
   private stageSpecialEffects!: StageSpecialEffects;
   private seasonalEventEffects = new SeasonalEventEffects();
   private monthlyEncounterEffect = new MonthlyEncounterEffect();
+  private lovelyStarBurstEffect = new LovelyStarBurstEffect();
   private rainbowTrailEffect!: RainbowTrailEffect;
   private stageAtmosphereEffect = new StageAtmosphereEffect();
   private wormholeTunnelEffect = new WormholeTunnelEffect();
@@ -255,6 +257,8 @@ export class StageScene implements Scene {
   private static readonly BOOST_HINT_DURATION = 2.4;
   private static readonly ADAPTIVE_HINT_DURATION = 3;
   private static readonly SHOOTING_STAR_SCORE_BONUS_DURATION = 6;
+  private static readonly LOVELY_STAR_SCORE_BONUS_DURATION = 3;
+  private static readonly LOVELY_STAR_BONUS_SCORE = 200;
   private static readonly METEO_SHOWER_MESSAGE = 'りゅうせいぐんだ！ ✨';
   private static readonly METEO_SHOWER_MESSAGE_DURATION = 2.4;
   private static readonly STAGE_SPECIAL_MESSAGE_DURATION = 2.8;
@@ -410,6 +414,7 @@ export class StageScene implements Scene {
     this.wormholeTunnelEffect.init(this.threeScene);
     this.scorePopupEffect.init(this.threeScene);
     this.monthlyEncounterEffect.init(this.threeScene);
+    this.lovelyStarBurstEffect.init(this.threeScene);
 
     this.hud = new HUD();
     this.initialized = true;
@@ -898,6 +903,7 @@ export class StageScene implements Scene {
     this.planetRingEffect.clear();
     this.scorePopupEffect.clear();
     this.particleBurstManager.clear(this.threeScene);
+    this.lovelyStarBurstEffect.clear();
     this.spawnSystem.recycleAll();
     this.spawnSystem.setMeteoriteIntervalMultiplier(1);
     this.meteoShowerEventSystem.reset();
@@ -952,6 +958,7 @@ export class StageScene implements Scene {
       this.constellationCelebrationEffect.update(deltaTime);
       this.planetRingEffect.update(deltaTime);
       this.monthlyEncounterEffect.update(deltaTime);
+      this.lovelyStarBurstEffect.update(deltaTime);
       this.scorePopupEffect.update(deltaTime);
       this.particleBurstManager.update(this.threeScene, deltaTime);
       // Keep companion entrance animation progressing during clear screen
@@ -1012,6 +1019,7 @@ export class StageScene implements Scene {
       this.constellationCelebrationEffect.update(deltaTime);
       this.seasonalEventEffects.update(deltaTime, this.spaceship.position.x, this.spaceship.position.z);
       this.monthlyEncounterEffect.update(deltaTime);
+      this.lovelyStarBurstEffect.update(deltaTime);
       this.stageAtmosphereEffect.update(deltaTime, this.camera, this.spaceship.position.x, this.spaceship.position.z);
       return;
     }
@@ -1294,7 +1302,13 @@ export class StageScene implements Scene {
     // Star collection
     for (const star of collisionResult.starCollisions) {
       this.scoreSystem.addStarScore(star.starType, star.position);
-      if (star.starType === 'RAINBOW') {
+      if (star.starType === 'LOVELY') {
+        this.scoreSystem.addBonusScore(StageScene.LOVELY_STAR_BONUS_SCORE, star.position);
+        this.scoreSystem.activateShootingStarBonus(StageScene.LOVELY_STAR_SCORE_BONUS_DURATION);
+        this.audioManager.playSFX('lovelyCollect');
+        this.lovelyStarBurstEffect.emit(star.position);
+        this.scorePopupManager.showLabel('💖 ラブリースター！', star.position, this.camera, 'lovely-star');
+      } else if (star.starType === 'RAINBOW') {
         this.audioManager.playSFX('rainbowCollect');
         this.rainbowTrailEffect.start(this.spaceship.position);
         this.particleBurstManager.emit(
@@ -1387,7 +1401,7 @@ export class StageScene implements Scene {
     this.rainbowTrailEffect.update(deltaTime, this.spaceship.position);
 
     for (const star of collisionResult.starCollisions) {
-      this.scorePopupManager.show(star.scoreValue, star.position, this.camera);
+      this.scorePopupManager.show(star.scoreValue, star.position, this.camera, star.starType);
     }
 
     // Sun pulse animation
@@ -1464,6 +1478,7 @@ export class StageScene implements Scene {
 
     // Particle effects
     this.scorePopupEffect.update(deltaTime);
+    this.lovelyStarBurstEffect.update(deltaTime);
     this.particleBurstManager.update(this.threeScene, deltaTime);
     this.scoreSystem.update(deltaTime);
     this.constellationLineEffect.update(deltaTime);

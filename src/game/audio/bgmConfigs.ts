@@ -22,6 +22,8 @@ export interface BGMConfig {
   volumes: BGMVolumes;
 }
 
+export const LOVELY_STAR_SFX_MELODY = [659, 784, 988, 1319, 1568] as const;
+
 export const BGM_CONFIGS: Record<number, BGMConfig> = {
   // Title BGM (stageNumber=0): Am, 100 BPM — 冒険の予感
   0: {

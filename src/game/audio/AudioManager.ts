@@ -1,5 +1,5 @@
 import type { AudioVolumeLevel, SFXType } from '../../types';
-import { BGM_CONFIGS } from './bgmConfigs';
+import { BGM_CONFIGS, LOVELY_STAR_SFX_MELODY } from './bgmConfigs';
 import type { BGMConfig } from './bgmConfigs';
 
 export { BGM_CONFIGS } from './bgmConfigs';
@@ -517,6 +517,10 @@ export class AudioManager {
           break;
         case 'rainbowCollect':
           this.playArpeggio([440, 880, 1760], 'sine', 0.1, 0.22);
+          break;
+        case 'lovelyCollect':
+          this.playArpeggio([...LOVELY_STAR_SFX_MELODY], 'triangle', 0.05, 0.18);
+          this.playSweep('sine', 784, 1568, 0.32, 0.08);
           break;
         case 'constellationCelebrate':
           this.playArpeggio([523, 659, 784, 1047, 1319], 'triangle', 0.08, 0.12);

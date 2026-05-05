@@ -1,4 +1,4 @@
-import type { StageConfig } from '../../types';
+import type { StageConfig, StarType } from '../../types';
 import { Star } from '../entities/Star';
 import { Meteorite } from '../entities/Meteorite';
 import { ShootingStar } from '../entities/ShootingStar';
@@ -49,6 +49,7 @@ export class SpawnSystem {
   private static readonly SAFE_XY_DISTANCE = 2.5;
   private static readonly SAFE_Z_BAND = 3.0;
   private static readonly MAX_REROLL = 4;
+  private static readonly LOVELY_STAR_SPAWN_CHANCE = 0.01;
   private static readonly RAINBOW_STAR_SPAWN_CHANCE = 0.05;
 
   // Constitution I (子供ファースト) / III (左右移動のみ): 宇宙船は Y=0 固定で
@@ -101,11 +102,10 @@ export class SpawnSystem {
     newComets: [],
   };
 
-  // NORMAL stars, RAINBOW stars, and meteorites are all pooled to eliminate
-  // per-spawn Mesh / Material allocations on iPad Safari. RAINBOW stars own a
-  // per-instance animated MeshToonMaterial; pooling preserves that material
-  // across the instance's lifetime so hue animation reuses the same color
-  // buffers and avoids GC churn from repeated material construction/disposal.
+  // NORMAL stars, RAINBOW stars, LOVELY stars, and meteorites are all pooled
+  // to eliminate per-spawn Mesh / Material allocations on iPad Safari.
+  // RAINBOW / LOVELY stars own per-instance animated materials; pooling
+  // preserves those resources across the instance lifetime.
   private readonly normalStarPool = new EntityPool<Star, readonly [number, number, number]>(
     (x, y, z) => new Star(x, y, z, 'NORMAL'),
     (star, x, y, z) => star.reset(x, y, z),
@@ -114,6 +114,12 @@ export class SpawnSystem {
   );
   private readonly rainbowStarPool = new EntityPool<Star, readonly [number, number, number]>(
     (x, y, z) => new Star(x, y, z, 'RAINBOW'),
+    (star, x, y, z) => star.reset(x, y, z),
+    (star) => star.recycle(),
+    (star) => star.dispose(),
+  );
+  private readonly lovelyStarPool = new EntityPool<Star, readonly [number, number, number]>(
+    (x, y, z) => new Star(x, y, z, 'LOVELY'),
     (star, x, y, z) => star.reset(x, y, z),
     (star) => star.recycle(),
     (star) => star.dispose(),
@@ -180,7 +186,7 @@ export class SpawnSystem {
       if (spawned >= SpawnSystem.MAX_STAR_SPAWNS_PER_FRAME) break;
       this.lastStarSpawnZ -= starSpacing;
       const z = this.lastStarSpawnZ;
-      const isRainbow = Math.random() < SpawnSystem.RAINBOW_STAR_SPAWN_CHANCE;
+      const starType = SpawnSystem.sampleStarType();
       let x = (Math.random() - 0.5) * 14;
       let y = (Math.random() - 0.5) * 2 * SpawnSystem.STAR_SPAWN_Y_HALF_RANGE;
       let safe = this.isXySafeAgainstEntities(x, y, z, existingMeteorites, result.newMeteorites);
@@ -194,9 +200,7 @@ export class SpawnSystem {
       // entirely; per Constitution I, a missing star is preferable to an unfair pair.
       spawned++;
       if (!safe) continue;
-      const star = isRainbow
-        ? this.rainbowStarPool.acquire(x, y, z)
-        : this.normalStarPool.acquire(x, y, z);
+      const star = this.acquireStar(x, y, z, starType);
       result.newStars.push(star);
     }
 
@@ -343,13 +347,21 @@ export class SpawnSystem {
       this.rainbowStarPool.release(star);
       return;
     }
+    if (star.starType === 'LOVELY') {
+      this.lovelyStarPool.release(star);
+      return;
+    }
     this.normalStarPool.release(star);
   }
 
-  acquireStar(x: number, y: number, z: number, starType: 'NORMAL' | 'RAINBOW' = 'NORMAL'): Star {
-    return starType === 'RAINBOW'
-      ? this.rainbowStarPool.acquire(x, y, z)
-      : this.normalStarPool.acquire(x, y, z);
+  acquireStar(x: number, y: number, z: number, starType: StarType = 'NORMAL'): Star {
+    if (starType === 'RAINBOW') {
+      return this.rainbowStarPool.acquire(x, y, z);
+    }
+    if (starType === 'LOVELY') {
+      return this.lovelyStarPool.acquire(x, y, z);
+    }
+    return this.normalStarPool.acquire(x, y, z);
   }
 
   releaseMeteorite(met: Meteorite): void {
@@ -394,6 +406,7 @@ export class SpawnSystem {
   recycleAll(): void {
     this.normalStarPool.releaseAll();
     this.rainbowStarPool.releaseAll();
+    this.lovelyStarPool.releaseAll();
     this.meteoritePool.releaseAll();
     this.shootingStarPool.releaseAll();
     this.cometPool.releaseAll();
@@ -403,6 +416,7 @@ export class SpawnSystem {
   dispose(): void {
     this.normalStarPool.dispose();
     this.rainbowStarPool.dispose();
+    this.lovelyStarPool.dispose();
     this.meteoritePool.dispose();
     this.shootingStarPool.dispose();
     this.cometPool.dispose();
@@ -416,6 +430,10 @@ export class SpawnSystem {
   /** Test/diagnostic helper: number of RAINBOW stars allocated by the pool. */
   getRainbowStarPoolSize(): number {
     return this.rainbowStarPool.getPoolSize();
+  }
+
+  getLovelyStarPoolSize(): number {
+    return this.lovelyStarPool.getPoolSize();
   }
 
   /** Test/diagnostic helper: number of meteorites allocated by the pool. */
@@ -441,6 +459,17 @@ export class SpawnSystem {
 
   private static sampleCometDelay(): number {
     return SpawnSystem.COMET_MIN_DELAY + Math.random() * SpawnSystem.COMET_DELAY_RANGE;
+  }
+
+  private static sampleStarType(): StarType {
+    const roll = Math.random();
+    if (roll < SpawnSystem.LOVELY_STAR_SPAWN_CHANCE) {
+      return 'LOVELY';
+    }
+    if (roll < SpawnSystem.LOVELY_STAR_SPAWN_CHANCE + SpawnSystem.RAINBOW_STAR_SPAWN_CHANCE) {
+      return 'RAINBOW';
+    }
+    return 'NORMAL';
   }
 
   private ensureRareShootingStarPlan(config: StageConfig): void {

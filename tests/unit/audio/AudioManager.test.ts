@@ -200,6 +200,7 @@ describe('AudioManager', () => {
       audioManager.playSFX('stageClear');
       audioManager.playSFX('boostReady');
       audioManager.playSFX('boostDenied');
+      audioManager.playSFX('lovelyCollect');
       // All should play without error
     });
   });

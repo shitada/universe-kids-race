@@ -37,4 +37,14 @@ describe('Star.collect', () => {
 
     expect(vibrate).toHaveBeenCalledWith(100);
   });
+
+  it('plays the special vibration profile for a lovely star', () => {
+    const vibrate = vi.fn(() => true);
+    __setSharedVibrationSystemForTest(new VibrationSystem({ vibrate }, () => 0, 0));
+    const star = new Star(0, 0, 0, 'LOVELY');
+
+    star.collect();
+
+    expect(vibrate).toHaveBeenCalledWith(100);
+  });
 });

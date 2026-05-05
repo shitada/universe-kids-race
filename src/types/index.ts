@@ -23,7 +23,7 @@ export interface Scene {
 export type SpeedState = 'NORMAL' | 'BOOST' | 'SLOWDOWN' | 'RECOVERING';
 
 // Star types
-export type StarType = 'NORMAL' | 'RAINBOW';
+export type StarType = 'NORMAL' | 'RAINBOW' | 'LOVELY';
 
 export type VibrationPattern = number | number[];
 export type VibrationIntensity = 'off' | 'weak' | 'medium' | 'strong';
@@ -102,6 +102,7 @@ export interface StageMedalStatus {
 export type SFXType =
   | 'starCollect'
   | 'rainbowCollect'
+  | 'lovelyCollect'
   | 'constellationCelebrate'
   | 'shootingStarCollect'
   | 'cometCollect'

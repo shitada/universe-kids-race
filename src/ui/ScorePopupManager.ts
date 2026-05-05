@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { StarType } from '../types';
 
 type WorldPosition = Pick<THREE.Vector3, 'x' | 'y' | 'z'>;
 
@@ -11,7 +12,13 @@ interface PopupEntry {
   currentAnimationName: 'scorePopupFloatA' | 'scorePopupFloatB' | 'none';
 }
 
-export type PopupKind = 'normal' | 'bonus' | 'shooting-star' | 'special-star' | 'monthly-encounter';
+export type PopupKind =
+  | 'normal'
+  | 'bonus'
+  | 'shooting-star'
+  | 'special-star'
+  | 'monthly-encounter'
+  | 'lovely-star';
 
 interface PopupVisualStyle {
   text: string;
@@ -28,7 +35,16 @@ export interface ScoreGainPresentation {
   shadow: string;
 }
 
-export function createScoreGainPresentation(score: number): ScoreGainPresentation {
+export function createScoreGainPresentation(score: number, starType?: StarType): ScoreGainPresentation {
+  if (starType === 'LOVELY') {
+    return {
+      worldText: `💖 +${score}`,
+      hudText: `+${score}`,
+      kind: 'lovely-star',
+      color: '#ff8fd6',
+      shadow: 'rgba(255, 143, 214, 0.65)',
+    };
+  }
   const isBonus = score >= 500;
   return {
     worldText: `${isBonus ? '🌈' : '⬢'} +${score}`,
@@ -54,8 +70,8 @@ export class ScorePopupManager {
     this.highContrastMode = enabled;
   }
 
-  show(score: number, worldPosition: WorldPosition, camera: THREE.Camera): void {
-    const presentation = createScoreGainPresentation(score);
+  show(score: number, worldPosition: WorldPosition, camera: THREE.Camera, starType?: StarType): void {
+    const presentation = createScoreGainPresentation(score, starType);
     this.showPopup(
       {
         text: presentation.worldText,
@@ -70,12 +86,15 @@ export class ScorePopupManager {
 
   showLabel(text: string, worldPosition: WorldPosition, camera: THREE.Camera, kind: PopupKind = 'normal'): void {
     const style =
-      kind === 'shooting-star' || kind === 'special-star' || kind === 'monthly-encounter'
+      kind === 'shooting-star'
+        || kind === 'special-star'
+        || kind === 'monthly-encounter'
+        || kind === 'lovely-star'
         ? {
             text,
             kind,
-            color: 'rgb(255, 244, 179)',
-            shadow: 'rgba(191, 231, 255, 0.75)',
+            color: kind === 'lovely-star' ? '#ff8fd6' : 'rgb(255, 244, 179)',
+            shadow: kind === 'lovely-star' ? 'rgba(255, 143, 214, 0.65)' : 'rgba(191, 231, 255, 0.75)',
           }
         : {
             text,
@@ -112,12 +131,20 @@ export class ScorePopupManager {
     entry.el.style.color = style.color;
     entry.el.style.textShadow = `0 2px 10px ${style.shadow}`;
     entry.el.style.background = this.highContrastMode
-      ? style.kind === 'bonus' || style.kind === 'shooting-star' || style.kind === 'special-star' || style.kind === 'monthly-encounter'
+      ? style.kind === 'bonus'
+        || style.kind === 'shooting-star'
+        || style.kind === 'special-star'
+        || style.kind === 'monthly-encounter'
+        || style.kind === 'lovely-star'
         ? 'rgba(13, 18, 38, 0.92)'
         : 'rgba(0, 0, 0, 0.82)'
       : 'transparent';
     entry.el.style.border = this.highContrastMode
-      ? style.kind === 'bonus' || style.kind === 'shooting-star' || style.kind === 'special-star' || style.kind === 'monthly-encounter'
+      ? style.kind === 'bonus'
+        || style.kind === 'shooting-star'
+        || style.kind === 'special-star'
+        || style.kind === 'monthly-encounter'
+        || style.kind === 'lovely-star'
         ? '3px solid rgba(255, 255, 255, 0.95)'
         : '2px dashed rgba(255, 255, 255, 0.95)'
       : 'none';

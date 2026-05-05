@@ -28,6 +28,15 @@ describe('CollisionSystem', () => {
     expect(result.starCollisions).toHaveLength(0);
   });
 
+  it('detects LOVELY star collisions like other collectible stars', () => {
+    const ship = new Spaceship();
+    ship.position = { x: 0, y: 0, z: 0 };
+    const star = new Star(0.5, 0, 0, 'LOVELY');
+    const result = system.check(ship, [star], []);
+    expect(result.starCollisions).toEqual([star]);
+    expect(star.isCollected).toBe(true);
+  });
+
   it('does not detect star collision when far away', () => {
     const ship = new Spaceship();
     ship.position = { x: 0, y: 0, z: 0 };

@@ -30,7 +30,11 @@ export class ScoreSystem {
   }
 
   addStarScore(starType: StarType, worldPosition?: WorldPosition): void {
-    const value = starType === 'RAINBOW' ? 500 : 100;
+    const value = starType === 'RAINBOW'
+      ? 500
+      : starType === 'LOVELY'
+        ? 1000
+        : 100;
     const amount = value * this.getScoreMultiplier();
     this.stageScore += amount;
     this.starCount++;
