@@ -65,17 +65,22 @@ function createScene(inputState = { moveDirection: 0 as -1 | 0 | 1, boostPressed
   const scene = new StageScene(sceneManager, inputSystem, audioManager, saveManager);
   scene.enter({ stageNumber: 1 });
 
-  const internal = scene as unknown as {
-    countdownOverlay: { dispose(): void } | null;
-    stageIntroOverlay: { dispose(): void } | null;
-    awaitingResume: boolean;
-    cameraShakeTimer: number;
-    isHomeConfirmOpen: boolean;
-    isPauseOpen: boolean;
-    isStarting: boolean;
-    onStageClear(): void;
-    update(deltaTime: number): void;
-  };
+    const internal = scene as unknown as {
+      countdownOverlay: { dispose(): void } | null;
+      stageIntroOverlay: { dispose(): void } | null;
+      awaitingResume: boolean;
+      cameraShakeTimer: number;
+      isHomeConfirmOpen: boolean;
+      isPauseOpen: boolean;
+      isStarting: boolean;
+      stars: Array<{
+        position: { x: number; y: number; z: number };
+        constellationOrder: number | null;
+      }>;
+      spaceship: { position: { x: number; y: number; z: number } };
+      onStageClear(): void;
+      update(deltaTime: number): void;
+    };
   internal.stageIntroOverlay?.dispose();
   internal.stageIntroOverlay = null;
   internal.countdownOverlay?.dispose();
@@ -117,5 +122,24 @@ describe('StageScene vibration integration', () => {
     internal.onStageClear();
 
     expect(internal.cameraShakeTimer).toBeGreaterThan(0);
+  });
+
+  it('triggers the constellation celebration vibration when a constellation is completed', () => {
+    const vibrate = vi.fn(() => true);
+    __setSharedVibrationSystemForTest(new VibrationSystem({ vibrate }, () => 0, 0));
+    const { scene, internal } = createScene();
+
+    const targetStars = [...internal.stars]
+      .filter((star) => star.constellationOrder !== null)
+      .sort((a, b) => (a.constellationOrder ?? 0) - (b.constellationOrder ?? 0));
+
+    for (const star of targetStars) {
+      internal.spaceship.position.x = star.position.x;
+      internal.spaceship.position.y = star.position.y;
+      internal.spaceship.position.z = star.position.z;
+      scene.update(0.016);
+    }
+
+    expect(vibrate).toHaveBeenCalledWith([60, 30, 90, 30, 130]);
   });
 });

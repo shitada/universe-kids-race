@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import {
+  type ConstellationDefinition,
+  type ConstellationPoint,
   DEFAULT_SPACESHIP_CUSTOMIZATION,
   type AssistDirection,
   type MotionSensitivity,
@@ -45,6 +47,7 @@ import { AirShield } from '../effects/AirShield';
 import { BoostLinesEffect } from '../effects/BoostLinesEffect';
 import { BoostFlameEffect } from '../effects/BoostFlameEffect';
 import { ConstellationLineEffect } from '../effects/ConstellationLineEffect';
+import { ConstellationCelebrationEffect } from '../effects/ConstellationCelebrationEffect';
 import { MeteoShowerEffect } from '../effects/MeteoShowerEffect';
 import { PlanetRingEffect } from '../effects/PlanetRingEffect';
 import { RainbowTrailEffect } from '../effects/RainbowTrailEffect';
@@ -105,6 +108,7 @@ interface CameraShakeProfile {
 const CAMERA_SHAKE_PROFILES: Record<VibrationEvent, CameraShakeProfile> = {
   starCollect: { duration: 0.09, amplitudeX: 0.04, amplitudeY: 0.025, frequency: 34 },
   rainbowCollect: { duration: 0.12, amplitudeX: 0.07, amplitudeY: 0.04, frequency: 32 },
+  constellationCelebrate: { duration: 0.2, amplitudeX: 0.09, amplitudeY: 0.05, frequency: 24 },
   meteoriteHit: { duration: 0.28, amplitudeX: 0.18, amplitudeY: 0.12, frequency: 42 },
   boost: { duration: 0.14, amplitudeX: 0.08, amplitudeY: 0.045, frequency: 28 },
   stageClear: { duration: 0.3, amplitudeX: 0.1, amplitudeY: 0.06, frequency: 22 },
@@ -195,6 +199,7 @@ export class StageScene implements Scene {
   private particleBurstManager = new ParticleBurstManager();
   private planetRingEffect = new PlanetRingEffect();
   private constellationLineEffect = new ConstellationLineEffect();
+  private constellationCelebrationEffect = new ConstellationCelebrationEffect();
   private constellationSystem = new ConstellationSystem();
   private constellationHintOverlay = new ConstellationHintOverlay();
   private airShield!: AirShield;
@@ -388,6 +393,7 @@ export class StageScene implements Scene {
     this.threeScene.add(this.rainbowTrailEffect.group);
 
     this.constellationLineEffect.init(this.threeScene);
+    this.constellationCelebrationEffect.init(this.threeScene);
 
     this.meteoShowerEffect = new MeteoShowerEffect();
     this.meteoShowerEffect.init(this.threeScene);
@@ -549,6 +555,7 @@ export class StageScene implements Scene {
     this.scoreSystem.resetStage();
     this.constellationSystem.reset(getConstellationForStage(this.stageNumber));
     this.constellationLineEffect.clear();
+    this.constellationCelebrationEffect.clear();
     this.spawnConstellationStars();
     const constellation = this.constellationSystem.getDefinition();
     if (constellation) {
@@ -926,6 +933,7 @@ export class StageScene implements Scene {
     this.hud?.hideAssistMessage();
     this.constellationHintOverlay.hide();
     this.constellationLineEffect.clear();
+    this.constellationCelebrationEffect.clear();
     this.constellationSystem.reset();
     this.resetBoostHintState();
   }
@@ -941,6 +949,7 @@ export class StageScene implements Scene {
       this.seasonalEventNotice.tick(deltaTime);
       this.constellationHintOverlay.tick(deltaTime);
       this.constellationLineEffect.update(deltaTime);
+      this.constellationCelebrationEffect.update(deltaTime);
       this.planetRingEffect.update(deltaTime);
       this.monthlyEncounterEffect.update(deltaTime);
       this.scorePopupEffect.update(deltaTime);
@@ -1000,6 +1009,7 @@ export class StageScene implements Scene {
       this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
       this.constellationHintOverlay.tick(deltaTime);
       this.constellationLineEffect.update(deltaTime);
+      this.constellationCelebrationEffect.update(deltaTime);
       this.seasonalEventEffects.update(deltaTime, this.spaceship.position.x, this.spaceship.position.z);
       this.monthlyEncounterEffect.update(deltaTime);
       this.stageAtmosphereEffect.update(deltaTime, this.camera, this.spaceship.position.x, this.spaceship.position.z);
@@ -1457,6 +1467,7 @@ export class StageScene implements Scene {
     this.particleBurstManager.update(this.threeScene, deltaTime);
     this.scoreSystem.update(deltaTime);
     this.constellationLineEffect.update(deltaTime);
+    this.constellationCelebrationEffect.update(deltaTime);
     this.constellationHintOverlay.tick(deltaTime);
 
     // HUD update
@@ -1981,7 +1992,10 @@ export class StageScene implements Scene {
 
     this.saveManager.markConstellationDiscovered?.(this.stageNumber);
     this.constellationHintOverlay.showCelebration(constellation.celebrationMessage);
-    this.audioManager.playSFX('rainbowCollect');
+    const celebrationPosition = this.getConstellationCelebrationPosition(constellation);
+    this.constellationCelebrationEffect.play(celebrationPosition, this.stageConfig.planetColor);
+    this.audioManager.playSFX('constellationCelebrate');
+    triggerSharedVibration('constellationCelebrate');
     this.particleBurstManager.emit(
       this.threeScene,
       star.position.x,
@@ -1991,6 +2005,36 @@ export class StageScene implements Scene {
       42,
       true,
     );
+    this.particleBurstManager.emit(
+      this.threeScene,
+      celebrationPosition.x,
+      celebrationPosition.y,
+      celebrationPosition.z,
+      this.stageConfig.planetColor,
+      36,
+      true,
+    );
+  }
+
+  private getConstellationCelebrationPosition(constellation: ConstellationDefinition): ConstellationPoint {
+    if (constellation.points.length === 0) {
+      return { x: 0, y: 0, z: this.spaceship.position.z };
+    }
+
+    let x = 0;
+    let y = 0;
+    let z = 0;
+    for (const point of constellation.points) {
+      x += point.x;
+      y += point.y;
+      z += point.z;
+    }
+
+    return {
+      x: x / constellation.points.length,
+      y: y / constellation.points.length,
+      z: z / constellation.points.length,
+    };
   }
 
 

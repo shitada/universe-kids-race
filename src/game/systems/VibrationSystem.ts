@@ -3,6 +3,7 @@ import type { VibrationIntensity, VibrationPattern } from '../../types';
 export type VibrationEvent =
   | 'starCollect'
   | 'rainbowCollect'
+  | 'constellationCelebrate'
   | 'meteoriteHit'
   | 'boost'
   | 'stageClear';
@@ -15,9 +16,10 @@ interface VibrationEventConfig {
 const VIBRATION_EVENT_CONFIGS: Record<VibrationEvent, VibrationEventConfig> = {
   starCollect: { pattern: 50, priority: 1 },
   rainbowCollect: { pattern: 100, priority: 2 },
+  constellationCelebrate: { pattern: [60, 30, 90, 30, 130], priority: 4 },
   meteoriteHit: { pattern: 200, priority: 3 },
   boost: { pattern: [100, 50, 100], priority: 2 },
-  stageClear: { pattern: [100, 50, 100, 50, 150], priority: 4 },
+  stageClear: { pattern: [100, 50, 100, 50, 150], priority: 5 },
 };
 
 type VibrationNavigator = Pick<Navigator, 'vibrate'> | null | undefined;

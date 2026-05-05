@@ -194,6 +194,7 @@ describe('AudioManager', () => {
       await audioManager.init();
       audioManager.playSFX('starCollect');
       audioManager.playSFX('rainbowCollect');
+      audioManager.playSFX('constellationCelebrate');
       audioManager.playSFX('meteoriteHit');
       audioManager.playSFX('boost');
       audioManager.playSFX('stageClear');

@@ -115,6 +115,7 @@ describe('Stage constellation flow integration', () => {
       }>;
       spaceship: { position: { x: number; y: number; z: number } };
       constellationLineEffect: { getObject(): { visible: boolean; geometry: { drawRange: { count: number } } } | null };
+      constellationCelebrationEffect: { getObject(): { visible: boolean } };
       constellationHintOverlay: { getMessage(): string | null };
     };
     internal.stageIntroOverlay?.dispose();
@@ -137,8 +138,9 @@ describe('Stage constellation flow integration', () => {
 
     expect(saveManager.markConstellationDiscovered).toHaveBeenCalledWith(1);
     expect(state.discoveredConstellations).toEqual([1]);
-    expect(audioManager.playSFX).toHaveBeenCalledWith('rainbowCollect');
+    expect(audioManager.playSFX).toHaveBeenCalledWith('constellationCelebrate');
     expect(internal.constellationLineEffect.getObject()?.visible).toBe(true);
+    expect(internal.constellationCelebrationEffect.getObject().visible).toBe(true);
     expect(internal.constellationLineEffect.getObject()?.geometry.drawRange.count).toBeGreaterThan(0);
     expect(internal.constellationHintOverlay.getMessage()).toContain('おおぐまざ');
 

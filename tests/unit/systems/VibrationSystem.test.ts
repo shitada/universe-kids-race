@@ -17,6 +17,7 @@ describe('VibrationSystem', () => {
 
     expect(system.trigger('starCollect')).toBe(true);
     expect(system.trigger('rainbowCollect')).toBe(true);
+    expect(system.trigger('constellationCelebrate')).toBe(true);
     expect(system.trigger('meteoriteHit')).toBe(true);
     expect(system.trigger('boost')).toBe(true);
     expect(system.trigger('stageClear')).toBe(true);
@@ -24,6 +25,7 @@ describe('VibrationSystem', () => {
     expect(vibrate.mock.calls).toEqual([
       [50],
       [100],
+      [[60, 30, 90, 30, 130]],
       [200],
       [[100, 50, 100]],
       [[100, 50, 100, 50, 150]],

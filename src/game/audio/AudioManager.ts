@@ -518,6 +518,10 @@ export class AudioManager {
         case 'rainbowCollect':
           this.playArpeggio([440, 880, 1760], 'sine', 0.1, 0.22);
           break;
+        case 'constellationCelebrate':
+          this.playArpeggio([523, 659, 784, 1047, 1319], 'triangle', 0.08, 0.12);
+          this.playSweep('sine', 784, 1568, 0.42, 0.08);
+          break;
         case 'shootingStarCollect':
           this.playArpeggio([659, 988, 1319, 1760], 'triangle', 0.06, 0.2);
           break;
