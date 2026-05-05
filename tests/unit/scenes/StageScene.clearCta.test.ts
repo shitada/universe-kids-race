@@ -203,7 +203,9 @@ describe('StageScene clear CTA', () => {
       stageNumber: 4,
       finalizeStageResult: { totalScore: 2400, totalStarCount: 14 },
     });
-    const internal = scene as unknown as StageSceneInternals;
+    const internal = scene as unknown as StageSceneInternals & {
+      wormholeTunnelEffect: { isActive(): boolean };
+    };
 
     internal.onStageClear();
     internal.update(1);
@@ -213,6 +215,11 @@ describe('StageScene clear CTA', () => {
 
     dispatchReleaseConfirm(button);
     button.dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(internal.wormholeTunnelEffect.isActive()).toBe(true);
+    expect(sceneManager.requestTransition).not.toHaveBeenCalled();
+
+    internal.update(2.3);
 
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
     expect(sceneManager.requestTransition).toHaveBeenCalledWith('stage', {
@@ -556,6 +563,7 @@ describe('StageScene clear CTA', () => {
     expect(document.querySelector('[data-stage-clear-overlay]')).not.toBeNull();
 
     dispatchReleaseConfirm(continueButton);
+    internal.update(2.3);
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
     expect(sceneManager.requestTransition).toHaveBeenCalledWith('stage', {
       stageNumber: 3,

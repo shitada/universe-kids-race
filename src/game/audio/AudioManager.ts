@@ -498,6 +498,11 @@ export class AudioManager {
           // 明るい長三和音 (C/E/G) ジングル。「スタート！」の高揚感を与える。
           this.playArpeggio([523, 659, 784], 'sine', 0.07, 0.22);
           break;
+        case 'wormhole':
+          this.playSweep('triangle', 220, 1240, 0.8, 0.08);
+          this.playSweep('sine', 880, 180, 1.1, 0.06);
+          this.playArpeggio([392, 523, 784, 1175], 'sine', 0.08, 0.05);
+          break;
       }
       this.lastSfxTime.set(type, now);
     } catch {

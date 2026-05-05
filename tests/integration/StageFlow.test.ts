@@ -305,6 +305,7 @@ describe('Stage Flow Integration', () => {
     const continueButton = document.querySelector('[data-stage-clear-continue]') as HTMLButtonElement | null;
     expect(continueButton).toBeTruthy();
     dispatchReleaseConfirm(continueButton!);
+    internal.update(2.3);
     await flushPromises();
 
     expect(transitionLog.at(-1)).toEqual({
@@ -797,6 +798,7 @@ describe('Stage Flow Integration', () => {
     const button = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
     expect(button).not.toBeNull();
     dispatchReleaseConfirm(button!);
+    internal.update(2.3);
     await Promise.resolve();
     await Promise.resolve();
 

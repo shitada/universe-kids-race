@@ -49,6 +49,7 @@ import { PlanetRingEffect } from '../effects/PlanetRingEffect';
 import { RainbowTrailEffect } from '../effects/RainbowTrailEffect';
 import { SpaceWeatherEffect } from '../effects/SpaceWeatherEffect';
 import { StageAtmosphereEffect } from '../effects/StageAtmosphereEffect';
+import { WormholeTunnelEffect } from '../effects/WormholeTunnelEffect';
 import { SeasonalEventEffects } from '../effects/SeasonalEventEffects';
 import { StageSpecialEffects } from '../effects/StageSpecialEffects';
 import { ScorePopupEffect } from '../effects/ScorePopupEffect';
@@ -195,6 +196,7 @@ export class StageScene implements Scene {
   private seasonalEventEffects = new SeasonalEventEffects();
   private rainbowTrailEffect!: RainbowTrailEffect;
   private stageAtmosphereEffect = new StageAtmosphereEffect();
+  private wormholeTunnelEffect = new WormholeTunnelEffect();
   private seasonalEventNotice = new SeasonalEventNotice();
 
   private stageConfig!: StageConfig;
@@ -242,6 +244,7 @@ export class StageScene implements Scene {
   private static readonly METEO_SHOWER_MESSAGE = 'りゅうせいぐんだ！ ✨';
   private static readonly METEO_SHOWER_MESSAGE_DURATION = 2.4;
   private static readonly STAGE_SPECIAL_MESSAGE_DURATION = 2.8;
+  private static readonly WORMHOLE_TRANSITION_DURATION = 2.2;
 
   // Background stars
   private bgStars: THREE.Points | null = null;
@@ -300,6 +303,8 @@ export class StageScene implements Scene {
   private readonly scheduleIdleTask: (callback: () => void) => void;
   private readonly loadEncyclopediaOverlay: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
   private clearRewardRequestToken = 0;
+  private wormholeTransitionTimer = 0;
+  private pendingWormholeTransition: SceneContext | null = null;
   private onPauseRequested: (() => void) | null = null;
   private onResumeRequested: (() => void) | null = null;
   private onExitHomeRequested: (() => void) | null = null;
@@ -381,6 +386,7 @@ export class StageScene implements Scene {
     this.seasonalEventEffects.init(this.threeScene);
 
     this.stageAtmosphereEffect.init(this.threeScene);
+    this.wormholeTunnelEffect.init(this.threeScene);
     this.scorePopupEffect.init(this.threeScene);
 
     this.hud = new HUD();
@@ -420,6 +426,9 @@ export class StageScene implements Scene {
     this.stageClearOverlay.hide();
     this.isClearRewardOpen = false;
     this.isOpeningClearReward = false;
+    this.wormholeTransitionTimer = 0;
+    this.pendingWormholeTransition = null;
+    this.wormholeTunnelEffect.clear();
     this.damageTimer = 0;
     this.elapsedTime = 0;
     this.destinationPlanetSpinTarget = null;
@@ -870,6 +879,9 @@ export class StageScene implements Scene {
     this.seasonalEventSystem.clear();
     this.seasonalEventEffects.clear();
     this.stageAtmosphereEffect.clear();
+    this.wormholeTunnelEffect.clear();
+    this.wormholeTransitionTimer = 0;
+    this.pendingWormholeTransition = null;
     this.rainbowTrailEffect.clear();
     this.stageSpecialAnnouncementTimer = 0;
     this.stageSpecialAnnouncementMessage = '';
@@ -914,8 +926,13 @@ export class StageScene implements Scene {
           deltaTime * StageScene.DESTINATION_PLANET_SPIN_SPEED;
       }
       this.seasonalEventEffects.update(deltaTime, this.spaceship.position.x, this.spaceship.position.z);
-      this.revealClearActionButtonsIfReady();
+      if (!this.pendingWormholeTransition) {
+        this.revealClearActionButtonsIfReady();
+      }
       this.stageAtmosphereEffect.update(deltaTime, this.camera, this.spaceship.position.x, this.spaceship.position.z);
+      if (this.updateWormholeTransition(deltaTime)) {
+        return;
+      }
       return;
     }
 
@@ -2094,6 +2111,15 @@ export class StageScene implements Scene {
   private handleStageComplete(): void {
     const { totalScore, totalStarCount } = this.scoreSystem.finalizeStage();
 
+    if (this.shouldPlayWormholeTransition()) {
+      this.startWormholeTransition({
+        stageNumber: this.stageNumber + 1,
+        totalScore,
+        totalStarCount,
+      });
+      return;
+    }
+
     if (this.launchSource === 'encyclopedia') {
       this.sceneManager.requestTransition('title');
       return;
@@ -2108,6 +2134,49 @@ export class StageScene implements Scene {
         totalStarCount,
       });
     }
+  }
+
+  private shouldPlayWormholeTransition(): boolean {
+    return this.launchSource === 'campaign' && this.stageNumber < TOTAL_STAGES;
+  }
+
+  private startWormholeTransition(context: SceneContext): void {
+    if (this.pendingWormholeTransition) {
+      return;
+    }
+    const nextStageNumber = context.stageNumber ?? this.stageNumber + 1;
+    const nextStageConfig = getStageConfig(nextStageNumber);
+    this.pendingWormholeTransition = context;
+    this.wormholeTransitionTimer = 0;
+    this.stageClearOverlay.hide();
+    this.clearRewardOverlay?.hide();
+    this.isClearRewardOpen = false;
+    this.isOpeningClearReward = false;
+    this.wormholeTunnelEffect.start({
+      sourceColor: this.stageConfig.planetColor,
+      targetColor: nextStageConfig.planetColor,
+      duration: StageScene.WORMHOLE_TRANSITION_DURATION,
+      particleCount: 72,
+      rayCount: 20,
+    });
+    this.audioManager.playSFX('wormhole');
+  }
+
+  private updateWormholeTransition(deltaTime: number): boolean {
+    if (!this.pendingWormholeTransition) {
+      return false;
+    }
+    this.wormholeTransitionTimer += deltaTime;
+    this.wormholeTunnelEffect.update(deltaTime, this.camera);
+    if (this.wormholeTransitionTimer < StageScene.WORMHOLE_TRANSITION_DURATION) {
+      return false;
+    }
+    const context = this.pendingWormholeTransition;
+    this.pendingWormholeTransition = null;
+    this.wormholeTransitionTimer = 0;
+    this.wormholeTunnelEffect.clear();
+    this.sceneManager.requestTransition('stage', context);
+    return true;
   }
 
   private handleStageRetry(): void {
@@ -2160,6 +2229,9 @@ export class StageScene implements Scene {
     setSharedVibrationFallbackHandler(null);
     this.audioManager.stopBGM();
     this.audioManager.stopBoostSFX();
+    this.wormholeTunnelEffect.clear();
+    this.pendingWormholeTransition = null;
+    this.wormholeTransitionTimer = 0;
     if (this.stageIntroOverlay) {
       this.stageIntroOverlay.dispose();
       this.stageIntroOverlay = null;
@@ -2225,6 +2297,7 @@ export class StageScene implements Scene {
     this.boostLinesEffect.setQualityTier(effectiveTier);
     this.boostFlameEffect.setQualityTier(effectiveTier);
     this.stageAtmosphereEffect.setQualityTier(effectiveTier);
+    this.wormholeTunnelEffect.setQualityTier(effectiveTier);
     if (this.bgStars) {
       this.bgStars.geometry.setDrawRange(0, this.getBackgroundStarDrawCount());
     }
@@ -2249,6 +2322,7 @@ export class StageScene implements Scene {
     this.boostLinesEffect.setMotionSensitivity(this.motionSensitivity);
     this.boostFlameEffect.setMotionSensitivity(this.motionSensitivity);
     this.stageAtmosphereEffect.setMotionSensitivity(this.motionSensitivity);
+    this.wormholeTunnelEffect.setMotionSensitivity(this.motionSensitivity);
   }
 
   private static clampVisualQualityTier(tier: number): number {

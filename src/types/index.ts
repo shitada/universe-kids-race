@@ -108,7 +108,16 @@ export type SFXType =
   | 'boostReady'
   | 'boostDenied'
   | 'countdownTick'
-  | 'countdownGo';
+  | 'countdownGo'
+  | 'wormhole';
+
+export interface WormholeTunnelConfig {
+  sourceColor: number;
+  targetColor: number;
+  duration: number;
+  particleCount: number;
+  rayCount: number;
+}
 
 // Save data
 export interface ColorAccessibilitySettings {

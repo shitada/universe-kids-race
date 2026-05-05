@@ -820,17 +820,28 @@ describe('StageScene cumulative totals on re-entry', () => {
         getTotalScore(): number;
         getTotalStarCount(): number;
       };
-      handleStageComplete(): void;
+      onStageClear(): void;
+      update(deltaTime: number): void;
     };
 
     scene.enter({ stageNumber: 1, totalScore: 500, totalStarCount: 5 });
     skipCountdown(scene);
     internal.scoreSystem.addStarScore('NORMAL');
 
-    internal.handleStageComplete();
+    internal.onStageClear();
+    internal.update(1);
+
+    const continueButton = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
+    expect(continueButton).not.toBeNull();
+    continueButton?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    continueButton?.dispatchEvent(new Event('pointerup', { bubbles: true }));
 
     expect(internal.scoreSystem.getTotalScore()).toBe(600);
     expect(internal.scoreSystem.getTotalStarCount()).toBe(6);
+    expect(sceneManager.requestTransition).not.toHaveBeenCalled();
+
+    internal.update(2.3);
+
     expect(sceneManager.requestTransition).toHaveBeenCalledWith('stage', {
       stageNumber: 2,
       totalScore: 600,
