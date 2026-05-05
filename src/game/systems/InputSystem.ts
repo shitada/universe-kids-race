@@ -1,4 +1,5 @@
 import type { InputState } from '../../types';
+import type { TouchFeedbackOverlay } from '../../ui/TouchFeedbackOverlay';
 
 export class InputSystem {
   private state: InputState = { moveDirection: 0, boostPressed: false };
@@ -6,6 +7,7 @@ export class InputSystem {
   private activePointers = new Map<number, 'left' | 'right'>();
   private pendingPointers = new Set<number>();
   private pressedKeys = new Set<string>();
+  private touchFeedbackOverlay: TouchFeedbackOverlay | null = null;
   // Cached canvas bounds to avoid forced reflow on every pointer event
   // (Constitution III/IV: iPad Safari touch latency / 60fps). Updated via
   // notifyResize() from the main resize pipeline.
@@ -97,9 +99,11 @@ export class InputSystem {
     const side = this.sideOf(e.clientX);
     if (side === null) {
       this.pendingPointers.add(e.pointerId);
+      this.touchFeedbackOverlay?.showGameplayTouch(e.pointerId, e.clientX, e.clientY, 'center');
       return;
     }
     this.activePointers.set(e.pointerId, side);
+    this.touchFeedbackOverlay?.showGameplayTouch(e.pointerId, e.clientX, e.clientY, side);
     this.updateDirection();
   };
 
@@ -111,19 +115,31 @@ export class InputSystem {
       const current = this.activePointers.get(e.pointerId);
       if (current === side) return;
       this.activePointers.set(e.pointerId, side);
+      this.touchFeedbackOverlay?.moveGameplayTouch(e.pointerId, e.clientX, e.clientY, side);
       this.updateDirection();
       return;
     }
     if (!this.pendingPointers.has(e.pointerId) || side === null) return;
     this.pendingPointers.delete(e.pointerId);
     this.activePointers.set(e.pointerId, side);
+    this.touchFeedbackOverlay?.moveGameplayTouch(e.pointerId, e.clientX, e.clientY, side);
     this.updateDirection();
   };
 
   private releasePointer(pointerId: number): void {
     this.pendingPointers.delete(pointerId);
     this.activePointers.delete(pointerId);
+    this.touchFeedbackOverlay?.releaseGameplayTouch(pointerId);
     this.updateDirection();
+  }
+
+  private clearTouchFeedbackPointers(): void {
+    for (const pointerId of this.pendingPointers) {
+      this.touchFeedbackOverlay?.releaseGameplayTouch(pointerId);
+    }
+    for (const pointerId of this.activePointers.keys()) {
+      this.touchFeedbackOverlay?.releaseGameplayTouch(pointerId);
+    }
   }
 
   private onPointerUp = (e: PointerEvent): void => {
@@ -153,6 +169,7 @@ export class InputSystem {
   };
 
   private resetInputs(): void {
+    this.clearTouchFeedbackPointers();
     this.activePointers.clear();
     this.pendingPointers.clear();
     this.pressedKeys.clear();
@@ -219,6 +236,11 @@ export class InputSystem {
     this.state.boostPressed = pressed;
   }
 
+  setTouchFeedbackOverlay(overlay: TouchFeedbackOverlay | null): void {
+    this.clearTouchFeedbackPointers();
+    this.touchFeedbackOverlay = overlay;
+  }
+
   /**
    * Notify the InputSystem of a canvas bounds change. Called from the main
    * resize pipeline so sideOf() can avoid reading layout on every pointer
@@ -237,6 +259,7 @@ export class InputSystem {
    * across stages (e.g. when a DOM overlay intercepts pointerup).
    */
   resetPointers(): void {
+    this.clearTouchFeedbackPointers();
     this.activePointers.clear();
     this.pendingPointers.clear();
     this.updateDirection();
@@ -265,6 +288,7 @@ export class InputSystem {
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
     this.activePointers.clear();
     this.pendingPointers.clear();
+    this.touchFeedbackOverlay = null;
     this.state = { moveDirection: 0, boostPressed: false };
   }
 }

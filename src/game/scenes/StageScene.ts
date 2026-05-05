@@ -84,6 +84,7 @@ import { SeasonalEventNotice } from '../../ui/SeasonalEventNotice';
 import { StageClearOverlay } from '../../ui/StageClearOverlay';
 import { FrameRateHintOverlay } from '../../ui/FrameRateHintOverlay';
 import { BonusTimeOverlay } from '../../ui/BonusTimeOverlay';
+import { TouchFeedbackOverlay } from '../../ui/TouchFeedbackOverlay';
 import { ConstellationSystem } from '../systems/ConstellationSystem';
 import {
   __resetStageSceneSharedAssetCachesForTest,
@@ -313,6 +314,7 @@ export class StageScene implements Scene {
   private isPauseOpen = false;
   private shouldResumeAfterPause = false;
   private touchGuide = new TouchGuideOverlay();
+  private readonly touchFeedbackOverlay = new TouchFeedbackOverlay();
   private touchGuideMode: TouchGuideMode = 'intro';
   private touchGuideIdleTimer = 0;
   private hasSeenMoveInput = false;
@@ -599,6 +601,13 @@ export class StageScene implements Scene {
     );
     const stageName = `ステージ${this.stageConfig.stageNumber}: ${this.stageConfig.emoji} ${destinationLabel}を めざせ！`;
     this.hud.show(stageName, this.stageConfig.planetColor);
+    this.touchFeedbackOverlay.setMotionSensitivity(this.motionSensitivity);
+    this.touchFeedbackOverlay.attach();
+    this.touchFeedbackOverlay.bindUiRoots([
+      document.getElementById('hud'),
+      document.getElementById('ui-overlay'),
+    ]);
+    this.inputSystem.setTouchFeedbackOverlay?.(this.touchFeedbackOverlay);
     this.hud.setBoostCallback(() => {
       this.inputSystem.setBoostPressed(true);
     });
@@ -2569,6 +2578,8 @@ export class StageScene implements Scene {
     this.isOpeningClearReward = false;
     this.pauseOverlay.hide();
     this.touchGuide.hide();
+    this.touchFeedbackOverlay.hide();
+    this.inputSystem.setTouchFeedbackOverlay?.(null);
     this.adaptiveTutorialHint.hide();
     this.constellationHintOverlay.hide();
     this.seasonalEventNotice.dispose();

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { InputSystem } from '../../../src/game/systems/InputSystem';
+import type { TouchFeedbackOverlay } from '../../../src/ui/TouchFeedbackOverlay';
 
 function setCanvasLayout(
   canvas: HTMLCanvasElement,
@@ -242,6 +243,60 @@ describe('InputSystem — pointermove tracking', () => {
     zeroCanvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 100, pointerId: 1, bubbles: true }));
     expect(input.getState().moveDirection).toBe(before);
     zeroCanvas.remove();
+  });
+});
+
+describe('InputSystem — touch feedback integration', () => {
+  let input: InputSystem;
+  let canvas: HTMLCanvasElement;
+  let overlay: {
+    showGameplayTouch: ReturnType<typeof vi.fn>;
+    moveGameplayTouch: ReturnType<typeof vi.fn>;
+    releaseGameplayTouch: ReturnType<typeof vi.fn>;
+  };
+
+  beforeEach(() => {
+    input = new InputSystem();
+    canvas = createCanvas();
+    input.setup(canvas);
+    overlay = {
+      showGameplayTouch: vi.fn(),
+      moveGameplayTouch: vi.fn(),
+      releaseGameplayTouch: vi.fn(),
+    };
+    input.setTouchFeedbackOverlay(overlay as unknown as TouchFeedbackOverlay);
+  });
+
+  afterEach(() => {
+    input.dispose();
+    canvas.remove();
+  });
+
+  it('reports immediate gameplay feedback on pointerdown and pointerup', () => {
+    pointerDown(canvas, 120, 7);
+
+    expect(overlay.showGameplayTouch).toHaveBeenCalledWith(7, 120, 0, 'left');
+
+    pointerUp(canvas, 7);
+    expect(overlay.releaseGameplayTouch).toHaveBeenCalledWith(7);
+  });
+
+  it('reports center-start feedback and later side resolution on pointermove', () => {
+    pointerDown(canvas, 512, 9);
+    expect(overlay.showGameplayTouch).toHaveBeenCalledWith(9, 512, 0, 'center');
+
+    pointerMove(canvas, 860, 9);
+    expect(overlay.moveGameplayTouch).toHaveBeenCalledWith(9, 860, 0, 'right');
+  });
+
+  it('releases tracked feedback when resetPointers() clears ghost touches', () => {
+    pointerDown(canvas, 900, 21);
+    expect(input.getState().moveDirection).toBe(1);
+
+    input.resetPointers();
+
+    expect(overlay.releaseGameplayTouch).toHaveBeenCalledWith(21);
+    expect(input.getState().moveDirection).toBe(0);
   });
 });
 

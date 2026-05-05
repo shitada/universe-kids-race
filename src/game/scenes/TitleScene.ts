@@ -20,6 +20,7 @@ import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButt
 import { ColorAccessibilitySettings } from '../../ui/ColorAccessibilitySettings';
 import { SpaceshipCustomizer } from '../../ui/SpaceshipCustomizer';
 import { StatsOverlay } from '../../ui/StatsOverlay';
+import { TouchFeedbackOverlay } from '../../ui/TouchFeedbackOverlay';
 import { getStageConfig, getStageMedalStatus, TOTAL_STAGES } from '../config/StageConfig';
 import { DEFAULT_REST_REMINDER_ENABLED } from '../config/RestReminderConfig';
 import {
@@ -220,6 +221,7 @@ export class TitleScene implements Scene {
   private encyclopediaBtn: HTMLButtonElement | null = null;
   private isOpeningEncyclopedia = false;
   private isActive = false;
+  private readonly touchFeedbackOverlay = new TouchFeedbackOverlay();
   private encyclopediaRequestToken = 0;
   private companionParadeRequestToken = 0;
   // タイトル滞在中、初回 user gesture（AudioContext 初期化）を待つフラグ。
@@ -285,6 +287,14 @@ export class TitleScene implements Scene {
 
     this.createOverlay();
     this.createMuteButton();
+    this.touchFeedbackOverlay.setMotionSensitivity(
+      saveData.colorAccessibility?.motionSensitivity ?? getDefaultMotionSensitivity(),
+    );
+    this.touchFeedbackOverlay.attach();
+    this.touchFeedbackOverlay.bindUiRoots([
+      document.getElementById('hud'),
+      document.getElementById('ui-overlay'),
+    ]);
     this.prefetchEncyclopediaOnIdle();
     this.prewarmNextAdventureOnIdle(getNextAdventurePreview(saveData).startStage);
 
@@ -1193,6 +1203,7 @@ export class TitleScene implements Scene {
     // 「タイトル BGM がステージ突入後にうっすら残る」可能性を断つ。
     this.audioManager.stopBGM();
     this.bgmPending = false;
+    this.touchFeedbackOverlay.hide();
     this.clearCompanionParade();
     if (this.stars) {
       // SHARED: geometry / material はモジュールキャッシュで使い回すため dispose しない。
