@@ -3,7 +3,7 @@ import type {
   ColorVisionSupportMode,
   Language,
   MotionSensitivity,
-  VibrationIntensity,
+  VisualFeedbackIntensity,
 } from '../types';
 import { getMotionSensitivityVisualProfile } from '../game/accessibility/motionSensitivity';
 import { i18n } from '../game/i18n/i18nService';
@@ -22,11 +22,11 @@ const COLOR_VISION_OPTIONS: ReadonlyArray<{ value: ColorVisionSupportMode; label
   { value: 'color-and-marks', labelKey: 'colorSettings.colorVision.option.colorAndMarks', icon: '★' },
 ];
 
-const VIBRATION_OPTIONS: ReadonlyArray<{ value: VibrationIntensity; labelKey: string }> = [
-  { value: 'strong', labelKey: 'colorSettings.vibration.option.strong' },
-  { value: 'medium', labelKey: 'colorSettings.vibration.option.medium' },
-  { value: 'weak', labelKey: 'colorSettings.vibration.option.weak' },
-  { value: 'off', labelKey: 'colorSettings.vibration.option.off' },
+const VISUAL_FEEDBACK_OPTIONS: ReadonlyArray<{ value: VisualFeedbackIntensity; labelKey: string }> = [
+  { value: 'strong', labelKey: 'colorSettings.visualFeedback.option.strong' },
+  { value: 'medium', labelKey: 'colorSettings.visualFeedback.option.medium' },
+  { value: 'weak', labelKey: 'colorSettings.visualFeedback.option.weak' },
+  { value: 'off', labelKey: 'colorSettings.visualFeedback.option.off' },
 ];
 
 const LANGUAGE_OPTIONS: ReadonlyArray<{ value: Language; labelKey: string; icon: string }> = [
@@ -63,7 +63,7 @@ export interface ColorAccessibilitySettingsOptions {
   initialColorVisionSupportMode: ColorVisionSupportMode;
   initialBGMVolume: AudioVolumeLevel;
   initialSFXVolume: AudioVolumeLevel;
-  initialVibrationIntensity: VibrationIntensity;
+  initialVisualEffectIntensity: VisualFeedbackIntensity;
   initialMotionSensitivity: MotionSensitivity;
   initialRestReminderEnabled: boolean;
   initialLanguage: Language;
@@ -71,7 +71,7 @@ export interface ColorAccessibilitySettingsOptions {
   onColorVisionSupportModeChange: (mode: ColorVisionSupportMode) => void;
   onBGMVolumeChange: (volume: AudioVolumeLevel) => void;
   onSFXVolumeChange: (volume: AudioVolumeLevel) => void;
-  onVibrationIntensityChange: (intensity: VibrationIntensity) => void;
+  onVisualEffectIntensityChange: (intensity: VisualFeedbackIntensity) => void;
   onMotionSensitivityChange: (sensitivity: MotionSensitivity) => void;
   onRestReminderToggle: (enabled: boolean) => void;
   onLanguageChange: (language: Language) => void;
@@ -85,7 +85,7 @@ export class ColorAccessibilitySettings {
   private colorVisionSupportMode: ColorVisionSupportMode = 'color-only';
   private bgmVolume: AudioVolumeLevel = 100;
   private sfxVolume: AudioVolumeLevel = 100;
-  private vibrationIntensity: VibrationIntensity = 'medium';
+  private visualFeedbackIntensity: VisualFeedbackIntensity = 'medium';
   private motionSensitivity: MotionSensitivity = 'strong';
   private restReminderEnabled = true;
   private language: Language = DEFAULT_LANGUAGE;
@@ -95,8 +95,8 @@ export class ColorAccessibilitySettings {
   private sfxVolumeSlider: HTMLInputElement | null = null;
   private colorVisionDescriptionEl: HTMLParagraphElement | null = null;
   private colorVisionButtons = new Map<ColorVisionSupportMode, HTMLButtonElement>();
-  private vibrationDescriptionEl: HTMLParagraphElement | null = null;
-  private vibrationButtons = new Map<VibrationIntensity, HTMLButtonElement>();
+  private visualFeedbackDescriptionEl: HTMLParagraphElement | null = null;
+  private visualFeedbackButtons = new Map<VisualFeedbackIntensity, HTMLButtonElement>();
   private motionDescriptionEl: HTMLParagraphElement | null = null;
   private motionButtons = new Map<MotionSensitivity, HTMLButtonElement>();
   private restReminderDescriptionEl: HTMLParagraphElement | null = null;
@@ -112,7 +112,7 @@ export class ColorAccessibilitySettings {
   private onColorVisionSupportModeChange: ((mode: ColorVisionSupportMode) => void) | null = null;
   private onBGMVolumeChange: ((volume: AudioVolumeLevel) => void) | null = null;
   private onSFXVolumeChange: ((volume: AudioVolumeLevel) => void) | null = null;
-  private onVibrationIntensityChange: ((intensity: VibrationIntensity) => void) | null = null;
+  private onVisualEffectIntensityChange: ((intensity: VisualFeedbackIntensity) => void) | null = null;
   private onMotionSensitivityChange: ((sensitivity: MotionSensitivity) => void) | null = null;
   private onRestReminderToggle: ((enabled: boolean) => void) | null = null;
   private onLanguageChange: ((language: Language) => void) | null = null;
@@ -126,7 +126,7 @@ export class ColorAccessibilitySettings {
     this.colorVisionSupportMode = options.initialColorVisionSupportMode;
     this.bgmVolume = options.initialBGMVolume;
     this.sfxVolume = options.initialSFXVolume;
-    this.vibrationIntensity = options.initialVibrationIntensity;
+    this.visualFeedbackIntensity = options.initialVisualEffectIntensity;
     this.motionSensitivity = options.initialMotionSensitivity;
     this.restReminderEnabled = options.initialRestReminderEnabled;
     this.language = options.initialLanguage;
@@ -134,7 +134,7 @@ export class ColorAccessibilitySettings {
     this.onColorVisionSupportModeChange = options.onColorVisionSupportModeChange;
     this.onBGMVolumeChange = options.onBGMVolumeChange;
     this.onSFXVolumeChange = options.onSFXVolumeChange;
-    this.onVibrationIntensityChange = options.onVibrationIntensityChange;
+    this.onVisualEffectIntensityChange = options.onVisualEffectIntensityChange;
     this.onMotionSensitivityChange = options.onMotionSensitivityChange;
     this.onRestReminderToggle = options.onRestReminderToggle;
     this.onLanguageChange = options.onLanguageChange;
@@ -400,25 +400,25 @@ export class ColorAccessibilitySettings {
         colorVisionGroup.appendChild(button);
       }
 
-      const vibrationTitle = document.createElement('h3');
-      vibrationTitle.setAttribute('data-vibration-title', '');
-      vibrationTitle.style.cssText = 'margin: 0.9rem 0 0.45rem; font-size: clamp(1rem, 3.8vmin, 1.2rem);';
+      const visualFeedbackTitle = document.createElement('h3');
+      visualFeedbackTitle.setAttribute('data-visual-feedback-title', '');
+      visualFeedbackTitle.style.cssText = 'margin: 0.9rem 0 0.45rem; font-size: clamp(1rem, 3.8vmin, 1.2rem);';
 
-      this.vibrationDescriptionEl = document.createElement('p');
-      this.vibrationDescriptionEl.style.cssText = 'margin: 0 0 0.8rem; font-size: clamp(0.9rem, 3.2vmin, 1rem); line-height: 1.5;';
+      this.visualFeedbackDescriptionEl = document.createElement('p');
+      this.visualFeedbackDescriptionEl.style.cssText = 'margin: 0 0 0.8rem; font-size: clamp(0.9rem, 3.2vmin, 1rem); line-height: 1.5;';
 
-      const vibrationGroup = document.createElement('div');
-      vibrationGroup.setAttribute('data-vibration-intensity-group', '');
-      vibrationGroup.style.cssText = `
+      const visualFeedbackGroup = document.createElement('div');
+      visualFeedbackGroup.setAttribute('data-visual-feedback-intensity-group', '');
+      visualFeedbackGroup.style.cssText = `
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 0.65rem;
         margin-bottom: 0.95rem;
       `;
 
-      for (const option of VIBRATION_OPTIONS) {
+      for (const option of VISUAL_FEEDBACK_OPTIONS) {
         const button = document.createElement('button');
-        button.setAttribute('data-vibration-intensity-button', option.value);
+        button.setAttribute('data-visual-feedback-intensity-button', option.value);
         button.style.cssText = `
           min-height: 3.25rem;
           padding: 0.8rem 0.9rem;
@@ -434,12 +434,12 @@ export class ColorAccessibilitySettings {
           transition: transform 0.08s ease-out, border-color 0.12s ease-out, background 0.12s ease-out;
         `;
         button.addEventListener('click', () => {
-          this.vibrationIntensity = option.value;
+          this.visualFeedbackIntensity = option.value;
           this.render();
-          this.onVibrationIntensityChange?.(option.value);
+          this.onVisualEffectIntensityChange?.(option.value);
         });
-        this.vibrationButtons.set(option.value, button);
-        vibrationGroup.appendChild(button);
+        this.visualFeedbackButtons.set(option.value, button);
+        visualFeedbackGroup.appendChild(button);
       }
 
       const motionTitle = document.createElement('h3');
@@ -596,9 +596,9 @@ export class ColorAccessibilitySettings {
       panel.appendChild(colorVisionTitle);
       panel.appendChild(this.colorVisionDescriptionEl);
       panel.appendChild(colorVisionGroup);
-      panel.appendChild(vibrationTitle);
-      panel.appendChild(this.vibrationDescriptionEl);
-      panel.appendChild(vibrationGroup);
+      panel.appendChild(visualFeedbackTitle);
+      panel.appendChild(this.visualFeedbackDescriptionEl);
+      panel.appendChild(visualFeedbackGroup);
       panel.appendChild(motionTitle);
       panel.appendChild(motionHint);
       panel.appendChild(this.motionDescriptionEl);
@@ -650,7 +650,7 @@ export class ColorAccessibilitySettings {
       !this.restReminderToggleButton ||
       !this.languageDescriptionEl ||
       !this.colorVisionDescriptionEl ||
-      !this.vibrationDescriptionEl ||
+      !this.visualFeedbackDescriptionEl ||
       !this.motionDescriptionEl
     ) return;
 
@@ -662,7 +662,7 @@ export class ColorAccessibilitySettings {
     this.setStaticText('[data-rest-reminder-title]', 'colorSettings.restReminder.title');
     this.setStaticText('[data-language-title]', 'colorSettings.language.title');
     this.setStaticText('[data-color-vision-title]', 'colorSettings.colorVision.title');
-    this.setStaticText('[data-vibration-title]', 'colorSettings.vibration.title');
+    this.setStaticText('[data-visual-feedback-title]', 'colorSettings.visualFeedback.title');
     this.setStaticText('[data-motion-title]', 'colorSettings.motion.title');
     this.setStaticText('[data-motion-hint]', 'colorSettings.motion.hint');
     this.setStaticText('[data-color-settings-close]', 'colorSettings.close');
@@ -733,18 +733,18 @@ export class ColorAccessibilitySettings {
       button.style.transform = selected ? 'scale(1.02)' : 'scale(1)';
     }
 
-    const vibrationDescriptions: Record<VibrationIntensity, string> = {
-      strong: i18n.t('colorSettings.vibration.description.strong'),
-      medium: i18n.t('colorSettings.vibration.description.medium'),
-      weak: i18n.t('colorSettings.vibration.description.weak'),
-      off: i18n.t('colorSettings.vibration.description.off'),
+    const vibrationDescriptions: Record<VisualFeedbackIntensity, string> = {
+      strong: i18n.t('colorSettings.visualFeedback.description.strong'),
+      medium: i18n.t('colorSettings.visualFeedback.description.medium'),
+      weak: i18n.t('colorSettings.visualFeedback.description.weak'),
+      off: i18n.t('colorSettings.visualFeedback.description.off'),
     };
-    this.vibrationDescriptionEl.textContent = vibrationDescriptions[this.vibrationIntensity];
+    this.visualFeedbackDescriptionEl.textContent = vibrationDescriptions[this.visualFeedbackIntensity];
 
-    for (const option of VIBRATION_OPTIONS) {
-      const button = this.vibrationButtons.get(option.value);
+    for (const option of VISUAL_FEEDBACK_OPTIONS) {
+      const button = this.visualFeedbackButtons.get(option.value);
       if (!button) continue;
-      const selected = option.value === this.vibrationIntensity;
+      const selected = option.value === this.visualFeedbackIntensity;
       button.textContent = i18n.t(option.labelKey);
       button.setAttribute('aria-pressed', selected ? 'true' : 'false');
       button.style.borderColor = selected ? '#fff27a' : 'rgba(255, 255, 255, 0.4)';

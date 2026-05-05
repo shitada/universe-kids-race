@@ -18,7 +18,7 @@ import { MemoryHealthMonitor, type MemoryHealthAlert } from './utils/MemoryHealt
 import { GameStateBackup } from './storage/GameStateBackup';
 import { InterruptionSystem } from './systems/InterruptionSystem';
 import { FrameRateAdaptationSystem } from './systems/FrameRateAdaptationSystem';
-import { setSharedVibrationIntensity } from './systems/VibrationSystem';
+import { setSharedVisualFeedbackIntensity } from './systems/VisualFeedbackSystem';
 import { ContextLossOverlay } from '../ui/ContextLossOverlay';
 import { ResumeOverlay } from '../ui/ResumeOverlay';
 import { ResumeGentlyOverlay } from '../ui/ResumeGentlyOverlay';
@@ -149,7 +149,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   );
 
   applyPixelRatioTier(initialPixelTier);
-  setSharedVibrationIntensity(initialSaveData.vibrationSettings?.intensity ?? 'medium');
+  setSharedVisualFeedbackIntensity(initialSaveData.visualFeedbackSettings?.intensity ?? 'medium');
 
   const currentVisualTier = { value: initialPixelTier };
   const currentPerformanceAdaptation = { value: 0 };

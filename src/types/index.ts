@@ -25,8 +25,7 @@ export type SpeedState = 'NORMAL' | 'BOOST' | 'SLOWDOWN' | 'RECOVERING';
 // Star types
 export type StarType = 'NORMAL' | 'RAINBOW' | 'LOVELY';
 
-export type VibrationPattern = number | number[];
-export type VibrationIntensity = 'off' | 'weak' | 'medium' | 'strong';
+export type VisualFeedbackIntensity = 'off' | 'weak' | 'medium' | 'strong';
 export const MOTION_SENSITIVITY_LEVELS = ['strong', 'medium', 'gentle', 'minimal'] as const;
 export type MotionSensitivity = (typeof MOTION_SENSITIVITY_LEVELS)[number];
 export const COLOR_VISION_SUPPORT_MODES = ['color-only', 'color-and-marks'] as const;
@@ -140,8 +139,8 @@ export interface AudioSettings {
   sfxVolume?: AudioVolumeLevel;
 }
 
-export interface VibrationSettings {
-  intensity: VibrationIntensity;
+export interface VisualFeedbackSettings {
+  intensity: VisualFeedbackIntensity;
 }
 
 export interface RestReminderSettings {
@@ -196,7 +195,7 @@ export interface SaveData {
   muted?: boolean;
   audioSettings?: AudioSettings;
   colorAccessibility?: ColorAccessibilitySettings;
-  vibrationSettings?: VibrationSettings;
+  visualFeedbackSettings?: VisualFeedbackSettings;
   restReminderSettings?: RestReminderSettings;
   bestStageStars?: Record<number, number>;
   discoveredConstellations?: number[];

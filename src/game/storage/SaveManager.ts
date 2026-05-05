@@ -15,7 +15,7 @@ import {
   type SpecialShootingStarType,
   type SpaceshipColorKey,
   type SpaceshipCustomization,
-  type VibrationIntensity,
+  type VisualFeedbackIntensity,
 } from '../../types';
 import {
   DEFAULT_COLOR_VISION_SUPPORT_MODE,
@@ -46,7 +46,7 @@ const DEFAULT_DATA: SaveData = {
   clearedStage: 0,
   unlockedPlanets: [],
   muted: false,
-  vibrationSettings: { intensity: 'medium' },
+  visualFeedbackSettings: { intensity: 'medium' },
   restReminderSettings: { enabled: DEFAULT_REST_REMINDER_ENABLED },
   bestStageStars: {},
   gameplayStats: createDefaultGameplayStats(),
@@ -160,7 +160,7 @@ function normalizeGameplayStats(value: unknown): GameplayStats {
   return normalized;
 }
 
-function normalizeVibrationIntensity(value: unknown): VibrationIntensity {
+function normalizeVisualFeedbackIntensity(value: unknown): VisualFeedbackIntensity {
   switch (value) {
     case 'off':
     case 'weak':
@@ -169,6 +169,10 @@ function normalizeVibrationIntensity(value: unknown): VibrationIntensity {
     default:
       return 'medium';
   }
+}
+
+function readLegacyVisualFeedbackIntensity(data: unknown): unknown {
+  return (data as { vibrationSettings?: { intensity?: unknown } }).vibrationSettings?.intensity;
 }
 
 function normalizeAudioVolumeLevel(value: unknown): AudioSettings['bgmVolume'] {
@@ -285,8 +289,10 @@ function sanitizeSaveData(data: SaveData): SaveData {
     gameplayStats: normalizeGameplayStats(data.gameplayStats),
     tutorialShown: data.tutorialShown === true,
     spaceshipCustomization: normalizeSpaceshipCustomization(data.spaceshipCustomization),
-    vibrationSettings: {
-      intensity: normalizeVibrationIntensity(data.vibrationSettings?.intensity),
+    visualFeedbackSettings: {
+      intensity: normalizeVisualFeedbackIntensity(
+        data.visualFeedbackSettings?.intensity ?? readLegacyVisualFeedbackIntensity(data),
+      ),
     },
     restReminderSettings: normalizeRestReminderSettings(data.restReminderSettings),
   };
@@ -376,9 +382,13 @@ export class SaveManager {
       } else {
         delete (data as { audioSettings?: unknown }).audioSettings;
       }
-      data.vibrationSettings = {
-        intensity: normalizeVibrationIntensity((data as { vibrationSettings?: { intensity?: unknown } }).vibrationSettings?.intensity),
+      data.visualFeedbackSettings = {
+        intensity: normalizeVisualFeedbackIntensity(
+          (data as { visualFeedbackSettings?: { intensity?: unknown } }).visualFeedbackSettings?.intensity
+          ?? readLegacyVisualFeedbackIntensity(data),
+        ),
       };
+      delete (data as { vibrationSettings?: unknown }).vibrationSettings;
       data.restReminderSettings = normalizeRestReminderSettings(
         (data as { restReminderSettings?: unknown }).restReminderSettings,
       );
@@ -509,8 +519,8 @@ export class SaveManager {
     try {
       const prev = this.load();
       const muted = prev.muted === true;
-      const vibrationSettings = {
-        intensity: normalizeVibrationIntensity(prev.vibrationSettings?.intensity),
+      const visualFeedbackSettings = {
+        intensity: normalizeVisualFeedbackIntensity(prev.visualFeedbackSettings?.intensity),
       };
       const restReminderSettings = normalizeRestReminderSettings(prev.restReminderSettings);
       const lastStablePixelTier = prev.lastStablePixelTier;
@@ -525,7 +535,7 @@ export class SaveManager {
         clearedStage: 0,
         unlockedPlanets: [],
         muted,
-        vibrationSettings,
+        visualFeedbackSettings,
         restReminderSettings,
         bestStageStars: {},
         gameplayStats,
@@ -556,8 +566,8 @@ export class SaveManager {
     try {
       const prev = this.load();
       const muted = prev.muted === true;
-      const vibrationSettings = {
-        intensity: normalizeVibrationIntensity(prev.vibrationSettings?.intensity),
+      const visualFeedbackSettings = {
+        intensity: normalizeVisualFeedbackIntensity(prev.visualFeedbackSettings?.intensity),
       };
       const restReminderSettings = normalizeRestReminderSettings(prev.restReminderSettings);
       const lastStablePixelTier = prev.lastStablePixelTier;
@@ -571,7 +581,7 @@ export class SaveManager {
         clearedStage: 0,
         unlockedPlanets: [],
         muted,
-        vibrationSettings,
+        visualFeedbackSettings,
         restReminderSettings,
         bestStageStars: {},
         gameplayStats,

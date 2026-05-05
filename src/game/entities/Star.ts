@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { ColorVisionSupportMode, StarType } from '../../types';
 import type { LODLevel } from '../systems/LODSystem';
-import { triggerSharedVibration } from '../systems/VibrationSystem';
+import { triggerSharedVisualFeedback } from '../systems/VisualFeedbackSystem';
 
 function createHexPrismGeometry(): THREE.BufferGeometry {
   const shape = new THREE.Shape();
@@ -440,7 +440,7 @@ export class Star {
     }
     this.isCollected = true;
     this.mesh.visible = false;
-    triggerSharedVibration(isAnimatedStarType(this.starType) ? 'rainbowCollect' : 'starCollect');
+    triggerSharedVisualFeedback(isAnimatedStarType(this.starType) ? 'rainbowCollect' : 'starCollect');
   }
 
   setConstellationMarker(id: string, stageNumber: number, order: number): void {

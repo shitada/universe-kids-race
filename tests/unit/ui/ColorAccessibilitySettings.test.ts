@@ -13,7 +13,7 @@ describe('ColorAccessibilitySettings', () => {
       initialColorVisionSupportMode: 'color-only' as const,
       initialBGMVolume: 100 as const,
       initialSFXVolume: 100 as const,
-      initialVibrationIntensity: 'medium' as const,
+      initialVisualEffectIntensity: 'medium' as const,
       initialMotionSensitivity: 'strong' as const,
       initialRestReminderEnabled: true,
       initialLanguage: 'ja' as const,
@@ -21,7 +21,7 @@ describe('ColorAccessibilitySettings', () => {
       onColorVisionSupportModeChange: vi.fn(),
       onBGMVolumeChange: vi.fn(),
       onSFXVolumeChange: vi.fn(),
-      onVibrationIntensityChange: vi.fn(),
+      onVisualEffectIntensityChange: vi.fn(),
       onMotionSensitivityChange: vi.fn(),
       onRestReminderToggle: vi.fn(),
       onLanguageChange: vi.fn(),
@@ -44,10 +44,10 @@ describe('ColorAccessibilitySettings', () => {
 
   it('renders and toggles the child-friendly high-contrast button', () => {
     const onToggle = vi.fn();
-    const onVibrationIntensityChange = vi.fn();
+    const onVisualEffectIntensityChange = vi.fn();
     settings.show(createOptions({
       onToggle,
-      onVibrationIntensityChange,
+      onVisualEffectIntensityChange,
     }));
 
     const toggle = document.querySelector('[data-color-accessibility-toggle]') as HTMLButtonElement | null;
@@ -57,25 +57,25 @@ describe('ColorAccessibilitySettings', () => {
 
     expect(toggle?.textContent).toContain('ON');
     expect(onToggle).toHaveBeenCalledWith(true);
-    expect(onVibrationIntensityChange).not.toHaveBeenCalled();
+    expect(onVisualEffectIntensityChange).not.toHaveBeenCalled();
   });
 
-  it('lets children pick vibration intensity explicitly', () => {
-    const onVibrationIntensityChange = vi.fn();
+  it('lets children pick visual effect intensity explicitly', () => {
+    const onVisualEffectIntensityChange = vi.fn();
     settings.show(createOptions({
       initialHighContrast: true,
-      initialVibrationIntensity: 'weak',
-      onVibrationIntensityChange,
+      initialVisualEffectIntensity: 'weak',
+      onVisualEffectIntensityChange,
     }));
 
-    const weakButton = document.querySelector('[data-vibration-intensity-button="weak"]') as HTMLButtonElement | null;
-    const strongButton = document.querySelector('[data-vibration-intensity-button="strong"]') as HTMLButtonElement | null;
+    const weakButton = document.querySelector('[data-visual-feedback-intensity-button="weak"]') as HTMLButtonElement | null;
+    const strongButton = document.querySelector('[data-visual-feedback-intensity-button="strong"]') as HTMLButtonElement | null;
     expect(weakButton?.getAttribute('aria-pressed')).toBe('true');
 
     strongButton?.click();
 
     expect(strongButton?.getAttribute('aria-pressed')).toBe('true');
-    expect(onVibrationIntensityChange).toHaveBeenCalledWith('strong');
+    expect(onVisualEffectIntensityChange).toHaveBeenCalledWith('strong');
   });
 
   it('shows visual motion choices and starts a preview when selected', () => {

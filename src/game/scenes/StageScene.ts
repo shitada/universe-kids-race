@@ -32,11 +32,12 @@ import { SpaceWeatherEventSystem } from '../systems/SpaceWeatherEventSystem';
 import { StageSpecialEventSystem } from '../systems/StageSpecialEventSystem';
 import { SpecialStarSpawnSystem } from '../systems/SpecialStarSpawnSystem';
 import {
-  setSharedVibrationFallbackHandler,
-  setSharedVibrationIntensity,
-  triggerSharedVibration,
-  type VibrationEvent,
-} from '../systems/VibrationSystem';
+  type VisualFeedbackEffect,
+  setSharedVisualFeedbackHandler,
+  setSharedVisualFeedbackIntensity,
+  triggerSharedVisualFeedback,
+  type VisualFeedbackEvent,
+} from '../systems/VisualFeedbackSystem';
 import { HUD } from '../../ui/HUD';
 import { AdaptiveTutorialHint } from '../../ui/AdaptiveTutorialHint';
 import { CountdownOverlay } from '../../ui/CountdownOverlay';
@@ -113,7 +114,15 @@ interface CameraShakeProfile {
   frequency: number;
 }
 
-const CAMERA_SHAKE_PROFILES: Record<VibrationEvent, CameraShakeProfile> = {
+interface ActiveVisualFeedbackState {
+  background: string;
+  duration: number;
+  elapsed: number;
+  overlayOpacity: number;
+  spaceshipScale: number;
+}
+
+const CAMERA_SHAKE_PROFILES: Record<VisualFeedbackEvent, CameraShakeProfile> = {
   starCollect: { duration: 0.09, amplitudeX: 0.04, amplitudeY: 0.025, frequency: 34 },
   rainbowCollect: { duration: 0.12, amplitudeX: 0.07, amplitudeY: 0.04, frequency: 32 },
   constellationCelebrate: { duration: 0.2, amplitudeX: 0.09, amplitudeY: 0.05, frequency: 24 },
@@ -261,6 +270,8 @@ export class StageScene implements Scene {
   private cameraShakeElapsed = 0;
   private readonly cameraShakeOffset = new THREE.Vector3();
   private cameraShakeProfile: CameraShakeProfile = CAMERA_SHAKE_PROFILES.meteoriteHit;
+  private visualFeedbackOverlay: HTMLDivElement | null = null;
+  private activeVisualFeedback: ActiveVisualFeedbackState | null = null;
   private motionSensitivity: MotionSensitivity = getDefaultMotionSensitivity();
   private readonly cameraPositionTarget = new THREE.Vector3(0, 5, 10);
   private readonly cameraLookAtTarget = new THREE.Vector3(0, 0, -10);
@@ -487,6 +498,9 @@ export class StageScene implements Scene {
     this.pendingWormholeTransition = null;
     this.wormholeTunnelEffect.clear();
     this.damageTimer = 0;
+    this.activeVisualFeedback = null;
+    this.ensureVisualFeedbackOverlay();
+    this.updateVisualFeedbackOverlay(0, 'transparent');
     this.elapsedTime = 0;
     this.destinationPlanetSpinTarget = null;
     this.planetRingEffect.clear();
@@ -529,8 +543,8 @@ export class StageScene implements Scene {
     this.motionSensitivity = saveData.colorAccessibility?.motionSensitivity ?? getDefaultMotionSensitivity();
     const colorVisionSupportMode =
       saveData.colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE;
-    setSharedVibrationIntensity(saveData.vibrationSettings?.intensity ?? 'medium');
-    setSharedVibrationFallbackHandler((event) => this.handleVibrationFallback(event));
+    setSharedVisualFeedbackIntensity(saveData.visualFeedbackSettings?.intensity ?? 'medium');
+    setSharedVisualFeedbackHandler((effect) => this.handleVisualFeedback(effect));
     setStarHighContrastMode(highContrastEnabled);
     setStarColorVisionSupportMode(colorVisionSupportMode);
     setMeteoriteHighContrastMode(highContrastEnabled);
@@ -608,6 +622,7 @@ export class StageScene implements Scene {
     );
     const stageName = `ステージ${this.stageConfig.stageNumber}: ${this.stageConfig.emoji} ${destinationLabel}を めざせ！`;
     this.hud.show(stageName, this.stageConfig.planetColor);
+    this.ensureVisualFeedbackOverlay();
     this.touchFeedbackOverlay.setMotionSensitivity(this.motionSensitivity);
     this.touchFeedbackOverlay.attach();
     this.touchFeedbackOverlay.bindUiRoots([
@@ -1104,7 +1119,7 @@ export class StageScene implements Scene {
       if (this.boostSystem.activate()) {
         this.adaptiveTutorialSystem.recordBoostUsed();
         this.audioManager.playSFX('boost');
-        triggerSharedVibration('boost');
+        triggerSharedVisualFeedback('boost');
         this.audioManager.startBoostSFX();
         this.boostFlameEffect.start();
       } else {
@@ -1303,7 +1318,7 @@ export class StageScene implements Scene {
       const isNewDiscovery = this.saveManager.markSpecialStarDiscovered?.(specialStar.specialType) ?? false;
       this.scoreSystem.addBonusScore(specialStar.scoreBonus, specialStar.position);
       this.audioManager.playSFX('shootingStarCollect');
-      triggerSharedVibration('rainbowCollect');
+      triggerSharedVisualFeedback('rainbowCollect');
       this.particleBurstManager.emitShootingStar(
         this.threeScene,
         specialStar.position.x,
@@ -1344,7 +1359,7 @@ export class StageScene implements Scene {
       const isNewDiscovery = this.saveManager.markMonthlyEncounterDiscovered?.(monthlyEncounter.encounterId) ?? false;
       this.scoreSystem.addBonusScore(monthlyEncounter.scoreBonus, monthlyEncounter.position);
       this.audioManager.playSFX('shootingStarCollect');
-      triggerSharedVibration('rainbowCollect');
+      triggerSharedVisualFeedback('rainbowCollect');
       this.monthlyEncounterEffect.emit(
         monthlyEncounter.position,
         encyclopediaEntry?.accentColor ?? 0xffffff,
@@ -1372,7 +1387,7 @@ export class StageScene implements Scene {
       const isNewDiscovery = this.saveManager.markSpaceGemDiscovered?.(spaceGem.gemType) ?? false;
       this.scoreSystem.addBonusScore(spaceGem.scoreBonus, spaceGem.position);
       this.audioManager.playSFX('spaceGemCollect');
-      triggerSharedVibration('constellationCelebrate');
+      triggerSharedVisualFeedback('constellationCelebrate');
       this.spaceGemCollectionEffect.emit(spaceGem.position, gemConfig.visual.glowColor);
       this.particleBurstManager.emit(
         this.threeScene,
@@ -1464,7 +1479,7 @@ export class StageScene implements Scene {
           // pickup" feedback for UX consistency. Visibility is restored by
           // Meteorite.reset()/recycle() before the mesh re-enters the pool.
           hit.mesh.visible = false;
-          triggerSharedVibration('meteoriteHit');
+          triggerSharedVisualFeedback('meteoriteHit');
         }
         // Subtle orange particle burst at the hit position to signal impact
         // without distracting from gameplay; uses the non-rainbow burst
@@ -1492,6 +1507,7 @@ export class StageScene implements Scene {
 
     // Damage animation (overrides bank rotation while active)
     this.updateDamageEffect(deltaTime);
+    this.updateVisualFeedback(deltaTime);
 
     // Deactivate passed objects
     this.cleanupPassedObjects(deltaTime);
@@ -1905,17 +1921,83 @@ export class StageScene implements Scene {
     this.cameraShakeOffset.set(0, 0, 0);
   }
 
-  private startCameraShake(event: VibrationEvent = 'meteoriteHit'): void {
+  private startCameraShake(event: VisualFeedbackEvent = 'meteoriteHit'): void {
     this.cameraShakeProfile = CAMERA_SHAKE_PROFILES[event];
     this.cameraShakeTimer = this.cameraShakeProfile.duration;
     this.cameraShakeElapsed = 0;
   }
 
-  private handleVibrationFallback(event: VibrationEvent): void {
-    if (event === 'meteoriteHit') {
+  private ensureVisualFeedbackOverlay(): void {
+    if (this.visualFeedbackOverlay) {
       return;
     }
-    this.startCameraShake(event);
+
+    const host = document.getElementById('ui-overlay');
+    if (!host) {
+      return;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.setAttribute('data-stage-visual-feedback', '');
+    overlay.style.cssText = `
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0;
+      z-index: 8;
+      transition: opacity 0.05s linear;
+      will-change: opacity, background;
+    `;
+    host.prepend(overlay);
+    this.visualFeedbackOverlay = overlay;
+  }
+
+  private updateVisualFeedbackOverlay(opacity: number, background: string): void {
+    this.visualFeedbackOverlay?.style.setProperty('opacity', String(opacity));
+    this.visualFeedbackOverlay?.style.setProperty('background', background);
+  }
+
+  private handleVisualFeedback(effect: VisualFeedbackEffect): void {
+    this.activeVisualFeedback = {
+      background: effect.overlayBackground,
+      duration: effect.durationMs / 1000,
+      elapsed: 0,
+      overlayOpacity: effect.overlayOpacity,
+      spaceshipScale: effect.spaceshipScale,
+    };
+
+    if (effect.event === 'meteoriteHit') {
+      return;
+    }
+
+    if (effect.event !== 'starCollect' && effect.event !== 'boost') {
+      this.startCameraShake(effect.event);
+    }
+
+    this.updateVisualFeedbackOverlay(effect.overlayOpacity, effect.overlayBackground);
+  }
+
+  private updateVisualFeedback(deltaTime: number): void {
+    const active = this.activeVisualFeedback;
+    if (!active) {
+      this.spaceship.mesh.scale.setScalar(1);
+      this.updateVisualFeedbackOverlay(0, 'transparent');
+      return;
+    }
+
+    active.elapsed = Math.min(active.duration, active.elapsed + deltaTime);
+    const progress = active.duration > 0 ? active.elapsed / active.duration : 1;
+    const fade = 1 - progress;
+    const scalePulse = Math.sin(progress * Math.PI);
+
+    this.spaceship.mesh.scale.setScalar(1 + ((active.spaceshipScale - 1) * scalePulse));
+    this.updateVisualFeedbackOverlay(active.overlayOpacity * fade, active.background);
+
+    if (progress >= 1) {
+      this.activeVisualFeedback = null;
+      this.spaceship.mesh.scale.setScalar(1);
+      this.updateVisualFeedbackOverlay(0, 'transparent');
+    }
   }
 
   private updateCameraShake(deltaTime: number): void {
@@ -2133,7 +2215,7 @@ export class StageScene implements Scene {
     const celebrationPosition = this.getConstellationCelebrationPosition(constellation);
     this.constellationCelebrationEffect.play(celebrationPosition, this.stageConfig.planetColor);
     this.audioManager.playSFX('constellationCelebrate');
-    triggerSharedVibration('constellationCelebrate');
+    triggerSharedVisualFeedback('constellationCelebrate');
     this.particleBurstManager.emit(
       this.threeScene,
       star.position.x,
@@ -2202,7 +2284,7 @@ export class StageScene implements Scene {
     this.syncPauseAvailability();
     const isNewPlanetUnlock = this.saveManager.markStageCleared(this.stageNumber);
     this.audioManager.playSFX('stageClear');
-    triggerSharedVibration('stageClear');
+    triggerSharedVisualFeedback('stageClear');
     this.audioManager.stopBoostSFX();
     this.boostFlameEffect.remove();
     if (this.destinationPlanet) {
@@ -2684,13 +2766,16 @@ export class StageScene implements Scene {
     this.touchGuide.hide();
     this.touchFeedbackOverlay.hide();
     this.inputSystem.setTouchFeedbackOverlay?.(null);
+    this.visualFeedbackOverlay?.remove();
+    this.visualFeedbackOverlay = null;
+    this.activeVisualFeedback = null;
     this.adaptiveTutorialHint.hide();
     this.constellationHintOverlay.hide();
     this.seasonalEventNotice.dispose();
     this.frameRateHintOverlay.hide();
     this.hud.hide();
     this.scorePopupManager.dispose();
-    setSharedVibrationFallbackHandler(null);
+    setSharedVisualFeedbackHandler(null);
     this.audioManager.stopBGM();
     this.audioManager.stopBoostSFX();
     this.wormholeTunnelEffect.clear();

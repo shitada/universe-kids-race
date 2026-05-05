@@ -53,7 +53,7 @@ describe('SaveManager', () => {
       totalBoostUses: 0,
       stageClearCounts: {},
     });
-    expect(data.vibrationSettings).toEqual({ intensity: 'medium' });
+    expect(data.visualFeedbackSettings).toEqual({ intensity: 'medium' });
   });
 
   it('saves and loads data', () => {
@@ -393,13 +393,24 @@ describe('SaveManager', () => {
     });
   });
 
-  describe('vibrationSettings', () => {
-    it('defaults vibration intensity to medium', () => {
+  describe('visualFeedbackSettings', () => {
+    it('defaults visual feedback intensity to medium', () => {
       const manager = new SaveManager();
-      expect(manager.load().vibrationSettings).toEqual({ intensity: 'medium' });
+      expect(manager.load().visualFeedbackSettings).toEqual({ intensity: 'medium' });
     });
 
-    it('keeps valid vibration intensity values on load', () => {
+    it('keeps valid visual feedback intensity values on load', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        visualFeedbackSettings: { intensity: 'weak' },
+      }));
+      const manager = new SaveManager();
+
+      expect(manager.load().visualFeedbackSettings).toEqual({ intensity: 'weak' });
+    });
+
+    it('migrates legacy vibration settings into visual feedback settings', () => {
       storage.set('universe-kids-race-save', JSON.stringify({
         clearedStage: 1,
         unlockedPlanets: [1],
@@ -407,31 +418,31 @@ describe('SaveManager', () => {
       }));
       const manager = new SaveManager();
 
-      expect(manager.load().vibrationSettings).toEqual({ intensity: 'weak' });
+      expect(manager.load().visualFeedbackSettings).toEqual({ intensity: 'weak' });
     });
 
-    it('falls back to medium when vibration intensity is malformed', () => {
+    it('falls back to medium when visual feedback intensity is malformed', () => {
       storage.set('universe-kids-race-save', JSON.stringify({
         clearedStage: 1,
         unlockedPlanets: [1],
-        vibrationSettings: { intensity: 'loud' },
+        visualFeedbackSettings: { intensity: 'loud' },
       }));
       const manager = new SaveManager();
 
-      expect(manager.load().vibrationSettings).toEqual({ intensity: 'medium' });
+      expect(manager.load().visualFeedbackSettings).toEqual({ intensity: 'medium' });
     });
 
-    it('preserves vibration settings when progress is reset', () => {
+    it('preserves visual feedback settings when progress is reset', () => {
       const manager = new SaveManager();
       manager.save({
         clearedStage: 4,
         unlockedPlanets: [1, 2, 3, 4],
-        vibrationSettings: { intensity: 'off' },
+        visualFeedbackSettings: { intensity: 'off' },
       });
 
       manager.resetProgressPreservingSettings();
 
-      expect(manager.load().vibrationSettings).toEqual({ intensity: 'off' });
+      expect(manager.load().visualFeedbackSettings).toEqual({ intensity: 'off' });
     });
   });
 
@@ -812,7 +823,7 @@ describe('SaveManager', () => {
         },
         tutorialShown: false,
         muted: true,
-        vibrationSettings: { intensity: 'medium' },
+        visualFeedbackSettings: { intensity: 'medium' },
         restReminderSettings: { enabled: true },
         spaceshipCustomization: { bodyColor: 'sky', noseColor: 'sunset', wingColor: 'aqua' },
       });
@@ -915,7 +926,7 @@ describe('SaveManager', () => {
         },
         muted: true,
         tutorialShown: true,
-        vibrationSettings: { intensity: 'medium' },
+        visualFeedbackSettings: { intensity: 'medium' },
         restReminderSettings: { enabled: true },
         spaceshipCustomization: { bodyColor: 'sky', noseColor: 'sunset', wingColor: 'aqua' },
       };
@@ -948,7 +959,7 @@ describe('SaveManager', () => {
         },
         muted: false,
         tutorialShown: true,
-        vibrationSettings: { intensity: 'medium' },
+        visualFeedbackSettings: { intensity: 'medium' },
         restReminderSettings: { enabled: true },
         spaceshipCustomization: { bodyColor: 'sky', noseColor: 'sunset', wingColor: 'aqua' },
       };
@@ -1008,7 +1019,7 @@ describe('SaveManager', () => {
         muted: true,
         tutorialShown: false,
         colorAccessibility: { highContrast: true },
-        vibrationSettings: { intensity: 'medium' },
+        visualFeedbackSettings: { intensity: 'medium' },
         restReminderSettings: { enabled: true },
         bestStageStars: {},
         gameplayStats: {
@@ -1038,7 +1049,7 @@ describe('SaveManager', () => {
         unlockedPlanets: [],
         muted: false,
         tutorialShown: false,
-        vibrationSettings: { intensity: 'medium' },
+        visualFeedbackSettings: { intensity: 'medium' },
         restReminderSettings: { enabled: true },
         bestStageStars: {},
         gameplayStats: {
@@ -1092,7 +1103,7 @@ describe('SaveManager', () => {
         muted: true,
         tutorialShown: true,
         colorAccessibility: { highContrast: true },
-        vibrationSettings: { intensity: 'medium' },
+        visualFeedbackSettings: { intensity: 'medium' },
         restReminderSettings: { enabled: true },
         bestStageStars: {},
         gameplayStats: {
@@ -1116,7 +1127,7 @@ describe('SaveManager', () => {
         unlockedPlanets: [],
         muted: false,
         tutorialShown: false,
-        vibrationSettings: { intensity: 'medium' },
+        visualFeedbackSettings: { intensity: 'medium' },
         restReminderSettings: { enabled: true },
         bestStageStars: {},
         gameplayStats: {

@@ -34,7 +34,7 @@ import { getViewportSize } from '../utils/getViewportSize';
 import { attachReleaseConfirmButton } from '../../ui/attachReleaseConfirmButton';
 import { createStageMedalDisplay } from '../../ui/stageMedalDisplay';
 import { prewarmStageVisualAssets } from './stageVisualAssets';
-import { setSharedVibrationIntensity } from '../systems/VibrationSystem';
+import { setSharedVisualFeedbackIntensity } from '../systems/VisualFeedbackSystem';
 import { getDefaultMotionSensitivity } from '../accessibility/motionSensitivity';
 import { i18n } from '../i18n/i18nService';
 import { DEFAULT_LANGUAGE } from '../i18n/types';
@@ -503,11 +503,11 @@ export class TitleScene implements Scene {
     this.saveManager.save(data);
   }
 
-  private persistVibrationIntensitySetting(intensity: 'off' | 'weak' | 'medium' | 'strong'): void {
+  private persistVisualFeedbackIntensitySetting(intensity: 'off' | 'weak' | 'medium' | 'strong'): void {
     const data = this.saveManager.load();
-    data.vibrationSettings = { intensity };
+    data.visualFeedbackSettings = { intensity };
     this.saveManager.save(data);
-    setSharedVibrationIntensity(intensity);
+    setSharedVisualFeedbackIntensity(intensity);
   }
 
   private persistRestReminderSetting(enabled: boolean): void {
@@ -968,7 +968,7 @@ export class TitleScene implements Scene {
             this.saveManager.load().colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE,
           initialBGMVolume: this.saveManager.load().audioSettings?.bgmVolume ?? 100,
           initialSFXVolume: this.saveManager.load().audioSettings?.sfxVolume ?? 100,
-          initialVibrationIntensity: this.saveManager.load().vibrationSettings?.intensity ?? 'medium',
+          initialVisualEffectIntensity: this.saveManager.load().visualFeedbackSettings?.intensity ?? 'medium',
           initialMotionSensitivity:
             this.saveManager.load().colorAccessibility?.motionSensitivity ?? getDefaultMotionSensitivity(),
           initialRestReminderEnabled:
@@ -978,7 +978,7 @@ export class TitleScene implements Scene {
           onColorVisionSupportModeChange: (mode) => this.persistColorVisionSupportModeSetting(mode),
           onBGMVolumeChange: (volume) => this.persistBGMVolumeSetting(volume),
           onSFXVolumeChange: (volume) => this.persistSFXVolumeSetting(volume),
-          onVibrationIntensityChange: (intensity) => this.persistVibrationIntensitySetting(intensity),
+          onVisualEffectIntensityChange: (intensity) => this.persistVisualFeedbackIntensitySetting(intensity),
           onMotionSensitivityChange: (sensitivity) => this.persistMotionSensitivitySetting(sensitivity),
           onRestReminderToggle: (enabled) => this.persistRestReminderSetting(enabled),
           onLanguageChange: (language) => this.persistLanguageSetting(language),

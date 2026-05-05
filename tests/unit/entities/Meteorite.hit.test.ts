@@ -1,22 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Meteorite } from '../../../src/game/entities/Meteorite';
 import {
-  __setSharedVibrationSystemForTest,
-  VibrationSystem,
-} from '../../../src/game/systems/VibrationSystem';
+  __setSharedVisualFeedbackSystemForTest,
+  VisualFeedbackSystem,
+} from '../../../src/game/systems/VisualFeedbackSystem';
 
 describe('Meteorite.handleCollision', () => {
   beforeEach(() => {
-    __setSharedVibrationSystemForTest(null);
+    __setSharedVisualFeedbackSystemForTest(null);
   });
 
   afterEach(() => {
-    __setSharedVibrationSystemForTest(null);
+    __setSharedVisualFeedbackSystemForTest(null);
   });
 
-  it('deactivates the meteorite and triggers a strong vibration once', () => {
-    const vibrate = vi.fn(() => true);
-    __setSharedVibrationSystemForTest(new VibrationSystem({ vibrate }, () => 0, 0));
+  it('deactivates the meteorite and triggers a single hit effect', () => {
+    const handler = vi.fn();
+    const system = new VisualFeedbackSystem(() => 0, 0);
+    system.setHandler(handler);
+    __setSharedVisualFeedbackSystemForTest(system);
     const meteorite = new Meteorite(0, 0, 0);
 
     meteorite.handleCollision();
@@ -24,7 +26,10 @@ describe('Meteorite.handleCollision', () => {
 
     expect(meteorite.isActive).toBe(false);
     expect(meteorite.mesh.visible).toBe(false);
-    expect(vibrate).toHaveBeenCalledTimes(1);
-    expect(vibrate).toHaveBeenCalledWith(200);
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
+      event: 'meteoriteHit',
+      durationMs: 200,
+    }));
   });
 });

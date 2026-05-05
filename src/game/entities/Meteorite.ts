@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { LODLevel } from '../systems/LODSystem';
-import { triggerSharedVibration } from '../systems/VibrationSystem';
+import { triggerSharedVisualFeedback } from '../systems/VisualFeedbackSystem';
 
 interface MeteoriteSharedResources {
   geometry: THREE.BufferGeometry;
@@ -135,7 +135,7 @@ export class Meteorite {
 
     this.isActive = false;
     this.mesh.visible = false;
-    triggerSharedVibration('meteoriteHit');
+    triggerSharedVisualFeedback('meteoriteHit');
   }
 
   reset(x: number, y: number, z: number): void {
