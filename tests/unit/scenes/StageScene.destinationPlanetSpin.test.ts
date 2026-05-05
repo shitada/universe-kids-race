@@ -177,8 +177,22 @@ describe('StageScene destination planet self-rotation', () => {
     expect(spinTarget.scale.x).toBe(1);
   });
 
-  it('Earth (stage 11): sphere body and cloud layer rotate together via parent sub-group', () => {
+  it('Space station (stage 11): center structure and solar panels rotate together via parent sub-group', () => {
     const { internal } = setupForStage(11);
+    const spinTarget = internal.destinationPlanetSpinTarget!;
+    expect(spinTarget).toBeInstanceOf(THREE.Group);
+    const stationGroup = spinTarget as THREE.Group;
+    expect(stationGroup.children.length).toBeGreaterThanOrEqual(5);
+
+    const before = stationGroup.rotation.y;
+
+    internal.update(0.5);
+
+    expect(stationGroup.rotation.y).toBeGreaterThan(before);
+  });
+
+  it('Earth (stage 12): sphere body and cloud layer rotate together via parent sub-group', () => {
+    const { internal } = setupForStage(12);
     const spinTarget = internal.destinationPlanetSpinTarget!;
     expect(spinTarget).toBeInstanceOf(THREE.Group);
     const earthGroup = spinTarget as THREE.Group;

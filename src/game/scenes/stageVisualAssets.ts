@@ -196,6 +196,24 @@ function buildEarthCloudTexture(): THREE.CanvasTexture {
   return new THREE.CanvasTexture(canvas);
 }
 
+function buildSpaceStationTexture(): THREE.CanvasTexture {
+  const { canvas, ctx } = createTextureCanvas(256, 128);
+  if (!ctx) return new THREE.CanvasTexture(canvas);
+  ctx.fillStyle = '#d7dde8';
+  ctx.fillRect(0, 0, 256, 128);
+  ctx.fillStyle = '#8bbcff';
+  ctx.fillRect(0, 0, 256, 28);
+  ctx.fillStyle = '#90a4bf';
+  for (let x = 0; x < 256; x += 24) {
+    ctx.fillRect(x, 40, 4, 88);
+  }
+  ctx.fillStyle = '#4a6c9a';
+  for (let y = 44; y < 128; y += 16) {
+    ctx.fillRect(0, y, 256, 6);
+  }
+  return new THREE.CanvasTexture(canvas);
+}
+
 export function __resetStageSceneSharedAssetCachesForTest(): void {
   planetTextureCache.clear();
   planetGeometryCache.clear();
@@ -313,6 +331,61 @@ function buildDestinationPlanet(
       break;
     }
     case 11: {
+      const stationTex = getPlanetTexture('station:panel', buildSpaceStationTexture);
+      const coreGeo = getPlanetGeometry('station:core', () => new THREE.CylinderGeometry(3.2, 3.2, 12, 12));
+      const moduleGeo = getPlanetGeometry('station:module', () => new THREE.CylinderGeometry(1.7, 1.7, 6, 10));
+      const trussGeo = getPlanetGeometry('station:truss', () => new THREE.BoxGeometry(18, 0.9, 0.9));
+      const panelGeo = getPlanetGeometry('station:panelGeo', () => new THREE.BoxGeometry(8, 3.6, 0.18));
+      const dishGeo = getPlanetGeometry('station:dish', () => new THREE.SphereGeometry(1.4, 12, 12, 0, Math.PI));
+      const metallicMat = getPlanetMaterial(
+        'station:metal',
+        () => new THREE.MeshToonMaterial({ color: 0xd8e0ea }),
+      );
+      const moduleMat = getPlanetMaterial(
+        'station:moduleMat',
+        () => new THREE.MeshToonMaterial({ color: 0xa8b7cb }),
+      );
+      const panelMat = getPlanetMaterial(
+        'station:panelMat',
+        () => new THREE.MeshToonMaterial({ map: stationTex, color: 0xffffff }),
+      );
+      const stationSpin = new THREE.Group();
+
+      const core = makeSharedMesh(coreGeo, metallicMat);
+      core.rotation.z = Math.PI / 2;
+      stationSpin.add(core);
+
+      const truss = makeSharedMesh(trussGeo, moduleMat);
+      stationSpin.add(truss);
+
+      const leftModule = makeSharedMesh(moduleGeo, moduleMat);
+      leftModule.position.x = -6;
+      leftModule.rotation.z = Math.PI / 2;
+      stationSpin.add(leftModule);
+
+      const rightModule = makeSharedMesh(moduleGeo, moduleMat);
+      rightModule.position.x = 6;
+      rightModule.rotation.z = Math.PI / 2;
+      stationSpin.add(rightModule);
+
+      const leftPanel = makeSharedMesh(panelGeo, panelMat);
+      leftPanel.position.set(-11, 0, 0);
+      stationSpin.add(leftPanel);
+
+      const rightPanel = makeSharedMesh(panelGeo, panelMat);
+      rightPanel.position.set(11, 0, 0);
+      stationSpin.add(rightPanel);
+
+      const dish = makeSharedMesh(dishGeo, metallicMat);
+      dish.position.set(0, 3.2, 0);
+      dish.rotation.x = -Math.PI / 2;
+      stationSpin.add(dish);
+
+      destinationPlanet.add(stationSpin);
+      spinTarget = stationSpin;
+      break;
+    }
+    case 12: {
       const tex = getPlanetTexture('earth', buildEarthTexture);
       const geo = getPlanetGeometry('earth:sphere', () => new THREE.SphereGeometry(15, 32, 32));
       const mat = getPlanetMaterial('earth:mat', () => new THREE.MeshToonMaterial({ map: tex }));

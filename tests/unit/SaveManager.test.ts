@@ -128,8 +128,8 @@ describe('SaveManager', () => {
       expect(data.unlockedPlanets).toEqual([]);
     });
 
-    it('filters out values outside range 1-11', () => {
-      storage.set('universe-kids-race-save', JSON.stringify({ clearedStage: 3, unlockedPlanets: [0, 1, 2, 12, 99, -1] }));
+    it('filters out values outside the valid stage range', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({ clearedStage: 3, unlockedPlanets: [0, 1, 2, 13, 99, -1] }));
       const manager = new SaveManager();
       const data = manager.load();
       expect(data.unlockedPlanets).toEqual([1, 2]);

@@ -103,6 +103,16 @@ export const STAGE_ATMOSPHERE_CONFIGS: readonly StageAtmosphereConfig[] = [
   },
   {
     stageNumber: 11,
+    gradientTopColor: 0xeaf2ff,
+    gradientBottomColor: 0x1b2c4f,
+    particlePrimaryColor: 0xffffff,
+    particleSecondaryColor: 0x88c8ff,
+    particlePattern: 'crystal',
+    particleCount: 34,
+    particleSize: 0.28,
+  },
+  {
+    stageNumber: 12,
     gradientTopColor: 0x88d5ff,
     gradientBottomColor: 0x143a6f,
     particlePrimaryColor: 0xffffff,

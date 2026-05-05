@@ -2,18 +2,18 @@ import { describe, it, expect } from 'vitest';
 import { STAGE_CONFIGS, getStageConfig, getStageMedalStatus } from '../../../src/game/config/StageConfig';
 
 describe('StageConfig', () => {
-  it('has exactly 11 stage configs', () => {
-    expect(STAGE_CONFIGS).toHaveLength(11);
+  it('has exactly 12 stage configs', () => {
+    expect(STAGE_CONFIGS).toHaveLength(12);
   });
 
-  it('has sequential stageNumbers from 1 to 11', () => {
+  it('has sequential stageNumbers from 1 to 12', () => {
     for (let i = 0; i < STAGE_CONFIGS.length; i++) {
       expect(STAGE_CONFIGS[i].stageNumber).toBe(i + 1);
     }
   });
 
-  it('has correct destination order for all 11 stages', () => {
-    const expectedDestinations = ['月', '水星', '金星', '火星', '木星', '土星', '天王星', '海王星', '冥王星', '太陽', '地球'];
+  it('has correct destination order for all 12 stages', () => {
+    const expectedDestinations = ['月', '水星', '金星', '火星', '木星', '土星', '天王星', '海王星', '冥王星', '太陽', '宇宙ステーション', '地球'];
     for (let i = 0; i < expectedDestinations.length; i++) {
       expect(STAGE_CONFIGS[i].destination).toBe(expectedDestinations[i]);
     }
@@ -45,7 +45,7 @@ describe('StageConfig', () => {
   });
 
   it('keeps a child-friendly hiragana reading for each destination', () => {
-    const expectedReadings = ['つき', 'すいせい', 'きんせい', 'かせい', 'もくせい', 'どせい', 'てんのうせい', 'かいおうせい', 'めいおうせい', 'たいよう', 'ちきゅう'];
+    const expectedReadings = ['つき', 'すいせい', 'きんせい', 'かせい', 'もくせい', 'どせい', 'てんのうせい', 'かいおうせい', 'めいおうせい', 'たいよう', 'うちゅうすてーしょん', 'ちきゅう'];
     for (let i = 0; i < expectedReadings.length; i++) {
       expect(STAGE_CONFIGS[i].destinationReading).toBe(expectedReadings[i]);
     }
@@ -68,7 +68,7 @@ describe('StageConfig', () => {
   });
 
   it('getStageConfig returns correct config for each stage', () => {
-    for (let i = 1; i <= 11; i++) {
+    for (let i = 1; i <= 12; i++) {
       const config = getStageConfig(i);
       expect(config.stageNumber).toBe(i);
     }
@@ -76,10 +76,10 @@ describe('StageConfig', () => {
 
   it('getStageConfig throws for invalid stage number', () => {
     expect(() => getStageConfig(0)).toThrow('Invalid stage number: 0');
-    expect(() => getStageConfig(12)).toThrow('Invalid stage number: 12');
+    expect(() => getStageConfig(13)).toThrow('Invalid stage number: 13');
   });
 
-  it('has correct difficulty curve for new stages (水星, 金星, 地球)', () => {
+  it('has correct difficulty curve for new stages (水星, 金星, 宇宙ステーション, 地球)', () => {
     const mercury = getStageConfig(2);
     expect(mercury.stageLength).toBe(1100);
     expect(mercury.meteoriteInterval).toBe(2.8);
@@ -90,7 +90,12 @@ describe('StageConfig', () => {
     expect(venus.meteoriteInterval).toBe(2.6);
     expect(venus.medalThresholds).toEqual([3, 7, 11]);
 
-    const earth = getStageConfig(11);
+    const station = getStageConfig(11);
+    expect(station.stageLength).toBe(2600);
+    expect(station.meteoriteInterval).toBe(0.55);
+    expect(station.medalThresholds).toEqual([11, 22, 33]);
+
+    const earth = getStageConfig(12);
     expect(earth.stageLength).toBe(2700);
     expect(earth.meteoriteInterval).toBe(0.5);
     expect(earth.medalThresholds).toEqual([12, 24, 36]);

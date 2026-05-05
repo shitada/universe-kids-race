@@ -136,6 +136,16 @@ export const PLANET_ENCYCLOPEDIA: PlanetEncyclopediaEntry[] = [
   }),
   createPlanetEncyclopediaEntry({
     stageNumber: 11,
+    name: '宇宙ステーション',
+    reading: 'うちゅうすてーしょん',
+    identityMark: '✪',
+    emoji: '🛰️',
+    trivia: 'うちゅうすてーしょんは ひとが うちゅうで くらしたり けんきゅうしたり する いえだよ',
+    planetColor: 0xc9d2e3,
+    companionShape: 'basic',
+  }),
+  createPlanetEncyclopediaEntry({
+    stageNumber: 12,
     name: '地球',
     reading: 'ちきゅう',
     identityMark: '⬤',

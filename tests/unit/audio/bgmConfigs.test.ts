@@ -16,7 +16,7 @@ describe('bgmConfigs data integrity', () => {
   });
 
   const keys: number[] = [0, -1];
-  for (let s = 1; s <= 11; s++) keys.push(s);
+  for (let s = 1; s <= TOTAL_STAGES; s++) keys.push(s);
 
   for (const key of keys) {
     describe(`BGM_CONFIGS[${key}]`, () => {

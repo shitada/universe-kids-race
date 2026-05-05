@@ -201,8 +201,24 @@ export const BGM_CONFIGS: Record<number, BGMConfig> = {
     waveforms: { melody: 'square', pad: 'triangle', arpeggio: 'triangle', bass: 'sine' },
     volumes: { melody: 0.12, pad: 0.05, arpeggio: 0.08, bass: 0.08 },
   },
-  // Stage 11: Earth — C, 145 BPM — 帰還の凱旋、squareメロディ
+  // Stage 11: Space Station — F, 142 BPM — きらめく人工ステーション
   11: {
+    tempo: 142,
+    beatsPerChord: 4,
+    chords: [
+      [349, 440, 523], [262, 349, 440], [294, 370, 466], [330, 415, 523],
+      [349, 440, 523], [262, 349, 440], [330, 415, 523], [294, 370, 466],
+    ],
+    bassNotes: [175, 131, 147, 165, 175, 131, 165, 147],
+    melodyNotes: [
+      [698, 784, 880, 988], [523, 698, 784, 880], [587, 740, 831, 932], [659, 784, 880, 1047],
+      [698, 784, 880, 988], [523, 698, 784, 880], [659, 784, 880, 1047], [587, 740, 831, 932],
+    ],
+    waveforms: { melody: 'triangle', pad: 'triangle', arpeggio: 'square', bass: 'sine' },
+    volumes: { melody: 0.11, pad: 0.05, arpeggio: 0.08, bass: 0.07 },
+  },
+  // Stage 12: Earth — C, 145 BPM — 帰還の凱旋、squareメロディ
+  12: {
     tempo: 145,
     beatsPerChord: 4,
     chords: [

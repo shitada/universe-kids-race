@@ -93,6 +93,15 @@ export const STAGE_SPECIAL_EVENT_CONFIGS: readonly StageSpecialEventConfig[] = [
   },
   {
     stageNumber: 11,
+    id: 'station-halo',
+    style: 'halo',
+    startProgress: 0.46,
+    duration: 3.1,
+    message: 'ステーションが きらり！',
+    accentColor: 0xb7d8ff,
+  },
+  {
+    stageNumber: 12,
     id: 'earth-homecoming',
     style: 'homecoming',
     startProgress: 0.48,

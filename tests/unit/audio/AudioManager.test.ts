@@ -797,33 +797,33 @@ describe('AudioManager', () => {
   });
 
   describe('BGM_CONFIGS validation (T010)', () => {
-    it('has configs for all 11 stages plus title and ending', () => {
-      for (let stage = 0; stage <= 11; stage++) {
+    it('has configs for all 12 stages plus title and ending', () => {
+      for (let stage = 0; stage <= 12; stage++) {
         expect(BGM_CONFIGS[stage]).toBeDefined();
       }
       expect(BGM_CONFIGS[-1]).toBeDefined();
     });
 
-    it('stages 1-11 all have unique tempos', () => {
+    it('stages 1-12 all have unique tempos', () => {
       const tempos = new Set<number>();
-      for (let stage = 1; stage <= 11; stage++) {
+      for (let stage = 1; stage <= 12; stage++) {
         expect(BGM_CONFIGS[stage]).toBeDefined();
         tempos.add(BGM_CONFIGS[stage].tempo);
       }
-      expect(tempos.size).toBe(11);
+      expect(tempos.size).toBe(12);
     });
 
-    it('stages 1-11 all have unique tempo+key combinations', () => {
+    it('stages 1-12 all have unique tempo+key combinations', () => {
       const signatures = new Set<string>();
-      for (let stage = 1; stage <= 11; stage++) {
+      for (let stage = 1; stage <= 12; stage++) {
         const config = BGM_CONFIGS[stage];
         signatures.add(`${config.tempo}-${JSON.stringify(config.chords[0])}`);
       }
-      expect(signatures.size).toBe(11);
+      expect(signatures.size).toBe(12);
     });
 
     it('all configs have 8 chords, 8 bassNotes, and 8 melodyNotes', () => {
-      for (const key of [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) {
+      for (const key of [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
         const config = BGM_CONFIGS[key];
         expect(config).toBeDefined();
         expect(config.chords).toHaveLength(8);
@@ -832,12 +832,14 @@ describe('AudioManager', () => {
       }
     });
 
-    it('new BGM definitions: 水星(2, Dm, 112BPM), 金星(3, Eb, 115BPM), 地球(11, C, 145BPM)', () => {
+    it('new BGM definitions: 水星(2, Dm, 112BPM), 金星(3, Eb, 115BPM), 宇宙ステーション(11, F, 142BPM), 地球(12, C, 145BPM)', () => {
       expect(BGM_CONFIGS[2].tempo).toBe(112);
       expect(BGM_CONFIGS[3].tempo).toBe(115);
-      expect(BGM_CONFIGS[11].tempo).toBe(145);
+      expect(BGM_CONFIGS[11].tempo).toBe(142);
+      expect(BGM_CONFIGS[12].tempo).toBe(145);
+      expect(BGM_CONFIGS[11].waveforms.melody).toBe('triangle');
       // 地球 uses square wave melody
-      expect(BGM_CONFIGS[11].waveforms.melody).toBe('square');
+      expect(BGM_CONFIGS[12].waveforms.melody).toBe('square');
     });
 
     it('remapped BGM: old stage 2 (火星) is now stage 4', () => {

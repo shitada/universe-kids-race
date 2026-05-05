@@ -137,6 +137,17 @@ export const STAGE_CONFIGS: StageConfig[] = [
   }),
   createStageConfig({
     stageNumber: 11,
+    destination: '宇宙ステーション',
+    destinationReading: 'うちゅうすてーしょん',
+    stageLength: 2600,
+    meteoriteInterval: 0.55,
+    starDensity: 10,
+    medalThresholds: [11, 22, 33],
+    emoji: '🛰️',
+    planetColor: 0xc9d2e3,
+  }),
+  createStageConfig({
+    stageNumber: 12,
     destination: '地球',
     destinationReading: 'ちきゅう',
     stageLength: 2700,

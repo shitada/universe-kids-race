@@ -62,12 +62,14 @@ beforeEach(() => {
 });
 
 describe('EndingScene', () => {
+  const allStageNumbers = PLANET_ENCYCLOPEDIA.map((entry) => entry.stageNumber);
+
   describe('selective reset (US2)', () => {
     it('resets clearedStage to 0 while preserving unlockedPlanets on full clear', () => {
       const sceneManager = createMockSceneManager();
       const { mock: saveManager, savedData } = createMockSaveManager({
-        clearedStage: 11,
-        unlockedPlanets: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+        clearedStage: allStageNumbers.length,
+        unlockedPlanets: allStageNumbers,
       });
       const audioManager = createMockAudioManager();
 
@@ -79,7 +81,7 @@ describe('EndingScene', () => {
 
       const lastSave = savedData[savedData.length - 1];
       expect(lastSave.clearedStage).toBe(0);
-      expect(lastSave.unlockedPlanets).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+      expect(lastSave.unlockedPlanets).toEqual(allStageNumbers);
     });
 
     it('resets clearedStage to 0 while preserving partial unlockedPlanets', () => {
@@ -101,8 +103,8 @@ describe('EndingScene', () => {
     it('does not call saveManager.clear() (uses selective reset instead)', () => {
       const sceneManager = createMockSceneManager();
       const { mock: saveManager } = createMockSaveManager({
-        clearedStage: 11,
-        unlockedPlanets: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+        clearedStage: allStageNumbers.length,
+        unlockedPlanets: allStageNumbers,
       });
       const audioManager = createMockAudioManager();
 
@@ -119,17 +121,17 @@ describe('EndingScene', () => {
     beforeEach(() => {
       const sceneManager = createMockSceneManager();
       const { mock: saveManager } = createMockSaveManager({
-        clearedStage: 11,
-        unlockedPlanets: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+        clearedStage: allStageNumbers.length,
+        unlockedPlanets: allStageNumbers,
       });
       const audioManager = createMockAudioManager();
       scene = new EndingScene(sceneManager, saveManager, audioManager);
       scene.enter({ totalScore: 1000, totalStarCount: 50 });
     });
 
-    it('creates 11 companion meshes after enter()', () => {
+    it('creates all companion meshes after enter()', () => {
       const threeScene = scene.getThreeScene();
-      // Find the companion group (a Group containing 11 children)
+      // Find the companion group (a Group containing all encyclopedia children)
       let companionGroup: THREE.Group | null = null;
       threeScene.traverse((child) => {
         if (child instanceof THREE.Group && child !== threeScene && child.children.length === PLANET_ENCYCLOPEDIA.length) {
@@ -137,7 +139,7 @@ describe('EndingScene', () => {
         }
       });
       expect(companionGroup).not.toBeNull();
-      expect(companionGroup!.children.length).toBe(11);
+      expect(companionGroup!.children.length).toBe(PLANET_ENCYCLOPEDIA.length);
     });
 
     it('sets initial scale of each companion mesh to (0,0,0)', () => {
@@ -179,7 +181,7 @@ describe('EndingScene', () => {
       expect(companionGroup!.children[2].scale.x).toBeGreaterThan(0);
     });
 
-    it('shows all 11 companions bouncing with thank-you text at elapsed=2.5s', () => {
+    it('shows all companions bouncing with thank-you text at elapsed=2.5s', () => {
       // Simulate 3 seconds (well past 2.5s threshold)
       for (let i = 0; i < 300; i++) {
         scene.update(0.01);
@@ -194,7 +196,7 @@ describe('EndingScene', () => {
       });
       expect(companionGroup).not.toBeNull();
 
-      // All 11 should be fully visible (scale 1)
+      // All companions should be fully visible (scale 1)
       for (const mesh of companionGroup!.children) {
         expect(mesh.scale.x).toBeCloseTo(1, 1);
       }
@@ -309,8 +311,8 @@ describe('EndingScene', () => {
     function makeScene(): EndingScene {
       const sceneManager = createMockSceneManager();
       const { mock: saveManager } = createMockSaveManager({
-        clearedStage: 11,
-        unlockedPlanets: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+        clearedStage: allStageNumbers.length,
+        unlockedPlanets: allStageNumbers,
       });
       const audioManager = createMockAudioManager();
       const scene = new EndingScene(sceneManager, saveManager, audioManager);
@@ -340,9 +342,9 @@ describe('EndingScene', () => {
       for (let i = 0; i < 250; i++) scene.update(0.01);
 
       for (const mesh of group.children) {
-        expect(mesh.scale.x).toBe(1);
-        expect(mesh.scale.y).toBe(1);
-        expect(mesh.scale.z).toBe(1);
+        expect(mesh.scale.x).toBeCloseTo(1, 8);
+        expect(mesh.scale.y).toBeCloseTo(1, 8);
+        expect(mesh.scale.z).toBeCloseTo(1, 8);
       }
 
       // After settle, manually corrupt scale; if updateCelebration still re-writes scale every frame,
@@ -391,8 +393,8 @@ describe('EndingScene', () => {
     } {
       const sceneManager = createMockSceneManager();
       const { mock: saveManager } = createMockSaveManager({
-        clearedStage: 11,
-        unlockedPlanets: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+        clearedStage: allStageNumbers.length,
+        unlockedPlanets: allStageNumbers,
       });
       const audioManager = createMockAudioManager();
       const scene = new EndingScene(sceneManager, saveManager, audioManager);

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { PLANET_ENCYCLOPEDIA } from '../../../src/game/config/PlanetEncyclopedia';
 import { EncyclopediaOverlay } from '../../../src/ui/EncyclopediaOverlay';
 import type { CompanionPreviewController } from '../../../src/ui/CompanionPreview';
 
@@ -77,10 +78,10 @@ describe('EncyclopediaOverlay', () => {
     expect(firstCard?.textContent).toContain('○ 月（つき）');
   });
 
-  it('card grid renders 11 slots', () => {
+  it('card grid renders all encyclopedia slots', () => {
     overlay.show([], () => {});
     const cards = uiOverlay.querySelectorAll('[data-card]');
-    expect(cards.length).toBe(11);
+    expect(cards.length).toBe(PLANET_ENCYCLOPEDIA.length);
   });
 
   it('renders a constellation gallery section with hidden and discovered entries', () => {
