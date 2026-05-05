@@ -658,6 +658,34 @@ export class TitleScene implements Scene {
       text-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
     `;
 
+    const freePlayButton = document.createElement('button');
+    freePlayButton.textContent = 'うちゅうで あそぶ';
+    freePlayButton.setAttribute('data-free-play-button', '');
+    freePlayButton.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: ${compact ? '1.05rem' : '1.35rem'};
+      font-weight: 900;
+      padding: ${compact ? '0.55rem 1.6rem' : '0.85rem 2.4rem'};
+      border: none;
+      border-radius: 2rem;
+      background: linear-gradient(135deg, #7bd9ff, #b197fc);
+      color: #1f2040;
+      cursor: pointer;
+      touch-action: manipulation;
+      box-shadow: 0 4px 15px rgba(123, 217, 255, 0.35);
+      transform: scale(1);
+      transition: transform 0.08s ease-out;
+    `;
+    this.overlayButtonCleanups.add(attachReleaseConfirmButton(freePlayButton, {
+      onActivate: () => {
+        this.ensureTitleAudioInitialized(false);
+        this.sceneManager.requestTransition('freePlay', {});
+      },
+      onPressChange: (pressed) => {
+        freePlayButton.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+      },
+    }));
+
     const secondaryActions = document.createElement('div');
     secondaryActions.setAttribute('data-title-secondary-actions', '');
     secondaryActions.style.cssText = `
@@ -857,6 +885,7 @@ export class TitleScene implements Scene {
     }));
 
     playArea.appendChild(button);
+    playArea.appendChild(freePlayButton);
     playArea.appendChild(playButtonHint);
     secondaryActions.appendChild(customizeButton);
     secondaryActions.appendChild(statsButton);

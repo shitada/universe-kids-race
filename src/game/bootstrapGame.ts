@@ -233,12 +233,15 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
 
   const loadTitleSceneModule = createRetryableModuleLoader(() => import('./scenes/TitleScene'));
   const loadStageSceneModule = createRetryableModuleLoader(() => import('./scenes/StageScene'));
+  const loadFreePlaySceneModule = createRetryableModuleLoader(() => import('./scenes/FreePlayScene'));
   const loadEndingSceneModule = createRetryableModuleLoader(() => import('./scenes/EndingScene'));
 
   function getLoadingMessage(sceneType: SceneType): string {
     switch (sceneType) {
       case 'title':
         return 'タイトルの じゅんび ちゅう...';
+      case 'freePlay':
+        return 'うちゅうさんぽの じゅんび ちゅう...';
       case 'ending':
         return 'さいごの じゅんび ちゅう...';
       default:
@@ -250,6 +253,8 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
     switch (sceneType) {
       case 'title':
         return 'タイトルの じゅんびを もういちど してみよう！';
+      case 'freePlay':
+        return 'うちゅうさんぽの じゅんびを もういちど してみよう！';
       case 'ending':
         return 'さいごの じゅんびを もういちど してみよう！';
       default:
@@ -276,6 +281,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
         return;
       }
       void sceneManager.prefetchSceneModule('stage').catch(() => {});
+      void sceneManager.prefetchSceneModule('freePlay').catch(() => {});
     });
   }
 
@@ -284,6 +290,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
     return new TitleScene(sceneManager, saveManager, audioManager);
   });
   sceneManager.registerSceneModulePrefetch('stage', loadStageSceneModule);
+  sceneManager.registerSceneModulePrefetch('freePlay', loadFreePlaySceneModule);
   sceneManager.registerSceneModulePrefetch('ending', loadEndingSceneModule);
   sceneManager.registerSceneFactory('stage', async () => {
     const { StageScene } = await loadStageSceneModule();
@@ -314,9 +321,13 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
         void sceneManager.requestTransition('title');
       },
     });
-      syncStagePerformanceProfile();
-      return stageScene;
-    });
+    syncStagePerformanceProfile();
+    return stageScene;
+  });
+  sceneManager.registerSceneFactory('freePlay', async () => {
+    const { FreePlayScene } = await loadFreePlaySceneModule();
+    return new FreePlayScene(sceneManager, inputSystem, audioManager, saveManager);
+  });
   sceneManager.registerSceneFactory('ending', async () => {
     const { EndingScene } = await loadEndingSceneModule();
     return new EndingScene(sceneManager, saveManager, audioManager);
@@ -332,7 +343,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
     console.error(`Failed to transition to ${sceneType}`, error);
     loadingOverlay.hide();
 
-    if (sceneType !== 'title' && sceneType !== 'stage' && sceneType !== 'ending') {
+    if (sceneType !== 'title' && sceneType !== 'stage' && sceneType !== 'freePlay' && sceneType !== 'ending') {
       return;
     }
 

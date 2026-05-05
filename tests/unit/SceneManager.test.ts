@@ -33,6 +33,17 @@ describe('SceneManager', () => {
     expect(titleScene.enter).toHaveBeenCalledWith({});
   });
 
+  it('registers and transitions to a free-play scene', async () => {
+    const manager = new SceneManager();
+    const freePlayScene = createMockScene();
+    manager.registerScene('freePlay', freePlayScene);
+
+    await manager.transitionTo('freePlay');
+
+    expect(freePlayScene.enter).toHaveBeenCalledWith({});
+    expect(manager.getCurrentType()).toBe('freePlay');
+  });
+
   it('calls exit on current scene when transitioning', async () => {
     const manager = new SceneManager();
     const titleScene = createMockScene();

@@ -228,6 +228,26 @@ describe('TitleScene (T009)', () => {
     scene.exit();
   });
 
+  it('"うちゅうで あそぶ" button opens the free-play mode', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager(false);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager);
+    scene.enter({});
+
+    const freePlayButton = findButtonByText('うちゅうで あそぶ');
+    expect(freePlayButton).toBeTruthy();
+
+    dispatchReleaseConfirm(freePlayButton!);
+
+    expect(audioManager.initSync).toHaveBeenCalledTimes(1);
+    expect(audioManager.playBGM).not.toHaveBeenCalled();
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith('freePlay', {});
+
+    scene.exit();
+  });
+
   it('"あそびの きろく" button opens the stats overlay', () => {
     const sceneManager = createMockSceneManager();
     const saveManager = createMockSaveManager({

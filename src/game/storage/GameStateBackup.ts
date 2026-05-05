@@ -1,4 +1,4 @@
-export type BackupSceneType = 'title' | 'stage' | 'ending' | 'unknown';
+export type BackupSceneType = 'title' | 'stage' | 'freePlay' | 'ending' | 'unknown';
 
 export interface GameStateBackupSnapshot {
   sceneType: BackupSceneType;
@@ -19,7 +19,7 @@ const DEFAULT_STORAGE_KEY = 'universe-kids-race-interruption-backup';
 const DEFAULT_MAX_AGE_MS = 10 * 60 * 1000;
 
 function isBackupSceneType(value: unknown): value is BackupSceneType {
-  return value === 'title' || value === 'stage' || value === 'ending' || value === 'unknown';
+  return value === 'title' || value === 'stage' || value === 'freePlay' || value === 'ending' || value === 'unknown';
 }
 
 function sanitizeSnapshot(value: unknown): GameStateBackupSnapshot | null {

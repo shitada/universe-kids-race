@@ -1,7 +1,7 @@
 import type * as THREE from 'three';
 
 // Scene types
-export type SceneType = 'title' | 'stage' | 'ending';
+export type SceneType = 'title' | 'stage' | 'freePlay' | 'ending';
 
 export interface SceneContext {
   stageNumber?: number;
