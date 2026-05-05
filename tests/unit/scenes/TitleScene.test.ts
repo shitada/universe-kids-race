@@ -33,6 +33,8 @@ function createMockAudioManager(initialized = false): AudioManager {
     isMuted: vi.fn(() => false),
     toggleMute: vi.fn(() => false),
     setMuted: vi.fn(),
+    setBGMVolume: vi.fn(),
+    setSFXVolume: vi.fn(),
     playSFX: vi.fn(),
     startBoostSFX: vi.fn(),
     stopBoostSFX: vi.fn(),
@@ -47,9 +49,10 @@ function createMockSaveManager(overrides: Partial<ReturnType<SaveManager['load']
     unlockedPlanets: [],
     tutorialShown: true,
     bestStageStars: {},
-    muted: false,
-    ...overrides,
-  };
+      muted: false,
+      audioSettings: undefined,
+      ...overrides,
+    };
   return {
     load: vi.fn(() => ({ ...saveData, unlockedPlanets: [...saveData.unlockedPlanets] })),
     save: vi.fn((nextData) => {
@@ -577,6 +580,24 @@ describe('TitleScene (T009)', () => {
         motionSensitivity: 'minimal',
       },
     }));
+
+    const bgmSlider = document.querySelector('[data-bgm-volume-slider]') as HTMLInputElement | null;
+    const sfxSlider = document.querySelector('[data-sfx-volume-slider]') as HTMLInputElement | null;
+
+    if (bgmSlider) {
+      bgmSlider.value = '75';
+      bgmSlider.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (sfxSlider) {
+      sfxSlider.value = '25';
+      sfxSlider.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    expect(saveManager.save).toHaveBeenCalledWith(expect.objectContaining({
+      audioSettings: { bgmVolume: 75, sfxVolume: 25 },
+    }));
+    expect(audioManager.setBGMVolume).toHaveBeenCalledWith(75);
+    expect(audioManager.setSFXVolume).toHaveBeenCalledWith(25);
 
     scene.exit();
   });

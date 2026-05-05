@@ -129,6 +129,32 @@ describe('AudioManager', () => {
     });
   });
 
+  describe('setBGMVolume() / setSFXVolume()', () => {
+    it('applies saved bus gains after initialization', async () => {
+      await audioManager.init();
+
+      audioManager.setBGMVolume(75);
+      audioManager.setSFXVolume(25);
+
+      const bgmBusGain = (audioManager as any).bgmBusGain as MockGainNode | null;
+      const sfxBusGain = (audioManager as any).sfxBusGain as MockGainNode | null;
+      expect(bgmBusGain?.gain.setTargetAtTime).toHaveBeenCalledWith(0.75, 0, 0.01);
+      expect(sfxBusGain?.gain.setTargetAtTime).toHaveBeenCalledWith(0.25, 0, 0.01);
+    });
+
+    it('remembers volume levels set before initialization', async () => {
+      audioManager.setBGMVolume(25);
+      audioManager.setSFXVolume(75);
+
+      await audioManager.init();
+
+      const bgmBusGain = (audioManager as any).bgmBusGain as MockGainNode | null;
+      const sfxBusGain = (audioManager as any).sfxBusGain as MockGainNode | null;
+      expect(bgmBusGain?.gain.setTargetAtTime).toHaveBeenCalledWith(0.25, 0, 0.01);
+      expect(sfxBusGain?.gain.setTargetAtTime).toHaveBeenCalledWith(0.75, 0, 0.01);
+    });
+  });
+
   describe('playBGM()', () => {
     it('is no-op when not initialized', () => {
       audioManager.playBGM(1); // Should not throw
@@ -409,11 +435,12 @@ describe('AudioManager', () => {
       am.playBGM(1);
 
       // Stage 1 has 3-note chords:
-      // Master gain (1) + Persistent: bass(1) + pad(3) = 5
+      // Output buses: master(1) + bgm(1) + sfx(1) = 3
+      // Persistent: bass(1) + pad(3) = 4
       // First tick (synchronous): arpeggio(1) + melody(1) = 2
-      // Total: 6 oscillators and 7 gain nodes (master + 6 voices)
+      // Total: 6 oscillators and 9 gain nodes (3 buses + 6 voices)
       expect(ctx.createOscillator).toHaveBeenCalledTimes(6);
-      expect(ctx.createGain).toHaveBeenCalledTimes(7);
+      expect(ctx.createGain).toHaveBeenCalledTimes(9);
       am.dispose();
     });
 
@@ -899,7 +926,7 @@ describe('AudioManager', () => {
       expect(filter.type).toBe('lowpass');
       expect(filter.frequency.value).toBe(800);
 
-      const gain = ctx.createGain.mock.results[1].value;
+      const gain = (am as any).boostNoiseGain;
       expect(gain.gain.value).toBe(0.15);
 
       am.dispose();
@@ -1030,7 +1057,7 @@ describe('AudioManager', () => {
       expect(osc.frequency.setValueAtTime).toHaveBeenCalledWith(880, expect.any(Number));
       expect(osc.frequency.exponentialRampToValueAtTime).toHaveBeenCalledWith(1760, expect.any(Number));
 
-      const gain = ctx.createGain.mock.results[1].value;
+      const gain = ctx.createGain.mock.results[ctx.createGain.mock.results.length - 1]?.value;
       expect(gain.gain.setValueAtTime).toHaveBeenCalledWith(0.15, expect.any(Number));
 
       expect(osc.start).toHaveBeenCalled();

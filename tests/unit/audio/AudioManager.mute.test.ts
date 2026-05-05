@@ -100,11 +100,15 @@ describe('AudioManager mute control', () => {
     it('initSync() creates a master gain connected to ctx.destination', () => {
       am.initSync();
       const ctx = (am as any).ctx;
-      expect(ctx.createGain).toHaveBeenCalledTimes(1);
+      expect(ctx.createGain).toHaveBeenCalledTimes(3);
       const masterGain = (am as any).masterGain;
+      const bgmBusGain = (am as any).bgmBusGain;
+      const sfxBusGain = (am as any).sfxBusGain;
       expect(masterGain).not.toBeNull();
       expect(masterGain.connect).toHaveBeenCalledWith(ctx.destination);
       expect(masterGain.gain.value).toBe(1);
+      expect(bgmBusGain?.connect).toHaveBeenCalledWith(masterGain);
+      expect(sfxBusGain?.connect).toHaveBeenCalledWith(masterGain);
       am.dispose();
     });
 
@@ -128,7 +132,7 @@ describe('AudioManager mute control', () => {
     it('all BGM voices route through the master gain (no direct ctx.destination connect)', () => {
       am.initSync();
       const ctx = (am as any).ctx;
-      const masterGain = (am as any).masterGain;
+      const bgmBusGain = (am as any).bgmBusGain;
       ctx.createGain.mockClear();
 
       am.playBGM(1);
@@ -136,8 +140,8 @@ describe('AudioManager mute control', () => {
       const voiceGains = ctx.createGain.mock.results.map((r: any) => r.value);
       expect(voiceGains.length).toBeGreaterThan(0);
       for (const g of voiceGains) {
-        // Each voice gain should be connected to the master gain.
-        expect(g.connect).toHaveBeenCalledWith(masterGain);
+        // Each voice gain should be connected to the BGM bus gain.
+        expect(g.connect).toHaveBeenCalledWith(bgmBusGain);
         // None of them should be wired directly to ctx.destination.
         const destCalls = g.connect.mock.calls.filter((c: any[]) => c[0] === ctx.destination);
         expect(destCalls).toHaveLength(0);
@@ -148,13 +152,13 @@ describe('AudioManager mute control', () => {
     it('boost SFX routes through the master gain', () => {
       am.initSync();
       const ctx = (am as any).ctx;
-      const masterGain = (am as any).masterGain;
+      const sfxBusGain = (am as any).sfxBusGain;
 
       am.startBoostSFX();
 
       const boostGain = (am as any).boostNoiseGain as MockGainNode;
       expect(boostGain).not.toBeNull();
-      expect(boostGain.connect).toHaveBeenCalledWith(masterGain);
+      expect(boostGain.connect).toHaveBeenCalledWith(sfxBusGain);
       const destCalls = boostGain.connect.mock.calls.filter((c: any[]) => c[0] === ctx.destination);
       expect(destCalls).toHaveLength(0);
       am.dispose();
@@ -163,13 +167,13 @@ describe('AudioManager mute control', () => {
     it('one-shot SFX route through the master gain', () => {
       am.initSync();
       const ctx = (am as any).ctx;
-      const masterGain = (am as any).masterGain;
+      const sfxBusGain = (am as any).sfxBusGain;
       ctx.createGain.mockClear();
 
       am.playSFX('starCollect');
 
       const sfxGain = ctx.createGain.mock.results[0].value;
-      expect(sfxGain.connect).toHaveBeenCalledWith(masterGain);
+      expect(sfxGain.connect).toHaveBeenCalledWith(sfxBusGain);
       const destCalls = sfxGain.connect.mock.calls.filter((c: any[]) => c[0] === ctx.destination);
       expect(destCalls).toHaveLength(0);
       am.dispose();
@@ -252,9 +256,15 @@ describe('AudioManager mute control', () => {
     it('disconnects and clears the master gain', () => {
       am.initSync();
       const masterGain = (am as any).masterGain as MockGainNode;
+      const bgmBusGain = (am as any).bgmBusGain as MockGainNode;
+      const sfxBusGain = (am as any).sfxBusGain as MockGainNode;
       am.dispose();
       expect(masterGain.disconnect).toHaveBeenCalled();
+      expect(bgmBusGain.disconnect).toHaveBeenCalled();
+      expect(sfxBusGain.disconnect).toHaveBeenCalled();
       expect((am as any).masterGain).toBeNull();
+      expect((am as any).bgmBusGain).toBeNull();
+      expect((am as any).sfxBusGain).toBeNull();
     });
   });
 

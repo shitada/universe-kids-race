@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {
+  type AudioVolumeLevel,
   type ColorVisionSupportMode,
   DEFAULT_SPACESHIP_CUSTOMIZATION,
   type MotionSensitivity,
@@ -498,6 +499,32 @@ export class TitleScene implements Scene {
     this.saveManager.save(data);
   }
 
+  private persistBGMVolumeSetting(volume: AudioVolumeLevel): void {
+    const data = this.saveManager.load();
+    data.audioSettings = this.buildAudioSettings(
+      volume,
+      data.audioSettings?.sfxVolume ?? 100,
+    );
+    if (!data.audioSettings) {
+      delete data.audioSettings;
+    }
+    this.saveManager.save(data);
+    this.audioManager.setBGMVolume(volume);
+  }
+
+  private persistSFXVolumeSetting(volume: AudioVolumeLevel): void {
+    const data = this.saveManager.load();
+    data.audioSettings = this.buildAudioSettings(
+      data.audioSettings?.bgmVolume ?? 100,
+      volume,
+    );
+    if (!data.audioSettings) {
+      delete data.audioSettings;
+    }
+    this.saveManager.save(data);
+    this.audioManager.setSFXVolume(volume);
+  }
+
   private persistMotionSensitivitySetting(sensitivity: MotionSensitivity): void {
     const data = this.saveManager.load();
     const highContrastEnabled = data.colorAccessibility?.highContrast === true;
@@ -548,6 +575,20 @@ export class TitleScene implements Scene {
       ...(highContrastEnabled ? { highContrast: true } : {}),
       ...(motionSensitivity !== defaultMotionSensitivity ? { motionSensitivity } : {}),
       ...(colorVisionSupportMode !== DEFAULT_COLOR_VISION_SUPPORT_MODE ? { colorVisionSupportMode } : {}),
+    };
+  }
+
+  private buildAudioSettings(
+    bgmVolume: AudioVolumeLevel,
+    sfxVolume: AudioVolumeLevel,
+  ): SaveData['audioSettings'] {
+    if (bgmVolume === 100 && sfxVolume === 100) {
+      return undefined;
+    }
+
+    return {
+      ...(bgmVolume !== 100 ? { bgmVolume } : {}),
+      ...(sfxVolume !== 100 ? { sfxVolume } : {}),
     };
   }
 
@@ -895,6 +936,8 @@ export class TitleScene implements Scene {
           initialHighContrast: this.saveManager.load().colorAccessibility?.highContrast === true,
           initialColorVisionSupportMode:
             this.saveManager.load().colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE,
+          initialBGMVolume: this.saveManager.load().audioSettings?.bgmVolume ?? 100,
+          initialSFXVolume: this.saveManager.load().audioSettings?.sfxVolume ?? 100,
           initialVibrationIntensity: this.saveManager.load().vibrationSettings?.intensity ?? 'medium',
           initialMotionSensitivity:
             this.saveManager.load().colorAccessibility?.motionSensitivity ?? getDefaultMotionSensitivity(),
@@ -902,6 +945,8 @@ export class TitleScene implements Scene {
             this.saveManager.load().restReminderSettings?.enabled ?? DEFAULT_REST_REMINDER_ENABLED,
           onToggle: (enabled) => this.persistHighContrastSetting(enabled),
           onColorVisionSupportModeChange: (mode) => this.persistColorVisionSupportModeSetting(mode),
+          onBGMVolumeChange: (volume) => this.persistBGMVolumeSetting(volume),
+          onSFXVolumeChange: (volume) => this.persistSFXVolumeSetting(volume),
           onVibrationIntensityChange: (intensity) => this.persistVibrationIntensitySetting(intensity),
           onMotionSensitivityChange: (sensitivity) => this.persistMotionSensitivitySetting(sensitivity),
           onRestReminderToggle: (enabled) => this.persistRestReminderSetting(enabled),

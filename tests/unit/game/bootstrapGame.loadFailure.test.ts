@@ -164,6 +164,8 @@ async function setupBootstrap(failingSceneType: SceneType): Promise<SetupResult>
   vi.doMock('../../../src/game/audio/AudioManager', () => ({
     AudioManager: class {
       setMuted = vi.fn();
+      setBGMVolume = vi.fn();
+      setSFXVolume = vi.fn();
       ensureResumed = vi.fn();
       suspend = vi.fn();
       dispose = vi.fn();

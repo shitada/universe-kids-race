@@ -128,6 +128,14 @@ export interface ColorAccessibilitySettings {
   colorVisionSupportMode?: ColorVisionSupportMode;
 }
 
+export const AUDIO_VOLUME_LEVELS = [0, 25, 50, 75, 100] as const;
+export type AudioVolumeLevel = (typeof AUDIO_VOLUME_LEVELS)[number];
+
+export interface AudioSettings {
+  bgmVolume?: AudioVolumeLevel;
+  sfxVolume?: AudioVolumeLevel;
+}
+
 export interface VibrationSettings {
   intensity: VibrationIntensity;
 }
@@ -162,6 +170,7 @@ export interface SaveData {
   clearedStage: number;
   unlockedPlanets: number[];
   muted?: boolean;
+  audioSettings?: AudioSettings;
   colorAccessibility?: ColorAccessibilitySettings;
   vibrationSettings?: VibrationSettings;
   restReminderSettings?: RestReminderSettings;

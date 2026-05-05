@@ -142,13 +142,14 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
     saveManager.resetSessionDataPreservingMuted();
   }
 
+  const initialSaveData = saveManager.load();
   const initialPixelTier = resolveInitialPixelTier(
-    saveManager.load().lastStablePixelTier,
+    initialSaveData.lastStablePixelTier,
     maxTier,
   );
 
   applyPixelRatioTier(initialPixelTier);
-  setSharedVibrationIntensity(saveManager.load().vibrationSettings?.intensity ?? 'medium');
+  setSharedVibrationIntensity(initialSaveData.vibrationSettings?.intensity ?? 'medium');
 
   const currentVisualTier = { value: initialPixelTier };
   const currentPerformanceAdaptation = { value: 0 };
@@ -251,7 +252,9 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
 
   renderer.setClearColor(0x000020);
   inputSystem.setup(canvas);
-  audioManager.setMuted(saveManager.load().muted === true);
+  audioManager.setMuted(initialSaveData.muted === true);
+  audioManager.setBGMVolume(initialSaveData.audioSettings?.bgmVolume ?? 100);
+  audioManager.setSFXVolume(initialSaveData.audioSettings?.sfxVolume ?? 100);
 
   const loadTitleSceneModule = createRetryableModuleLoader(() => import('./scenes/TitleScene'));
   const loadStageSceneModule = createRetryableModuleLoader(() => import('./scenes/StageScene'));

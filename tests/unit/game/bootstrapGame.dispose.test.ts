@@ -174,6 +174,8 @@ async function setupBootSession(): Promise<MockBootSession> {
         audioManagerInstance = this as unknown as MockBootSession['audioManagerInstance'];
       }
       setMuted = vi.fn();
+      setBGMVolume = vi.fn();
+      setSFXVolume = vi.fn();
       ensureResumed = vi.fn();
       suspend = vi.fn();
       dispose = vi.fn();

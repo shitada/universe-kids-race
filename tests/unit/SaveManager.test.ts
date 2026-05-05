@@ -611,6 +611,43 @@ describe('SaveManager', () => {
     });
   });
 
+  describe('audioSettings', () => {
+    it('persists non-default bgm and sfx volumes', () => {
+      const manager = new SaveManager();
+      manager.save({
+        clearedStage: 2,
+        unlockedPlanets: [1, 2],
+        audioSettings: { bgmVolume: 75, sfxVolume: 25 },
+      });
+
+      expect(manager.load().audioSettings).toEqual({ bgmVolume: 75, sfxVolume: 25 });
+    });
+
+    it('drops malformed audio settings payloads', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        audioSettings: { bgmVolume: 60, sfxVolume: 'loud' },
+      }));
+      const manager = new SaveManager();
+
+      expect(manager.load().audioSettings).toBeUndefined();
+    });
+
+    it('preserves audio settings when session progress is reset', () => {
+      const manager = new SaveManager();
+      manager.save({
+        clearedStage: 4,
+        unlockedPlanets: [1, 2, 3, 4],
+        audioSettings: { bgmVolume: 50, sfxVolume: 25 },
+      });
+
+      manager.resetSessionDataPreservingMuted();
+
+      expect(manager.load().audioSettings).toEqual({ bgmVolume: 50, sfxVolume: 25 });
+    });
+  });
+
   describe('storage failure resilience', () => {
     afterEach(() => {
       vi.restoreAllMocks();

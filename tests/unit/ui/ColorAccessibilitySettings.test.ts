@@ -5,6 +5,26 @@ import { ColorAccessibilitySettings } from '../../../src/ui/ColorAccessibilitySe
 describe('ColorAccessibilitySettings', () => {
   let settings: ColorAccessibilitySettings;
 
+  function createOptions(overrides: Partial<Parameters<ColorAccessibilitySettings['show']>[0]> = {}) {
+    return {
+      initialHighContrast: false,
+      initialColorVisionSupportMode: 'color-only' as const,
+      initialBGMVolume: 100 as const,
+      initialSFXVolume: 100 as const,
+      initialVibrationIntensity: 'medium' as const,
+      initialMotionSensitivity: 'strong' as const,
+      initialRestReminderEnabled: true,
+      onToggle: vi.fn(),
+      onColorVisionSupportModeChange: vi.fn(),
+      onBGMVolumeChange: vi.fn(),
+      onSFXVolumeChange: vi.fn(),
+      onVibrationIntensityChange: vi.fn(),
+      onMotionSensitivityChange: vi.fn(),
+      onRestReminderToggle: vi.fn(),
+      ...overrides,
+    };
+  }
+
   beforeEach(() => {
     const overlay = document.createElement('div');
     overlay.id = 'ui-overlay';
@@ -19,18 +39,10 @@ describe('ColorAccessibilitySettings', () => {
   it('renders and toggles the child-friendly high-contrast button', () => {
     const onToggle = vi.fn();
     const onVibrationIntensityChange = vi.fn();
-    settings.show({
-      initialHighContrast: false,
-      initialColorVisionSupportMode: 'color-only',
-      initialVibrationIntensity: 'medium',
-      initialMotionSensitivity: 'strong',
-      initialRestReminderEnabled: true,
+    settings.show(createOptions({
       onToggle,
-      onColorVisionSupportModeChange: vi.fn(),
       onVibrationIntensityChange,
-      onMotionSensitivityChange: vi.fn(),
-      onRestReminderToggle: vi.fn(),
-    });
+    }));
 
     const toggle = document.querySelector('[data-color-accessibility-toggle]') as HTMLButtonElement | null;
     expect(toggle?.textContent).toContain('OFF');
@@ -44,18 +56,11 @@ describe('ColorAccessibilitySettings', () => {
 
   it('lets children pick vibration intensity explicitly', () => {
     const onVibrationIntensityChange = vi.fn();
-    settings.show({
+    settings.show(createOptions({
       initialHighContrast: true,
-      initialColorVisionSupportMode: 'color-only',
       initialVibrationIntensity: 'weak',
-      initialMotionSensitivity: 'strong',
-      initialRestReminderEnabled: true,
-      onToggle: vi.fn(),
-      onColorVisionSupportModeChange: vi.fn(),
       onVibrationIntensityChange,
-      onMotionSensitivityChange: vi.fn(),
-      onRestReminderToggle: vi.fn(),
-    });
+    }));
 
     const weakButton = document.querySelector('[data-vibration-intensity-button="weak"]') as HTMLButtonElement | null;
     const strongButton = document.querySelector('[data-vibration-intensity-button="strong"]') as HTMLButtonElement | null;
@@ -69,18 +74,10 @@ describe('ColorAccessibilitySettings', () => {
 
   it('shows visual motion choices and starts a preview when selected', () => {
     const onMotionSensitivityChange = vi.fn();
-    settings.show({
-      initialHighContrast: false,
-      initialColorVisionSupportMode: 'color-only',
-      initialVibrationIntensity: 'medium',
+    settings.show(createOptions({
       initialMotionSensitivity: 'medium',
-      initialRestReminderEnabled: true,
-      onToggle: vi.fn(),
-      onColorVisionSupportModeChange: vi.fn(),
-      onVibrationIntensityChange: vi.fn(),
       onMotionSensitivityChange,
-      onRestReminderToggle: vi.fn(),
-    });
+    }));
 
     const mediumButton = document.querySelector('[data-motion-sensitivity-button="medium"]') as HTMLButtonElement | null;
     const minimalButton = document.querySelector('[data-motion-sensitivity-button="minimal"]') as HTMLButtonElement | null;
@@ -103,18 +100,9 @@ describe('ColorAccessibilitySettings', () => {
 
   it('lets children switch between color-only and color-and-mark modes', () => {
     const onColorVisionSupportModeChange = vi.fn();
-    settings.show({
-      initialHighContrast: false,
-      initialColorVisionSupportMode: 'color-only',
-      initialVibrationIntensity: 'medium',
-      initialMotionSensitivity: 'strong',
-      initialRestReminderEnabled: true,
-      onToggle: vi.fn(),
+    settings.show(createOptions({
       onColorVisionSupportModeChange,
-      onVibrationIntensityChange: vi.fn(),
-      onMotionSensitivityChange: vi.fn(),
-      onRestReminderToggle: vi.fn(),
-    });
+    }));
 
     const colorOnlyButton = document.querySelector('[data-color-vision-mode-button="color-only"]') as HTMLButtonElement | null;
     const colorAndMarksButton = document.querySelector('[data-color-vision-mode-button="color-and-marks"]') as HTMLButtonElement | null;
@@ -128,18 +116,9 @@ describe('ColorAccessibilitySettings', () => {
   });
 
   it('hides the panel when requested', () => {
-    settings.show({
+    settings.show(createOptions({
       initialHighContrast: true,
-      initialColorVisionSupportMode: 'color-only',
-      initialVibrationIntensity: 'medium',
-      initialMotionSensitivity: 'strong',
-      initialRestReminderEnabled: true,
-      onToggle: vi.fn(),
-      onColorVisionSupportModeChange: vi.fn(),
-      onVibrationIntensityChange: vi.fn(),
-      onMotionSensitivityChange: vi.fn(),
-      onRestReminderToggle: vi.fn(),
-    });
+    }));
     expect(settings.isVisible()).toBe(true);
 
     settings.hide();
@@ -150,18 +129,10 @@ describe('ColorAccessibilitySettings', () => {
 
   it('lets children turn rest reminders on and off', () => {
     const onRestReminderToggle = vi.fn();
-    settings.show({
-      initialHighContrast: false,
-      initialColorVisionSupportMode: 'color-only',
-      initialVibrationIntensity: 'medium',
-      initialMotionSensitivity: 'strong',
+    settings.show(createOptions({
       initialRestReminderEnabled: false,
-      onToggle: vi.fn(),
-      onColorVisionSupportModeChange: vi.fn(),
-      onVibrationIntensityChange: vi.fn(),
-      onMotionSensitivityChange: vi.fn(),
       onRestReminderToggle,
-    });
+    }));
 
     const toggle = document.querySelector('[data-rest-reminder-toggle]') as HTMLButtonElement | null;
     expect(toggle?.textContent).toContain('OFF');
@@ -171,5 +142,40 @@ describe('ColorAccessibilitySettings', () => {
     expect(toggle?.textContent).toContain('ON');
     expect(document.body.textContent).toContain('15ぷんごと');
     expect(onRestReminderToggle).toHaveBeenCalledWith(true);
+  });
+
+  it('lets children adjust bgm and sfx volumes with 5-step sliders', () => {
+    const onBGMVolumeChange = vi.fn();
+    const onSFXVolumeChange = vi.fn();
+    settings.show(createOptions({
+      initialBGMVolume: 50,
+      initialSFXVolume: 25,
+      onBGMVolumeChange,
+      onSFXVolumeChange,
+    }));
+
+    const bgmSlider = document.querySelector('[data-bgm-volume-slider]') as HTMLInputElement | null;
+    const sfxSlider = document.querySelector('[data-sfx-volume-slider]') as HTMLInputElement | null;
+    const bgmLabel = document.querySelector('[data-bgm-volume-label]') as HTMLParagraphElement | null;
+    const sfxLabel = document.querySelector('[data-sfx-volume-label]') as HTMLParagraphElement | null;
+
+    expect(bgmLabel?.textContent).toContain('ふつう');
+    expect(sfxLabel?.textContent).toContain('ちいさい');
+    expect(document.body.textContent).toContain('しずか');
+    expect(document.body.textContent).toContain('さいだい');
+
+    if (bgmSlider) {
+      bgmSlider.value = '75';
+      bgmSlider.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (sfxSlider) {
+      sfxSlider.value = '0';
+      sfxSlider.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    expect(bgmLabel?.textContent).toContain('おおきい');
+    expect(sfxLabel?.textContent).toContain('しずか');
+    expect(onBGMVolumeChange).toHaveBeenCalledWith(75);
+    expect(onSFXVolumeChange).toHaveBeenCalledWith(0);
   });
 });

@@ -1,5 +1,7 @@
 import {
+  AUDIO_VOLUME_LEVELS,
   DEFAULT_SPACESHIP_CUSTOMIZATION,
+  type AudioSettings,
   type GameplayStats,
   MONTHLY_ENCOUNTER_IDS,
   type MonthlyEncounterId,
@@ -165,6 +167,30 @@ function normalizeVibrationIntensity(value: unknown): VibrationIntensity {
   }
 }
 
+function normalizeAudioVolumeLevel(value: unknown): AudioSettings['bgmVolume'] {
+  return typeof value === 'number' && (AUDIO_VOLUME_LEVELS as readonly number[]).includes(value)
+    ? value as AudioSettings['bgmVolume']
+    : undefined;
+}
+
+function normalizeAudioSettings(value: unknown): SaveData['audioSettings'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const bgmVolume = normalizeAudioVolumeLevel((value as { bgmVolume?: unknown }).bgmVolume);
+  const sfxVolume = normalizeAudioVolumeLevel((value as { sfxVolume?: unknown }).sfxVolume);
+
+  if (bgmVolume === undefined && sfxVolume === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...(bgmVolume !== undefined ? { bgmVolume } : {}),
+    ...(sfxVolume !== undefined ? { sfxVolume } : {}),
+  };
+}
+
 function normalizeRestReminderSettings(value: unknown): RestReminderSettings {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return { enabled: DEFAULT_REST_REMINDER_ENABLED };
@@ -269,6 +295,11 @@ function sanitizeSaveData(data: SaveData): SaveData {
     sanitized.colorAccessibility = colorAccessibility;
   }
 
+  const audioSettings = normalizeAudioSettings(data.audioSettings);
+  if (audioSettings) {
+    sanitized.audioSettings = audioSettings;
+  }
+
   if (data.bestStageStars && typeof data.bestStageStars === 'object') {
     for (const [key, value] of Object.entries(data.bestStageStars)) {
       const stage = Number(key);
@@ -309,6 +340,12 @@ export class SaveManager {
 
       data.muted = data.muted === true;
       data.tutorialShown = data.tutorialShown === true;
+      const audioSettings = normalizeAudioSettings((data as { audioSettings?: unknown }).audioSettings);
+      if (audioSettings) {
+        data.audioSettings = audioSettings;
+      } else {
+        delete (data as { audioSettings?: unknown }).audioSettings;
+      }
       data.vibrationSettings = {
         intensity: normalizeVibrationIntensity((data as { vibrationSettings?: { intensity?: unknown } }).vibrationSettings?.intensity),
       };
@@ -433,6 +470,7 @@ export class SaveManager {
       const restReminderSettings = normalizeRestReminderSettings(prev.restReminderSettings);
       const lastStablePixelTier = prev.lastStablePixelTier;
       const tutorialShown = prev.tutorialShown === true;
+      const audioSettings = normalizeAudioSettings(prev.audioSettings);
       const colorAccessibility = normalizeColorAccessibilitySettings(prev.colorAccessibility);
       const gameplayStats = normalizeGameplayStats(prev.gameplayStats);
       const spaceshipCustomization = normalizeSpaceshipCustomization(prev.spaceshipCustomization);
@@ -448,6 +486,9 @@ export class SaveManager {
         tutorialShown,
         spaceshipCustomization,
       };
+      if (audioSettings) {
+        next.audioSettings = audioSettings;
+      }
       if (colorAccessibility) {
         next.colorAccessibility = colorAccessibility;
       }
@@ -471,6 +512,7 @@ export class SaveManager {
       };
       const restReminderSettings = normalizeRestReminderSettings(prev.restReminderSettings);
       const lastStablePixelTier = prev.lastStablePixelTier;
+      const audioSettings = normalizeAudioSettings(prev.audioSettings);
       const colorAccessibility = normalizeColorAccessibilitySettings(prev.colorAccessibility);
       const gameplayStats = normalizeGameplayStats(prev.gameplayStats);
       const spaceshipCustomization = normalizeSpaceshipCustomization(prev.spaceshipCustomization);
@@ -486,6 +528,9 @@ export class SaveManager {
         tutorialShown: false,
         spaceshipCustomization,
       };
+      if (audioSettings) {
+        next.audioSettings = audioSettings;
+      }
       if (colorAccessibility) {
         next.colorAccessibility = colorAccessibility;
       }
