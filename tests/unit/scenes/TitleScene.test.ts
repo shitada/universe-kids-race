@@ -543,7 +543,7 @@ describe('TitleScene (T009)', () => {
     scene.exit();
   });
 
-  it('anchors the lower title buttons with fixed margins inside #ui-overlay', () => {
+  it('keeps lower title buttons in a non-overlapping footer row', () => {
     const sceneManager = createMockSceneManager();
     const saveManager = createMockSaveManager();
     const audioManager = createMockAudioManager(true);
@@ -555,14 +555,21 @@ describe('TitleScene (T009)', () => {
     const encyclopediaButton = Array.from(document.querySelectorAll('button')).find(
       (button) => button.textContent?.startsWith('ずかん'),
     ) as HTMLButtonElement | undefined;
+    const footerActions = document.querySelector('[data-title-footer-actions]') as HTMLElement | null;
 
     expect(tutorialButton).toBeTruthy();
     expect(encyclopediaButton).toBeTruthy();
-    expect(tutorialButton?.style.bottom).toBe('2rem');
-    expect(tutorialButton?.style.right).toBe('2rem');
+    expect(footerActions).not.toBeNull();
+    expect(footerActions?.style.display).toBe('grid');
+    expect(footerActions?.contains(tutorialButton ?? null)).toBe(true);
+    expect(footerActions?.contains(encyclopediaButton ?? null)).toBe(true);
+    expect(tutorialButton?.style.position).toBe('');
+    expect(tutorialButton?.style.bottom).toBe('');
+    expect(tutorialButton?.style.right).toBe('');
     expect(tutorialButton?.style.cssText).not.toContain('env(');
-    expect(encyclopediaButton?.style.bottom).toBe('2rem');
-    expect(encyclopediaButton?.style.left).toBe('2rem');
+    expect(encyclopediaButton?.style.position).toBe('');
+    expect(encyclopediaButton?.style.bottom).toBe('');
+    expect(encyclopediaButton?.style.left).toBe('');
     expect(encyclopediaButton?.style.cssText).not.toContain('env(');
 
     scene.exit();

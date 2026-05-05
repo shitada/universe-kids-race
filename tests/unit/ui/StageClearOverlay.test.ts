@@ -44,12 +44,13 @@ describe('StageClearOverlay', () => {
 
     expect(root).not.toBeNull();
     expect(root?.style.overflowY).toBe('hidden');
-    expect(actionRow?.style.flexDirection).toBe('row');
+    expect(actionRow?.style.display).toBe('grid');
+    expect(actionRow?.style.gridTemplateColumns).toContain('repeat(3');
     expect(root?.textContent).toContain('やったね！');
     expect(root?.textContent).toContain('✨ じこベストこうしん！ ⭐ 5 こ');
     expect(root?.textContent).toContain('⭐ 5 こ あつめたよ！');
     expect(root?.textContent).toContain('⚫ 水星の ずかんカード ゲット！');
-    expect(root?.textContent).toContain('⚫ 水星が なかまに なったよ！');
+    expect(root?.textContent).toContain('なかまに なったよ！');
     expect(root?.textContent).toContain('つぎのぼうけん');
     expect(retryButton?.disabled).toBe(true);
     expect(retryButton?.style.visibility).toBe('hidden');
@@ -106,6 +107,7 @@ describe('StageClearOverlay', () => {
 
     overlay.setRewardOpen(false);
     rewardButton?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    rewardButton?.dispatchEvent(new Event('pointerup', { bubbles: true }));
 
     expect(rewardButton?.style.pointerEvents).toBe('auto');
     expect(onReward).toHaveBeenCalledTimes(1);

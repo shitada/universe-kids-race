@@ -424,6 +424,9 @@ describe('StageScene clear CTA', () => {
     expect(overlay?.textContent).toContain('なかまに なったよ');
     expect(overlay?.textContent).toContain('つぎのぼうけん');
 
+    const actions = document.querySelector('[data-stage-clear-actions]') as HTMLElement | null;
+    expect(actions?.style.display).toBe('grid');
+    expect(actions?.style.gridTemplateColumns).toContain('repeat(3');
     const button = getContinueButton();
     const retryButton = getRetryButton();
     expect(retryButton.textContent).toBe('もういちど');

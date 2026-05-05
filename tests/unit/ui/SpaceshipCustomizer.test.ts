@@ -31,8 +31,12 @@ describe('SpaceshipCustomizer', () => {
     const wingOption = document.querySelector('[data-spaceship-color-option="wingColor:sky"]') as HTMLButtonElement;
 
     expect(panel.style.overflowY).toBe('hidden');
+    expect(panel.style.maxHeight).toBe('720px');
     expect(sections.style.display).toBe('grid');
     expect(sections.style.gridTemplateColumns).toContain('repeat(3');
+    expect((noseOption.firstElementChild as HTMLElement).getAttribute('data-color-hex')).not.toBe(
+      (wingOption.firstElementChild as HTMLElement).getAttribute('data-color-hex'),
+    );
     dispatchReleaseConfirm(bodyOption);
     dispatchReleaseConfirm(noseOption);
     dispatchReleaseConfirm(wingOption);

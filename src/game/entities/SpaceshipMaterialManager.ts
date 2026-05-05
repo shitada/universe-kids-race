@@ -19,9 +19,9 @@ export interface SpaceshipMaterialSet {
 }
 
 const SPACESHIP_COLOR_OPTIONS: readonly SpaceshipColorOption[] = [
-  { key: 'sky', label: 'そら', hex: 0x4488ff },
+  { key: 'sky', label: 'そら', hex: 0x6ecbff },
   { key: 'sunset', label: 'たいよう', hex: 0xff6644 },
-  { key: 'aqua', label: 'うみ', hex: 0x44aaff },
+  { key: 'aqua', label: 'うみ', hex: 0x00c28a },
 ] as const;
 
 const SPACESHIP_COLOR_HEX: Record<SpaceshipColorKey, number> = SPACESHIP_COLOR_OPTIONS.reduce(

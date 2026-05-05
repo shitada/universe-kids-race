@@ -243,8 +243,8 @@ describe('Spaceship', () => {
       ship.applyCustomization({ bodyColor: 'aqua', noseColor: 'sky', wingColor: 'sunset' });
 
       const [body, nose, wings] = ship.mesh.children as THREE.Mesh[];
-      expect((body.material as THREE.MeshToonMaterial).color.getHex()).toBe(0x44aaff);
-      expect((nose.material as THREE.MeshToonMaterial).color.getHex()).toBe(0x4488ff);
+      expect((body.material as THREE.MeshToonMaterial).color.getHex()).toBe(0x00c28a);
+      expect((nose.material as THREE.MeshToonMaterial).color.getHex()).toBe(0x6ecbff);
       expect((wings.material as THREE.MeshToonMaterial).color.getHex()).toBe(0xff6644);
       expect(ship.getCustomization()).toEqual({ bodyColor: 'aqua', noseColor: 'sky', wingColor: 'sunset' });
     });

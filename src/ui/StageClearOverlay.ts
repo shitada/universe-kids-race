@@ -104,65 +104,16 @@ export class StageClearOverlay {
     }
 
     if (options.rewardEntry) {
-      overlay.appendChild(this.createHeading(`${options.rewardEntry.emoji} ${options.rewardEntry.name}の ずかんカード ゲット！`, `
+      overlay.appendChild(this.createHeading(`${options.rewardEntry.emoji} ${options.rewardEntry.name}の ずかんカード ゲット！ なかまに なったよ！`, `
         position: relative;
         z-index: 1;
         font-family: 'Zen Maru Gothic', sans-serif;
-        font-size: clamp(1rem, 3.6vmin, 1.12rem);
+        font-size: clamp(0.95rem, 3.2vmin, 1.08rem);
         font-weight: 700;
         color: #FFD700;
-        margin-top: 0.75rem;
+        margin-top: 0.45rem;
         text-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
       `));
-      overlay.appendChild(this.createHeading(`${options.rewardEntry.emoji} ${options.rewardEntry.name}が なかまに なったよ！`, `
-        position: relative;
-        z-index: 1;
-        font-family: 'Zen Maru Gothic', sans-serif;
-        font-size: clamp(1rem, 3.6vmin, 1.12rem);
-        font-weight: 700;
-        color: #FFD700;
-        margin-top: 0.3rem;
-        text-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
-      `));
-
-      const rewardButton = document.createElement('button');
-      rewardButton.setAttribute('data-stage-clear-card', '');
-      rewardButton.textContent = 'カードをみる';
-      rewardButton.style.cssText = `
-        position: relative;
-        z-index: 1;
-        margin-top: 0.75rem;
-        min-width: min(46vw, 240px);
-        min-height: 64px;
-        padding: 0.8rem 1.3rem;
-        border: none;
-        border-radius: 999px;
-        font-family: 'Zen Maru Gothic', sans-serif;
-        font-size: clamp(1.1rem, 4vmin, 1.4rem);
-        font-weight: 900;
-        color: #fff;
-        background: rgba(255, 255, 255, 0.18);
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
-        cursor: pointer;
-        touch-action: manipulation;
-        transform: scale(1);
-        transition: transform 0.08s ease-out, opacity 0.18s ease-out;
-      `;
-      rewardButton.addEventListener('pointerdown', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        if (this.isRewardOpen) return;
-        rewardButton.style.transform = 'scale(0.96)';
-        options.onReward?.();
-      });
-      const releaseRewardButton = (): void => {
-        rewardButton.style.transform = 'scale(1)';
-      };
-      rewardButton.addEventListener('pointerup', releaseRewardButton);
-      rewardButton.addEventListener('pointercancel', releaseRewardButton);
-      rewardButton.addEventListener('pointerleave', releaseRewardButton);
-      this.rewardButton = rewardButton;
-      overlay.appendChild(rewardButton);
     }
 
     overlay.appendChild(this.createActionButtons(options));
@@ -326,17 +277,24 @@ export class StageClearOverlay {
   }
 
   private createActionButtons(options: StageClearOverlayShowOptions): HTMLDivElement {
+    const hasRewardButton = Boolean(options.rewardEntry && options.onReward);
     const actionButtons = document.createElement('div');
     actionButtons.setAttribute('data-stage-clear-actions', '');
     actionButtons.style.cssText = `
-      display: flex;
-      flex-direction: row;
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: repeat(${hasRewardButton ? 3 : 2}, minmax(0, 1fr));
       align-items: stretch;
       justify-content: center;
-      gap: 0.75rem;
-      width: min(100%, 32rem);
-      margin-top: 0.95rem;
+      gap: clamp(0.4rem, 1.8vmin, 0.7rem);
+      width: min(100%, ${hasRewardButton ? '42rem' : '30rem'});
+      margin-top: 0.7rem;
     `;
+
+    if (hasRewardButton) {
+      actionButtons.appendChild(this.createRewardButton(options));
+    }
 
     const retryButton = document.createElement('button');
     retryButton.setAttribute('data-stage-clear-retry', '');
@@ -344,13 +302,14 @@ export class StageClearOverlay {
     retryButton.textContent = 'もういちど';
     retryButton.disabled = true;
     retryButton.style.cssText = `
-      width: min(44vw, 220px);
-      min-height: 68px;
-      padding: 0.8rem 1rem;
+      width: 100%;
+      min-width: 0;
+      min-height: 58px;
+      padding: 0.65rem 0.7rem;
       border: none;
       border-radius: 999px;
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: clamp(1.05rem, 3.8vmin, 1.35rem);
+      font-size: clamp(0.95rem, 3.4vmin, 1.24rem);
       font-weight: 900;
       color: #fff;
       background: rgba(255, 255, 255, 0.2);
@@ -372,13 +331,14 @@ export class StageClearOverlay {
     continueButton.textContent = options.continueLabel;
     continueButton.disabled = true;
     continueButton.style.cssText = `
-      width: min(44vw, 220px);
-      min-height: 68px;
-      padding: 0.8rem 1rem;
+      width: 100%;
+      min-width: 0;
+      min-height: 58px;
+      padding: 0.65rem 0.7rem;
       border: none;
       border-radius: 999px;
       font-family: 'Zen Maru Gothic', sans-serif;
-      font-size: clamp(1.15rem, 4.1vmin, 1.45rem);
+      font-size: clamp(1rem, 3.6vmin, 1.3rem);
       font-weight: 900;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
       opacity: 0;
@@ -399,6 +359,46 @@ export class StageClearOverlay {
 
     actionButtons.append(retryButton, continueButton);
     return actionButtons;
+  }
+
+  private createRewardButton(options: StageClearOverlayShowOptions): HTMLButtonElement {
+    const rewardButton = document.createElement('button');
+    rewardButton.setAttribute('data-stage-clear-card', '');
+    rewardButton.textContent = 'カードをみる';
+    rewardButton.style.cssText = `
+      width: 100%;
+      min-width: 0;
+      min-height: 58px;
+      padding: 0.65rem 0.7rem;
+      border: none;
+      border-radius: 999px;
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: clamp(0.95rem, 3.4vmin, 1.24rem);
+      font-weight: 900;
+      color: #fff;
+      background: rgba(255, 255, 255, 0.18);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+      cursor: pointer;
+      touch-action: manipulation;
+      transform: scale(1);
+      transition: transform 0.08s ease-out, opacity 0.18s ease-out;
+    `;
+
+    this.buttonCleanups.add(attachReleaseConfirmButton(rewardButton, {
+      canActivate: () => !this.isRewardOpen,
+      onActivate: () => {
+        if (this.isRewardOpen) return;
+        options.onReward?.();
+      },
+      onPressChange: (pressed) => {
+        rewardButton.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+      },
+      preventDefaultOnPointerDown: true,
+      preventDefaultOnClick: true,
+      stopPropagation: true,
+    }));
+    this.rewardButton = rewardButton;
+    return rewardButton;
   }
 
   private attachActionHandlers(button: HTMLButtonElement, onActivate: () => void): void {

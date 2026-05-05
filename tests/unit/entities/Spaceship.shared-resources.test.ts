@@ -47,9 +47,9 @@ describe('Spaceship shared resources', () => {
     expect(bodyMat).toBeInstanceOf(THREE.MeshToonMaterial);
     expect(noseMat).toBeInstanceOf(THREE.MeshToonMaterial);
     expect(wingMat).toBeInstanceOf(THREE.MeshToonMaterial);
-    expect(bodyMat.color.getHex()).toBe(0x4488ff);
+    expect(bodyMat.color.getHex()).toBe(0x6ecbff);
     expect(noseMat.color.getHex()).toBe(0xff6644);
-    expect(wingMat.color.getHex()).toBe(0x44aaff);
+    expect(wingMat.color.getHex()).toBe(0x00c28a);
   });
 
   it('reuses pooled materials for ships with the same customization', () => {
