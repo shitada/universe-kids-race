@@ -295,7 +295,7 @@ export interface StageSpecialEventState {
   event: StageSpecialEventConfig | null;
 }
 
-export type SeasonalEventId = 'tanabata' | 'christmas' | 'new-year';
+export type SeasonalEventId = 'sakura' | 'tanabata' | 'christmas' | 'new-year';
 
 export interface SeasonalEventConfig {
   id: SeasonalEventId;

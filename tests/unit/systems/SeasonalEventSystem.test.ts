@@ -3,12 +3,12 @@ import { SeasonalEventSystem } from '../../../src/game/systems/SeasonalEventSyst
 
 describe('SeasonalEventSystem', () => {
   it('dateProvider から現在の季節イベントを更新して保持する', () => {
-    let currentDate = new Date(2026, 6, 7, 12);
+    let currentDate = new Date(2026, 3, 10, 12);
     const system = new SeasonalEventSystem(() => currentDate);
 
-    expect(system.refresh()?.id).toBe('tanabata');
+    expect(system.refresh()?.id).toBe('sakura');
     expect(system.isActive()).toBe(true);
-    expect(system.getActiveEvent()?.id).toBe('tanabata');
+    expect(system.getActiveEvent()?.id).toBe('sakura');
 
     currentDate = new Date(2026, 1, 1, 12);
     expect(system.refresh()).toBeNull();

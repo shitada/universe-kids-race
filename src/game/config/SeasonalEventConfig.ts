@@ -2,6 +2,17 @@ import type { SeasonalEventConfig } from '../../types';
 
 export const SEASONAL_EVENT_CONFIGS: readonly SeasonalEventConfig[] = [
   {
+    id: 'sakura',
+    title: 'さくら まつり',
+    emoji: '🌸',
+    noticeMessage: 'さくらの はなびらが ひらひら！',
+    accentColor: 0xffb7c5,
+    startMonth: 4,
+    startDay: 1,
+    endMonth: 4,
+    endDay: 14,
+  },
+  {
     id: 'tanabata',
     title: 'たなばた ほしまつり',
     emoji: '🎋',
