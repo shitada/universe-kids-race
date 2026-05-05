@@ -546,6 +546,13 @@ describe('TitleScene (T009)', () => {
       colorAccessibility: { highContrast: true },
     }));
 
+    const markModeButton = document.querySelector('[data-color-vision-mode-button="color-and-marks"]') as HTMLButtonElement | null;
+    markModeButton?.click();
+
+    expect(saveManager.save).toHaveBeenCalledWith(expect.objectContaining({
+      colorAccessibility: { highContrast: true, colorVisionSupportMode: 'color-and-marks' },
+    }));
+
     const strongButton = document.querySelector('[data-vibration-intensity-button="strong"]') as HTMLButtonElement | null;
     strongButton?.click();
 
@@ -557,7 +564,11 @@ describe('TitleScene (T009)', () => {
     minimalMotionButton?.click();
 
     expect(saveManager.save).toHaveBeenCalledWith(expect.objectContaining({
-      colorAccessibility: { highContrast: true, motionSensitivity: 'minimal' },
+      colorAccessibility: {
+        highContrast: true,
+        colorVisionSupportMode: 'color-and-marks',
+        motionSensitivity: 'minimal',
+      },
     }));
 
     scene.exit();

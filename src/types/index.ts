@@ -29,6 +29,8 @@ export type VibrationPattern = number | number[];
 export type VibrationIntensity = 'off' | 'weak' | 'medium' | 'strong';
 export const MOTION_SENSITIVITY_LEVELS = ['strong', 'medium', 'gentle', 'minimal'] as const;
 export type MotionSensitivity = (typeof MOTION_SENSITIVITY_LEVELS)[number];
+export const COLOR_VISION_SUPPORT_MODES = ['color-only', 'color-and-marks'] as const;
+export type ColorVisionSupportMode = (typeof COLOR_VISION_SUPPORT_MODES)[number];
 
 // Input
 export interface InputState {
@@ -123,6 +125,7 @@ export interface WormholeTunnelConfig {
 export interface ColorAccessibilitySettings {
   highContrast?: boolean;
   motionSensitivity?: MotionSensitivity;
+  colorVisionSupportMode?: ColorVisionSupportMode;
 }
 
 export interface VibrationSettings {
@@ -180,6 +183,7 @@ export interface PlanetEncyclopediaEntry {
   name: string;
   reading: string;
   encyclopediaLabel: string;
+  identityMark: string;
   emoji: string;
   trivia: string;
   planetColor: number;

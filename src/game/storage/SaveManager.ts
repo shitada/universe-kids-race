@@ -10,6 +10,10 @@ import {
   type VibrationIntensity,
 } from '../../types';
 import {
+  DEFAULT_COLOR_VISION_SUPPORT_MODE,
+  normalizeColorVisionSupportMode,
+} from '../config/PlanetEncyclopedia';
+import {
   DEFAULT_MOTION_SENSITIVITY,
   normalizeMotionSensitivity,
 } from '../accessibility/motionSensitivity';
@@ -142,14 +146,22 @@ function normalizeColorAccessibilitySettings(value: unknown): SaveData['colorAcc
   const motionSensitivity = normalizeMotionSensitivity(
     (value as { motionSensitivity?: unknown }).motionSensitivity,
   );
+  const colorVisionSupportMode = normalizeColorVisionSupportMode(
+    (value as { colorVisionSupportMode?: unknown }).colorVisionSupportMode,
+  );
 
-  if (!highContrast && motionSensitivity === DEFAULT_MOTION_SENSITIVITY) {
+  if (
+    !highContrast &&
+    motionSensitivity === DEFAULT_MOTION_SENSITIVITY &&
+    colorVisionSupportMode === DEFAULT_COLOR_VISION_SUPPORT_MODE
+  ) {
     return undefined;
   }
 
   return {
     ...(highContrast ? { highContrast: true } : {}),
     ...(motionSensitivity !== DEFAULT_MOTION_SENSITIVITY ? { motionSensitivity } : {}),
+    ...(colorVisionSupportMode !== DEFAULT_COLOR_VISION_SUPPORT_MODE ? { colorVisionSupportMode } : {}),
   };
 }
 

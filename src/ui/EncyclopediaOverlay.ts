@@ -1,5 +1,10 @@
-import type { ConstellationDefinition, PlanetEncyclopediaEntry } from '../types';
-import { getPlanetEncyclopediaEntry, PLANET_ENCYCLOPEDIA } from '../game/config/PlanetEncyclopedia';
+import type { ColorVisionSupportMode, ConstellationDefinition, PlanetEncyclopediaEntry } from '../types';
+import {
+  DEFAULT_COLOR_VISION_SUPPORT_MODE,
+  formatPlanetEncyclopediaLabel,
+  getPlanetEncyclopediaEntry,
+  PLANET_ENCYCLOPEDIA,
+} from '../game/config/PlanetEncyclopedia';
 import { CONSTELLATION_DATA, getConstellationForStage } from '../game/config/ConstellationData';
 import { createCompanionPreviewController, type CompanionPreviewController } from './CompanionPreview';
 import { attachReleaseConfirmButton } from './attachReleaseConfirmButton';
@@ -8,6 +13,7 @@ import { createStageMedalDisplay } from './stageMedalDisplay';
 interface DetailOverlayOptions {
   bestStageStars?: Record<number, number>;
   backLabel?: string;
+  colorVisionSupportMode?: ColorVisionSupportMode;
   zIndex?: number;
   discoveredConstellations?: number[];
 }
@@ -26,6 +32,7 @@ export class EncyclopediaOverlay {
   private onSelectStage: ((stageNumber: number) => void) | null = null;
   private bestStageStars: Record<number, number> = {};
   private discoveredConstellations: number[] = [];
+  private colorVisionSupportMode: ColorVisionSupportMode = DEFAULT_COLOR_VISION_SUPPORT_MODE;
   private detailBackLabel = 'もどる';
   private detailPreviewController: CompanionPreviewController | null = null;
   private readonly createPreviewController: () => CompanionPreviewController;
@@ -43,11 +50,13 @@ export class EncyclopediaOverlay {
     onSelectStage?: (stageNumber: number) => void,
     bestStageStars?: Record<number, number>,
     discoveredConstellations: number[] = [],
+    colorVisionSupportMode: ColorVisionSupportMode = DEFAULT_COLOR_VISION_SUPPORT_MODE,
   ): void {
     if (this.overlayEl) return;
     this.onSelectStage = onSelectStage ?? null;
     this.bestStageStars = bestStageStars ?? {};
     this.discoveredConstellations = discoveredConstellations;
+    this.colorVisionSupportMode = colorVisionSupportMode;
     this.detailBackLabel = 'もどる';
 
     const uiOverlay = document.getElementById('ui-overlay');
@@ -166,6 +175,7 @@ export class EncyclopediaOverlay {
     this.onSelectStage = null;
     this.bestStageStars = options.bestStageStars ?? {};
     this.discoveredConstellations = options.discoveredConstellations ?? [];
+    this.colorVisionSupportMode = options.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE;
     this.detailBackLabel = options.backLabel ?? 'もどる';
 
     const uiOverlay = document.getElementById('ui-overlay');
@@ -215,6 +225,7 @@ export class EncyclopediaOverlay {
     this.onSelectStage = null;
     this.bestStageStars = {};
     this.discoveredConstellations = [];
+    this.colorVisionSupportMode = DEFAULT_COLOR_VISION_SUPPORT_MODE;
     this.detailBackLabel = 'もどる';
     this.disposeDetailPreview();
   }
@@ -398,7 +409,7 @@ export class EncyclopediaOverlay {
       card.appendChild(emoji);
 
       const name = document.createElement('div');
-      name.textContent = entry.encyclopediaLabel;
+      name.textContent = this.getPlanetLabel(entry);
       name.style.cssText = `
         font-family: 'Zen Maru Gothic', sans-serif;
         font-size: ${isCompactHeight ? '0.76rem' : '0.88rem'};
@@ -516,7 +527,7 @@ export class EncyclopediaOverlay {
 
     const name = document.createElement('div');
     name.id = EncyclopediaOverlay.DETAIL_TITLE_ID;
-    name.textContent = entry.encyclopediaLabel;
+    name.textContent = this.getPlanetLabel(entry);
     name.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
       font-size: ${isCompactHeight ? '1.35rem' : '1.65rem'};
@@ -727,11 +738,15 @@ export class EncyclopediaOverlay {
   }
 
   private getCardAriaLabel(entry: PlanetEncyclopediaEntry, bestCount: number): string {
-    const parts = [`${entry.encyclopediaLabel}`];
+    const parts = [this.getPlanetLabel(entry)];
     if (bestCount > 0) {
       parts.push(`ベスト ほし ${bestCount}こ`);
     }
     parts.push('くわしく みる');
     return parts.join('、');
+  }
+
+  private getPlanetLabel(entry: PlanetEncyclopediaEntry): string {
+    return formatPlanetEncyclopediaLabel(entry, this.colorVisionSupportMode);
   }
 }

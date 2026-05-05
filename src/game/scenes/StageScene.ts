@@ -12,7 +12,7 @@ import type { InputSystem } from '../systems/InputSystem';
 import type { AudioManager } from '../audio/AudioManager';
 import type { SaveManager } from '../storage/SaveManager';
 import { Spaceship } from '../entities/Spaceship';
-import { Star, setStarHighContrastMode } from '../entities/Star';
+import { Star, setStarColorVisionSupportMode, setStarHighContrastMode } from '../entities/Star';
 import { Meteorite, setMeteoriteHighContrastMode } from '../entities/Meteorite';
 import { ShootingStar } from '../entities/ShootingStar';
 import { Comet } from '../entities/Comet';
@@ -61,6 +61,8 @@ import { followCameraZ } from '../utils/followCameraZ';
 import { getViewportSize } from '../utils/getViewportSize';
 import { ScorePopupManager } from '../../ui/ScorePopupManager';
 import {
+  DEFAULT_COLOR_VISION_SUPPORT_MODE,
+  formatPlanetReadingLabel,
   getNextPlanetEncyclopediaEntry,
   getPlanetEncyclopediaEntry,
   getSpecialStarEncyclopediaEntry,
@@ -470,9 +472,12 @@ export class StageScene implements Scene {
     this.spaceship.applyCustomization(saveData.spaceshipCustomization ?? DEFAULT_SPACESHIP_CUSTOMIZATION);
     const highContrastEnabled = saveData.colorAccessibility?.highContrast === true;
     this.motionSensitivity = saveData.colorAccessibility?.motionSensitivity ?? DEFAULT_MOTION_SENSITIVITY;
+    const colorVisionSupportMode =
+      saveData.colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE;
     setSharedVibrationIntensity(saveData.vibrationSettings?.intensity ?? 'medium');
     setSharedVibrationFallbackHandler((event) => this.handleVibrationFallback(event));
     setStarHighContrastMode(highContrastEnabled);
+    setStarColorVisionSupportMode(colorVisionSupportMode);
     setMeteoriteHighContrastMode(highContrastEnabled);
     this.hud.setHighContrastMode(highContrastEnabled);
     this.scorePopupManager.setHighContrastMode(highContrastEnabled);
@@ -537,7 +542,12 @@ export class StageScene implements Scene {
     }
 
     // HUD
-    const stageName = `ステージ${this.stageConfig.stageNumber}: ${this.stageConfig.emoji} ${this.stageConfig.displayName}`;
+    const destinationLabel = formatPlanetReadingLabel(
+      this.stageNumber,
+      this.stageConfig.destinationReading,
+      colorVisionSupportMode,
+    );
+    const stageName = `ステージ${this.stageConfig.stageNumber}: ${this.stageConfig.emoji} ${destinationLabel}を めざせ！`;
     this.hud.show(stageName, this.stageConfig.planetColor);
     this.hud.setBoostCallback(() => {
       this.inputSystem.setBoostPressed(true);
@@ -2033,6 +2043,8 @@ export class StageScene implements Scene {
       }, {
         bestStageStars: { [this.stageNumber]: starCount },
         backLabel: 'クリアへ もどる',
+        colorVisionSupportMode:
+          this.saveManager.load().colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE,
         discoveredConstellations: this.saveManager.load().discoveredConstellations ?? [],
         zIndex: 50,
       });

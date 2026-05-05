@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {
+  type ColorVisionSupportMode,
   DEFAULT_SPACESHIP_CUSTOMIZATION,
   type MotionSensitivity,
   type SaveData,
@@ -18,7 +19,12 @@ import { ColorAccessibilitySettings } from '../../ui/ColorAccessibilitySettings'
 import { SpaceshipCustomizer } from '../../ui/SpaceshipCustomizer';
 import { StatsOverlay } from '../../ui/StatsOverlay';
 import { getStageConfig, getStageMedalStatus, TOTAL_STAGES } from '../config/StageConfig';
-import { PLANET_ENCYCLOPEDIA, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
+import {
+  DEFAULT_COLOR_VISION_SUPPORT_MODE,
+  formatPlanetReadingLabel,
+  PLANET_ENCYCLOPEDIA,
+  getPlanetEncyclopediaEntry,
+} from '../config/PlanetEncyclopedia';
 import { formatEncyclopediaLabel } from '../../ui/formatEncyclopediaLabel';
 import { getViewportSize } from '../utils/getViewportSize';
 import { attachReleaseConfirmButton } from '../../ui/attachReleaseConfirmButton';
@@ -139,14 +145,21 @@ function getNextAdventurePreview(saveData: SaveData): NextAdventurePreview {
   const startStage = isAllClear ? 1 : Math.min(saveData.clearedStage + 1, TOTAL_STAGES);
   const stageConfig = getStageConfig(startStage);
   const bestStars = saveData.bestStageStars?.[startStage] ?? 0;
+  const colorVisionSupportMode =
+    saveData.colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE;
+  const destinationLabel = formatPlanetReadingLabel(
+    startStage,
+    stageConfig.destinationReading,
+    colorVisionSupportMode,
+  );
 
   if (isAllClear) {
     return {
       startStage,
-      destination: stageConfig.destinationReading,
+      destination: destinationLabel,
       emoji: stageConfig.emoji,
       statusLabel: 'ぜんぶ あつめたよ！',
-      destinationLabel: `${stageConfig.destinationReading}へ もういちど しゅっぱつ！`,
+      destinationLabel: `${destinationLabel}へ もういちど しゅっぱつ！`,
       buttonHint: `${stageConfig.emoji} ステージ ${startStage} から もういちど あそぶ`,
       bestStars,
     };
@@ -154,10 +167,10 @@ function getNextAdventurePreview(saveData: SaveData): NextAdventurePreview {
 
   return {
     startStage,
-    destination: stageConfig.destinationReading,
+    destination: destinationLabel,
     emoji: stageConfig.emoji,
     statusLabel: saveData.clearedStage > 0 ? 'つづきから しゅっぱつ！' : 'はじめての しゅっぱつ！',
-    destinationLabel: `${stageConfig.destinationReading}へ むかおう！`,
+    destinationLabel: `${destinationLabel}へ むかおう！`,
     buttonHint: `${stageConfig.emoji} ステージ ${startStage} から スタート`,
     bestStars,
   };
@@ -373,6 +386,7 @@ export class TitleScene implements Scene {
       },
       saveData.bestStageStars ?? {},
       saveData.discoveredConstellations ?? [],
+      saveData.colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE,
     );
   }
 
@@ -456,7 +470,13 @@ export class TitleScene implements Scene {
     const data = this.saveManager.load();
     const currentMotionSensitivity =
       data.colorAccessibility?.motionSensitivity ?? DEFAULT_MOTION_SENSITIVITY;
-    data.colorAccessibility = this.buildColorAccessibilitySettings(enabled, currentMotionSensitivity);
+    const currentColorVisionSupportMode =
+      data.colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE;
+    data.colorAccessibility = this.buildColorAccessibilitySettings(
+      enabled,
+      currentMotionSensitivity,
+      currentColorVisionSupportMode,
+    );
     if (!data.colorAccessibility) {
       delete data.colorAccessibility;
     }
@@ -473,7 +493,29 @@ export class TitleScene implements Scene {
   private persistMotionSensitivitySetting(sensitivity: MotionSensitivity): void {
     const data = this.saveManager.load();
     const highContrastEnabled = data.colorAccessibility?.highContrast === true;
-    data.colorAccessibility = this.buildColorAccessibilitySettings(highContrastEnabled, sensitivity);
+    const currentColorVisionSupportMode =
+      data.colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE;
+    data.colorAccessibility = this.buildColorAccessibilitySettings(
+      highContrastEnabled,
+      sensitivity,
+      currentColorVisionSupportMode,
+    );
+    if (!data.colorAccessibility) {
+      delete data.colorAccessibility;
+    }
+    this.saveManager.save(data);
+  }
+
+  private persistColorVisionSupportModeSetting(mode: ColorVisionSupportMode): void {
+    const data = this.saveManager.load();
+    const highContrastEnabled = data.colorAccessibility?.highContrast === true;
+    const currentMotionSensitivity =
+      data.colorAccessibility?.motionSensitivity ?? DEFAULT_MOTION_SENSITIVITY;
+    data.colorAccessibility = this.buildColorAccessibilitySettings(
+      highContrastEnabled,
+      currentMotionSensitivity,
+      mode,
+    );
     if (!data.colorAccessibility) {
       delete data.colorAccessibility;
     }
@@ -483,14 +525,20 @@ export class TitleScene implements Scene {
   private buildColorAccessibilitySettings(
     highContrastEnabled: boolean,
     motionSensitivity: MotionSensitivity,
+    colorVisionSupportMode: ColorVisionSupportMode,
   ): SaveData['colorAccessibility'] {
-    if (!highContrastEnabled && motionSensitivity === DEFAULT_MOTION_SENSITIVITY) {
+    if (
+      !highContrastEnabled &&
+      motionSensitivity === DEFAULT_MOTION_SENSITIVITY &&
+      colorVisionSupportMode === DEFAULT_COLOR_VISION_SUPPORT_MODE
+    ) {
       return undefined;
     }
 
     return {
       ...(highContrastEnabled ? { highContrast: true } : {}),
       ...(motionSensitivity !== DEFAULT_MOTION_SENSITIVITY ? { motionSensitivity } : {}),
+      ...(colorVisionSupportMode !== DEFAULT_COLOR_VISION_SUPPORT_MODE ? { colorVisionSupportMode } : {}),
     };
   }
 
@@ -836,10 +884,13 @@ export class TitleScene implements Scene {
         this.ensureTitleAudioInitialized(true);
         this.colorAccessibilitySettings.show({
           initialHighContrast: this.saveManager.load().colorAccessibility?.highContrast === true,
+          initialColorVisionSupportMode:
+            this.saveManager.load().colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE,
           initialVibrationIntensity: this.saveManager.load().vibrationSettings?.intensity ?? 'medium',
           initialMotionSensitivity:
             this.saveManager.load().colorAccessibility?.motionSensitivity ?? DEFAULT_MOTION_SENSITIVITY,
           onToggle: (enabled) => this.persistHighContrastSetting(enabled),
+          onColorVisionSupportModeChange: (mode) => this.persistColorVisionSupportModeSetting(mode),
           onVibrationIntensityChange: (intensity) => this.persistVibrationIntensitySetting(intensity),
           onMotionSensitivityChange: (sensitivity) => this.persistMotionSensitivitySetting(sensitivity),
         });

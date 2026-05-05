@@ -473,6 +473,17 @@ describe('SaveManager', () => {
       expect(manager.load().colorAccessibility).toEqual({ motionSensitivity: 'gentle' });
     });
 
+    it('keeps color-and-mark mode on load', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        colorAccessibility: { colorVisionSupportMode: 'color-and-marks' },
+      }));
+      const manager = new SaveManager();
+
+      expect(manager.load().colorAccessibility).toEqual({ colorVisionSupportMode: 'color-and-marks' });
+    });
+
     it('drops default-only motion sensitivity payloads', () => {
       storage.set('universe-kids-race-save', JSON.stringify({
         clearedStage: 1,
@@ -495,6 +506,19 @@ describe('SaveManager', () => {
       manager.resetProgressPreservingSettings();
 
       expect(manager.load().colorAccessibility).toEqual({ motionSensitivity: 'minimal' });
+    });
+
+    it('preserves color-and-mark mode when session progress is reset', () => {
+      const manager = new SaveManager();
+      manager.save({
+        clearedStage: 4,
+        unlockedPlanets: [1, 2, 3, 4],
+        colorAccessibility: { colorVisionSupportMode: 'color-and-marks' },
+      });
+
+      manager.resetSessionDataPreservingMuted();
+
+      expect(manager.load().colorAccessibility).toEqual({ colorVisionSupportMode: 'color-and-marks' });
     });
   });
 

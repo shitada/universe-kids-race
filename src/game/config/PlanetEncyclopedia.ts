@@ -1,4 +1,10 @@
-import type { PlanetEncyclopediaEntry, SpecialStarEncyclopediaEntry } from '../../types';
+import type {
+  ColorVisionSupportMode,
+  PlanetEncyclopediaEntry,
+  SpecialStarEncyclopediaEntry,
+} from '../../types';
+
+export const DEFAULT_COLOR_VISION_SUPPORT_MODE: ColorVisionSupportMode = 'color-only';
 
 export interface PlanetRewardPreview {
   cardChipLabel: string;
@@ -28,6 +34,7 @@ export const PLANET_ENCYCLOPEDIA: PlanetEncyclopediaEntry[] = [
     stageNumber: 1,
     name: '月',
     reading: 'つき',
+    identityMark: '○',
     emoji: '🌙',
     trivia: 'つきは ちきゅうの まわりを まわっているよ',
     planetColor: 0xcccccc,
@@ -37,6 +44,7 @@ export const PLANET_ENCYCLOPEDIA: PlanetEncyclopediaEntry[] = [
     stageNumber: 2,
     name: '水星',
     reading: 'すいせい',
+    identityMark: '□',
     emoji: '⚫',
     trivia: 'すいせいは たいように いちばん ちかい わくせいだよ',
     planetColor: 0x888888,
@@ -46,6 +54,7 @@ export const PLANET_ENCYCLOPEDIA: PlanetEncyclopediaEntry[] = [
     stageNumber: 3,
     name: '金星',
     reading: 'きんせい',
+    identityMark: '△',
     emoji: '🟡',
     trivia: 'きんせいは いちばん あつい わくせいだよ',
     planetColor: 0xddaa44,
@@ -55,6 +64,7 @@ export const PLANET_ENCYCLOPEDIA: PlanetEncyclopediaEntry[] = [
     stageNumber: 4,
     name: '火星',
     reading: 'かせい',
+    identityMark: '◇',
     emoji: '🔴',
     trivia: 'かせいは あかい すなで おおわれているよ',
     planetColor: 0xcc4422,
@@ -64,6 +74,7 @@ export const PLANET_ENCYCLOPEDIA: PlanetEncyclopediaEntry[] = [
     stageNumber: 5,
     name: '木星',
     reading: 'もくせい',
+    identityMark: '☆',
     emoji: '🟠',
     trivia: 'もくせいは ちきゅうの 1000こぶん おおきいよ！',
     planetColor: 0xdd8844,
@@ -73,6 +84,7 @@ export const PLANET_ENCYCLOPEDIA: PlanetEncyclopediaEntry[] = [
     stageNumber: 6,
     name: '土星',
     reading: 'どせい',
+    identityMark: '⬟',
     emoji: '🪐',
     trivia: 'どせいの わっかは こおりで できているよ',
     planetColor: 0xddaa44,
@@ -82,6 +94,7 @@ export const PLANET_ENCYCLOPEDIA: PlanetEncyclopediaEntry[] = [
     stageNumber: 7,
     name: '天王星',
     reading: 'てんのうせい',
+    identityMark: '⬢',
     emoji: '🔵',
     trivia: 'てんのうせいは よこに たおれて まわっているよ',
     planetColor: 0x66ccdd,
@@ -91,6 +104,7 @@ export const PLANET_ENCYCLOPEDIA: PlanetEncyclopediaEntry[] = [
     stageNumber: 8,
     name: '海王星',
     reading: 'かいおうせい',
+    identityMark: '✦',
     emoji: '🫧',
     trivia: 'かいおうせいは いちばん かぜが つよい わくせいだよ',
     planetColor: 0x2244cc,
@@ -100,6 +114,7 @@ export const PLANET_ENCYCLOPEDIA: PlanetEncyclopediaEntry[] = [
     stageNumber: 9,
     name: '冥王星',
     reading: 'めいおうせい',
+    identityMark: '⬣',
     emoji: '❄️',
     trivia: 'めいおうせいは とっても ちいさい ほしだよ',
     planetColor: 0xbbaaaa,
@@ -109,6 +124,7 @@ export const PLANET_ENCYCLOPEDIA: PlanetEncyclopediaEntry[] = [
     stageNumber: 10,
     name: '太陽',
     reading: 'たいよう',
+    identityMark: '☀',
     emoji: '☀️',
     trivia: 'たいようは もえている おおきな ほしだよ',
     planetColor: 0xffcc00,
@@ -118,6 +134,7 @@ export const PLANET_ENCYCLOPEDIA: PlanetEncyclopediaEntry[] = [
     stageNumber: 11,
     name: '地球',
     reading: 'ちきゅう',
+    identityMark: '⬤',
     emoji: '🌍',
     trivia: 'ちきゅうは いのちが ある たったひとつの ほしだよ',
     planetColor: 0x2266aa,
@@ -169,6 +186,29 @@ export function getNextPlanetEncyclopediaEntry(stageNumber: number): PlanetEncyc
 
 export function getSpecialStarEncyclopediaEntry(id: SpecialStarEncyclopediaEntry['id']): SpecialStarEncyclopediaEntry | undefined {
   return SPECIAL_STAR_ENCYCLOPEDIA_BY_ID.get(id);
+}
+
+export function normalizeColorVisionSupportMode(value: unknown): ColorVisionSupportMode {
+  return value === 'color-and-marks' ? 'color-and-marks' : DEFAULT_COLOR_VISION_SUPPORT_MODE;
+}
+
+export function formatPlanetEncyclopediaLabel(
+  entry: Pick<PlanetEncyclopediaEntry, 'encyclopediaLabel' | 'identityMark'>,
+  mode: ColorVisionSupportMode = DEFAULT_COLOR_VISION_SUPPORT_MODE,
+): string {
+  return mode === 'color-and-marks' ? `${entry.identityMark} ${entry.encyclopediaLabel}` : entry.encyclopediaLabel;
+}
+
+export function formatPlanetReadingLabel(
+  stageNumber: number,
+  reading: string,
+  mode: ColorVisionSupportMode = DEFAULT_COLOR_VISION_SUPPORT_MODE,
+): string {
+  if (mode !== 'color-and-marks') {
+    return reading;
+  }
+  const entry = getPlanetEncyclopediaEntry(stageNumber);
+  return entry ? `${entry.identityMark} ${reading}` : reading;
 }
 
 export function getPlanetRewardPreview(stageNumber: number): PlanetRewardPreview | undefined {

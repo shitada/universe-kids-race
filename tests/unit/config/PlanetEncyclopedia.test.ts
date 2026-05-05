@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  formatPlanetEncyclopediaLabel,
   getSpecialStarEncyclopediaEntry,
   getNextPlanetEncyclopediaEntry,
   getPlanetEncyclopediaEntry,
@@ -21,9 +22,15 @@ describe('PlanetEncyclopedia', () => {
     for (const entry of PLANET_ENCYCLOPEDIA) {
       expect(entry.name.length).toBeGreaterThan(0);
       expect(entry.reading.length).toBeGreaterThan(0);
+      expect(entry.identityMark.length).toBeGreaterThan(0);
       expect(entry.encyclopediaLabel).toContain(entry.name);
       expect(entry.encyclopediaLabel).toContain(entry.reading);
     }
+  });
+
+  it('assigns a unique identity mark to every planet', () => {
+    const identityMarks = PLANET_ENCYCLOPEDIA.map((entry) => entry.identityMark);
+    expect(new Set(identityMarks).size).toBe(PLANET_ENCYCLOPEDIA.length);
   });
 
   it('each entry has a non-empty emoji', () => {
@@ -75,5 +82,10 @@ describe('PlanetEncyclopedia', () => {
     expect(getSpecialStarEncyclopediaEntry('rainbow')?.name).toBe('にじりゅうせい');
     expect(getSpecialStarEncyclopediaEntry('gold')?.emoji).toBe('🥇');
     expect(getSpecialStarEncyclopediaEntry('silver')?.trivia).toContain('ぎんいろ');
+  });
+
+  it('formats planet labels with identity marks when color support is enabled', () => {
+    expect(formatPlanetEncyclopediaLabel(PLANET_ENCYCLOPEDIA[0], 'color-and-marks')).toBe('○ 月（つき）');
+    expect(formatPlanetEncyclopediaLabel(PLANET_ENCYCLOPEDIA[0], 'color-only')).toBe('月（つき）');
   });
 });

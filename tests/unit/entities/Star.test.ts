@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as THREE from 'three';
-import { Star, setStarHighContrastMode } from '../../../src/game/entities/Star';
+import { Star, setStarColorVisionSupportMode, setStarHighContrastMode } from '../../../src/game/entities/Star';
 
 describe('Star', () => {
   afterEach(() => {
     setStarHighContrastMode(false);
+    setStarColorVisionSupportMode('color-only');
   });
 
   it('creates a NORMAL star with score 100', () => {
@@ -169,6 +170,17 @@ describe('Star', () => {
     setStarHighContrastMode(false);
     star.reset(0, 0, -10);
     expect(outline?.visible).toBe(false);
+  });
+
+  it('shows a shared ★ mark on rainbow stars only in color-and-mark mode', () => {
+    setStarColorVisionSupportMode('color-and-marks');
+    const star = new Star(0, 0, -10, 'RAINBOW');
+    const mark = star.mesh.getObjectByName('rainbow-star-mark');
+    expect(mark?.visible).toBe(true);
+
+    setStarColorVisionSupportMode('color-only');
+    star.reset(0, 0, -10);
+    expect(mark?.visible).toBe(false);
   });
 
   it('reset() repositions the star and clears transient state', () => {

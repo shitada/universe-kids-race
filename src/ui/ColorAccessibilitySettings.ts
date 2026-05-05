@@ -1,11 +1,13 @@
-import type { MotionSensitivity, VibrationIntensity } from '../types';
+import type { ColorVisionSupportMode, MotionSensitivity, VibrationIntensity } from '../types';
 import { getMotionSensitivityVisualProfile } from '../game/accessibility/motionSensitivity';
 
 export interface ColorAccessibilitySettingsOptions {
   initialHighContrast: boolean;
+  initialColorVisionSupportMode: ColorVisionSupportMode;
   initialVibrationIntensity: VibrationIntensity;
   initialMotionSensitivity: MotionSensitivity;
   onToggle: (enabled: boolean) => void;
+  onColorVisionSupportModeChange: (mode: ColorVisionSupportMode) => void;
   onVibrationIntensityChange: (intensity: VibrationIntensity) => void;
   onMotionSensitivityChange: (sensitivity: MotionSensitivity) => void;
 }
@@ -15,8 +17,11 @@ export class ColorAccessibilitySettings {
   private toggleButton: HTMLButtonElement | null = null;
   private descriptionEl: HTMLParagraphElement | null = null;
   private highContrast = false;
+  private colorVisionSupportMode: ColorVisionSupportMode = 'color-only';
   private vibrationIntensity: VibrationIntensity = 'medium';
   private motionSensitivity: MotionSensitivity = 'strong';
+  private colorVisionDescriptionEl: HTMLParagraphElement | null = null;
+  private colorVisionButtons = new Map<ColorVisionSupportMode, HTMLButtonElement>();
   private vibrationDescriptionEl: HTMLParagraphElement | null = null;
   private vibrationButtons = new Map<VibrationIntensity, HTMLButtonElement>();
   private motionDescriptionEl: HTMLParagraphElement | null = null;
@@ -27,6 +32,7 @@ export class ColorAccessibilitySettings {
   private motionPreviewTimeoutId: number | null = null;
   private motionPreviewFrameId: number | null = null;
   private onToggle: ((enabled: boolean) => void) | null = null;
+  private onColorVisionSupportModeChange: ((mode: ColorVisionSupportMode) => void) | null = null;
   private onVibrationIntensityChange: ((intensity: VibrationIntensity) => void) | null = null;
   private onMotionSensitivityChange: ((sensitivity: MotionSensitivity) => void) | null = null;
 
@@ -35,9 +41,11 @@ export class ColorAccessibilitySettings {
     if (!host) return;
 
     this.highContrast = options.initialHighContrast;
+    this.colorVisionSupportMode = options.initialColorVisionSupportMode;
     this.vibrationIntensity = options.initialVibrationIntensity;
     this.motionSensitivity = options.initialMotionSensitivity;
     this.onToggle = options.onToggle;
+    this.onColorVisionSupportModeChange = options.onColorVisionSupportModeChange;
     this.onVibrationIntensityChange = options.onVibrationIntensityChange;
     this.onMotionSensitivityChange = options.onMotionSensitivityChange;
     if (!this.overlay) {
@@ -99,9 +107,57 @@ export class ColorAccessibilitySettings {
         this.onToggle?.(this.highContrast);
       });
 
+      const colorVisionTitle = document.createElement('h3');
+      colorVisionTitle.textContent = 'いろの みわけかた';
+      colorVisionTitle.style.cssText = 'margin: 0.9rem 0 0.45rem; font-size: clamp(1rem, 3.8vmin, 1.2rem);';
+
+      this.colorVisionDescriptionEl = document.createElement('p');
+      this.colorVisionDescriptionEl.style.cssText = 'margin: 0 0 0.8rem; font-size: clamp(0.9rem, 3.2vmin, 1rem); line-height: 1.5;';
+
+      const colorVisionGroup = document.createElement('div');
+      colorVisionGroup.setAttribute('data-color-vision-mode-group', '');
+      colorVisionGroup.style.cssText = `
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.65rem;
+        margin-bottom: 0.95rem;
+      `;
+
+      const colorVisionOptions: Array<{ value: ColorVisionSupportMode; label: string; icon: string }> = [
+        { value: 'color-only', label: 'いろだけ', icon: '🎨' },
+        { value: 'color-and-marks', label: 'いろとマーク', icon: '★' },
+      ];
+
+      for (const option of colorVisionOptions) {
+        const button = document.createElement('button');
+        button.setAttribute('data-color-vision-mode-button', option.value);
+        button.textContent = `${option.icon} ${option.label}`;
+        button.style.cssText = `
+          min-height: 3.25rem;
+          padding: 0.8rem 0.9rem;
+          border-radius: 1rem;
+          border: 2px solid rgba(255, 255, 255, 0.4);
+          background: rgba(255, 255, 255, 0.08);
+          color: #fff;
+          font-family: 'Zen Maru Gothic', sans-serif;
+          font-size: clamp(0.9rem, 3.3vmin, 1rem);
+          font-weight: 800;
+          cursor: pointer;
+          touch-action: manipulation;
+          transition: transform 0.08s ease-out, border-color 0.12s ease-out, background 0.12s ease-out;
+        `;
+        button.addEventListener('click', () => {
+          this.colorVisionSupportMode = option.value;
+          this.render();
+          this.onColorVisionSupportModeChange?.(option.value);
+        });
+        this.colorVisionButtons.set(option.value, button);
+        colorVisionGroup.appendChild(button);
+      }
+
       const vibrationTitle = document.createElement('h3');
       vibrationTitle.textContent = 'しんどうの つよさ';
-      vibrationTitle.style.cssText = 'margin: 1.1rem 0 0.45rem; font-size: clamp(1rem, 3.8vmin, 1.2rem);';
+      vibrationTitle.style.cssText = 'margin: 0.9rem 0 0.45rem; font-size: clamp(1rem, 3.8vmin, 1.2rem);';
 
       this.vibrationDescriptionEl = document.createElement('p');
       this.vibrationDescriptionEl.style.cssText = 'margin: 0 0 0.8rem; font-size: clamp(0.9rem, 3.2vmin, 1rem); line-height: 1.5;';
@@ -290,6 +346,9 @@ export class ColorAccessibilitySettings {
       panel.appendChild(title);
       panel.appendChild(this.descriptionEl);
       panel.appendChild(this.toggleButton);
+      panel.appendChild(colorVisionTitle);
+      panel.appendChild(this.colorVisionDescriptionEl);
+      panel.appendChild(colorVisionGroup);
       panel.appendChild(vibrationTitle);
       panel.appendChild(this.vibrationDescriptionEl);
       panel.appendChild(vibrationGroup);
@@ -316,14 +375,35 @@ export class ColorAccessibilitySettings {
   }
 
   private render(): void {
-    if (!this.toggleButton || !this.descriptionEl || !this.vibrationDescriptionEl || !this.motionDescriptionEl) return;
+    if (
+      !this.toggleButton ||
+      !this.descriptionEl ||
+      !this.colorVisionDescriptionEl ||
+      !this.vibrationDescriptionEl ||
+      !this.motionDescriptionEl
+    ) return;
     this.descriptionEl.textContent = this.highContrast
-      ? 'いろだけじゃなく ふちや しまもようで わかりやすくしているよ。'
-      : 'いろだけでなく かたちや うごきでも みわけられるようにするよ。';
+      ? 'ふちや しまもようを つよくして みやすく しているよ。'
+      : 'ひかりかたを やさしくして いつもの みために しているよ。';
     this.toggleButton.textContent = this.highContrast
       ? 'みやすくする: ON'
       : 'みやすくする: OFF';
     this.toggleButton.setAttribute('aria-pressed', this.highContrast ? 'true' : 'false');
+
+    this.colorVisionDescriptionEl.textContent = this.colorVisionSupportMode === 'color-and-marks'
+      ? 'にじりゅうせいは ★、わくせいは しるしつきで わかるよ。'
+      : 'いまは いろを みながら あそぶ モードだよ。';
+
+    for (const [value, button] of this.colorVisionButtons.entries()) {
+      const selected = value === this.colorVisionSupportMode;
+      button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+      button.style.borderColor = selected ? '#fff27a' : 'rgba(255, 255, 255, 0.4)';
+      button.style.background = selected
+        ? 'linear-gradient(135deg, rgba(255, 242, 122, 0.94), rgba(118, 240, 255, 0.92))'
+        : 'rgba(255, 255, 255, 0.08)';
+      button.style.color = selected ? '#102040' : '#fff';
+      button.style.transform = selected ? 'scale(1.02)' : 'scale(1)';
+    }
 
     const vibrationDescriptions: Record<VibrationIntensity, string> = {
       strong: 'しっかり つたえる しんどうだよ。',

@@ -71,6 +71,12 @@ describe('EncyclopediaOverlay', () => {
     expect(uiOverlay.children.length).toBe(1);
   });
 
+  it('adds identity marks to planet names when color-and-mark mode is enabled', () => {
+    overlay.show([1], () => {}, undefined, undefined, [], 'color-and-marks');
+    const firstCard = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement | null;
+    expect(firstCard?.textContent).toContain('○ 月（つき）');
+  });
+
   it('card grid renders 11 slots', () => {
     overlay.show([], () => {});
     const cards = uiOverlay.querySelectorAll('[data-card]');

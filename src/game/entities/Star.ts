@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { StarType } from '../../types';
+import type { ColorVisionSupportMode, StarType } from '../../types';
 import type { LODLevel } from '../systems/LODSystem';
 import { triggerSharedVibration } from '../systems/VibrationSystem';
 
@@ -86,6 +86,38 @@ const SHARED_STAR_RESOURCES: Record<LODLevel, StarSharedResources> = (() => {
   };
 })();
 const SHARED_OUTLINE_MATERIAL = new THREE.LineBasicMaterial({ color: 0x101020 });
+const SHARED_RAINBOW_MARK_GEOMETRY = (() => {
+  const shape = new THREE.Shape();
+  const outerRadius = 0.34;
+  const innerRadius = 0.15;
+  for (let i = 0; i < 10; i++) {
+    const angle = (-Math.PI / 2) + (i * Math.PI) / 5;
+    const radius = i % 2 === 0 ? outerRadius : innerRadius;
+    const x = Math.cos(angle) * radius;
+    const y = Math.sin(angle) * radius;
+    if (i === 0) {
+      shape.moveTo(x, y);
+    } else {
+      shape.lineTo(x, y);
+    }
+  }
+  shape.closePath();
+  const geometry = new THREE.ShapeGeometry(shape);
+  geometry.center();
+  return geometry;
+})();
+const SHARED_RAINBOW_MARK_SHADOW_MATERIAL = new THREE.MeshBasicMaterial({
+  color: 0x102040,
+  transparent: true,
+  opacity: 0.95,
+  depthTest: false,
+});
+const SHARED_RAINBOW_MARK_FILL_MATERIAL = new THREE.MeshBasicMaterial({
+  color: 0xffffff,
+  transparent: true,
+  opacity: 0.98,
+  depthTest: false,
+});
 
 // Initial color for a RAINBOW star. The per-instance materials mutate in place
 // so pooled instances can keep reusing the same GPU resources without leaking
@@ -98,6 +130,7 @@ const STAR_ANIMATION_AHEAD = 60;
 const STAR_ANIMATION_BEHIND = 5;
 
 let HIGH_CONTRAST_MODE = false;
+let COLOR_VISION_SUPPORT_MODE: ColorVisionSupportMode = 'color-only';
 
 function createRainbowMaterials(): RainbowStarMaterials {
   return {
@@ -122,6 +155,10 @@ function createRainbowMaterials(): RainbowStarMaterials {
 
 export function setStarHighContrastMode(enabled: boolean): void {
   HIGH_CONTRAST_MODE = enabled;
+}
+
+export function setStarColorVisionSupportMode(mode: ColorVisionSupportMode): void {
+  COLOR_VISION_SUPPORT_MODE = mode;
 }
 
 export class Star {
@@ -157,6 +194,7 @@ export class Star {
     );
     mesh.userData.sharedAssets = true;
     this.syncOutlineVisibility(mesh);
+    this.syncRainbowMarkVisibility(mesh);
     return mesh;
   }
 
@@ -176,6 +214,37 @@ export class Star {
     mesh.add(outline);
   }
 
+  private attachRainbowMark(mesh: THREE.Mesh): void {
+    if (this.starType !== 'RAINBOW') {
+      return;
+    }
+    const group = new THREE.Group();
+    group.name = 'rainbow-star-mark';
+    group.position.z = 0.17;
+    group.renderOrder = 2;
+    group.userData.sharedAssets = true;
+
+    const shadow = new THREE.Mesh(
+      SHARED_RAINBOW_MARK_GEOMETRY,
+      SHARED_RAINBOW_MARK_SHADOW_MATERIAL,
+    );
+    shadow.scale.setScalar(1.2);
+    shadow.renderOrder = 2;
+    shadow.userData.sharedAssets = true;
+
+    const fill = new THREE.Mesh(
+      SHARED_RAINBOW_MARK_GEOMETRY,
+      SHARED_RAINBOW_MARK_FILL_MATERIAL,
+    );
+    fill.scale.setScalar(0.82);
+    fill.position.z = 0.01;
+    fill.renderOrder = 3;
+    fill.userData.sharedAssets = true;
+
+    group.add(shadow, fill);
+    mesh.add(group);
+  }
+
   private syncOutlineVisibility(mesh: THREE.Mesh = this.mesh): void {
     let outline = mesh.getObjectByName('star-high-contrast-outline') as THREE.LineSegments | null;
     if (!outline && HIGH_CONTRAST_MODE) {
@@ -187,6 +256,20 @@ export class Star {
       outline.geometry = resources.outlineGeometry;
       outline.scale.setScalar(resources.outlineScale);
       outline.visible = HIGH_CONTRAST_MODE;
+    }
+  }
+
+  private syncRainbowMarkVisibility(mesh: THREE.Mesh = this.mesh): void {
+    if (this.starType !== 'RAINBOW') {
+      return;
+    }
+    let mark = mesh.getObjectByName('rainbow-star-mark');
+    if (!mark && COLOR_VISION_SUPPORT_MODE === 'color-and-marks') {
+      this.attachRainbowMark(mesh);
+      mark = mesh.getObjectByName('rainbow-star-mark');
+    }
+    if (mark) {
+      mark.visible = COLOR_VISION_SUPPORT_MODE === 'color-and-marks';
     }
   }
 
@@ -202,6 +285,7 @@ export class Star {
     this.mesh.geometry = SHARED_STAR_RESOURCES[level].geometry;
     this.mesh.material = this.getCurrentMaterial();
     this.syncOutlineVisibility();
+    this.syncRainbowMarkVisibility();
   }
 
   update(deltaTime: number, cameraZ?: number): void {
@@ -267,6 +351,7 @@ export class Star {
     this.clearConstellationMarker();
     this.applyLOD('near');
     this.syncOutlineVisibility();
+    this.syncRainbowMarkVisibility();
     if (this.starType === 'RAINBOW' && this.rainbowMaterials) {
       this.rainbowMaterials.near.color.setHex(RAINBOW_INITIAL_COLOR);
       this.rainbowMaterials.near.emissive.setHex(RAINBOW_INITIAL_COLOR);
@@ -287,6 +372,7 @@ export class Star {
     this.clearConstellationMarker();
     this.applyLOD('near');
     this.syncOutlineVisibility();
+    this.syncRainbowMarkVisibility();
   }
 
   dispose(): void {

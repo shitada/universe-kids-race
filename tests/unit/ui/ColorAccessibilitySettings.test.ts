@@ -21,9 +21,11 @@ describe('ColorAccessibilitySettings', () => {
     const onVibrationIntensityChange = vi.fn();
     settings.show({
       initialHighContrast: false,
+      initialColorVisionSupportMode: 'color-only',
       initialVibrationIntensity: 'medium',
       initialMotionSensitivity: 'strong',
       onToggle,
+      onColorVisionSupportModeChange: vi.fn(),
       onVibrationIntensityChange,
       onMotionSensitivityChange: vi.fn(),
     });
@@ -42,9 +44,11 @@ describe('ColorAccessibilitySettings', () => {
     const onVibrationIntensityChange = vi.fn();
     settings.show({
       initialHighContrast: true,
+      initialColorVisionSupportMode: 'color-only',
       initialVibrationIntensity: 'weak',
       initialMotionSensitivity: 'strong',
       onToggle: vi.fn(),
+      onColorVisionSupportModeChange: vi.fn(),
       onVibrationIntensityChange,
       onMotionSensitivityChange: vi.fn(),
     });
@@ -63,9 +67,11 @@ describe('ColorAccessibilitySettings', () => {
     const onMotionSensitivityChange = vi.fn();
     settings.show({
       initialHighContrast: false,
+      initialColorVisionSupportMode: 'color-only',
       initialVibrationIntensity: 'medium',
       initialMotionSensitivity: 'medium',
       onToggle: vi.fn(),
+      onColorVisionSupportModeChange: vi.fn(),
       onVibrationIntensityChange: vi.fn(),
       onMotionSensitivityChange,
     });
@@ -89,12 +95,38 @@ describe('ColorAccessibilitySettings', () => {
     expect(onMotionSensitivityChange).toHaveBeenCalledWith('minimal');
   });
 
-  it('hides the panel when requested', () => {
+  it('lets children switch between color-only and color-and-mark modes', () => {
+    const onColorVisionSupportModeChange = vi.fn();
     settings.show({
-      initialHighContrast: true,
+      initialHighContrast: false,
+      initialColorVisionSupportMode: 'color-only',
       initialVibrationIntensity: 'medium',
       initialMotionSensitivity: 'strong',
       onToggle: vi.fn(),
+      onColorVisionSupportModeChange,
+      onVibrationIntensityChange: vi.fn(),
+      onMotionSensitivityChange: vi.fn(),
+    });
+
+    const colorOnlyButton = document.querySelector('[data-color-vision-mode-button="color-only"]') as HTMLButtonElement | null;
+    const colorAndMarksButton = document.querySelector('[data-color-vision-mode-button="color-and-marks"]') as HTMLButtonElement | null;
+    expect(colorOnlyButton?.getAttribute('aria-pressed')).toBe('true');
+
+    colorAndMarksButton?.click();
+
+    expect(colorAndMarksButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(document.body.textContent).toContain('にじりゅうせいは ★');
+    expect(onColorVisionSupportModeChange).toHaveBeenCalledWith('color-and-marks');
+  });
+
+  it('hides the panel when requested', () => {
+    settings.show({
+      initialHighContrast: true,
+      initialColorVisionSupportMode: 'color-only',
+      initialVibrationIntensity: 'medium',
+      initialMotionSensitivity: 'strong',
+      onToggle: vi.fn(),
+      onColorVisionSupportModeChange: vi.fn(),
       onVibrationIntensityChange: vi.fn(),
       onMotionSensitivityChange: vi.fn(),
     });
