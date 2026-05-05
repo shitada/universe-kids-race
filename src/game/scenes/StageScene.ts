@@ -532,6 +532,7 @@ export class StageScene implements Scene {
     this.scorePopupManager.setHighContrastMode(highContrastEnabled);
     this.adaptiveTutorialHint.setHighContrastMode(highContrastEnabled);
     this.constellationHintOverlay.setHighContrastMode(highContrastEnabled);
+    this.constellationHintOverlay.setMotionSensitivity(this.motionSensitivity);
     this.seasonalEventNotice.setHighContrastMode(highContrastEnabled);
     this.stageEntryTotalScore = totalScore;
     this.stageEntryTotalStarCount = totalStarCount;
@@ -588,7 +589,7 @@ export class StageScene implements Scene {
     this.spawnConstellationStars();
     const constellation = this.constellationSystem.getDefinition();
     if (constellation) {
-      this.constellationHintOverlay.showHint(constellation.hintMessage);
+      this.constellationHintOverlay.showGuide(constellation, this.constellationSystem.getCollectedCount());
     } else {
       this.constellationHintOverlay.hide();
     }
@@ -1002,6 +1003,7 @@ export class StageScene implements Scene {
       this.updateBonusTime(deltaTime);
       this.seasonalEventNotice.tick(deltaTime);
       this.constellationHintOverlay.tick(deltaTime);
+      this.updateConstellationHintOverlay();
       this.constellationLineEffect.update(deltaTime);
       this.constellationCelebrationEffect.update(deltaTime);
       this.planetRingEffect.update(deltaTime);
@@ -1063,6 +1065,7 @@ export class StageScene implements Scene {
       this.airShield.update(deltaTime);
       this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
       this.constellationHintOverlay.tick(deltaTime);
+      this.updateConstellationHintOverlay();
       this.constellationLineEffect.update(deltaTime);
       this.constellationCelebrationEffect.update(deltaTime);
       this.seasonalEventEffects.update(deltaTime, this.spaceship.position.x, this.spaceship.position.z);
@@ -1532,6 +1535,7 @@ export class StageScene implements Scene {
     this.constellationLineEffect.update(deltaTime);
     this.constellationCelebrationEffect.update(deltaTime);
     this.constellationHintOverlay.tick(deltaTime);
+    this.updateConstellationHintOverlay();
 
     // HUD update
     this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
@@ -2040,6 +2044,11 @@ export class StageScene implements Scene {
       return;
     }
 
+    const constellation = this.constellationSystem.getDefinition();
+    if (constellation) {
+      this.constellationHintOverlay.showGuide(constellation, this.constellationSystem.getCollectedCount());
+    }
+
     if (result.lineSegment) {
       this.constellationLineEffect.addSegment(result.lineSegment.from, result.lineSegment.to);
     }
@@ -2048,7 +2057,6 @@ export class StageScene implements Scene {
       return;
     }
 
-    const constellation = this.constellationSystem.getDefinition();
     if (!constellation) {
       return;
     }
@@ -2165,6 +2173,35 @@ export class StageScene implements Scene {
     if (isBestUpdated) {
       this.audioManager.playSFX('rainbowCollect');
     }
+  }
+
+  private updateConstellationHintOverlay(): void {
+    if (this.constellationSystem.isCompleted()) {
+      this.constellationHintOverlay.updateTargetScreenPosition(null);
+      return;
+    }
+
+    const nextPoint = this.constellationSystem.getNextPoint();
+    if (!nextPoint) {
+      this.constellationHintOverlay.updateTargetScreenPosition(null);
+      return;
+    }
+
+    const viewport = getViewportSize();
+    const projectedPosition = new THREE.Vector3(nextPoint.x, nextPoint.y, nextPoint.z).project(this.camera);
+    const isVisible =
+      projectedPosition.z >= -1 &&
+      projectedPosition.z <= 1 &&
+      projectedPosition.x >= -1 &&
+      projectedPosition.x <= 1 &&
+      projectedPosition.y >= -1 &&
+      projectedPosition.y <= 1;
+
+    this.constellationHintOverlay.updateTargetScreenPosition({
+      x: ((projectedPosition.x + 1) * 0.5) * viewport.width,
+      y: ((1 - projectedPosition.y) * 0.5) * viewport.height,
+      visible: isVisible,
+    });
   }
 
   private startBonusTime(): void {

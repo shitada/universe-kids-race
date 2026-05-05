@@ -28,6 +28,8 @@ describe('ConstellationSystem', () => {
     expect(first.advanced).toBe(true);
     expect(first.lineSegment).toBeNull();
     expect(first.completed).toBe(false);
+    expect(system.getNextPoint()).toEqual(definition.points[1]);
+    expect(system.getRemainingCount()).toBe(definition.points.length - 1);
 
     const second = system.registerCollectedStar(createConstellationStar(1, 1));
     expect(second.advanced).toBe(true);
@@ -41,6 +43,8 @@ describe('ConstellationSystem', () => {
     const final = system.registerCollectedStar(createConstellationStar(1, 3));
     expect(final.completed).toBe(true);
     expect(system.isCompleted()).toBe(true);
+    expect(system.getNextPoint()).toBeNull();
+    expect(system.getRemainingCount()).toBe(0);
   });
 
   it('ignores stars from another stage or non-constellation stars', () => {
@@ -76,5 +80,6 @@ describe('ConstellationSystem', () => {
     const first = system.registerCollectedStar(createConstellationStar(1, 0));
     expect(first.advanced).toBe(true);
     expect(system.getCollectedCount()).toBe(1);
+    expect(system.getNextPoint()).toEqual(definition.points[1]);
   });
 });
