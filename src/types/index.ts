@@ -31,6 +31,7 @@ export const MOTION_SENSITIVITY_LEVELS = ['strong', 'medium', 'gentle', 'minimal
 export type MotionSensitivity = (typeof MOTION_SENSITIVITY_LEVELS)[number];
 export const COLOR_VISION_SUPPORT_MODES = ['color-only', 'color-and-marks'] as const;
 export type ColorVisionSupportMode = (typeof COLOR_VISION_SUPPORT_MODES)[number];
+export type Language = 'ja' | 'en';
 
 // Input
 export interface InputState {
@@ -189,6 +190,7 @@ export interface SaveData {
   // on the title screen. When false / missing, TitleScene auto-shows the
   // TutorialOverlay once on entry to introduce controls to new players.
   tutorialShown?: boolean;
+  language?: Language;
 }
 
 // Planet encyclopedia

@@ -1,0 +1,62 @@
+import type { Language } from '../../types';
+
+export const DEFAULT_LANGUAGE: Language = 'ja';
+export const LANGUAGES = ['ja', 'en'] as const satisfies readonly Language[];
+
+export const TRANSLATION_KEYS = [
+  'titleScene.colorSettingsButton',
+  'colorSettings.title',
+  'colorSettings.description.on',
+  'colorSettings.description.off',
+  'colorSettings.toggle.on',
+  'colorSettings.toggle.off',
+  'colorSettings.audio.title',
+  'colorSettings.audio.hint',
+  'colorSettings.audio.bgm',
+  'colorSettings.audio.sfx',
+  'colorSettings.audio.volume.quiet',
+  'colorSettings.audio.volume.small',
+  'colorSettings.audio.volume.normal',
+  'colorSettings.audio.volume.loud',
+  'colorSettings.audio.volume.max',
+  'colorSettings.restReminder.title',
+  'colorSettings.restReminder.description.on',
+  'colorSettings.restReminder.description.off',
+  'colorSettings.restReminder.toggle.on',
+  'colorSettings.restReminder.toggle.off',
+  'colorSettings.language.title',
+  'colorSettings.language.description',
+  'colorSettings.language.option.ja',
+  'colorSettings.language.option.en',
+  'colorSettings.colorVision.title',
+  'colorSettings.colorVision.description.colorOnly',
+  'colorSettings.colorVision.description.colorAndMarks',
+  'colorSettings.colorVision.option.colorOnly',
+  'colorSettings.colorVision.option.colorAndMarks',
+  'colorSettings.vibration.title',
+  'colorSettings.vibration.description.strong',
+  'colorSettings.vibration.description.medium',
+  'colorSettings.vibration.description.weak',
+  'colorSettings.vibration.description.off',
+  'colorSettings.vibration.option.strong',
+  'colorSettings.vibration.option.medium',
+  'colorSettings.vibration.option.weak',
+  'colorSettings.vibration.option.off',
+  'colorSettings.motion.title',
+  'colorSettings.motion.hint',
+  'colorSettings.motion.option.strong.shortLabel',
+  'colorSettings.motion.option.strong.description',
+  'colorSettings.motion.option.medium.shortLabel',
+  'colorSettings.motion.option.medium.description',
+  'colorSettings.motion.option.gentle.shortLabel',
+  'colorSettings.motion.option.gentle.description',
+  'colorSettings.motion.option.minimal.shortLabel',
+  'colorSettings.motion.option.minimal.description',
+  'colorSettings.motion.preview.playing',
+  'colorSettings.motion.preview.idle',
+  'colorSettings.close',
+] as const;
+
+export type TranslationKey = (typeof TRANSLATION_KEYS)[number];
+export type TranslationDictionary = Readonly<Record<TranslationKey, string>>;
+export type TranslationParams = Record<string, string | number>;

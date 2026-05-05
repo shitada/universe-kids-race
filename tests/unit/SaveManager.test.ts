@@ -239,6 +239,22 @@ describe('SaveManager', () => {
     });
   });
 
+  describe('language persistence', () => {
+    it('restores a saved english language choice', () => {
+      const manager = new SaveManager();
+      manager.save({ clearedStage: 1, unlockedPlanets: [1], language: 'en' });
+
+      expect(manager.load().language).toBe('en');
+    });
+
+    it('drops invalid language values and falls back to default japanese behavior', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({ clearedStage: 1, unlockedPlanets: [1], language: 'fr' }));
+      const manager = new SaveManager();
+
+      expect(manager.load().language).toBeUndefined();
+    });
+  });
+
   describe('muted persistence', () => {
     it('defaults muted to false when no save exists', () => {
       const manager = new SaveManager();

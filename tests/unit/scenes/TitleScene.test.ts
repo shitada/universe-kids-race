@@ -8,6 +8,8 @@ import type { SaveManager } from '../../../src/game/storage/SaveManager';
 import type { AudioManager } from '../../../src/game/audio/AudioManager';
 import { TOTAL_STAGES } from '../../../src/game/config/StageConfig';
 import { EncyclopediaOverlay } from '../../../src/ui/EncyclopediaOverlay';
+import { i18n } from '../../../src/game/i18n/i18nService';
+import { DEFAULT_LANGUAGE } from '../../../src/game/i18n/types';
 import type { LoadFailureOverlayOptions } from '../../../src/ui/LoadFailureOverlay';
 
 function createMockSceneManager(): SceneManager {
@@ -49,10 +51,11 @@ function createMockSaveManager(overrides: Partial<ReturnType<SaveManager['load']
     unlockedPlanets: [],
     tutorialShown: true,
     bestStageStars: {},
-      muted: false,
-      audioSettings: undefined,
-      ...overrides,
-    };
+    language: undefined,
+    muted: false,
+    audioSettings: undefined,
+    ...overrides,
+  };
   return {
     load: vi.fn(() => ({ ...saveData, unlockedPlanets: [...saveData.unlockedPlanets] })),
     save: vi.fn((nextData) => {
@@ -65,6 +68,7 @@ function createMockSaveManager(overrides: Partial<ReturnType<SaveManager['load']
 }
 
 beforeEach(() => {
+  i18n.setLanguage(DEFAULT_LANGUAGE, { notify: false });
   const overlay = document.createElement('div');
   overlay.id = 'ui-overlay';
   document.body.appendChild(overlay);
@@ -555,6 +559,14 @@ describe('TitleScene (T009)', () => {
     expect(saveManager.save).toHaveBeenCalledWith(expect.objectContaining({
       restReminderSettings: { enabled: false },
     }));
+
+    const englishButton = document.querySelector('[data-language-button="en"]') as HTMLButtonElement | null;
+    englishButton?.click();
+
+    expect(saveManager.save).toHaveBeenCalledWith(expect.objectContaining({
+      language: 'en',
+    }));
+    expect(settingsButton?.textContent).toBe('Accessibility');
 
     const markModeButton = document.querySelector('[data-color-vision-mode-button="color-and-marks"]') as HTMLButtonElement | null;
     markModeButton?.click();

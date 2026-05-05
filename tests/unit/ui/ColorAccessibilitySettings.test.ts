@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ColorAccessibilitySettings } from '../../../src/ui/ColorAccessibilitySettings';
+import { i18n } from '../../../src/game/i18n/i18nService';
+import { DEFAULT_LANGUAGE } from '../../../src/game/i18n/types';
 
 describe('ColorAccessibilitySettings', () => {
   let settings: ColorAccessibilitySettings;
@@ -14,6 +16,7 @@ describe('ColorAccessibilitySettings', () => {
       initialVibrationIntensity: 'medium' as const,
       initialMotionSensitivity: 'strong' as const,
       initialRestReminderEnabled: true,
+      initialLanguage: 'ja' as const,
       onToggle: vi.fn(),
       onColorVisionSupportModeChange: vi.fn(),
       onBGMVolumeChange: vi.fn(),
@@ -21,6 +24,7 @@ describe('ColorAccessibilitySettings', () => {
       onVibrationIntensityChange: vi.fn(),
       onMotionSensitivityChange: vi.fn(),
       onRestReminderToggle: vi.fn(),
+      onLanguageChange: vi.fn(),
       ...overrides,
     };
   }
@@ -29,10 +33,12 @@ describe('ColorAccessibilitySettings', () => {
     const overlay = document.createElement('div');
     overlay.id = 'ui-overlay';
     document.body.appendChild(overlay);
+    i18n.setLanguage(DEFAULT_LANGUAGE, { notify: false });
     settings = new ColorAccessibilitySettings();
   });
 
   afterEach(() => {
+    i18n.setLanguage(DEFAULT_LANGUAGE, { notify: false });
     document.body.innerHTML = '';
   });
 
@@ -96,6 +102,27 @@ describe('ColorAccessibilitySettings', () => {
     expect(preview?.dataset.previewActive).toBe('true');
     expect(previewCaption?.textContent).toContain('ゆっくり');
     expect(onMotionSensitivityChange).toHaveBeenCalledWith('minimal');
+  });
+
+  it('switches language and rerenders labels right away', () => {
+    const onLanguageChange = vi.fn();
+    settings.show(createOptions({
+      initialBGMVolume: 50,
+      onLanguageChange,
+    }));
+
+    const englishButton = document.querySelector('[data-language-button="en"]') as HTMLButtonElement | null;
+    const title = document.querySelector('[data-color-settings-title]');
+    const bgmLabel = document.querySelector('[data-bgm-volume-label]');
+    const closeButton = document.querySelector('[data-color-settings-close]') as HTMLButtonElement | null;
+
+    englishButton?.click();
+
+    expect(title?.textContent).toBe('Accessibility Settings');
+    expect(bgmLabel?.textContent).toContain('Normal');
+    expect(document.body.textContent).toContain('Language');
+    expect(closeButton?.textContent).toBe('Close');
+    expect(onLanguageChange).toHaveBeenCalledWith('en');
   });
 
   it('lets children switch between color-only and color-and-mark modes', () => {

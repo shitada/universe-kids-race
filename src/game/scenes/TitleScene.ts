@@ -3,6 +3,7 @@ import {
   type AudioVolumeLevel,
   type ColorVisionSupportMode,
   DEFAULT_SPACESHIP_CUSTOMIZATION,
+  type Language,
   type MotionSensitivity,
   type SaveData,
   type Scene,
@@ -34,6 +35,8 @@ import { createStageMedalDisplay } from '../../ui/stageMedalDisplay';
 import { prewarmStageVisualAssets } from './stageVisualAssets';
 import { setSharedVibrationIntensity } from '../systems/VibrationSystem';
 import { getDefaultMotionSensitivity } from '../accessibility/motionSensitivity';
+import { i18n } from '../i18n/i18nService';
+import { DEFAULT_LANGUAGE } from '../i18n/types';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // SHARED background-star resources for TitleScene
@@ -226,6 +229,8 @@ export class TitleScene implements Scene {
   // 直後に再生開始するため、その判定にこのフラグを利用する。
   private bgmPending = false;
   private readonly overlayButtonCleanups = new Set<() => void>();
+  private colorSettingsButton: HTMLButtonElement | null = null;
+  private unsubscribeLanguageChange: (() => void) | null = null;
 
   constructor(
     sceneManager: SceneManager,
@@ -275,6 +280,7 @@ export class TitleScene implements Scene {
     }
 
     const saveData = this.saveManager.load();
+    i18n.setLanguage(saveData.language ?? DEFAULT_LANGUAGE, { notify: false });
     void this.createCompanionParade(saveData.unlockedPlanets);
 
     this.createOverlay();
@@ -499,6 +505,16 @@ export class TitleScene implements Scene {
     this.saveManager.save(data);
   }
 
+  private persistLanguageSetting(language: Language): void {
+    const data = this.saveManager.load();
+    if (language === DEFAULT_LANGUAGE) {
+      delete data.language;
+    } else {
+      data.language = language;
+    }
+    this.saveManager.save(data);
+  }
+
   private persistBGMVolumeSetting(volume: AudioVolumeLevel): void {
     const data = this.saveManager.load();
     data.audioSettings = this.buildAudioSettings(
@@ -600,6 +616,8 @@ export class TitleScene implements Scene {
     const savedProgress = hasSavedProgress(initialSaveData);
 
     this.overlay = document.createElement('div');
+    this.unsubscribeLanguageChange?.();
+    this.unsubscribeLanguageChange = i18n.subscribe(() => this.applyLocalizedText());
     this.overlay.style.cssText = `
       display: flex;
       flex-direction: column;
@@ -910,7 +928,8 @@ export class TitleScene implements Scene {
     // Color accessibility button
     const colorSettingsBtn = document.createElement('button');
     colorSettingsBtn.setAttribute('data-color-settings-button', '');
-    colorSettingsBtn.textContent = 'みやすさ・しんどう';
+    colorSettingsBtn.textContent = i18n.t('titleScene.colorSettingsButton');
+    this.colorSettingsButton = colorSettingsBtn;
     colorSettingsBtn.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
       font-size: ${compact ? '0.82rem' : '1rem'};
@@ -943,6 +962,7 @@ export class TitleScene implements Scene {
             this.saveManager.load().colorAccessibility?.motionSensitivity ?? getDefaultMotionSensitivity(),
           initialRestReminderEnabled:
             this.saveManager.load().restReminderSettings?.enabled ?? DEFAULT_REST_REMINDER_ENABLED,
+          initialLanguage: this.saveManager.load().language ?? DEFAULT_LANGUAGE,
           onToggle: (enabled) => this.persistHighContrastSetting(enabled),
           onColorVisionSupportModeChange: (mode) => this.persistColorVisionSupportModeSetting(mode),
           onBGMVolumeChange: (volume) => this.persistBGMVolumeSetting(volume),
@@ -950,6 +970,7 @@ export class TitleScene implements Scene {
           onVibrationIntensityChange: (intensity) => this.persistVibrationIntensitySetting(intensity),
           onMotionSensitivityChange: (sensitivity) => this.persistMotionSensitivitySetting(sensitivity),
           onRestReminderToggle: (enabled) => this.persistRestReminderSetting(enabled),
+          onLanguageChange: (language) => this.persistLanguageSetting(language),
         });
       },
       onPressChange: (pressed) => {
@@ -1048,6 +1069,12 @@ export class TitleScene implements Scene {
     this.overlay.addEventListener('pointerdown', () => {
       this.ensureTitleAudioInitialized(true);
     }, { once: true });
+  }
+
+  private applyLocalizedText(): void {
+    if (this.colorSettingsButton) {
+      this.colorSettingsButton.textContent = i18n.t('titleScene.colorSettingsButton');
+    }
   }
 
   private ensureTitleAudioInitialized(playTitleBgm: boolean): void {
@@ -1183,6 +1210,9 @@ export class TitleScene implements Scene {
       this.overlay = null;
     }
     this.encyclopediaBtn = null;
+    this.colorSettingsButton = null;
+    this.unsubscribeLanguageChange?.();
+    this.unsubscribeLanguageChange = null;
     if (this.muteHandle) {
       this.muteHandle.remove();
       this.muteHandle = null;

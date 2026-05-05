@@ -3,6 +3,7 @@ import {
   DEFAULT_SPACESHIP_CUSTOMIZATION,
   type AudioSettings,
   type GameplayStats,
+  type Language,
   MONTHLY_ENCOUNTER_IDS,
   type MonthlyEncounterId,
   type RestReminderSettings,
@@ -24,6 +25,7 @@ import {
   normalizeMotionSensitivity,
 } from '../accessibility/motionSensitivity';
 import { DEFAULT_REST_REMINDER_ENABLED } from '../config/RestReminderConfig';
+import { DEFAULT_LANGUAGE, LANGUAGES } from '../i18n/types';
 import { TOTAL_STAGES } from '../config/StageConfig';
 
 const STORAGE_KEY = 'universe-kids-race-save';
@@ -201,6 +203,12 @@ function normalizeRestReminderSettings(value: unknown): RestReminderSettings {
   };
 }
 
+function normalizeLanguage(value: unknown): Language | undefined {
+  return typeof value === 'string' && (LANGUAGES as readonly string[]).includes(value)
+    ? value as Language
+    : undefined;
+}
+
 function normalizeColorAccessibilitySettings(value: unknown): SaveData['colorAccessibility'] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
@@ -295,6 +303,11 @@ function sanitizeSaveData(data: SaveData): SaveData {
     sanitized.colorAccessibility = colorAccessibility;
   }
 
+  const language = normalizeLanguage(data.language);
+  if (language && language !== DEFAULT_LANGUAGE) {
+    sanitized.language = language;
+  }
+
   const audioSettings = normalizeAudioSettings(data.audioSettings);
   if (audioSettings) {
     sanitized.audioSettings = audioSettings;
@@ -360,6 +373,13 @@ export class SaveManager {
         data.colorAccessibility = colorAccessibility;
       } else {
         delete (data as { colorAccessibility?: unknown }).colorAccessibility;
+      }
+
+      const language = normalizeLanguage((data as { language?: unknown }).language);
+      if (language && language !== DEFAULT_LANGUAGE) {
+        data.language = language;
+      } else {
+        delete (data as { language?: unknown }).language;
       }
 
       const rawBest = (data as { bestStageStars?: unknown }).bestStageStars;
@@ -470,6 +490,7 @@ export class SaveManager {
       const restReminderSettings = normalizeRestReminderSettings(prev.restReminderSettings);
       const lastStablePixelTier = prev.lastStablePixelTier;
       const tutorialShown = prev.tutorialShown === true;
+      const language = normalizeLanguage(prev.language);
       const audioSettings = normalizeAudioSettings(prev.audioSettings);
       const colorAccessibility = normalizeColorAccessibilitySettings(prev.colorAccessibility);
       const gameplayStats = normalizeGameplayStats(prev.gameplayStats);
@@ -492,6 +513,9 @@ export class SaveManager {
       if (colorAccessibility) {
         next.colorAccessibility = colorAccessibility;
       }
+      if (language && language !== DEFAULT_LANGUAGE) {
+        next.language = language;
+      }
       if (typeof lastStablePixelTier === 'number') {
         next.lastStablePixelTier = lastStablePixelTier;
       }
@@ -512,6 +536,7 @@ export class SaveManager {
       };
       const restReminderSettings = normalizeRestReminderSettings(prev.restReminderSettings);
       const lastStablePixelTier = prev.lastStablePixelTier;
+      const language = normalizeLanguage(prev.language);
       const audioSettings = normalizeAudioSettings(prev.audioSettings);
       const colorAccessibility = normalizeColorAccessibilitySettings(prev.colorAccessibility);
       const gameplayStats = normalizeGameplayStats(prev.gameplayStats);
@@ -533,6 +558,9 @@ export class SaveManager {
       }
       if (colorAccessibility) {
         next.colorAccessibility = colorAccessibility;
+      }
+      if (language && language !== DEFAULT_LANGUAGE) {
+        next.language = language;
       }
       if (typeof lastStablePixelTier === 'number') {
         next.lastStablePixelTier = lastStablePixelTier;
