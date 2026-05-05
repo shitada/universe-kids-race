@@ -24,6 +24,7 @@ import { BoostSystem } from '../systems/BoostSystem';
 import { LODSystem } from '../systems/LODSystem';
 import { AdaptiveTutorialSystem, type AdaptiveTutorialEvent } from '../systems/AdaptiveTutorialSystem';
 import { MeteoShowerEventSystem } from '../systems/MeteoShowerEventSystem';
+import { SpaceWeatherEventSystem } from '../systems/SpaceWeatherEventSystem';
 import { StageSpecialEventSystem } from '../systems/StageSpecialEventSystem';
 import { SpecialStarSpawnSystem } from '../systems/SpecialStarSpawnSystem';
 import {
@@ -46,6 +47,7 @@ import { ConstellationLineEffect } from '../effects/ConstellationLineEffect';
 import { MeteoShowerEffect } from '../effects/MeteoShowerEffect';
 import { PlanetRingEffect } from '../effects/PlanetRingEffect';
 import { RainbowTrailEffect } from '../effects/RainbowTrailEffect';
+import { SpaceWeatherEffect } from '../effects/SpaceWeatherEffect';
 import { StageAtmosphereEffect } from '../effects/StageAtmosphereEffect';
 import { SeasonalEventEffects } from '../effects/SeasonalEventEffects';
 import { StageSpecialEffects } from '../effects/StageSpecialEffects';
@@ -175,6 +177,7 @@ export class StageScene implements Scene {
   private lodSystem = new LODSystem();
   private meteoShowerEventSystem = new MeteoShowerEventSystem();
   private stageSpecialEventSystem = new StageSpecialEventSystem();
+  private spaceWeatherEventSystem = new SpaceWeatherEventSystem();
   private specialStarSpawnSystem = new SpecialStarSpawnSystem();
   private readonly seasonalEventSystem: SeasonalEventSystem;
   private hud!: HUD;
@@ -187,6 +190,7 @@ export class StageScene implements Scene {
   private constellationHintOverlay = new ConstellationHintOverlay();
   private airShield!: AirShield;
   private meteoShowerEffect!: MeteoShowerEffect;
+  private spaceWeatherEffect!: SpaceWeatherEffect;
   private stageSpecialEffects!: StageSpecialEffects;
   private seasonalEventEffects = new SeasonalEventEffects();
   private rainbowTrailEffect!: RainbowTrailEffect;
@@ -284,6 +288,8 @@ export class StageScene implements Scene {
   private adaptiveTutorialSystem = new AdaptiveTutorialSystem();
   private adaptiveTutorialHint = new AdaptiveTutorialHint();
   private meteoShowerAnnouncementTimer = 0;
+  private spaceWeatherAnnouncementTimer = 0;
+  private spaceWeatherAnnouncementMessage = '';
   private stageSpecialAnnouncementTimer = 0;
   private stageSpecialAnnouncementMessage = '';
   private prewarmRequestToken = 0;
@@ -366,6 +372,9 @@ export class StageScene implements Scene {
     this.meteoShowerEffect = new MeteoShowerEffect();
     this.meteoShowerEffect.init(this.threeScene);
 
+    this.spaceWeatherEffect = new SpaceWeatherEffect();
+    this.spaceWeatherEffect.init(this.threeScene);
+
     this.stageSpecialEffects = new StageSpecialEffects();
     this.stageSpecialEffects.init(this.threeScene);
 
@@ -427,6 +436,8 @@ export class StageScene implements Scene {
     this.attemptStatsRecorded = false;
     this.meteoriteHitTimes.length = 0;
     this.meteoShowerAnnouncementTimer = 0;
+    this.spaceWeatherAnnouncementTimer = 0;
+    this.spaceWeatherAnnouncementMessage = '';
     this.stageSpecialAnnouncementTimer = 0;
     this.stageSpecialAnnouncementMessage = '';
     this.assistTimer = 0;
@@ -437,8 +448,10 @@ export class StageScene implements Scene {
     this.adaptiveHintDisplayTimer = 0;
     this.adaptiveTutorialHint.hide();
     this.meteoShowerEventSystem.reset();
+    this.spaceWeatherEventSystem.reset();
     this.stageSpecialEventSystem.setStage(getStageSpecialEventConfig(this.stageNumber));
     this.meteoShowerEffect.clear();
+    this.spaceWeatherEffect.clear();
     this.stageSpecialEffects.clear();
     this.resetBoostHintState();
 
@@ -848,6 +861,10 @@ export class StageScene implements Scene {
     this.meteoShowerEventSystem.reset();
     this.meteoShowerEffect.clear();
     this.meteoShowerAnnouncementTimer = 0;
+    this.spaceWeatherEventSystem.reset();
+    this.spaceWeatherEffect.clear();
+    this.spaceWeatherAnnouncementTimer = 0;
+    this.spaceWeatherAnnouncementMessage = '';
     this.stageSpecialEventSystem.reset();
     this.stageSpecialEffects.clear();
     this.seasonalEventSystem.clear();
@@ -945,6 +962,7 @@ export class StageScene implements Scene {
     this.seasonalEventNotice.tick(deltaTime);
     this.updateAssistTimers(deltaTime);
     this.updateMeteoShowerAnnouncement(deltaTime);
+    this.updateSpaceWeatherAnnouncement(deltaTime);
     this.updateStageSpecialAnnouncement(deltaTime);
     this.updateAdaptiveHintDisplay(deltaTime);
     this.updateBoostHintDisplay(deltaTime);
@@ -1010,6 +1028,17 @@ export class StageScene implements Scene {
       this.audioManager.playSFX('meteorShowerStart');
       this.meteoShowerEffect.start();
       this.showMeteoShowerAnnouncement();
+    }
+
+    const spaceWeatherState = this.spaceWeatherEventSystem.update(deltaTime);
+    this.scoreSystem.setEventStarMultiplier?.(
+      spaceWeatherState.active && spaceWeatherState.event
+        ? spaceWeatherState.event.starScoreMultiplier
+        : 1,
+    );
+    if (spaceWeatherState.started && spaceWeatherState.event) {
+      this.spaceWeatherEffect.start(spaceWeatherState.event);
+      this.showSpaceWeatherAnnouncement(spaceWeatherState.event.message);
     }
 
     // Spawn
@@ -1293,6 +1322,12 @@ export class StageScene implements Scene {
       this.spaceship.position.x,
       this.spaceship.position.z,
     );
+    this.spaceWeatherEffect.update(
+      spaceWeatherState.active,
+      deltaTime,
+      this.spaceship.position.x,
+      this.spaceship.position.z,
+    );
 
     // Boost visual effects
     this.boostLinesEffect.update(
@@ -1419,8 +1454,26 @@ export class StageScene implements Scene {
     }
   }
 
+  private updateSpaceWeatherAnnouncement(deltaTime: number): void {
+    if (this.spaceWeatherAnnouncementTimer <= 0) {
+      return;
+    }
+
+    this.spaceWeatherAnnouncementTimer = Math.max(0, this.spaceWeatherAnnouncementTimer - deltaTime);
+    if (this.spaceWeatherAnnouncementTimer === 0) {
+      this.spaceWeatherAnnouncementMessage = '';
+      this.syncAssistMessage();
+    }
+  }
+
   private showMeteoShowerAnnouncement(): void {
     this.meteoShowerAnnouncementTimer = StageScene.METEO_SHOWER_MESSAGE_DURATION;
+    this.syncAssistMessage();
+  }
+
+  private showSpaceWeatherAnnouncement(message: string): void {
+    this.spaceWeatherAnnouncementMessage = message;
+    this.spaceWeatherAnnouncementTimer = StageScene.STAGE_SPECIAL_MESSAGE_DURATION;
     this.syncAssistMessage();
   }
 
@@ -1449,6 +1502,10 @@ export class StageScene implements Scene {
     }
     if (this.stageSpecialAnnouncementTimer > 0 && this.stageSpecialAnnouncementMessage) {
       this.hud.showAssistMessage(this.stageSpecialAnnouncementMessage);
+      return;
+    }
+    if (this.spaceWeatherAnnouncementTimer > 0 && this.spaceWeatherAnnouncementMessage) {
+      this.hud.showAssistMessage(this.spaceWeatherAnnouncementMessage);
       return;
     }
     if (this.assistMessageTimer > 0) {
@@ -1842,10 +1899,15 @@ export class StageScene implements Scene {
     this.stageClearOverlay.hide();
     this.resetAssistNavigation();
     this.meteoShowerAnnouncementTimer = 0;
+    this.spaceWeatherAnnouncementTimer = 0;
+    this.spaceWeatherAnnouncementMessage = '';
     this.stageSpecialAnnouncementTimer = 0;
     this.stageSpecialAnnouncementMessage = '';
     this.meteoShowerEventSystem.reset();
     this.meteoShowerEffect.clear();
+    this.spaceWeatherEventSystem.reset();
+    this.spaceWeatherEffect.clear();
+    this.scoreSystem.setEventStarMultiplier?.(1);
     this.stageSpecialEventSystem.reset();
     this.stageSpecialEffects.clear();
     this.rainbowTrailEffect.clear();
@@ -2120,9 +2182,13 @@ export class StageScene implements Scene {
     this.boostLinesEffect.update(false, this.spaceship.position.x, this.spaceship.position.z);
     this.airShield.reset(this.spaceship.position.x, this.spaceship.position.y, this.spaceship.position.z);
     this.planetRingEffect.clear();
+    this.meteoShowerEffect.clear();
+    this.spaceWeatherEffect.clear();
     this.stageSpecialEffects.clear();
     this.seasonalEventEffects.clear();
+    this.spaceWeatherEventSystem.reset();
     this.seasonalEventSystem.clear();
+    this.scoreSystem.setEventStarMultiplier?.(1);
     this.frameRateHintOverlay.dispose();
     this.resetStageObjects();
     if (this.bgStars) {

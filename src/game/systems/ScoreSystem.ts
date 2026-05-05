@@ -16,8 +16,9 @@ export class ScoreSystem {
   private totalScore = 0;
   private starCount = 0;
   private totalStarCount = 0;
-  private scoreMultiplier = 1;
-  private scoreMultiplierTimer = 0;
+  private shootingStarMultiplier = 1;
+  private shootingStarMultiplierTimer = 0;
+  private eventStarMultiplier = 1;
   private onScoreGain: ((event: ScoreGainEvent) => void) | null;
 
   constructor(onScoreGain?: (event: ScoreGainEvent) => void) {
@@ -30,7 +31,7 @@ export class ScoreSystem {
 
   addStarScore(starType: StarType, worldPosition?: WorldPosition): void {
     const value = starType === 'RAINBOW' ? 500 : 100;
-    const amount = value * this.scoreMultiplier;
+    const amount = value * this.getScoreMultiplier();
     this.stageScore += amount;
     this.starCount++;
     this.onScoreGain?.({
@@ -47,8 +48,16 @@ export class ScoreSystem {
     if (!Number.isFinite(duration) || duration <= 0) {
       return;
     }
-    this.scoreMultiplier = 2;
-    this.scoreMultiplierTimer = Math.max(this.scoreMultiplierTimer, duration);
+    this.shootingStarMultiplier = 2;
+    this.shootingStarMultiplierTimer = Math.max(this.shootingStarMultiplierTimer, duration);
+  }
+
+  setEventStarMultiplier(multiplier: number): void {
+    if (!Number.isFinite(multiplier) || multiplier < 1) {
+      this.eventStarMultiplier = 1;
+      return;
+    }
+    this.eventStarMultiplier = multiplier;
   }
 
   addBonusScore(value: number, worldPosition?: WorldPosition): void {
@@ -67,12 +76,12 @@ export class ScoreSystem {
   }
 
   update(deltaTime: number): void {
-    if (this.scoreMultiplierTimer <= 0) {
+    if (this.shootingStarMultiplierTimer <= 0) {
       return;
     }
-    this.scoreMultiplierTimer = Math.max(0, this.scoreMultiplierTimer - deltaTime);
-    if (this.scoreMultiplierTimer === 0) {
-      this.scoreMultiplier = 1;
+    this.shootingStarMultiplierTimer = Math.max(0, this.shootingStarMultiplierTimer - deltaTime);
+    if (this.shootingStarMultiplierTimer === 0) {
+      this.shootingStarMultiplier = 1;
     }
   }
 
@@ -100,7 +109,7 @@ export class ScoreSystem {
   }
 
   getScoreMultiplier(): number {
-    return this.scoreMultiplier;
+    return this.shootingStarMultiplier * this.eventStarMultiplier;
   }
 
   setTotalScore(score: number): void {
@@ -127,8 +136,9 @@ export class ScoreSystem {
   resetStage(): void {
     this.stageScore = 0;
     this.starCount = 0;
-    this.scoreMultiplier = 1;
-    this.scoreMultiplierTimer = 0;
+    this.shootingStarMultiplier = 1;
+    this.shootingStarMultiplierTimer = 0;
+    this.eventStarMultiplier = 1;
   }
 
   reset(): void {
@@ -136,7 +146,8 @@ export class ScoreSystem {
     this.totalScore = 0;
     this.starCount = 0;
     this.totalStarCount = 0;
-    this.scoreMultiplier = 1;
-    this.scoreMultiplierTimer = 0;
+    this.shootingStarMultiplier = 1;
+    this.shootingStarMultiplierTimer = 0;
+    this.eventStarMultiplier = 1;
   }
 }

@@ -54,6 +54,40 @@ describe('ScoreSystem', () => {
     expect(system.getStageScore()).toBe(100);
   });
 
+  it('applies the space weather star bonus while it is active', () => {
+    const system = new ScoreSystem();
+
+    system.setEventStarMultiplier(2);
+    system.addStarScore('NORMAL');
+
+    expect(system.getScoreMultiplier()).toBe(2);
+    expect(system.getStageScore()).toBe(200);
+    expect(system.getStarCount()).toBe(1);
+  });
+
+  it('stacks the space weather bonus with the shooting star bonus', () => {
+    const system = new ScoreSystem();
+
+    system.setEventStarMultiplier(2);
+    system.activateShootingStarBonus(6);
+    system.addStarScore('RAINBOW');
+
+    expect(system.getScoreMultiplier()).toBe(4);
+    expect(system.getStageScore()).toBe(2000);
+    expect(system.getStarCount()).toBe(1);
+  });
+
+  it('clears the space weather bonus when resetStage is called', () => {
+    const system = new ScoreSystem();
+
+    system.setEventStarMultiplier(2);
+    system.resetStage();
+    system.addStarScore('NORMAL');
+
+    expect(system.getScoreMultiplier()).toBe(1);
+    expect(system.getStageScore()).toBe(100);
+  });
+
   it('adds bonus score without increasing the collected star count', () => {
     const system = new ScoreSystem();
 

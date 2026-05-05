@@ -251,3 +251,22 @@ export interface SeasonalEventConfig {
   endMonth: number;
   endDay: number;
 }
+
+export type SpaceWeatherEventId = 'meteor-shower' | 'aurora-storm' | 'comet-approach';
+
+export interface SpaceWeatherEventConfig {
+  id: SpaceWeatherEventId;
+  title: string;
+  message: string;
+  accentColor: number;
+  duration: number;
+  starScoreMultiplier: number;
+}
+
+export interface SpaceWeatherEventState {
+  active: boolean;
+  started: boolean;
+  ended: boolean;
+  timeRemaining: number;
+  event: SpaceWeatherEventConfig | null;
+}
