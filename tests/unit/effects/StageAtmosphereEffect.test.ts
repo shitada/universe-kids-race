@@ -4,7 +4,7 @@ import { StageAtmosphereEffect } from '../../../src/game/effects/StageAtmosphere
 import { getStageAtmosphereConfig } from '../../../src/game/config/StageAtmosphereConfig';
 
 describe('StageAtmosphereEffect', () => {
-  it('開始すると背景グラデーションと粒子を表示する', () => {
+  it('開始すると背景を覆わずに粒子だけを表示する', () => {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(60, 4 / 3, 0.1, 2000);
     camera.position.set(0, 5, 10);
@@ -17,9 +17,9 @@ describe('StageAtmosphereEffect', () => {
 
     expect(scene.children).toContain(effect.getGroup());
     expect(effect.isActive()).toBe(true);
-    expect(effect.getBackdropMesh().visible).toBe(true);
+    expect(effect.getBackdropMesh().visible).toBe(false);
     expect(effect.getBackdropMesh().material).toBeInstanceOf(THREE.MeshBasicMaterial);
-    expect((effect.getBackdropMesh().material as THREE.MeshBasicMaterial).map).not.toBeNull();
+    expect((effect.getBackdropMesh().material as THREE.MeshBasicMaterial).map).toBeNull();
     expect(effect.getParticleSystem().visible).toBe(true);
     expect(effect.getGroup().position.x).toBe(0);
     expect(effect.getParticleSystem().position.z).toBe(0);

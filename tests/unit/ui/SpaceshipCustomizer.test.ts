@@ -24,10 +24,15 @@ describe('SpaceshipCustomizer', () => {
       onComplete,
     });
 
+    const panel = document.querySelector('[data-spaceship-customizer-panel]') as HTMLDivElement;
+    const sections = document.querySelector('[data-spaceship-customizer-sections]') as HTMLDivElement;
     const bodyOption = document.querySelector('[data-spaceship-color-option="bodyColor:sunset"]') as HTMLButtonElement;
     const noseOption = document.querySelector('[data-spaceship-color-option="noseColor:aqua"]') as HTMLButtonElement;
     const wingOption = document.querySelector('[data-spaceship-color-option="wingColor:sky"]') as HTMLButtonElement;
 
+    expect(panel.style.overflowY).toBe('hidden');
+    expect(sections.style.display).toBe('grid');
+    expect(sections.style.gridTemplateColumns).toContain('repeat(3');
     dispatchReleaseConfirm(bodyOption);
     dispatchReleaseConfirm(noseOption);
     dispatchReleaseConfirm(wingOption);

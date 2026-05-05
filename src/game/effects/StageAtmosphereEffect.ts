@@ -84,7 +84,7 @@ export class StageAtmosphereEffect {
     this.elapsed = 0;
     this.active = true;
     this.group.visible = true;
-    this.backdropMesh.visible = true;
+    this.backdropMesh.visible = false;
     this.particleSystem.visible = true;
     this.applyMotionSensitivityToMaterial(config);
     this.updateGradientTexture(config.gradientTopColor, config.gradientBottomColor);
@@ -100,6 +100,7 @@ export class StageAtmosphereEffect {
     this.backdropMesh.visible = false;
     this.particleSystem.visible = false;
     this.particleGeometry.setDrawRange(0, 0);
+    this.updateGradientTexture(0, 0);
   }
 
   update(deltaTime: number, camera: THREE.PerspectiveCamera, shipX: number, shipZ: number): void {
@@ -108,7 +109,6 @@ export class StageAtmosphereEffect {
     }
 
     this.elapsed += Math.max(0, deltaTime) * getMotionSensitivityProfile(this.motionSensitivity).animationSpeedScale;
-    this.syncBackdrop(camera);
     this.syncParticles(shipX, shipZ, this.activeConfig.particlePattern);
   }
 
@@ -308,31 +308,10 @@ export class StageAtmosphereEffect {
     }
   }
 
-  private updateGradientTexture(topColorHex: number, bottomColorHex: number): void {
-    const steps = StageAtmosphereEffect.GRADIENT_STEPS;
-    const topColor = new THREE.Color(topColorHex);
-    const bottomColor = new THREE.Color(bottomColorHex);
-    const data = new Uint8Array(steps * 4);
-    const mixColor = new THREE.Color();
-
-    for (let index = 0; index < steps; index += 1) {
-      const t = steps <= 1 ? 0 : index / (steps - 1);
-      mixColor.copy(bottomColor).lerp(topColor, t);
-      data[index * 4] = Math.round(mixColor.r * 255);
-      data[index * 4 + 1] = Math.round(mixColor.g * 255);
-      data[index * 4 + 2] = Math.round(mixColor.b * 255);
-      data[index * 4 + 3] = 255;
-    }
-
+  private updateGradientTexture(_topColorHex: number, _bottomColorHex: number): void {
     this.gradientTexture?.dispose();
-    this.gradientTexture = new THREE.DataTexture(data, 1, steps, THREE.RGBAFormat);
-    this.gradientTexture.colorSpace = THREE.SRGBColorSpace;
-    this.gradientTexture.magFilter = THREE.LinearFilter;
-    this.gradientTexture.minFilter = THREE.LinearFilter;
-    this.gradientTexture.wrapS = THREE.ClampToEdgeWrapping;
-    this.gradientTexture.wrapT = THREE.ClampToEdgeWrapping;
-    this.gradientTexture.needsUpdate = true;
-    this.backdropMaterial.map = this.gradientTexture;
+    this.gradientTexture = null;
+    this.backdropMaterial.map = null;
     this.backdropMaterial.needsUpdate = true;
   }
 }

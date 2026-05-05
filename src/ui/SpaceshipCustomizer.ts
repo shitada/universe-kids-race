@@ -43,7 +43,7 @@ export class SpaceshipCustomizer {
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 1rem;
+      padding: 0.8rem;
       background: rgba(2, 8, 28, 0.82);
       backdrop-filter: blur(8px);
       z-index: 56;
@@ -52,11 +52,13 @@ export class SpaceshipCustomizer {
     `;
 
     const panel = document.createElement('div');
+    panel.setAttribute('data-spaceship-customizer-panel', '');
     panel.style.cssText = `
-      width: min(92vw, 46rem);
-      max-height: 100%;
-      overflow-y: auto;
-      padding: 1.2rem;
+      width: min(94vw, 58rem);
+      max-height: min(100%, 44rem);
+      overflow-x: hidden;
+      overflow-y: hidden;
+      padding: 1rem;
       border-radius: 1.8rem;
       background: linear-gradient(180deg, rgba(12, 25, 76, 0.98), rgba(7, 15, 48, 0.98));
       border: 3px solid rgba(255, 255, 255, 0.94);
@@ -66,6 +68,7 @@ export class SpaceshipCustomizer {
       text-align: center;
       box-sizing: border-box;
     `;
+    panel.style.overflowY = 'hidden';
     panel.addEventListener('pointerdown', (event) => event.stopPropagation());
     this.overlay.appendChild(panel);
 
@@ -79,22 +82,26 @@ export class SpaceshipCustomizer {
 
     panel.appendChild(title);
     panel.appendChild(subtitle);
-    panel.appendChild(this.createPreviewCard());
+    const content = document.createElement('div');
+    content.style.cssText = 'display: grid; grid-template-columns: minmax(15rem, 17rem) minmax(0, 1fr); gap: 0.8rem; align-items: start; margin: 0.8rem 0 1rem;';
+    content.appendChild(this.createPreviewCard());
 
     const sections = document.createElement('div');
-    sections.style.cssText = 'display: flex; flex-direction: column; gap: 0.8rem; margin: 1rem 0;';
+    sections.setAttribute('data-spaceship-customizer-sections', '');
+    sections.style.cssText = 'display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.65rem;';
     sections.appendChild(this.createPartSection('bodyColor', 'ほんたい'));
     sections.appendChild(this.createPartSection('noseColor', 'ノーズ'));
     sections.appendChild(this.createPartSection('wingColor', 'つばさ'));
-    panel.appendChild(sections);
+    content.appendChild(sections);
+    panel.appendChild(content);
 
     const doneButton = document.createElement('button');
     doneButton.textContent = 'かんりょう';
     doneButton.setAttribute('data-spaceship-customizer-done', '');
     doneButton.style.cssText = `
-      width: min(100%, 18rem);
-      min-height: 72px;
-      padding: 0.95rem 1.2rem;
+      width: min(100%, 14rem);
+      min-height: 64px;
+      padding: 0.8rem 1rem;
       border: none;
       border-radius: 999px;
       background: linear-gradient(135deg, #ffcf6b, #ffe66d);
@@ -146,9 +153,9 @@ export class SpaceshipCustomizer {
     const card = document.createElement('div');
     card.setAttribute('data-spaceship-customizer-preview-card', '');
     card.style.cssText = `
-      width: min(100%, 22rem);
-      margin: 0 auto;
-      padding: 0.95rem;
+      width: 100%;
+      margin: 0;
+      padding: 0.8rem;
       border-radius: 1.4rem;
       background: rgba(255, 255, 255, 0.1);
       box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.12);
@@ -156,15 +163,15 @@ export class SpaceshipCustomizer {
 
     const label = document.createElement('div');
     label.textContent = 'プレビュー';
-    label.style.cssText = 'margin-bottom: 0.6rem; font-size: 0.95rem; font-weight: 700; color: #dff4ff;';
+    label.style.cssText = 'margin-bottom: 0.45rem; font-size: 0.9rem; font-weight: 700; color: #dff4ff;';
     card.appendChild(label);
 
     const preview = document.createElement('div');
     preview.setAttribute('data-spaceship-customizer-preview', '');
     preview.style.cssText = `
       position: relative;
-      width: min(72vw, 16rem);
-      height: 11rem;
+      width: min(100%, 14rem);
+      height: 8.8rem;
       margin: 0 auto;
       border-radius: 1.4rem;
       background: radial-gradient(circle at top, rgba(123, 206, 255, 0.36), rgba(18, 28, 74, 0.95));
@@ -247,19 +254,19 @@ export class SpaceshipCustomizer {
   private createPartSection(part: keyof SpaceshipCustomization, label: string): HTMLDivElement {
     const section = document.createElement('div');
     section.style.cssText = `
-      padding: 0.8rem;
-      border-radius: 1.2rem;
+      padding: 0.7rem 0.55rem;
+      border-radius: 1.1rem;
       background: rgba(255, 255, 255, 0.08);
       text-align: left;
     `;
 
     const heading = document.createElement('div');
     heading.textContent = label;
-    heading.style.cssText = 'margin-bottom: 0.55rem; font-size: 1rem; font-weight: 900; color: #ffe66d; text-align: center;';
+    heading.style.cssText = 'margin-bottom: 0.4rem; font-size: 0.95rem; font-weight: 900; color: #ffe66d; text-align: center;';
     section.appendChild(heading);
 
     const buttonRow = document.createElement('div');
-    buttonRow.style.cssText = 'display: flex; justify-content: center; gap: 0.6rem; flex-wrap: wrap;';
+    buttonRow.style.cssText = 'display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.45rem;';
 
     for (const option of this.colorOptions) {
       buttonRow.appendChild(this.createColorButton(part, option));
@@ -274,20 +281,20 @@ export class SpaceshipCustomizer {
     button.type = 'button';
     button.setAttribute('data-spaceship-color-option', `${part}:${option.key}`);
     button.style.cssText = `
-      min-width: 88px;
-      min-height: 88px;
-      padding: 0.7rem 0.75rem;
-      border-radius: 1.25rem;
+      width: 100%;
+      min-height: 58px;
+      padding: 0.55rem 0.65rem;
+      border-radius: 1rem;
       border: 4px solid transparent;
       background: rgba(255, 255, 255, 0.12);
       color: #fff;
       cursor: pointer;
       touch-action: manipulation;
       display: flex;
-      flex-direction: column;
+      flex-direction: row;
       align-items: center;
-      justify-content: center;
-      gap: 0.45rem;
+      justify-content: flex-start;
+      gap: 0.55rem;
       transform: scale(1);
       transition: transform 0.08s ease-out, border-color 0.08s ease-out;
     `;
@@ -295,8 +302,8 @@ export class SpaceshipCustomizer {
     const swatch = document.createElement('span');
     swatch.style.cssText = `
       display: block;
-      width: 2rem;
-      height: 2rem;
+      width: 1.55rem;
+      height: 1.55rem;
       border-radius: 999px;
       background: #${option.hex.toString(16).padStart(6, '0')};
       box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.24);
@@ -304,7 +311,7 @@ export class SpaceshipCustomizer {
 
     const label = document.createElement('span');
     label.textContent = option.label;
-    label.style.cssText = 'font-family: Zen Maru Gothic, sans-serif; font-size: 0.95rem; font-weight: 700;';
+    label.style.cssText = 'font-family: Zen Maru Gothic, sans-serif; font-size: 0.88rem; font-weight: 700;';
 
     button.appendChild(swatch);
     button.appendChild(label);

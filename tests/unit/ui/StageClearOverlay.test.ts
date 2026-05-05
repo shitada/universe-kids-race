@@ -38,10 +38,13 @@ describe('StageClearOverlay', () => {
     overlay.show(createOptions());
 
     const root = document.querySelector<HTMLElement>('[data-stage-clear-overlay]');
+    const actionRow = document.querySelector<HTMLElement>('[data-stage-clear-actions]');
     const retryButton = document.querySelector<HTMLButtonElement>('[data-stage-clear-retry]');
     const continueButton = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
 
     expect(root).not.toBeNull();
+    expect(root?.style.overflowY).toBe('hidden');
+    expect(actionRow?.style.flexDirection).toBe('row');
     expect(root?.textContent).toContain('やったね！');
     expect(root?.textContent).toContain('✨ じこベストこうしん！ ⭐ 5 こ');
     expect(root?.textContent).toContain('⭐ 5 こ あつめたよ！');
