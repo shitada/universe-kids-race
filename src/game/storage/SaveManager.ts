@@ -18,6 +18,7 @@ import {
 } from '../config/PlanetEncyclopedia';
 import {
   DEFAULT_MOTION_SENSITIVITY,
+  getDefaultMotionSensitivity,
   normalizeMotionSensitivity,
 } from '../accessibility/motionSensitivity';
 import { DEFAULT_REST_REMINDER_ENABLED } from '../config/RestReminderConfig';
@@ -50,6 +51,7 @@ const DEFAULT_DATA: SaveData = {
 export type SessionState = 'fresh' | 'existing' | 'unavailable';
 
 function defaults(): SaveData {
+  const defaultMotionSensitivity = getDefaultMotionSensitivity();
   return {
     ...DEFAULT_DATA,
     unlockedPlanets: [],
@@ -57,6 +59,27 @@ function defaults(): SaveData {
     gameplayStats: createDefaultGameplayStats(),
     tutorialShown: false,
     spaceshipCustomization: { ...DEFAULT_SPACESHIP_CUSTOMIZATION },
+    ...(defaultMotionSensitivity !== DEFAULT_MOTION_SENSITIVITY
+      ? {
+        colorAccessibility: {
+          motionSensitivity: defaultMotionSensitivity,
+        },
+      }
+      : {}),
+  };
+}
+
+function applySystemMotionSensitivityDefault(
+  colorAccessibility: SaveData['colorAccessibility'],
+): SaveData['colorAccessibility'] {
+  const defaultMotionSensitivity = getDefaultMotionSensitivity();
+  if (defaultMotionSensitivity === DEFAULT_MOTION_SENSITIVITY || colorAccessibility?.motionSensitivity) {
+    return colorAccessibility;
+  }
+
+  return {
+    ...(colorAccessibility ?? {}),
+    motionSensitivity: defaultMotionSensitivity,
   };
 }
 
@@ -158,6 +181,7 @@ function normalizeColorAccessibilitySettings(value: unknown): SaveData['colorAcc
   }
 
   const highContrast = (value as { highContrast?: unknown }).highContrast === true;
+  const defaultMotionSensitivity = getDefaultMotionSensitivity();
   const motionSensitivity = normalizeMotionSensitivity(
     (value as { motionSensitivity?: unknown }).motionSensitivity,
   );
@@ -167,7 +191,7 @@ function normalizeColorAccessibilitySettings(value: unknown): SaveData['colorAcc
 
   if (
     !highContrast &&
-    motionSensitivity === DEFAULT_MOTION_SENSITIVITY &&
+    motionSensitivity === defaultMotionSensitivity &&
     colorVisionSupportMode === DEFAULT_COLOR_VISION_SUPPORT_MODE
   ) {
     return undefined;
@@ -175,7 +199,7 @@ function normalizeColorAccessibilitySettings(value: unknown): SaveData['colorAcc
 
   return {
     ...(highContrast ? { highContrast: true } : {}),
-    ...(motionSensitivity !== DEFAULT_MOTION_SENSITIVITY ? { motionSensitivity } : {}),
+    ...(motionSensitivity !== defaultMotionSensitivity ? { motionSensitivity } : {}),
     ...(colorVisionSupportMode !== DEFAULT_COLOR_VISION_SUPPORT_MODE ? { colorVisionSupportMode } : {}),
   };
 }
@@ -292,9 +316,9 @@ export class SaveManager {
         (data as { restReminderSettings?: unknown }).restReminderSettings,
       );
 
-      const colorAccessibility = normalizeColorAccessibilitySettings(
+      const colorAccessibility = applySystemMotionSensitivityDefault(normalizeColorAccessibilitySettings(
         (data as { colorAccessibility?: unknown }).colorAccessibility,
-      );
+      ));
       if (colorAccessibility) {
         data.colorAccessibility = colorAccessibility;
       } else {

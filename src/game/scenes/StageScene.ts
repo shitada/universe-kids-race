@@ -88,7 +88,7 @@ import {
 } from './stageVisualAssets';
 import { SPECIAL_STAR_CONFIG } from '../config/SpecialStarConfig';
 import {
-  DEFAULT_MOTION_SENSITIVITY,
+  getDefaultMotionSensitivity,
   getMotionSensitivityProfile,
 } from '../accessibility/motionSensitivity';
 
@@ -235,7 +235,7 @@ export class StageScene implements Scene {
   private cameraShakeElapsed = 0;
   private readonly cameraShakeOffset = new THREE.Vector3();
   private cameraShakeProfile: CameraShakeProfile = CAMERA_SHAKE_PROFILES.meteoriteHit;
-  private motionSensitivity: MotionSensitivity = DEFAULT_MOTION_SENSITIVITY;
+  private motionSensitivity: MotionSensitivity = getDefaultMotionSensitivity();
   private readonly cameraPositionTarget = new THREE.Vector3(0, 5, 10);
   private readonly cameraLookAtTarget = new THREE.Vector3(0, 0, -10);
 
@@ -485,7 +485,7 @@ export class StageScene implements Scene {
     const saveData = this.saveManager.load();
     this.spaceship.applyCustomization(saveData.spaceshipCustomization ?? DEFAULT_SPACESHIP_CUSTOMIZATION);
     const highContrastEnabled = saveData.colorAccessibility?.highContrast === true;
-    this.motionSensitivity = saveData.colorAccessibility?.motionSensitivity ?? DEFAULT_MOTION_SENSITIVITY;
+    this.motionSensitivity = saveData.colorAccessibility?.motionSensitivity ?? getDefaultMotionSensitivity();
     const colorVisionSupportMode =
       saveData.colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE;
     setSharedVibrationIntensity(saveData.vibrationSettings?.intensity ?? 'medium');

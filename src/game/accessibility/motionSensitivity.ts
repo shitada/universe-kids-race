@@ -20,6 +20,9 @@ export interface MotionSensitivityVisualProfile {
 }
 
 export const DEFAULT_MOTION_SENSITIVITY: MotionSensitivity = 'strong';
+export const REDUCED_MOTION_SENSITIVITY: MotionSensitivity = 'gentle';
+
+const REDUCED_MOTION_MEDIA_QUERY = '(prefers-reduced-motion: reduce)';
 
 const MOTION_SENSITIVITY_PROFILES: Record<MotionSensitivity, MotionSensitivityProfile> = {
   strong: {
@@ -97,23 +100,41 @@ const MOTION_SENSITIVITY_VISUAL_PROFILES: Record<MotionSensitivity, MotionSensit
 
 export function normalizeMotionSensitivity(value: unknown): MotionSensitivity {
   switch (value) {
+    case 'strong':
     case 'medium':
     case 'gentle':
     case 'minimal':
       return value;
     default:
-      return DEFAULT_MOTION_SENSITIVITY;
+      return getDefaultMotionSensitivity();
   }
 }
 
+export function prefersReducedMotion(): boolean {
+  const mediaMatcher = globalThis.matchMedia;
+  if (typeof mediaMatcher !== 'function') {
+    return false;
+  }
+
+  try {
+    return mediaMatcher(REDUCED_MOTION_MEDIA_QUERY).matches;
+  } catch {
+    return false;
+  }
+}
+
+export function getDefaultMotionSensitivity(): MotionSensitivity {
+  return prefersReducedMotion() ? REDUCED_MOTION_SENSITIVITY : DEFAULT_MOTION_SENSITIVITY;
+}
+
 export function getMotionSensitivityProfile(
-  value: MotionSensitivity = DEFAULT_MOTION_SENSITIVITY,
+  value: MotionSensitivity = getDefaultMotionSensitivity(),
 ): MotionSensitivityProfile {
   return MOTION_SENSITIVITY_PROFILES[value];
 }
 
 export function getMotionSensitivityVisualProfile(
-  value: MotionSensitivity = DEFAULT_MOTION_SENSITIVITY,
+  value: MotionSensitivity = getDefaultMotionSensitivity(),
 ): MotionSensitivityVisualProfile {
   return MOTION_SENSITIVITY_VISUAL_PROFILES[value];
 }

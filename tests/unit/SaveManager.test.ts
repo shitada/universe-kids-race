@@ -39,6 +39,7 @@ describe('SaveManager', () => {
     storage.clear();
     sessionStore.clear();
     vi.clearAllMocks();
+    Reflect.deleteProperty(globalThis, 'matchMedia');
   });
 
   it('returns default data when no save exists', () => {
@@ -507,6 +508,14 @@ describe('SaveManager', () => {
   });
 
   describe('colorAccessibility', () => {
+    it('uses the browser reduced-motion preference when no motion setting was saved', () => {
+      vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true }));
+
+      const manager = new SaveManager();
+
+      expect(manager.load().colorAccessibility).toEqual({ motionSensitivity: 'gentle' });
+    });
+
     it('persists high contrast mode when enabled', () => {
       const manager = new SaveManager();
       manager.save({
@@ -560,6 +569,19 @@ describe('SaveManager', () => {
       const manager = new SaveManager();
 
       expect(manager.load().colorAccessibility).toBeUndefined();
+    });
+
+    it('preserves an explicit strong motion choice when reduced motion is preferred', () => {
+      vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true }));
+      const manager = new SaveManager();
+
+      manager.save({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        colorAccessibility: { motionSensitivity: 'strong' },
+      });
+
+      expect(manager.load().colorAccessibility).toEqual({ motionSensitivity: 'strong' });
     });
 
     it('preserves motion sensitivity when progress is reset', () => {

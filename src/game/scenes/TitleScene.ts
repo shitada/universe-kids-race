@@ -32,7 +32,7 @@ import { attachReleaseConfirmButton } from '../../ui/attachReleaseConfirmButton'
 import { createStageMedalDisplay } from '../../ui/stageMedalDisplay';
 import { prewarmStageVisualAssets } from './stageVisualAssets';
 import { setSharedVibrationIntensity } from '../systems/VibrationSystem';
-import { DEFAULT_MOTION_SENSITIVITY } from '../accessibility/motionSensitivity';
+import { getDefaultMotionSensitivity } from '../accessibility/motionSensitivity';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // SHARED background-star resources for TitleScene
@@ -471,7 +471,7 @@ export class TitleScene implements Scene {
   private persistHighContrastSetting(enabled: boolean): void {
     const data = this.saveManager.load();
     const currentMotionSensitivity =
-      data.colorAccessibility?.motionSensitivity ?? DEFAULT_MOTION_SENSITIVITY;
+      data.colorAccessibility?.motionSensitivity ?? getDefaultMotionSensitivity();
     const currentColorVisionSupportMode =
       data.colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE;
     data.colorAccessibility = this.buildColorAccessibilitySettings(
@@ -518,7 +518,7 @@ export class TitleScene implements Scene {
     const data = this.saveManager.load();
     const highContrastEnabled = data.colorAccessibility?.highContrast === true;
     const currentMotionSensitivity =
-      data.colorAccessibility?.motionSensitivity ?? DEFAULT_MOTION_SENSITIVITY;
+      data.colorAccessibility?.motionSensitivity ?? getDefaultMotionSensitivity();
     data.colorAccessibility = this.buildColorAccessibilitySettings(
       highContrastEnabled,
       currentMotionSensitivity,
@@ -535,9 +535,10 @@ export class TitleScene implements Scene {
     motionSensitivity: MotionSensitivity,
     colorVisionSupportMode: ColorVisionSupportMode,
   ): SaveData['colorAccessibility'] {
+    const defaultMotionSensitivity = getDefaultMotionSensitivity();
     if (
       !highContrastEnabled &&
-      motionSensitivity === DEFAULT_MOTION_SENSITIVITY &&
+      motionSensitivity === defaultMotionSensitivity &&
       colorVisionSupportMode === DEFAULT_COLOR_VISION_SUPPORT_MODE
     ) {
       return undefined;
@@ -545,7 +546,7 @@ export class TitleScene implements Scene {
 
     return {
       ...(highContrastEnabled ? { highContrast: true } : {}),
-      ...(motionSensitivity !== DEFAULT_MOTION_SENSITIVITY ? { motionSensitivity } : {}),
+      ...(motionSensitivity !== defaultMotionSensitivity ? { motionSensitivity } : {}),
       ...(colorVisionSupportMode !== DEFAULT_COLOR_VISION_SUPPORT_MODE ? { colorVisionSupportMode } : {}),
     };
   }
@@ -896,7 +897,7 @@ export class TitleScene implements Scene {
             this.saveManager.load().colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE,
           initialVibrationIntensity: this.saveManager.load().vibrationSettings?.intensity ?? 'medium',
           initialMotionSensitivity:
-            this.saveManager.load().colorAccessibility?.motionSensitivity ?? DEFAULT_MOTION_SENSITIVITY,
+            this.saveManager.load().colorAccessibility?.motionSensitivity ?? getDefaultMotionSensitivity(),
           initialRestReminderEnabled:
             this.saveManager.load().restReminderSettings?.enabled ?? DEFAULT_REST_REMINDER_ENABLED,
           onToggle: (enabled) => this.persistHighContrastSetting(enabled),
