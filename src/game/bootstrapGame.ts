@@ -30,6 +30,7 @@ import { PlayTimeRestOverlay } from '../ui/PlayTimeRestOverlay';
 import { createOrientationHintHandler } from './utils/createOrientationHintHandler';
 import { createRetryableModuleLoader } from './utils/createRetryableModuleLoader';
 import type { SceneType } from '../types';
+import { DEFAULT_REST_REMINDER_ENABLED } from './config/RestReminderConfig';
 import { ThermalPreventionSystem } from './systems/ThermalPreventionSystem';
 
 export interface BootstrapGameOptions {
@@ -84,6 +85,10 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   let lastAppliedHeight = 0;
   let stageScene: StageScene | null = null;
   let hasScheduledStagePrefetch = false;
+
+  function isRestReminderEnabled(): boolean {
+    return saveManager.load().restReminderSettings?.enabled ?? DEFAULT_REST_REMINDER_ENABLED;
+  }
 
   function isStageManuallyPaused(): boolean {
     return (stageScene as (StageScene & { isManuallyPaused?: () => boolean }) | null)?.isManuallyPaused?.() === true;
@@ -190,6 +195,11 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
         return;
       }
 
+      if (!isRestReminderEnabled()) {
+        frameRateAdaptationSystem.setPreventiveLevel(0);
+        return;
+      }
+
       frameRateAdaptationSystem.setPreventiveLevel(level);
       if (
         sceneManager.getCurrentType() !== 'stage' ||
@@ -219,13 +229,25 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
           if (memoryPressureOverlay.isVisible()) {
             return;
           }
+          thermalPreventionSystem.flush();
           resumeGame();
-          void sceneManager.requestTransition('title');
+          return sceneManager.requestTransition('title').then(() => {
+            if (disposed || memoryPressureOverlay.isVisible() || isPortraitLocked) {
+              return;
+            }
+            playTimeRestOverlay.show({
+              variant: 'rest-complete',
+              totalPlayTimeMs,
+              onAcknowledge: () => {},
+            });
+          }).catch(() => {});
         },
       });
     },
   });
-  frameRateAdaptationSystem.setPreventiveLevel(thermalPreventionSystem.getPreventiveLevel());
+  frameRateAdaptationSystem.setPreventiveLevel(
+    isRestReminderEnabled() ? thermalPreventionSystem.getPreventiveLevel() : 0,
+  );
 
   renderer.setClearColor(0x000020);
   inputSystem.setup(canvas);
@@ -295,6 +317,9 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   sceneManager.registerSceneFactory('stage', async () => {
     const { StageScene } = await loadStageSceneModule();
     stageScene = new StageScene(sceneManager, inputSystem, audioManager, saveManager);
+    frameRateAdaptationSystem.setPreventiveLevel(
+      isRestReminderEnabled() ? thermalPreventionSystem.getPreventiveLevel() : 0,
+    );
     (stageScene as StageScene & {
       setPauseHandlers?: (handlers: {
         onPauseRequested?: () => void;
@@ -380,7 +405,11 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   gameLoop.start(
     (deltaTime: number) => {
       sceneManager.update(deltaTime);
-      if (sceneManager.getCurrentType() === 'stage' && stageScene?.isPlaying() === true) {
+      if (
+        sceneManager.getCurrentType() === 'stage' &&
+        stageScene?.isPlaying() === true &&
+        isRestReminderEnabled()
+      ) {
         thermalPreventionSystem.updateActivePlay(deltaTime);
       }
     },

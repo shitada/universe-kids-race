@@ -1,6 +1,7 @@
 import {
   DEFAULT_SPACESHIP_CUSTOMIZATION,
   type GameplayStats,
+  type RestReminderSettings,
   SPECIAL_SHOOTING_STAR_TYPES,
   SPACESHIP_COLOR_KEYS,
   type SaveData,
@@ -17,6 +18,7 @@ import {
   DEFAULT_MOTION_SENSITIVITY,
   normalizeMotionSensitivity,
 } from '../accessibility/motionSensitivity';
+import { DEFAULT_REST_REMINDER_ENABLED } from '../config/RestReminderConfig';
 import { TOTAL_STAGES } from '../config/StageConfig';
 
 const STORAGE_KEY = 'universe-kids-race-save';
@@ -36,6 +38,7 @@ const DEFAULT_DATA: SaveData = {
   unlockedPlanets: [],
   muted: false,
   vibrationSettings: { intensity: 'medium' },
+  restReminderSettings: { enabled: DEFAULT_REST_REMINDER_ENABLED },
   bestStageStars: {},
   gameplayStats: createDefaultGameplayStats(),
   tutorialShown: false,
@@ -137,6 +140,16 @@ function normalizeVibrationIntensity(value: unknown): VibrationIntensity {
   }
 }
 
+function normalizeRestReminderSettings(value: unknown): RestReminderSettings {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { enabled: DEFAULT_REST_REMINDER_ENABLED };
+  }
+
+  return {
+    enabled: (value as { enabled?: unknown }).enabled !== false,
+  };
+}
+
 function normalizeColorAccessibilitySettings(value: unknown): SaveData['colorAccessibility'] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
@@ -193,6 +206,7 @@ function sanitizeSaveData(data: SaveData): SaveData {
     vibrationSettings: {
       intensity: normalizeVibrationIntensity(data.vibrationSettings?.intensity),
     },
+    restReminderSettings: normalizeRestReminderSettings(data.restReminderSettings),
   };
 
   const discoveredConstellations = Array.isArray(data.discoveredConstellations)
@@ -257,6 +271,9 @@ export class SaveManager {
       data.vibrationSettings = {
         intensity: normalizeVibrationIntensity((data as { vibrationSettings?: { intensity?: unknown } }).vibrationSettings?.intensity),
       };
+      data.restReminderSettings = normalizeRestReminderSettings(
+        (data as { restReminderSettings?: unknown }).restReminderSettings,
+      );
 
       const colorAccessibility = normalizeColorAccessibilitySettings(
         (data as { colorAccessibility?: unknown }).colorAccessibility,
@@ -364,6 +381,7 @@ export class SaveManager {
       const vibrationSettings = {
         intensity: normalizeVibrationIntensity(prev.vibrationSettings?.intensity),
       };
+      const restReminderSettings = normalizeRestReminderSettings(prev.restReminderSettings);
       const lastStablePixelTier = prev.lastStablePixelTier;
       const tutorialShown = prev.tutorialShown === true;
       const colorAccessibility = normalizeColorAccessibilitySettings(prev.colorAccessibility);
@@ -375,6 +393,7 @@ export class SaveManager {
         unlockedPlanets: [],
         muted,
         vibrationSettings,
+        restReminderSettings,
         bestStageStars: {},
         gameplayStats,
         tutorialShown,
@@ -401,6 +420,7 @@ export class SaveManager {
       const vibrationSettings = {
         intensity: normalizeVibrationIntensity(prev.vibrationSettings?.intensity),
       };
+      const restReminderSettings = normalizeRestReminderSettings(prev.restReminderSettings);
       const lastStablePixelTier = prev.lastStablePixelTier;
       const colorAccessibility = normalizeColorAccessibilitySettings(prev.colorAccessibility);
       const gameplayStats = normalizeGameplayStats(prev.gameplayStats);
@@ -411,6 +431,7 @@ export class SaveManager {
         unlockedPlanets: [],
         muted,
         vibrationSettings,
+        restReminderSettings,
         bestStageStars: {},
         gameplayStats,
         tutorialShown: false,

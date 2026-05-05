@@ -19,6 +19,7 @@ import { ColorAccessibilitySettings } from '../../ui/ColorAccessibilitySettings'
 import { SpaceshipCustomizer } from '../../ui/SpaceshipCustomizer';
 import { StatsOverlay } from '../../ui/StatsOverlay';
 import { getStageConfig, getStageMedalStatus, TOTAL_STAGES } from '../config/StageConfig';
+import { DEFAULT_REST_REMINDER_ENABLED } from '../config/RestReminderConfig';
 import {
   DEFAULT_COLOR_VISION_SUPPORT_MODE,
   formatPlanetReadingLabel,
@@ -490,6 +491,12 @@ export class TitleScene implements Scene {
     setSharedVibrationIntensity(intensity);
   }
 
+  private persistRestReminderSetting(enabled: boolean): void {
+    const data = this.saveManager.load();
+    data.restReminderSettings = { enabled };
+    this.saveManager.save(data);
+  }
+
   private persistMotionSensitivitySetting(sensitivity: MotionSensitivity): void {
     const data = this.saveManager.load();
     const highContrastEnabled = data.colorAccessibility?.highContrast === true;
@@ -889,10 +896,13 @@ export class TitleScene implements Scene {
           initialVibrationIntensity: this.saveManager.load().vibrationSettings?.intensity ?? 'medium',
           initialMotionSensitivity:
             this.saveManager.load().colorAccessibility?.motionSensitivity ?? DEFAULT_MOTION_SENSITIVITY,
+          initialRestReminderEnabled:
+            this.saveManager.load().restReminderSettings?.enabled ?? DEFAULT_REST_REMINDER_ENABLED,
           onToggle: (enabled) => this.persistHighContrastSetting(enabled),
           onColorVisionSupportModeChange: (mode) => this.persistColorVisionSupportModeSetting(mode),
           onVibrationIntensityChange: (intensity) => this.persistVibrationIntensitySetting(intensity),
           onMotionSensitivityChange: (sensitivity) => this.persistMotionSensitivitySetting(sensitivity),
+          onRestReminderToggle: (enabled) => this.persistRestReminderSetting(enabled),
         });
       },
       onPressChange: (pressed) => {

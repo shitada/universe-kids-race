@@ -546,6 +546,13 @@ describe('TitleScene (T009)', () => {
       colorAccessibility: { highContrast: true },
     }));
 
+    const restReminderToggle = document.querySelector('[data-rest-reminder-toggle]') as HTMLButtonElement | null;
+    restReminderToggle?.click();
+
+    expect(saveManager.save).toHaveBeenCalledWith(expect.objectContaining({
+      restReminderSettings: { enabled: false },
+    }));
+
     const markModeButton = document.querySelector('[data-color-vision-mode-button="color-and-marks"]') as HTMLButtonElement | null;
     markModeButton?.click();
 

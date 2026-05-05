@@ -1,3 +1,8 @@
+import {
+  REST_REMINDER_STORAGE_KEY,
+  REST_REMINDER_THRESHOLDS_MS,
+} from '../config/RestReminderConfig';
+
 export interface ThermalPreventionMilestone {
   level: number;
   thresholdMinutes: number;
@@ -17,8 +22,6 @@ interface PersistedThermalPreventionState {
   shownMilestoneLevels: number[];
 }
 
-const DEFAULT_STORAGE_KEY = 'universe-kids-race-thermal-prevention';
-const DEFAULT_THRESHOLDS_MS = [20 * 60 * 1000, 30 * 60 * 1000] as const;
 const DEFAULT_PERSIST_INTERVAL_MS = 15 * 1000;
 
 function sanitizePersistedState(value: unknown): PersistedThermalPreventionState | null {
@@ -56,8 +59,8 @@ export class ThermalPreventionSystem {
 
   constructor(options: ThermalPreventionSystemOptions = {}) {
     this.storage = options.storage ?? globalThis.sessionStorage ?? null;
-    this.storageKey = options.storageKey ?? DEFAULT_STORAGE_KEY;
-    this.thresholdsMs = (options.thresholdsMs ?? DEFAULT_THRESHOLDS_MS)
+    this.storageKey = options.storageKey ?? REST_REMINDER_STORAGE_KEY;
+    this.thresholdsMs = (options.thresholdsMs ?? REST_REMINDER_THRESHOLDS_MS)
       .map((threshold) => Math.max(0, Math.floor(threshold)))
       .filter((threshold, index, list) => threshold > 0 && list.indexOf(threshold) === index)
       .sort((a, b) => a - b);

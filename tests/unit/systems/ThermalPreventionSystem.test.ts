@@ -16,7 +16,7 @@ function createStorage(initialState?: unknown) {
 }
 
 describe('ThermalPreventionSystem', () => {
-  it('20分と30分で一度だけ休憩提案を発火し、予防レベルを上げる', () => {
+  it('15分・30分・45分で一度だけ休憩提案を発火し、予防レベルを上げる', () => {
     const storage = createStorage();
     const onMilestoneReached = vi.fn();
     const system = new ThermalPreventionSystem({
@@ -26,7 +26,7 @@ describe('ThermalPreventionSystem', () => {
       onMilestoneReached,
     });
 
-    system.updateActivePlay(19 * 60);
+    system.updateActivePlay(14 * 60);
     expect(system.getPreventiveLevel()).toBe(0);
     expect(onMilestoneReached).not.toHaveBeenCalled();
 
@@ -34,11 +34,11 @@ describe('ThermalPreventionSystem', () => {
     expect(system.getPreventiveLevel()).toBe(1);
     expect(onMilestoneReached).toHaveBeenNthCalledWith(1, {
       level: 1,
-      thresholdMinutes: 20,
-      totalPlayTimeMs: 20 * 60 * 1000,
+      thresholdMinutes: 15,
+      totalPlayTimeMs: 15 * 60 * 1000,
     });
 
-    system.updateActivePlay(9 * 60);
+    system.updateActivePlay(14 * 60);
     expect(onMilestoneReached).toHaveBeenCalledTimes(1);
 
     system.updateActivePlay(60);
@@ -47,6 +47,17 @@ describe('ThermalPreventionSystem', () => {
       level: 2,
       thresholdMinutes: 30,
       totalPlayTimeMs: 30 * 60 * 1000,
+    });
+
+    system.updateActivePlay(14 * 60);
+    expect(onMilestoneReached).toHaveBeenCalledTimes(2);
+
+    system.updateActivePlay(60);
+    expect(system.getPreventiveLevel()).toBe(3);
+    expect(onMilestoneReached).toHaveBeenNthCalledWith(3, {
+      level: 3,
+      thresholdMinutes: 45,
+      totalPlayTimeMs: 45 * 60 * 1000,
     });
   });
 

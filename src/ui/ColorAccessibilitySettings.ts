@@ -6,10 +6,12 @@ export interface ColorAccessibilitySettingsOptions {
   initialColorVisionSupportMode: ColorVisionSupportMode;
   initialVibrationIntensity: VibrationIntensity;
   initialMotionSensitivity: MotionSensitivity;
+  initialRestReminderEnabled: boolean;
   onToggle: (enabled: boolean) => void;
   onColorVisionSupportModeChange: (mode: ColorVisionSupportMode) => void;
   onVibrationIntensityChange: (intensity: VibrationIntensity) => void;
   onMotionSensitivityChange: (sensitivity: MotionSensitivity) => void;
+  onRestReminderToggle: (enabled: boolean) => void;
 }
 
 export class ColorAccessibilitySettings {
@@ -20,12 +22,15 @@ export class ColorAccessibilitySettings {
   private colorVisionSupportMode: ColorVisionSupportMode = 'color-only';
   private vibrationIntensity: VibrationIntensity = 'medium';
   private motionSensitivity: MotionSensitivity = 'strong';
+  private restReminderEnabled = true;
   private colorVisionDescriptionEl: HTMLParagraphElement | null = null;
   private colorVisionButtons = new Map<ColorVisionSupportMode, HTMLButtonElement>();
   private vibrationDescriptionEl: HTMLParagraphElement | null = null;
   private vibrationButtons = new Map<VibrationIntensity, HTMLButtonElement>();
   private motionDescriptionEl: HTMLParagraphElement | null = null;
   private motionButtons = new Map<MotionSensitivity, HTMLButtonElement>();
+  private restReminderDescriptionEl: HTMLParagraphElement | null = null;
+  private restReminderToggleButton: HTMLButtonElement | null = null;
   private motionPreviewEl: HTMLDivElement | null = null;
   private motionPreviewTokenEl: HTMLDivElement | null = null;
   private motionPreviewCaptionEl: HTMLParagraphElement | null = null;
@@ -35,6 +40,7 @@ export class ColorAccessibilitySettings {
   private onColorVisionSupportModeChange: ((mode: ColorVisionSupportMode) => void) | null = null;
   private onVibrationIntensityChange: ((intensity: VibrationIntensity) => void) | null = null;
   private onMotionSensitivityChange: ((sensitivity: MotionSensitivity) => void) | null = null;
+  private onRestReminderToggle: ((enabled: boolean) => void) | null = null;
 
   show(options: ColorAccessibilitySettingsOptions): void {
     const host = document.getElementById('ui-overlay');
@@ -44,10 +50,12 @@ export class ColorAccessibilitySettings {
     this.colorVisionSupportMode = options.initialColorVisionSupportMode;
     this.vibrationIntensity = options.initialVibrationIntensity;
     this.motionSensitivity = options.initialMotionSensitivity;
+    this.restReminderEnabled = options.initialRestReminderEnabled;
     this.onToggle = options.onToggle;
     this.onColorVisionSupportModeChange = options.onColorVisionSupportModeChange;
     this.onVibrationIntensityChange = options.onVibrationIntensityChange;
     this.onMotionSensitivityChange = options.onMotionSensitivityChange;
+    this.onRestReminderToggle = options.onRestReminderToggle;
     if (!this.overlay) {
       this.overlay = document.createElement('div');
       this.overlay.setAttribute('data-color-accessibility-settings', '');
@@ -77,7 +85,7 @@ export class ColorAccessibilitySettings {
       `;
 
       const title = document.createElement('h2');
-      title.textContent = 'みやすさ・しんどう せってい';
+      title.textContent = 'みやすさ・しんどう・やすみ せってい';
       title.style.cssText = 'margin: 0 0 0.65rem; font-size: clamp(1.25rem, 4.6vmin, 1.7rem);';
 
       this.descriptionEl = document.createElement('p');
@@ -105,6 +113,37 @@ export class ColorAccessibilitySettings {
         this.highContrast = !this.highContrast;
         this.render();
         this.onToggle?.(this.highContrast);
+      });
+
+      const restReminderTitle = document.createElement('h3');
+      restReminderTitle.textContent = 'やすみじかんの おしらせ';
+      restReminderTitle.style.cssText = 'margin: 0.9rem 0 0.45rem; font-size: clamp(1rem, 3.8vmin, 1.2rem);';
+
+      this.restReminderDescriptionEl = document.createElement('p');
+      this.restReminderDescriptionEl.style.cssText = 'margin: 0 0 0.6rem; font-size: clamp(0.9rem, 3.2vmin, 1rem); line-height: 1.5;';
+
+      this.restReminderToggleButton = document.createElement('button');
+      this.restReminderToggleButton.setAttribute('data-rest-reminder-toggle', '');
+      this.restReminderToggleButton.style.cssText = `
+        display: block;
+        width: 100%;
+        min-height: 2.75rem;
+        margin-bottom: 0.85rem;
+        padding: 0.9rem 1rem;
+        border-radius: 999px;
+        border: 3px solid #fff;
+        background: linear-gradient(135deg, #ffe58b, #9fd6ff);
+        color: #102040;
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: clamp(1rem, 3.6vmin, 1.15rem);
+        font-weight: 900;
+        cursor: pointer;
+        touch-action: manipulation;
+      `;
+      this.restReminderToggleButton.addEventListener('click', () => {
+        this.restReminderEnabled = !this.restReminderEnabled;
+        this.render();
+        this.onRestReminderToggle?.(this.restReminderEnabled);
       });
 
       const colorVisionTitle = document.createElement('h3');
@@ -346,6 +385,9 @@ export class ColorAccessibilitySettings {
       panel.appendChild(title);
       panel.appendChild(this.descriptionEl);
       panel.appendChild(this.toggleButton);
+      panel.appendChild(restReminderTitle);
+      panel.appendChild(this.restReminderDescriptionEl);
+      panel.appendChild(this.restReminderToggleButton);
       panel.appendChild(colorVisionTitle);
       panel.appendChild(this.colorVisionDescriptionEl);
       panel.appendChild(colorVisionGroup);
@@ -378,6 +420,8 @@ export class ColorAccessibilitySettings {
     if (
       !this.toggleButton ||
       !this.descriptionEl ||
+      !this.restReminderDescriptionEl ||
+      !this.restReminderToggleButton ||
       !this.colorVisionDescriptionEl ||
       !this.vibrationDescriptionEl ||
       !this.motionDescriptionEl
@@ -389,6 +433,14 @@ export class ColorAccessibilitySettings {
       ? 'みやすくする: ON'
       : 'みやすくする: OFF';
     this.toggleButton.setAttribute('aria-pressed', this.highContrast ? 'true' : 'false');
+
+    this.restReminderDescriptionEl.textContent = this.restReminderEnabled
+      ? '15ぷんごとに そっと やすもうって つたえるよ。'
+      : 'いまは おしらせを ださずに あそべるよ。';
+    this.restReminderToggleButton.textContent = this.restReminderEnabled
+      ? 'やすみじかんの おしらせ: ON'
+      : 'やすみじかんの おしらせ: OFF';
+    this.restReminderToggleButton.setAttribute('aria-pressed', this.restReminderEnabled ? 'true' : 'false');
 
     this.colorVisionDescriptionEl.textContent = this.colorVisionSupportMode === 'color-and-marks'
       ? 'にじりゅうせいは ★、わくせいは しるしつきで わかるよ。'

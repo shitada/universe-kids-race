@@ -368,6 +368,48 @@ describe('SaveManager', () => {
     });
   });
 
+  describe('restReminderSettings', () => {
+    it('defaults rest reminders to enabled', () => {
+      const manager = new SaveManager();
+      expect(manager.load().restReminderSettings).toEqual({ enabled: true });
+    });
+
+    it('keeps valid disabled rest reminder settings on load', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        restReminderSettings: { enabled: false },
+      }));
+      const manager = new SaveManager();
+
+      expect(manager.load().restReminderSettings).toEqual({ enabled: false });
+    });
+
+    it('falls back to enabled when rest reminder settings are malformed', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        restReminderSettings: { enabled: 'nope' },
+      }));
+      const manager = new SaveManager();
+
+      expect(manager.load().restReminderSettings).toEqual({ enabled: true });
+    });
+
+    it('preserves rest reminder settings when progress is reset', () => {
+      const manager = new SaveManager();
+      manager.save({
+        clearedStage: 4,
+        unlockedPlanets: [1, 2, 3, 4],
+        restReminderSettings: { enabled: false },
+      });
+
+      manager.resetProgressPreservingSettings();
+
+      expect(manager.load().restReminderSettings).toEqual({ enabled: false });
+    });
+  });
+
   describe('gameplayStats', () => {
     it('sanitizes malformed gameplay stats from storage', () => {
       storage.set('universe-kids-race-save', JSON.stringify({
@@ -646,6 +688,7 @@ describe('SaveManager', () => {
         tutorialShown: false,
         muted: true,
         vibrationSettings: { intensity: 'medium' },
+        restReminderSettings: { enabled: true },
         spaceshipCustomization: { bodyColor: 'sky', noseColor: 'sunset', wingColor: 'aqua' },
       });
     });
@@ -748,6 +791,7 @@ describe('SaveManager', () => {
         muted: true,
         tutorialShown: true,
         vibrationSettings: { intensity: 'medium' },
+        restReminderSettings: { enabled: true },
         spaceshipCustomization: { bodyColor: 'sky', noseColor: 'sunset', wingColor: 'aqua' },
       };
       const manager = new SaveManager();
@@ -780,6 +824,7 @@ describe('SaveManager', () => {
         muted: false,
         tutorialShown: true,
         vibrationSettings: { intensity: 'medium' },
+        restReminderSettings: { enabled: true },
         spaceshipCustomization: { bodyColor: 'sky', noseColor: 'sunset', wingColor: 'aqua' },
       };
       const manager = new SaveManager();
@@ -839,6 +884,7 @@ describe('SaveManager', () => {
         tutorialShown: false,
         colorAccessibility: { highContrast: true },
         vibrationSettings: { intensity: 'medium' },
+        restReminderSettings: { enabled: true },
         bestStageStars: {},
         gameplayStats: {
           totalPlayTimeSeconds: 0,
@@ -868,6 +914,7 @@ describe('SaveManager', () => {
         muted: false,
         tutorialShown: false,
         vibrationSettings: { intensity: 'medium' },
+        restReminderSettings: { enabled: true },
         bestStageStars: {},
         gameplayStats: {
           totalPlayTimeSeconds: 0,
@@ -921,6 +968,7 @@ describe('SaveManager', () => {
         tutorialShown: true,
         colorAccessibility: { highContrast: true },
         vibrationSettings: { intensity: 'medium' },
+        restReminderSettings: { enabled: true },
         bestStageStars: {},
         gameplayStats: {
           totalPlayTimeSeconds: 0,
@@ -944,6 +992,7 @@ describe('SaveManager', () => {
         muted: false,
         tutorialShown: false,
         vibrationSettings: { intensity: 'medium' },
+        restReminderSettings: { enabled: true },
         bestStageStars: {},
         gameplayStats: {
           totalPlayTimeSeconds: 0,

@@ -40,7 +40,10 @@ interface SetupResult {
   };
 }
 
-async function setup(initialPreventiveLevel = 0): Promise<SetupResult> {
+async function setup(
+  initialPreventiveLevel = 0,
+  saveOverrides: Record<string, unknown> = {},
+): Promise<SetupResult> {
   vi.resetModules();
   document.body.innerHTML = '<canvas id="game-canvas"></canvas><div id="hud"></div><div id="ui-overlay"></div>';
   const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
@@ -149,6 +152,8 @@ async function setup(initialPreventiveLevel = 0): Promise<SetupResult> {
         clearedStage: 0,
         tutorialShown: true,
         lastStablePixelTier: 0,
+        restReminderSettings: { enabled: true },
+        ...saveOverrides,
       }));
       saveLastStablePixelTier = vi.fn();
     },
@@ -454,7 +459,7 @@ describe('bootstrapGame thermal prevention wiring', () => {
       thermalPreventionSystemInstance,
     } = await setup();
 
-    thermalPreventionSystemInstance.triggerMilestone(1, 20);
+    thermalPreventionSystemInstance.triggerMilestone(1, 15);
 
     expect(stageSceneInstance.setPerformanceAdaptationLevel).toHaveBeenCalledWith(1);
     expect(gameLoopInstance.pause).toHaveBeenCalledTimes(1);
@@ -497,7 +502,7 @@ describe('bootstrapGame thermal prevention wiring', () => {
       thermalPreventionSystemInstance,
     } = await setup();
 
-    thermalPreventionSystemInstance.triggerMilestone(1, 20);
+    thermalPreventionSystemInstance.triggerMilestone(1, 15);
     const [options] = playTimeRestOverlayInstance.show.mock.calls[0];
 
     options.onContinue();
@@ -523,11 +528,35 @@ describe('bootstrapGame thermal prevention wiring', () => {
     thermalPreventionSystemInstance.triggerMilestone(2, 30);
     const [options] = playTimeRestOverlayInstance.show.mock.calls[0];
 
-    options.onRest();
+    await options.onRest();
 
     expect(gameLoopInstance.resume).toHaveBeenCalledTimes(1);
     expect(audioManagerInstance.ensureResumed).toHaveBeenCalledTimes(1);
     expect(transitionSpy).toHaveBeenCalledWith('title');
+    expect(playTimeRestOverlayInstance.show).toHaveBeenCalledTimes(2);
+    expect(playTimeRestOverlayInstance.show.mock.calls[1][0]).toEqual(expect.objectContaining({
+      variant: 'rest-complete',
+      totalPlayTimeMs: 30 * 60 * 1000,
+    }));
+
+    bootstrapHandle.dispose();
+  });
+
+  it('does not count or show reminders while the rest reminder setting is off', async () => {
+    const {
+      bootstrapHandle,
+      gameLoopInstance,
+      thermalPreventionSystemInstance,
+      playTimeRestOverlayInstance,
+    } = await setup(0, {
+      restReminderSettings: { enabled: false },
+    });
+
+    gameLoopInstance.runUpdate(1.5);
+    expect(thermalPreventionSystemInstance.updateActivePlay).not.toHaveBeenCalled();
+
+    thermalPreventionSystemInstance.triggerMilestone(1, 15);
+    expect(playTimeRestOverlayInstance.show).not.toHaveBeenCalled();
 
     bootstrapHandle.dispose();
   });

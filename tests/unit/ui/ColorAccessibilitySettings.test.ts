@@ -24,10 +24,12 @@ describe('ColorAccessibilitySettings', () => {
       initialColorVisionSupportMode: 'color-only',
       initialVibrationIntensity: 'medium',
       initialMotionSensitivity: 'strong',
+      initialRestReminderEnabled: true,
       onToggle,
       onColorVisionSupportModeChange: vi.fn(),
       onVibrationIntensityChange,
       onMotionSensitivityChange: vi.fn(),
+      onRestReminderToggle: vi.fn(),
     });
 
     const toggle = document.querySelector('[data-color-accessibility-toggle]') as HTMLButtonElement | null;
@@ -47,10 +49,12 @@ describe('ColorAccessibilitySettings', () => {
       initialColorVisionSupportMode: 'color-only',
       initialVibrationIntensity: 'weak',
       initialMotionSensitivity: 'strong',
+      initialRestReminderEnabled: true,
       onToggle: vi.fn(),
       onColorVisionSupportModeChange: vi.fn(),
       onVibrationIntensityChange,
       onMotionSensitivityChange: vi.fn(),
+      onRestReminderToggle: vi.fn(),
     });
 
     const weakButton = document.querySelector('[data-vibration-intensity-button="weak"]') as HTMLButtonElement | null;
@@ -70,10 +74,12 @@ describe('ColorAccessibilitySettings', () => {
       initialColorVisionSupportMode: 'color-only',
       initialVibrationIntensity: 'medium',
       initialMotionSensitivity: 'medium',
+      initialRestReminderEnabled: true,
       onToggle: vi.fn(),
       onColorVisionSupportModeChange: vi.fn(),
       onVibrationIntensityChange: vi.fn(),
       onMotionSensitivityChange,
+      onRestReminderToggle: vi.fn(),
     });
 
     const mediumButton = document.querySelector('[data-motion-sensitivity-button="medium"]') as HTMLButtonElement | null;
@@ -102,10 +108,12 @@ describe('ColorAccessibilitySettings', () => {
       initialColorVisionSupportMode: 'color-only',
       initialVibrationIntensity: 'medium',
       initialMotionSensitivity: 'strong',
+      initialRestReminderEnabled: true,
       onToggle: vi.fn(),
       onColorVisionSupportModeChange,
       onVibrationIntensityChange: vi.fn(),
       onMotionSensitivityChange: vi.fn(),
+      onRestReminderToggle: vi.fn(),
     });
 
     const colorOnlyButton = document.querySelector('[data-color-vision-mode-button="color-only"]') as HTMLButtonElement | null;
@@ -125,10 +133,12 @@ describe('ColorAccessibilitySettings', () => {
       initialColorVisionSupportMode: 'color-only',
       initialVibrationIntensity: 'medium',
       initialMotionSensitivity: 'strong',
+      initialRestReminderEnabled: true,
       onToggle: vi.fn(),
       onColorVisionSupportModeChange: vi.fn(),
       onVibrationIntensityChange: vi.fn(),
       onMotionSensitivityChange: vi.fn(),
+      onRestReminderToggle: vi.fn(),
     });
     expect(settings.isVisible()).toBe(true);
 
@@ -136,5 +146,30 @@ describe('ColorAccessibilitySettings', () => {
 
     expect(settings.isVisible()).toBe(false);
     expect(document.querySelector('[data-color-accessibility-settings]')).toBeNull();
+  });
+
+  it('lets children turn rest reminders on and off', () => {
+    const onRestReminderToggle = vi.fn();
+    settings.show({
+      initialHighContrast: false,
+      initialColorVisionSupportMode: 'color-only',
+      initialVibrationIntensity: 'medium',
+      initialMotionSensitivity: 'strong',
+      initialRestReminderEnabled: false,
+      onToggle: vi.fn(),
+      onColorVisionSupportModeChange: vi.fn(),
+      onVibrationIntensityChange: vi.fn(),
+      onMotionSensitivityChange: vi.fn(),
+      onRestReminderToggle,
+    });
+
+    const toggle = document.querySelector('[data-rest-reminder-toggle]') as HTMLButtonElement | null;
+    expect(toggle?.textContent).toContain('OFF');
+
+    toggle?.click();
+
+    expect(toggle?.textContent).toContain('ON');
+    expect(document.body.textContent).toContain('15ぷんごと');
+    expect(onRestReminderToggle).toHaveBeenCalledWith(true);
   });
 });
