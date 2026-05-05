@@ -95,6 +95,20 @@ describe('EncyclopediaOverlay', () => {
     expect(uiOverlay.querySelector('[data-constellation-card][data-stage="4"]')?.textContent).toContain('？？？');
   });
 
+  it('shows monthly encounters in the celestial encyclopedia tab', () => {
+    overlay.show([1], () => {}, undefined, undefined, [], undefined, ['new-year-comet']);
+
+    const monthlyTab = uiOverlay.querySelector('[data-encyclopedia-tab="monthly"]') as HTMLElement;
+    dispatchReleaseConfirm(monthlyTab);
+
+    expect(uiOverlay.querySelector('[data-encyclopedia-panel="monthly"]')?.getAttribute('data-active')).toBe('true');
+    expect(uiOverlay.textContent).toContain('てんたいずかん');
+    expect(uiOverlay.querySelector('[data-monthly-encounter-card][data-monthly-encounter-id="new-year-comet"]')?.textContent)
+      .toContain('しんねんすいせい');
+    expect(uiOverlay.querySelector('[data-monthly-encounter-card][data-monthly-encounter-id="geminid-rain"]')?.textContent)
+      .toContain('？？？');
+  });
+
   it('unlocked card shows emoji and name', () => {
     overlay.show([1], () => {});
     const cards = uiOverlay.querySelectorAll('[data-card]');

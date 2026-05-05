@@ -11,12 +11,16 @@ export interface PlanetRewardPreview {
   companionChipLabel: string;
 }
 
+export function createEncyclopediaLabel(name: string, reading: string): string {
+  return `${name}（${reading}）`;
+}
+
 function createSpecialStarEncyclopediaEntry(
   entry: Omit<SpecialStarEncyclopediaEntry, 'encyclopediaLabel'>,
 ): SpecialStarEncyclopediaEntry {
   return {
     ...entry,
-    encyclopediaLabel: `${entry.name}（${entry.reading}）`,
+    encyclopediaLabel: createEncyclopediaLabel(entry.name, entry.reading),
   };
 }
 
@@ -25,7 +29,7 @@ function createPlanetEncyclopediaEntry(
 ): PlanetEncyclopediaEntry {
   return {
     ...entry,
-    encyclopediaLabel: `${entry.name}（${entry.reading}）`,
+    encyclopediaLabel: createEncyclopediaLabel(entry.name, entry.reading),
   };
 }
 

@@ -1,6 +1,8 @@
 import {
   DEFAULT_SPACESHIP_CUSTOMIZATION,
   type GameplayStats,
+  MONTHLY_ENCOUNTER_IDS,
+  type MonthlyEncounterId,
   type RestReminderSettings,
   SPECIAL_SHOOTING_STAR_TYPES,
   SPACESHIP_COLOR_KEYS,
@@ -188,6 +190,16 @@ function normalizeSpecialShootingStars(value: unknown): SpecialShootingStarType[
   ))];
 }
 
+function normalizeMonthlyEncounters(value: unknown): MonthlyEncounterId[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return [...new Set(value.filter(
+    (entry): entry is MonthlyEncounterId =>
+      typeof entry === 'string' && (MONTHLY_ENCOUNTER_IDS as readonly string[]).includes(entry),
+  ))];
+}
+
 function sanitizeSaveData(data: SaveData): SaveData {
   const sanitized: SaveData = {
     clearedStage: Number.isInteger(data.clearedStage) && data.clearedStage >= 0 && data.clearedStage <= TOTAL_STAGES
@@ -221,6 +233,11 @@ function sanitizeSaveData(data: SaveData): SaveData {
   const discoveredSpecialStars = normalizeSpecialShootingStars(data.discoveredSpecialStars);
   if (discoveredSpecialStars.length > 0) {
     sanitized.discoveredSpecialStars = discoveredSpecialStars;
+  }
+
+  const discoveredMonthlyEncounters = normalizeMonthlyEncounters(data.discoveredMonthlyEncounters);
+  if (discoveredMonthlyEncounters.length > 0) {
+    sanitized.discoveredMonthlyEncounters = discoveredMonthlyEncounters;
   }
 
   const colorAccessibility = normalizeColorAccessibilitySettings(data.colorAccessibility);
@@ -323,6 +340,14 @@ export class SaveManager {
         data.discoveredSpecialStars = discoveredSpecialStars;
       } else {
         delete (data as { discoveredSpecialStars?: unknown }).discoveredSpecialStars;
+      }
+      const discoveredMonthlyEncounters = normalizeMonthlyEncounters(
+        (data as { discoveredMonthlyEncounters?: unknown }).discoveredMonthlyEncounters,
+      );
+      if (discoveredMonthlyEncounters.length > 0) {
+        data.discoveredMonthlyEncounters = discoveredMonthlyEncounters;
+      } else {
+        delete (data as { discoveredMonthlyEncounters?: unknown }).discoveredMonthlyEncounters;
       }
       data.gameplayStats = normalizeGameplayStats((data as { gameplayStats?: unknown }).gameplayStats);
 
@@ -534,6 +559,26 @@ export class SaveManager {
       return true;
     } catch (e) {
       console.warn('SaveManager.markSpecialStarDiscovered failed:', e);
+      return false;
+    }
+  }
+
+  markMonthlyEncounterDiscovered(encounterId: MonthlyEncounterId): boolean {
+    if (!(MONTHLY_ENCOUNTER_IDS as readonly string[]).includes(encounterId)) {
+      return false;
+    }
+    try {
+      const data = this.load();
+      const discoveredMonthlyEncounters = [...(data.discoveredMonthlyEncounters ?? [])];
+      if (discoveredMonthlyEncounters.includes(encounterId)) {
+        return false;
+      }
+      discoveredMonthlyEncounters.push(encounterId);
+      data.discoveredMonthlyEncounters = discoveredMonthlyEncounters;
+      this.save(data);
+      return true;
+    } catch (e) {
+      console.warn('SaveManager.markMonthlyEncounterDiscovered failed:', e);
       return false;
     }
   }

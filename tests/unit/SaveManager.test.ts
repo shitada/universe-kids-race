@@ -213,6 +213,31 @@ describe('SaveManager', () => {
     });
   });
 
+  describe('discoveredMonthlyEncounters', () => {
+    it('defaults to empty array when the field is missing', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({ clearedStage: 1, unlockedPlanets: [1] }));
+      const manager = new SaveManager();
+      expect(manager.load().discoveredMonthlyEncounters ?? []).toEqual([]);
+    });
+
+    it('sanitizes invalid monthly encounter ids', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        discoveredMonthlyEncounters: ['new-year-comet', 'bad', 'geminid-rain', 3, 'geminid-rain'],
+      }));
+      const manager = new SaveManager();
+      expect(manager.load().discoveredMonthlyEncounters ?? []).toEqual(['new-year-comet', 'geminid-rain']);
+    });
+
+    it('marks a monthly encounter as discovered only once', () => {
+      const manager = new SaveManager();
+      expect(manager.markMonthlyEncounterDiscovered('starlight-whale')).toBe(true);
+      expect(manager.markMonthlyEncounterDiscovered('starlight-whale')).toBe(false);
+      expect(manager.load().discoveredMonthlyEncounters ?? []).toEqual(['starlight-whale']);
+    });
+  });
+
   describe('muted persistence', () => {
     it('defaults muted to false when no save exists', () => {
       const manager = new SaveManager();

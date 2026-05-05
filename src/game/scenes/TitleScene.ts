@@ -388,6 +388,7 @@ export class TitleScene implements Scene {
       saveData.bestStageStars ?? {},
       saveData.discoveredConstellations ?? [],
       saveData.colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE,
+      saveData.discoveredMonthlyEncounters ?? [],
     );
   }
 

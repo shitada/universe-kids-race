@@ -1,4 +1,9 @@
-import type { ColorVisionSupportMode, ConstellationDefinition, PlanetEncyclopediaEntry } from '../types';
+import type {
+  ColorVisionSupportMode,
+  ConstellationDefinition,
+  MonthlyEncounterId,
+  PlanetEncyclopediaEntry,
+} from '../types';
 import {
   DEFAULT_COLOR_VISION_SUPPORT_MODE,
   formatPlanetEncyclopediaLabel,
@@ -6,6 +11,7 @@ import {
   PLANET_ENCYCLOPEDIA,
 } from '../game/config/PlanetEncyclopedia';
 import { CONSTELLATION_DATA, getConstellationForStage } from '../game/config/ConstellationData';
+import { MONTHLY_ENCOUNTER_CONFIG } from '../game/config/MonthlyEncounterConfig';
 import { createCompanionPreviewController, type CompanionPreviewController } from './CompanionPreview';
 import { attachReleaseConfirmButton } from './attachReleaseConfirmButton';
 import { createStageMedalDisplay } from './stageMedalDisplay';
@@ -26,12 +32,18 @@ export class EncyclopediaOverlay {
   private static readonly RELEASE_CONFIRM_MOVE_TOLERANCE_PX = 12;
   private static readonly GALLERY_TITLE_ID = 'encyclopedia-gallery-title';
   private static readonly DETAIL_TITLE_ID = 'encyclopedia-detail-title';
+  private static readonly PLANET_TAB_LABEL = 'わくせいずかん';
+  private static readonly MONTHLY_TAB_LABEL = 'てんたいずかん';
   private overlayEl: HTMLDivElement | null = null;
   private detailEl: HTMLDivElement | null = null;
+  private galleryTitleEl: HTMLDivElement | null = null;
+  private galleryPanels = new Map<'planets' | 'monthly', HTMLDivElement>();
+  private activeTab: 'planets' | 'monthly' = 'planets';
   private isShowingDetail = false;
   private onSelectStage: ((stageNumber: number) => void) | null = null;
   private bestStageStars: Record<number, number> = {};
   private discoveredConstellations: number[] = [];
+  private discoveredMonthlyEncounters: MonthlyEncounterId[] = [];
   private colorVisionSupportMode: ColorVisionSupportMode = DEFAULT_COLOR_VISION_SUPPORT_MODE;
   private detailBackLabel = 'もどる';
   private detailPreviewController: CompanionPreviewController | null = null;
@@ -51,13 +63,17 @@ export class EncyclopediaOverlay {
     bestStageStars?: Record<number, number>,
     discoveredConstellations: number[] = [],
     colorVisionSupportMode: ColorVisionSupportMode = DEFAULT_COLOR_VISION_SUPPORT_MODE,
+    discoveredMonthlyEncounters: MonthlyEncounterId[] = [],
   ): void {
     if (this.overlayEl) return;
     this.onSelectStage = onSelectStage ?? null;
     this.bestStageStars = bestStageStars ?? {};
     this.discoveredConstellations = discoveredConstellations;
     this.colorVisionSupportMode = colorVisionSupportMode;
+    this.discoveredMonthlyEncounters = discoveredMonthlyEncounters;
     this.detailBackLabel = 'もどる';
+    this.activeTab = 'planets';
+    this.galleryPanels.clear();
 
     const uiOverlay = document.getElementById('ui-overlay');
     if (!uiOverlay) return;
@@ -87,7 +103,7 @@ export class EncyclopediaOverlay {
     // Title
     const title = document.createElement('div');
     title.id = EncyclopediaOverlay.GALLERY_TITLE_ID;
-    title.textContent = 'わくせいずかん';
+    title.textContent = EncyclopediaOverlay.PLANET_TAB_LABEL;
     title.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
       font-size: ${isCompactHeight ? '1.7rem' : '2rem'};
@@ -97,39 +113,30 @@ export class EncyclopediaOverlay {
       margin-bottom: ${isCompactHeight ? '0.45rem' : '0.8rem'};
       text-align: center;
     `;
+    this.galleryTitleEl = title;
     content.appendChild(title);
+
+    content.appendChild(this.createTabBar(isCompactHeight));
 
     const galleryMain = document.createElement('div');
     galleryMain.setAttribute('data-gallery-main', '');
     galleryMain.style.cssText = `
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(12rem, 0.34fr);
-      gap: ${isCompactHeight ? '0.55rem' : '0.8rem'};
+      position: relative;
       width: min(100%, 900px);
-      align-items: stretch;
-    `;
-
-    // Card grid
-    const grid = document.createElement('div');
-    grid.setAttribute('data-gallery-grid', '');
-    grid.setAttribute('aria-label', 'わくせい の いちらん');
-    grid.style.cssText = `
+      min-height: 0;
+      flex: 1 1 auto;
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(${isCompactHeight ? '86px' : '110px'}, 1fr));
-      gap: ${isCompactHeight ? '0.45rem' : '0.65rem'};
-      width: 100%;
-      justify-items: center;
       align-items: stretch;
+      justify-content: center;
     `;
 
-    for (const entry of PLANET_ENCYCLOPEDIA) {
-      const isUnlocked = unlockedPlanets.includes(entry.stageNumber);
-      const card = this.createCard(entry, isUnlocked, isCompactHeight);
-      grid.appendChild(card);
-    }
-
-    galleryMain.appendChild(grid);
-    galleryMain.appendChild(this.createConstellationSection(isCompactHeight));
+    const planetPanel = this.createPlanetPanel(unlockedPlanets, isCompactHeight);
+    const monthlyPanel = this.createMonthlyPanel(isCompactHeight);
+    this.galleryPanels.set('planets', planetPanel);
+    this.galleryPanels.set('monthly', monthlyPanel);
+    galleryMain.appendChild(planetPanel);
+    galleryMain.appendChild(monthlyPanel);
+    this.setActiveTab('planets');
     content.appendChild(galleryMain);
 
     // Back button
@@ -225,9 +232,184 @@ export class EncyclopediaOverlay {
     this.onSelectStage = null;
     this.bestStageStars = {};
     this.discoveredConstellations = [];
+    this.discoveredMonthlyEncounters = [];
     this.colorVisionSupportMode = DEFAULT_COLOR_VISION_SUPPORT_MODE;
     this.detailBackLabel = 'もどる';
+    this.galleryTitleEl = null;
+    this.galleryPanels.clear();
+    this.activeTab = 'planets';
     this.disposeDetailPreview();
+  }
+
+  private createTabBar(isCompactHeight: boolean): HTMLDivElement {
+    const tabBar = document.createElement('div');
+    tabBar.style.cssText = `
+      display: flex;
+      gap: 0.45rem;
+      margin-bottom: ${isCompactHeight ? '0.4rem' : '0.55rem'};
+    `;
+    tabBar.appendChild(this.createTabButton('planets', 'わくせい', isCompactHeight));
+    tabBar.appendChild(this.createTabButton('monthly', 'てんたい', isCompactHeight));
+    return tabBar;
+  }
+
+  private createTabButton(tab: 'planets' | 'monthly', label: string, isCompactHeight: boolean): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.setAttribute('data-encyclopedia-tab', tab);
+    button.textContent = label;
+    button.style.cssText = `
+      min-width: ${isCompactHeight ? '7.4rem' : '8.4rem'};
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: ${isCompactHeight ? '0.95rem' : '1.05rem'};
+      font-weight: 800;
+      padding: ${isCompactHeight ? '0.42rem 0.9rem' : '0.5rem 1rem'};
+      border: none;
+      border-radius: 999px;
+      color: #fff;
+      background: rgba(255, 255, 255, 0.12);
+      cursor: pointer;
+      touch-action: manipulation;
+      transform: scale(1);
+      transition: transform 0.08s ease-out, background 0.12s ease-out;
+    `;
+    this.galleryActionCleanups.add(attachReleaseConfirmButton(button, {
+      onActivate: () => {
+        this.setActiveTab(tab);
+      },
+      onPressChange: (pressed) => {
+        button.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+      },
+      moveTolerancePx: EncyclopediaOverlay.RELEASE_CONFIRM_MOVE_TOLERANCE_PX,
+    }));
+    return button;
+  }
+
+  private setActiveTab(tab: 'planets' | 'monthly'): void {
+    this.activeTab = tab;
+    if (this.galleryTitleEl) {
+      this.galleryTitleEl.textContent =
+        tab === 'monthly' ? EncyclopediaOverlay.MONTHLY_TAB_LABEL : EncyclopediaOverlay.PLANET_TAB_LABEL;
+    }
+    for (const [panelTab, panel] of this.galleryPanels) {
+      const isActive = panelTab === tab;
+      panel.style.display = isActive ? 'grid' : 'none';
+      panel.setAttribute('data-active', isActive ? 'true' : 'false');
+    }
+    const tabButtons = this.overlayEl?.querySelectorAll<HTMLElement>('[data-encyclopedia-tab]') ?? [];
+    tabButtons.forEach((button) => {
+      const isActive = button.getAttribute('data-encyclopedia-tab') === tab;
+      button.style.background = isActive ? 'linear-gradient(135deg, rgba(255, 215, 112, 0.9), rgba(123, 199, 255, 0.85))' : 'rgba(255, 255, 255, 0.12)';
+      button.style.color = isActive ? '#18233b' : '#fff';
+      button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+  }
+
+  private createPlanetPanel(unlockedPlanets: number[], isCompactHeight: boolean): HTMLDivElement {
+    const galleryMain = document.createElement('div');
+    galleryMain.setAttribute('data-encyclopedia-panel', 'planets');
+    galleryMain.style.cssText = `
+      display: grid;
+      grid-area: 1 / 1;
+      grid-template-columns: minmax(0, 1fr) minmax(12rem, 0.34fr);
+      gap: ${isCompactHeight ? '0.55rem' : '0.8rem'};
+      width: 100%;
+      align-items: stretch;
+      min-height: 0;
+    `;
+
+    const grid = document.createElement('div');
+    grid.setAttribute('data-gallery-grid', '');
+    grid.setAttribute('aria-label', 'わくせい の いちらん');
+    grid.style.cssText = `
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(${isCompactHeight ? '86px' : '110px'}, 1fr));
+      gap: ${isCompactHeight ? '0.45rem' : '0.65rem'};
+      width: 100%;
+      justify-items: center;
+      align-items: stretch;
+    `;
+
+    for (const entry of PLANET_ENCYCLOPEDIA) {
+      const isUnlocked = unlockedPlanets.includes(entry.stageNumber);
+      const card = this.createCard(entry, isUnlocked, isCompactHeight);
+      grid.appendChild(card);
+    }
+
+    galleryMain.appendChild(grid);
+    galleryMain.appendChild(this.createConstellationSection(isCompactHeight));
+    return galleryMain;
+  }
+
+  private createMonthlyPanel(isCompactHeight: boolean): HTMLDivElement {
+    const panel = document.createElement('div');
+    panel.setAttribute('data-encyclopedia-panel', 'monthly');
+    panel.style.cssText = `
+      display: none;
+      grid-area: 1 / 1;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: ${isCompactHeight ? '0.45rem' : '0.6rem'};
+      width: 100%;
+      align-content: start;
+    `;
+
+    for (const entry of MONTHLY_ENCOUNTER_CONFIG) {
+      const discovered = this.discoveredMonthlyEncounters.includes(entry.id);
+      const card = document.createElement('div');
+      card.setAttribute('data-monthly-encounter-card', '');
+      card.setAttribute('data-monthly-encounter-id', entry.id);
+      card.style.cssText = `
+        min-height: ${isCompactHeight ? '96px' : '116px'};
+        border-radius: 18px;
+        padding: ${isCompactHeight ? '0.5rem' : '0.65rem'};
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        gap: 0.18rem;
+        background: ${discovered ? `linear-gradient(135deg, #${entry.accentColor.toString(16).padStart(6, '0')}aa, rgba(255,255,255,0.16))` : 'rgba(255,255,255,0.08)'};
+        color: ${discovered ? '#fff' : '#aeb8d7'};
+        box-shadow: 0 4px 12px rgba(0,0,0,0.24);
+      `;
+
+      const monthChip = document.createElement('div');
+      monthChip.textContent = `${entry.month}がつ`;
+      monthChip.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: ${isCompactHeight ? '0.7rem' : '0.8rem'};
+        font-weight: 800;
+      `;
+      card.appendChild(monthChip);
+
+      const emoji = document.createElement('div');
+      emoji.textContent = discovered ? entry.emoji : '✨';
+      emoji.style.fontSize = isCompactHeight ? '1.4rem' : '1.7rem';
+      card.appendChild(emoji);
+
+      const name = document.createElement('div');
+      name.textContent = discovered ? entry.reading : '？？？';
+      name.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: ${isCompactHeight ? '0.78rem' : '0.9rem'};
+        font-weight: 900;
+        overflow-wrap: anywhere;
+      `;
+      card.appendChild(name);
+
+      const trivia = document.createElement('div');
+      trivia.textContent = discovered ? entry.trivia : 'こんげつ みつけると ずかんに のるよ';
+      trivia.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: ${isCompactHeight ? '0.62rem' : '0.72rem'};
+        line-height: 1.3;
+        overflow-wrap: anywhere;
+      `;
+      card.appendChild(trivia);
+
+      panel.appendChild(card);
+    }
+
+    return panel;
   }
 
   private createConstellationSection(isCompactHeight: boolean): HTMLDivElement {

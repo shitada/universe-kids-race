@@ -17,6 +17,7 @@ import { Meteorite, setMeteoriteHighContrastMode } from '../entities/Meteorite';
 import { ShootingStar } from '../entities/ShootingStar';
 import { Comet } from '../entities/Comet';
 import { SpecialShootingStar } from '../entities/SpecialShootingStar';
+import { MonthlyEncounterEntity } from '../entities/MonthlyEncounterEntity';
 import { CollisionSystem } from '../systems/CollisionSystem';
 import { ScoreSystem } from '../systems/ScoreSystem';
 import { SpawnSystem } from '../systems/SpawnSystem';
@@ -53,10 +54,12 @@ import { WormholeTunnelEffect } from '../effects/WormholeTunnelEffect';
 import { SeasonalEventEffects } from '../effects/SeasonalEventEffects';
 import { StageSpecialEffects } from '../effects/StageSpecialEffects';
 import { ScorePopupEffect } from '../effects/ScorePopupEffect';
+import { MonthlyEncounterEffect } from '../effects/MonthlyEncounterEffect';
 import { CompanionManager } from '../entities/CompanionManager';
 import { getConstellationForStage } from '../config/ConstellationData';
 import { getStageSpecialEventConfig } from '../config/StageSpecialEvents';
 import { SeasonalEventSystem } from '../systems/SeasonalEventSystem';
+import { MonthlyEncounterSystem } from '../systems/MonthlyEncounterSystem';
 import { followCameraZ } from '../utils/followCameraZ';
 import { getViewportSize } from '../utils/getViewportSize';
 import { ScorePopupManager } from '../../ui/ScorePopupManager';
@@ -67,6 +70,7 @@ import {
   getPlanetEncyclopediaEntry,
   getSpecialStarEncyclopediaEntry,
 } from '../config/PlanetEncyclopedia';
+import { getMonthlyEncounterEntry } from '../config/MonthlyEncounterConfig';
 import { TouchGuideOverlay, type TouchGuideMode } from '../../ui/TouchGuideOverlay';
 import { ConstellationHintOverlay } from '../../ui/ConstellationHintOverlay';
 import { attachReleaseConfirmButton } from '../../ui/attachReleaseConfirmButton';
@@ -172,6 +176,7 @@ export class StageScene implements Scene {
   private shootingStars: ShootingStar[] = [];
   private comets: Comet[] = [];
   private specialShootingStars: SpecialShootingStar[] = [];
+  private monthlyEncounters: MonthlyEncounterEntity[] = [];
 
   private collisionSystem = new CollisionSystem();
   private scoreSystem = new ScoreSystem();
@@ -183,6 +188,7 @@ export class StageScene implements Scene {
   private spaceWeatherEventSystem = new SpaceWeatherEventSystem();
   private specialStarSpawnSystem = new SpecialStarSpawnSystem();
   private readonly seasonalEventSystem: SeasonalEventSystem;
+  private monthlyEncounterSystem = new MonthlyEncounterSystem();
   private hud!: HUD;
   private scorePopupManager = new ScorePopupManager();
   private scorePopupEffect = new ScorePopupEffect();
@@ -196,6 +202,7 @@ export class StageScene implements Scene {
   private spaceWeatherEffect!: SpaceWeatherEffect;
   private stageSpecialEffects!: StageSpecialEffects;
   private seasonalEventEffects = new SeasonalEventEffects();
+  private monthlyEncounterEffect = new MonthlyEncounterEffect();
   private rainbowTrailEffect!: RainbowTrailEffect;
   private stageAtmosphereEffect = new StageAtmosphereEffect();
   private wormholeTunnelEffect = new WormholeTunnelEffect();
@@ -390,6 +397,7 @@ export class StageScene implements Scene {
     this.stageAtmosphereEffect.init(this.threeScene);
     this.wormholeTunnelEffect.init(this.threeScene);
     this.scorePopupEffect.init(this.threeScene);
+    this.monthlyEncounterEffect.init(this.threeScene);
 
     this.hud = new HUD();
     this.initialized = true;
@@ -526,9 +534,11 @@ export class StageScene implements Scene {
     this.shootingStars.length = 0;
     this.comets.length = 0;
     this.specialShootingStars.length = 0;
+    this.monthlyEncounters.length = 0;
     this.spawnSystem.reset();
     this.spawnSystem.setMeteoriteIntervalMultiplier(1);
     this.specialStarSpawnSystem.reset();
+    this.monthlyEncounterSystem.reset();
     this.boostSystem.reset();
     this.scoreSystem.resetStage();
     this.constellationSystem.reset(getConstellationForStage(this.stageNumber));
@@ -888,6 +898,7 @@ export class StageScene implements Scene {
     this.stageSpecialEffects.clear();
     this.seasonalEventSystem.clear();
     this.seasonalEventEffects.clear();
+    this.monthlyEncounterEffect.clear();
     this.stageAtmosphereEffect.clear();
     this.wormholeTunnelEffect.clear();
     this.wormholeTransitionTimer = 0;
@@ -901,8 +912,11 @@ export class StageScene implements Scene {
     this.shootingStars.length = 0;
     this.comets.length = 0;
     this.specialShootingStars.length = 0;
+    this.monthlyEncounters.length = 0;
     this.specialStarSpawnSystem.recycleAll();
     this.specialStarSpawnSystem.reset();
+    this.monthlyEncounterSystem.recycleAll();
+    this.monthlyEncounterSystem.reset();
     this.hud?.hideAssistMessage();
     this.constellationHintOverlay.hide();
     this.constellationLineEffect.clear();
@@ -922,6 +936,7 @@ export class StageScene implements Scene {
       this.constellationHintOverlay.tick(deltaTime);
       this.constellationLineEffect.update(deltaTime);
       this.planetRingEffect.update(deltaTime);
+      this.monthlyEncounterEffect.update(deltaTime);
       this.scorePopupEffect.update(deltaTime);
       this.particleBurstManager.update(this.threeScene, deltaTime);
       // Keep companion entrance animation progressing during clear screen
@@ -980,6 +995,7 @@ export class StageScene implements Scene {
       this.constellationHintOverlay.tick(deltaTime);
       this.constellationLineEffect.update(deltaTime);
       this.seasonalEventEffects.update(deltaTime, this.spaceship.position.x, this.spaceship.position.z);
+      this.monthlyEncounterEffect.update(deltaTime);
       this.stageAtmosphereEffect.update(deltaTime, this.camera, this.spaceship.position.x, this.spaceship.position.z);
       return;
     }
@@ -1106,6 +1122,18 @@ export class StageScene implements Scene {
       this.specialShootingStars.push(specialStar);
       this.threeScene.add(specialStar.mesh);
     }
+    const monthlyEncounterSpawnResult = this.monthlyEncounterSystem.update(
+      deltaTime,
+      this.spaceship.position.z,
+      this.monthlyEncounters,
+      this.specialShootingStars,
+      this.shootingStars,
+      this.comets,
+    );
+    for (const monthlyEncounter of monthlyEncounterSpawnResult.newMonthlyEncounters) {
+      this.monthlyEncounters.push(monthlyEncounter);
+      this.threeScene.add(monthlyEncounter.mesh);
+    }
 
     this.lodSystem.update(this.spaceship.position, this.stars);
     this.lodSystem.update(this.spaceship.position, this.meteorites);
@@ -1135,6 +1163,7 @@ export class StageScene implements Scene {
       this.shootingStars,
       this.comets,
       this.specialShootingStars,
+      this.monthlyEncounters,
     );
 
     if (collisionResult.shootingStarHit) {
@@ -1216,6 +1245,33 @@ export class StageScene implements Scene {
         specialStar.position,
         this.camera,
         'special-star',
+      );
+    }
+
+    if (collisionResult.monthlyEncounterHit) {
+      const monthlyEncounter = collisionResult.monthlyEncounterHit;
+      const encyclopediaEntry = getMonthlyEncounterEntry(monthlyEncounter.encounterId);
+      const isNewDiscovery = this.saveManager.markMonthlyEncounterDiscovered?.(monthlyEncounter.encounterId) ?? false;
+      this.scoreSystem.addBonusScore(monthlyEncounter.scoreBonus, monthlyEncounter.position);
+      this.audioManager.playSFX('shootingStarCollect');
+      triggerSharedVibration('rainbowCollect');
+      this.monthlyEncounterEffect.emit(
+        monthlyEncounter.position,
+        encyclopediaEntry?.accentColor ?? 0xffffff,
+      );
+      this.particleBurstManager.emitShootingStar(
+        this.threeScene,
+        monthlyEncounter.position.x,
+        monthlyEncounter.position.y,
+        monthlyEncounter.position.z,
+      );
+      this.scorePopupManager.showLabel(
+        isNewDiscovery
+          ? '✨ あたらしい てんたい はっけん！'
+          : `${encyclopediaEntry?.emoji ?? '✨'} ${encyclopediaEntry?.reading ?? 'てんたい'}`,
+        monthlyEncounter.position,
+        this.camera,
+        'monthly-encounter',
       );
     }
 
@@ -1311,6 +1367,7 @@ export class StageScene implements Scene {
     // Camera follow
     this.updateCameraFollow(deltaTime);
     this.stageAtmosphereEffect.update(deltaTime, this.camera, this.spaceship.position.x, this.spaceship.position.z);
+    this.monthlyEncounterEffect.update(deltaTime);
     this.rainbowTrailEffect.update(deltaTime, this.spaceship.position);
 
     for (const star of collisionResult.starCollisions) {
@@ -1866,6 +1923,20 @@ export class StageScene implements Scene {
       }
     }
     specialShootingStars.length = specialWrite;
+
+    const monthlyEncounters = this.monthlyEncounters;
+    let monthlyWrite = 0;
+    for (let read = 0; read < monthlyEncounters.length; read++) {
+      const monthlyEncounter = monthlyEncounters[read];
+      if (monthlyEncounter.isCollected || monthlyEncounter.position.z > behindThreshold) {
+        this.monthlyEncounterSystem.releaseMonthlyEncounter(monthlyEncounter);
+      } else {
+        monthlyEncounter.update(deltaTime, shipZ);
+        if (monthlyWrite !== read) monthlyEncounters[monthlyWrite] = monthlyEncounter;
+        monthlyWrite++;
+      }
+    }
+    monthlyEncounters.length = monthlyWrite;
   }
 
   private spawnConstellationStars(): void {

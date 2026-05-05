@@ -168,6 +168,7 @@ export interface SaveData {
   bestStageStars?: Record<number, number>;
   discoveredConstellations?: number[];
   discoveredSpecialStars?: SpecialShootingStarType[];
+  discoveredMonthlyEncounters?: MonthlyEncounterId[];
   gameplayStats?: GameplayStats;
   spaceshipCustomization?: SpaceshipCustomization;
   // Last stable adaptive pixel-ratio tier observed in the previous session.
@@ -206,6 +207,35 @@ export interface SpecialStarEncyclopediaEntry {
   emoji: string;
   trivia: string;
   accentColor: number;
+}
+
+export const MONTHLY_ENCOUNTER_IDS = [
+  'new-year-comet',
+  'heart-nebula',
+  'spring-ribbon',
+  'rainbow-seed',
+  'emerald-comet',
+  'rainy-jelly',
+  'tanabata-stream',
+  'starlight-whale',
+  'harvest-lantern',
+  'pumpkin-nebula',
+  'crystal-comet',
+  'geminid-rain',
+] as const;
+export type MonthlyEncounterId = (typeof MONTHLY_ENCOUNTER_IDS)[number];
+
+export interface MonthlyEncounterEncyclopediaEntry {
+  id: MonthlyEncounterId;
+  month: number;
+  name: string;
+  reading: string;
+  encyclopediaLabel: string;
+  emoji: string;
+  trivia: string;
+  encounterMessage: string;
+  accentColor: number;
+  scoreBonus: number;
 }
 
 export interface ConstellationPoint {
