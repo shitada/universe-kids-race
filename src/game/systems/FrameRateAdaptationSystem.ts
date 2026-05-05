@@ -1,3 +1,5 @@
+import type { FrameDropStats } from '../utils/FrameRateMonitor';
+
 export interface FrameRateAdaptationThresholds {
   fpsDownscaleThreshold: number;
   fpsUpscaleThreshold: number;
@@ -5,6 +7,8 @@ export interface FrameRateAdaptationThresholds {
   upscaleSustainMs: number;
   tierChangeCooldownMs: number;
   resumeGraceMs: number;
+  frameDropBurstCountThreshold: number;
+  frameDropBurstStreakThreshold: number;
 }
 
 export interface FrameRateAdaptationChange {
@@ -20,6 +24,8 @@ export const DEFAULT_FRAME_RATE_ADAPTATION_THRESHOLDS: FrameRateAdaptationThresh
   upscaleSustainMs: 4500,
   tierChangeCooldownMs: 2500,
   resumeGraceMs: 1200,
+  frameDropBurstCountThreshold: 4,
+  frameDropBurstStreakThreshold: 3,
 };
 
 export class FrameRateAdaptationSystem {
@@ -45,13 +51,20 @@ export class FrameRateAdaptationSystem {
     this.thresholds = { ...DEFAULT_FRAME_RATE_ADAPTATION_THRESHOLDS, ...thresholds };
   }
 
-  sample(fps: number, now: number): void {
+  sample(fps: number, now: number, frameDropStats?: Partial<FrameDropStats>): void {
     if (now < this.resumeGraceUntil) {
       this.lowFpsSince = null;
       this.highFpsSince = null;
       return;
     }
     if (now - this.lastReactiveLevelChangeAt < this.thresholds.tierChangeCooldownMs) {
+      return;
+    }
+
+    if (this.reactiveLevel < this.maxLevel && this.hasDroppedFrameBurst(frameDropStats)) {
+      this.lowFpsSince = null;
+      this.highFpsSince = null;
+      this.changeReactiveLevel(this.reactiveLevel + 1, now, 'degraded');
       return;
     }
 
@@ -141,5 +154,14 @@ export class FrameRateAdaptationSystem {
 
   private clampLevel(level: number): number {
     return Math.max(0, Math.min(this.maxLevel, Math.floor(level)));
+  }
+
+  private hasDroppedFrameBurst(frameDropStats?: Partial<FrameDropStats>): boolean {
+    const droppedFrameCount = Math.max(0, Math.floor(frameDropStats?.droppedFrameCount ?? 0));
+    const droppedFrameStreak = Math.max(0, Math.floor(frameDropStats?.droppedFrameStreak ?? 0));
+    return (
+      droppedFrameCount >= this.thresholds.frameDropBurstCountThreshold ||
+      droppedFrameStreak >= this.thresholds.frameDropBurstStreakThreshold
+    );
   }
 }

@@ -24,6 +24,23 @@ describe('FrameRateAdaptationSystem', () => {
     });
   });
 
+  it('raises adaptation immediately when a dropped-frame burst is detected', () => {
+    const onLevelChange = vi.fn();
+    const system = new FrameRateAdaptationSystem(2, onLevelChange);
+
+    system.sample(56, 10_000, {
+      droppedFrameCount: 4,
+      droppedFrameStreak: 3,
+    });
+
+    expect(system.getCurrentLevel()).toBe(1);
+    expect(onLevelChange).toHaveBeenCalledWith({
+      previousLevel: 0,
+      level: 1,
+      direction: 'degraded',
+    });
+  });
+
   it('recovers one step after sustained stable FPS', () => {
     const onLevelChange = vi.fn();
     const system = new FrameRateAdaptationSystem(2, onLevelChange);

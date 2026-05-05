@@ -1,6 +1,8 @@
-import { FrameRateMonitor } from './utils/FrameRateMonitor';
+import { FrameRateMonitor, type FrameDropStats } from './utils/FrameRateMonitor';
 
 const FPS_SAMPLE_INTERVAL_MS = 100;
+
+export interface GameLoopFpsDiagnostics extends FrameDropStats {}
 
 export class GameLoop {
   private running = false;
@@ -11,13 +13,14 @@ export class GameLoop {
   private animationId = 0;
   private updateCallback: ((deltaTime: number) => void) | null = null;
   private renderCallback: (() => void) | null = null;
-  private fpsSampleCallback: ((fps: number, sampleTimeMs: number) => void) | null = null;
+  private fpsSampleCallback: ((fps: number, sampleTimeMs: number, diagnostics: GameLoopFpsDiagnostics) => void) | null =
+    null;
   private readonly monitor = new FrameRateMonitor();
 
   start(
     onUpdate: (deltaTime: number) => void,
     onRender: () => void,
-    onFpsSample?: (fps: number, sampleTimeMs: number) => void,
+    onFpsSample?: (fps: number, sampleTimeMs: number, diagnostics: GameLoopFpsDiagnostics) => void,
   ): void {
     if (this.running) return;
     this.updateCallback = onUpdate;
@@ -102,7 +105,7 @@ export class GameLoop {
     // capped 100ms value that masquerades as a sustained 10fps sample.
     this.monitor.update(rawDeltaTime);
     if (this.fpsSampleCallback && now - this.lastFpsSampleAt >= FPS_SAMPLE_INTERVAL_MS) {
-      this.fpsSampleCallback(this.monitor.getFps(), now);
+      this.fpsSampleCallback(this.monitor.getFps(), now, this.monitor.consumeFrameDropStats());
       this.lastFpsSampleAt = now;
     }
 

@@ -423,9 +423,9 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
         renderer.render(scene, camera);
       }
     },
-    (fps: number, sampleTimeMs: number) => {
+    (fps: number, sampleTimeMs: number, diagnostics) => {
       pixelRatioController.sample(fps, sampleTimeMs);
-      frameRateAdaptationSystem.sample(fps, sampleTimeMs);
+      frameRateAdaptationSystem.sample(fps, sampleTimeMs, diagnostics);
       const performanceMemory = getPerformanceMemory();
       const report = memoryHealthMonitor.sample({
         jsHeapUsedBytes: performanceMemory?.usedJSHeapSize,

@@ -5,6 +5,13 @@
  * external dependency. Extreme deltaTime spikes (e.g. tab restore) are
  * filtered out to avoid biasing the average.
  */
+export interface FrameDropStats {
+  droppedFrameCount: number;
+  droppedFrameStreak: number;
+}
+
+const FRAME_DROP_THRESHOLD_SECONDS = (1 / 60) * 1.5;
+
 export class FrameRateMonitor {
   private readonly windowSize: number;
   private readonly buffer: Float64Array;
@@ -12,6 +19,8 @@ export class FrameRateMonitor {
   private filled = 0;
   private sum = 0;
   private cyclesSinceRecompute = 0;
+  private droppedFrameCountSinceLastPoll = 0;
+  private droppedFrameStreak = 0;
 
   constructor(windowSize = 60) {
     this.windowSize = Math.max(1, Math.floor(windowSize));
@@ -21,6 +30,12 @@ export class FrameRateMonitor {
   update(deltaTime: number): void {
     if (!Number.isFinite(deltaTime) || deltaTime <= 0 || deltaTime > 0.5) {
       return;
+    }
+    if (deltaTime >= FRAME_DROP_THRESHOLD_SECONDS) {
+      this.droppedFrameCountSinceLastPoll += 1;
+      this.droppedFrameStreak += 1;
+    } else {
+      this.droppedFrameStreak = 0;
     }
     if (this.filled < this.windowSize) {
       this.buffer[this.writeIndex] = deltaTime;
@@ -56,12 +71,23 @@ export class FrameRateMonitor {
     return this.filled;
   }
 
+  consumeFrameDropStats(): FrameDropStats {
+    const stats = {
+      droppedFrameCount: this.droppedFrameCountSinceLastPoll,
+      droppedFrameStreak: this.droppedFrameStreak,
+    };
+    this.droppedFrameCountSinceLastPoll = 0;
+    return stats;
+  }
+
   reset(): void {
     this.buffer.fill(0);
     this.writeIndex = 0;
     this.filled = 0;
     this.sum = 0;
     this.cyclesSinceRecompute = 0;
+    this.droppedFrameCountSinceLastPoll = 0;
+    this.droppedFrameStreak = 0;
   }
 
   private recomputeSum(): void {
