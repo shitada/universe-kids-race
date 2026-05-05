@@ -28,7 +28,13 @@ export type StarType = 'NORMAL' | 'RAINBOW' | 'LOVELY';
 export type VisualFeedbackIntensity = 'off' | 'weak' | 'medium' | 'strong';
 export const MOTION_SENSITIVITY_LEVELS = ['strong', 'medium', 'gentle', 'minimal'] as const;
 export type MotionSensitivity = (typeof MOTION_SENSITIVITY_LEVELS)[number];
-export const COLOR_VISION_SUPPORT_MODES = ['color-only', 'color-and-marks'] as const;
+export const COLOR_VISION_SUPPORT_MODES = [
+  'color-only',
+  'color-and-marks',
+  'protanopia-filter',
+  'deuteranopia-filter',
+  'tritanopia-filter',
+] as const;
 export type ColorVisionSupportMode = (typeof COLOR_VISION_SUPPORT_MODES)[number];
 export type Language = 'ja' | 'en';
 

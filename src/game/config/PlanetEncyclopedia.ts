@@ -203,7 +203,15 @@ export function getSpecialStarEncyclopediaEntry(id: SpecialStarEncyclopediaEntry
 }
 
 export function normalizeColorVisionSupportMode(value: unknown): ColorVisionSupportMode {
-  return value === 'color-and-marks' ? 'color-and-marks' : DEFAULT_COLOR_VISION_SUPPORT_MODE;
+  switch (value) {
+    case 'color-and-marks':
+    case 'protanopia-filter':
+    case 'deuteranopia-filter':
+    case 'tritanopia-filter':
+      return value;
+    default:
+      return DEFAULT_COLOR_VISION_SUPPORT_MODE;
+  }
 }
 
 export function formatPlanetEncyclopediaLabel(

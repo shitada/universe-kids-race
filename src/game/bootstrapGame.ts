@@ -31,6 +31,11 @@ import { createRetryableModuleLoader } from './utils/createRetryableModuleLoader
 import type { SceneType } from '../types';
 import { DEFAULT_REST_REMINDER_ENABLED } from './config/RestReminderConfig';
 import { ThermalPreventionSystem } from './systems/ThermalPreventionSystem';
+import {
+  ColorVisionPostProcessor,
+  getActiveColorVisionSupportMode,
+  setActiveColorVisionSupportMode,
+} from './effects/ColorVisionPostProcessor';
 
 export interface BootstrapGameOptions {
   canvas: HTMLCanvasElement;
@@ -65,6 +70,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   const { canvas } = options;
   const renderer = createRenderer(canvas);
   const maxPixelRatio = Math.min(window.devicePixelRatio, 2);
+  let currentRendererPixelRatio = 1;
   const pixelRatioTiers = [1.0, 1.5, maxPixelRatio];
   const maxTier = pixelRatioTiers.length - 1;
   const sceneManager = new SceneManager();
@@ -108,6 +114,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
 
     if (width !== lastAppliedWidth || height !== lastAppliedHeight) {
       renderer.setSize(width, height);
+      colorVisionPostProcessor.setSize(width * currentRendererPixelRatio, height * currentRendererPixelRatio);
       lastAppliedWidth = width;
       lastAppliedHeight = height;
       const metrics = getCanvasClientMetrics();
@@ -130,7 +137,8 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
     }
 
     const clamped = Math.max(0, Math.min(maxTier, tier));
-    renderer.setPixelRatio(pixelRatioTiers[clamped]);
+    currentRendererPixelRatio = pixelRatioTiers[clamped];
+    renderer.setPixelRatio(currentRendererPixelRatio);
     lastAppliedWidth = 0;
     lastAppliedHeight = 0;
     const { width, height } = updateViewportSizeCache();
@@ -142,6 +150,10 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   }
 
   const initialSaveData = saveManager.load();
+  setActiveColorVisionSupportMode(
+    initialSaveData.colorAccessibility?.colorVisionSupportMode ?? 'color-only',
+  );
+  const colorVisionPostProcessor = new ColorVisionPostProcessor(renderer);
   const initialPixelTier = resolveInitialPixelTier(
     initialSaveData.lastStablePixelTier,
     maxTier,
@@ -406,7 +418,8 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
       const scene = sceneManager.getCurrentThreeScene();
       const camera = sceneManager.getCurrentCamera();
       if (scene && camera) {
-        renderer.render(scene, camera);
+        colorVisionPostProcessor.setMode(getActiveColorVisionSupportMode());
+        colorVisionPostProcessor.render(scene, camera);
       }
     },
     (fps: number, sampleTimeMs: number, diagnostics) => {
@@ -638,6 +651,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
       loadingOverlay.dispose();
       loadFailureOverlay.hide();
       loadFailureOverlay.dispose();
+      colorVisionPostProcessor.dispose();
       renderer.forceContextLoss?.();
       renderer.dispose();
     },

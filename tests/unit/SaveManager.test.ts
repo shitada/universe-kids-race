@@ -612,6 +612,17 @@ describe('SaveManager', () => {
       expect(manager.load().colorAccessibility).toEqual({ colorVisionSupportMode: 'color-and-marks' });
     });
 
+    it('keeps color filter modes on load', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        colorAccessibility: { colorVisionSupportMode: 'deuteranopia-filter' },
+      }));
+      const manager = new SaveManager();
+
+      expect(manager.load().colorAccessibility).toEqual({ colorVisionSupportMode: 'deuteranopia-filter' });
+    });
+
     it('drops default-only motion sensitivity payloads', () => {
       storage.set('universe-kids-race-save', JSON.stringify({
         clearedStage: 1,

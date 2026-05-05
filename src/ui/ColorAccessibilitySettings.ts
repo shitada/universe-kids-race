@@ -17,9 +17,37 @@ const AUDIO_VOLUME_OPTIONS = [
   { value: 100, labelKey: 'colorSettings.audio.volume.max' },
 ] as const satisfies ReadonlyArray<{ value: AudioVolumeLevel; labelKey: string }>;
 
-const COLOR_VISION_OPTIONS: ReadonlyArray<{ value: ColorVisionSupportMode; labelKey: string; icon: string }> = [
-  { value: 'color-only', labelKey: 'colorSettings.colorVision.option.colorOnly', icon: '🎨' },
-  { value: 'color-and-marks', labelKey: 'colorSettings.colorVision.option.colorAndMarks', icon: '★' },
+const COLOR_VISION_OPTIONS: ReadonlyArray<{ value: ColorVisionSupportMode; labelKey: string; descriptionKey: string; icon: string }> = [
+  {
+    value: 'color-only',
+    labelKey: 'colorSettings.colorVision.option.colorOnly',
+    descriptionKey: 'colorSettings.colorVision.description.colorOnly',
+    icon: '🎨',
+  },
+  {
+    value: 'color-and-marks',
+    labelKey: 'colorSettings.colorVision.option.colorAndMarks',
+    descriptionKey: 'colorSettings.colorVision.description.colorAndMarks',
+    icon: '★',
+  },
+  {
+    value: 'protanopia-filter',
+    labelKey: 'colorSettings.colorVision.option.protanopiaFilter',
+    descriptionKey: 'colorSettings.colorVision.description.protanopiaFilter',
+    icon: '🔴',
+  },
+  {
+    value: 'deuteranopia-filter',
+    labelKey: 'colorSettings.colorVision.option.deuteranopiaFilter',
+    descriptionKey: 'colorSettings.colorVision.description.deuteranopiaFilter',
+    icon: '🟢',
+  },
+  {
+    value: 'tritanopia-filter',
+    labelKey: 'colorSettings.colorVision.option.tritanopiaFilter',
+    descriptionKey: 'colorSettings.colorVision.description.tritanopiaFilter',
+    icon: '🔵',
+  },
 ];
 
 const VISUAL_FEEDBACK_OPTIONS: ReadonlyArray<{ value: VisualFeedbackIntensity; labelKey: string }> = [
@@ -337,8 +365,8 @@ export class ColorAccessibilitySettings {
         const button = document.createElement('button');
         button.setAttribute('data-language-button', option.value);
         button.style.cssText = `
-          min-height: 3.25rem;
-          padding: 0.8rem 0.9rem;
+          min-height: 2.95rem;
+          padding: 0.7rem 0.65rem;
           border-radius: 1rem;
           border: 2px solid rgba(255, 255, 255, 0.4);
           background: rgba(255, 255, 255, 0.08);
@@ -369,8 +397,8 @@ export class ColorAccessibilitySettings {
       colorVisionGroup.setAttribute('data-color-vision-mode-group', '');
       colorVisionGroup.style.cssText = `
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 0.65rem;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.55rem;
         margin-bottom: 0.95rem;
       `;
 
@@ -715,9 +743,10 @@ export class ColorAccessibilitySettings {
       button.style.transform = selected ? 'scale(1.02)' : 'scale(1)';
     }
 
-    this.colorVisionDescriptionEl.textContent = this.colorVisionSupportMode === 'color-and-marks'
-      ? i18n.t('colorSettings.colorVision.description.colorAndMarks')
-      : i18n.t('colorSettings.colorVision.description.colorOnly');
+    const selectedColorVisionOption = COLOR_VISION_OPTIONS.find(
+      (option) => option.value === this.colorVisionSupportMode,
+    ) ?? COLOR_VISION_OPTIONS[0];
+    this.colorVisionDescriptionEl.textContent = i18n.t(selectedColorVisionOption.descriptionKey);
 
     for (const option of COLOR_VISION_OPTIONS) {
       const button = this.colorVisionButtons.get(option.value);

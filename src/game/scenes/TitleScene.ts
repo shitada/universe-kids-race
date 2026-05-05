@@ -35,6 +35,7 @@ import { attachReleaseConfirmButton } from '../../ui/attachReleaseConfirmButton'
 import { createStageMedalDisplay } from '../../ui/stageMedalDisplay';
 import { prewarmStageVisualAssets } from './stageVisualAssets';
 import { setSharedVisualFeedbackIntensity } from '../systems/VisualFeedbackSystem';
+import { setActiveColorVisionSupportMode } from '../effects/ColorVisionPostProcessor';
 import { getDefaultMotionSensitivity } from '../accessibility/motionSensitivity';
 import { i18n } from '../i18n/i18nService';
 import { DEFAULT_LANGUAGE } from '../i18n/types';
@@ -283,6 +284,9 @@ export class TitleScene implements Scene {
 
     const saveData = this.saveManager.load();
     i18n.setLanguage(saveData.language ?? DEFAULT_LANGUAGE, { notify: false });
+    setActiveColorVisionSupportMode(
+      saveData.colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE,
+    );
     void this.createCompanionParade(saveData.unlockedPlanets);
 
     this.createOverlay();
@@ -582,6 +586,7 @@ export class TitleScene implements Scene {
       delete data.colorAccessibility;
     }
     this.saveManager.save(data);
+    setActiveColorVisionSupportMode(mode);
   }
 
   private buildColorAccessibilitySettings(

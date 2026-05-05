@@ -125,7 +125,7 @@ describe('ColorAccessibilitySettings', () => {
     expect(onLanguageChange).toHaveBeenCalledWith('en');
   });
 
-  it('lets children switch between color-only and color-and-mark modes', () => {
+  it('lets children switch between marks and color filters', () => {
     const onColorVisionSupportModeChange = vi.fn();
     settings.show(createOptions({
       onColorVisionSupportModeChange,
@@ -133,13 +133,20 @@ describe('ColorAccessibilitySettings', () => {
 
     const colorOnlyButton = document.querySelector('[data-color-vision-mode-button="color-only"]') as HTMLButtonElement | null;
     const colorAndMarksButton = document.querySelector('[data-color-vision-mode-button="color-and-marks"]') as HTMLButtonElement | null;
+    const protanopiaButton = document.querySelector('[data-color-vision-mode-button="protanopia-filter"]') as HTMLButtonElement | null;
+    const tritanopiaButton = document.querySelector('[data-color-vision-mode-button="tritanopia-filter"]') as HTMLButtonElement | null;
     expect(colorOnlyButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(protanopiaButton?.textContent).toContain('🔴');
+    expect(tritanopiaButton?.textContent).toContain('🔵');
 
     colorAndMarksButton?.click();
-
-    expect(colorAndMarksButton?.getAttribute('aria-pressed')).toBe('true');
     expect(document.body.textContent).toContain('にじりゅうせいは ★');
-    expect(onColorVisionSupportModeChange).toHaveBeenCalledWith('color-and-marks');
+
+    protanopiaButton?.click();
+
+    expect(protanopiaButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(document.body.textContent).toContain('あかと みどり');
+    expect(onColorVisionSupportModeChange).toHaveBeenLastCalledWith('protanopia-filter');
   });
 
   it('hides the panel when requested', () => {

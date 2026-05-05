@@ -15,6 +15,7 @@ import type { AudioManager } from '../audio/AudioManager';
 import type { SaveManager } from '../storage/SaveManager';
 import { Spaceship } from '../entities/Spaceship';
 import { Star, setStarColorVisionSupportMode, setStarHighContrastMode } from '../entities/Star';
+import { setActiveColorVisionSupportMode } from '../effects/ColorVisionPostProcessor';
 import { Meteorite, setMeteoriteHighContrastMode } from '../entities/Meteorite';
 import { ShootingStar } from '../entities/ShootingStar';
 import { Comet } from '../entities/Comet';
@@ -565,6 +566,7 @@ export class StageScene implements Scene {
     setSharedVisualFeedbackHandler((effect) => this.handleVisualFeedback(effect));
     setStarHighContrastMode(highContrastEnabled);
     setStarColorVisionSupportMode(colorVisionSupportMode);
+    setActiveColorVisionSupportMode(colorVisionSupportMode);
     setMeteoriteHighContrastMode(highContrastEnabled);
     this.hud.setHighContrastMode(highContrastEnabled);
     this.scorePopupManager.setHighContrastMode(highContrastEnabled);
