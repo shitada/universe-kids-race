@@ -20,6 +20,7 @@ import { ShootingStar } from '../entities/ShootingStar';
 import { Comet } from '../entities/Comet';
 import { SpecialShootingStar } from '../entities/SpecialShootingStar';
 import { MonthlyEncounterEntity } from '../entities/MonthlyEncounterEntity';
+import { SpaceGem } from '../entities/SpaceGem';
 import { CollisionSystem } from '../systems/CollisionSystem';
 import { ScoreSystem } from '../systems/ScoreSystem';
 import { SpawnSystem } from '../systems/SpawnSystem';
@@ -60,6 +61,7 @@ import { ScorePopupEffect } from '../effects/ScorePopupEffect';
 import { MonthlyEncounterEffect } from '../effects/MonthlyEncounterEffect';
 import { LovelyStarBurstEffect } from '../effects/LovelyStarBurstEffect';
 import { StarBonusEffect } from '../effects/StarBonusEffect';
+import { SpaceGemCollectionEffect } from '../effects/SpaceGemCollectionEffect';
 import { CompanionManager } from '../entities/CompanionManager';
 import { getConstellationForStage } from '../config/ConstellationData';
 import { getStageSpecialEventConfig } from '../config/StageSpecialEvents';
@@ -76,6 +78,7 @@ import {
   getSpecialStarEncyclopediaEntry,
 } from '../config/PlanetEncyclopedia';
 import { getMonthlyEncounterEntry } from '../config/MonthlyEncounterConfig';
+import { SPACE_GEM_CONFIG, getSpaceGemEncyclopediaEntry } from '../config/SpaceGemConfig';
 import { TouchGuideOverlay, type TouchGuideMode } from '../../ui/TouchGuideOverlay';
 import { ConstellationHintOverlay } from '../../ui/ConstellationHintOverlay';
 import { attachReleaseConfirmButton } from '../../ui/attachReleaseConfirmButton';
@@ -186,6 +189,7 @@ export class StageScene implements Scene {
   private comets: Comet[] = [];
   private specialShootingStars: SpecialShootingStar[] = [];
   private monthlyEncounters: MonthlyEncounterEntity[] = [];
+  private spaceGems: SpaceGem[] = [];
 
   private collisionSystem = new CollisionSystem();
   private scoreSystem = new ScoreSystem();
@@ -213,6 +217,7 @@ export class StageScene implements Scene {
   private stageSpecialEffects!: StageSpecialEffects;
   private seasonalEventEffects = new SeasonalEventEffects();
   private monthlyEncounterEffect = new MonthlyEncounterEffect();
+  private spaceGemCollectionEffect = new SpaceGemCollectionEffect();
   private lovelyStarBurstEffect = new LovelyStarBurstEffect();
   private starBonusEffect = new StarBonusEffect();
   private rainbowTrailEffect!: RainbowTrailEffect;
@@ -429,6 +434,7 @@ export class StageScene implements Scene {
     this.wormholeTunnelEffect.init(this.threeScene);
     this.scorePopupEffect.init(this.threeScene);
     this.monthlyEncounterEffect.init(this.threeScene);
+    this.spaceGemCollectionEffect.init(this.threeScene);
     this.lovelyStarBurstEffect.init(this.threeScene);
     this.starBonusEffect.init(this.threeScene);
 
@@ -966,6 +972,7 @@ export class StageScene implements Scene {
     this.seasonalEventSystem.clear();
     this.seasonalEventEffects.clear();
     this.monthlyEncounterEffect.clear();
+    this.spaceGemCollectionEffect.clear();
     this.stageAtmosphereEffect.clear();
     this.wormholeTunnelEffect.clear();
     this.wormholeTransitionTimer = 0;
@@ -980,6 +987,7 @@ export class StageScene implements Scene {
     this.comets.length = 0;
     this.specialShootingStars.length = 0;
     this.monthlyEncounters.length = 0;
+    this.spaceGems.length = 0;
     this.specialStarSpawnSystem.recycleAll();
     this.specialStarSpawnSystem.reset();
     this.monthlyEncounterSystem.recycleAll();
@@ -1008,6 +1016,7 @@ export class StageScene implements Scene {
       this.constellationCelebrationEffect.update(deltaTime);
       this.planetRingEffect.update(deltaTime);
       this.monthlyEncounterEffect.update(deltaTime);
+      this.spaceGemCollectionEffect.update(deltaTime);
       this.lovelyStarBurstEffect.update(deltaTime);
       this.scorePopupEffect.update(deltaTime);
       this.particleBurstManager.update(this.threeScene, deltaTime);
@@ -1169,6 +1178,7 @@ export class StageScene implements Scene {
       this.shootingStars,
       this.comets,
       { meteoShowerActive: meteoShowerState.active },
+      this.spaceGems,
     );
     for (const star of spawnResult.newStars) {
       this.stars.push(star);
@@ -1185,6 +1195,10 @@ export class StageScene implements Scene {
     for (const comet of spawnResult.newComets) {
       this.comets.push(comet);
       this.threeScene.add(comet.mesh);
+    }
+    for (const spaceGem of spawnResult.newSpaceGems) {
+      this.spaceGems.push(spaceGem);
+      this.threeScene.add(spaceGem.mesh);
     }
     const specialStarSpawnResult = this.specialStarSpawnSystem.update(
       deltaTime,
@@ -1239,6 +1253,7 @@ export class StageScene implements Scene {
       this.comets,
       this.specialShootingStars,
       this.monthlyEncounters,
+      this.spaceGems,
     );
 
     if (collisionResult.shootingStarHit) {
@@ -1350,6 +1365,43 @@ export class StageScene implements Scene {
       );
     }
 
+    if (collisionResult.spaceGemHit) {
+      const spaceGem = collisionResult.spaceGemHit;
+      const encyclopediaEntry = getSpaceGemEncyclopediaEntry(spaceGem.gemType);
+      const gemConfig = SPACE_GEM_CONFIG[spaceGem.gemType];
+      const isNewDiscovery = this.saveManager.markSpaceGemDiscovered?.(spaceGem.gemType) ?? false;
+      this.scoreSystem.addBonusScore(spaceGem.scoreBonus, spaceGem.position);
+      this.audioManager.playSFX('spaceGemCollect');
+      triggerSharedVibration('constellationCelebrate');
+      this.spaceGemCollectionEffect.emit(spaceGem.position, gemConfig.visual.glowColor);
+      this.particleBurstManager.emit(
+        this.threeScene,
+        spaceGem.position.x,
+        spaceGem.position.y,
+        spaceGem.position.z,
+        gemConfig.visual.particleColor,
+        50,
+        true,
+      );
+      this.particleBurstManager.emit(
+        this.threeScene,
+        spaceGem.position.x,
+        spaceGem.position.y,
+        spaceGem.position.z,
+        gemConfig.visual.ringColor,
+        40,
+        true,
+      );
+      this.scorePopupManager.showLabel(
+        isNewDiscovery && encyclopediaEntry
+          ? `${encyclopediaEntry.emoji} ${encyclopediaEntry.reading}`
+          : gemConfig.pickupLabel,
+        spaceGem.position,
+        this.camera,
+        'space-gem',
+      );
+    }
+
     // Star collection
     for (const star of collisionResult.starCollisions) {
       this.scoreSystem.addStarScore(star.starType, star.position);
@@ -1449,6 +1501,7 @@ export class StageScene implements Scene {
     this.updateCameraFollow(deltaTime);
     this.stageAtmosphereEffect.update(deltaTime, this.camera, this.spaceship.position.x, this.spaceship.position.z);
     this.monthlyEncounterEffect.update(deltaTime);
+    this.spaceGemCollectionEffect.update(deltaTime);
     this.rainbowTrailEffect.update(deltaTime, this.spaceship.position);
 
     for (const star of collisionResult.starCollisions) {
@@ -2021,6 +2074,20 @@ export class StageScene implements Scene {
       }
     }
     monthlyEncounters.length = monthlyWrite;
+
+    const spaceGems = this.spaceGems;
+    let spaceGemWrite = 0;
+    for (let read = 0; read < spaceGems.length; read++) {
+      const spaceGem = spaceGems[read];
+      if (spaceGem.isCollected || spaceGem.position.z > behindThreshold) {
+        this.spawnSystem.releaseSpaceGem(spaceGem);
+      } else {
+        spaceGem.update(deltaTime, shipZ);
+        if (spaceGemWrite !== read) spaceGems[spaceGemWrite] = spaceGem;
+        spaceGemWrite++;
+      }
+    }
+    spaceGems.length = spaceGemWrite;
   }
 
   private spawnConstellationStars(): void {

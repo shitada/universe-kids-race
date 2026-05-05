@@ -522,6 +522,10 @@ export class AudioManager {
           this.playArpeggio([...LOVELY_STAR_SFX_MELODY], 'triangle', 0.05, 0.18);
           this.playSweep('sine', 784, 1568, 0.32, 0.08);
           break;
+        case 'spaceGemCollect':
+          this.playArpeggio([784, 1175, 1568, 2093], 'triangle', 0.05, 0.18);
+          this.playSweep('sine', 1175, 2093, 0.24, 0.1);
+          break;
         case 'constellationCelebrate':
           this.playArpeggio([523, 659, 784, 1047, 1319], 'triangle', 0.08, 0.12);
           this.playSweep('sine', 784, 1568, 0.42, 0.08);

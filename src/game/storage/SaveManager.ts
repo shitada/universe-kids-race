@@ -6,6 +6,8 @@ import {
   type Language,
   MONTHLY_ENCOUNTER_IDS,
   type MonthlyEncounterId,
+  SPACE_GEM_TYPES,
+  type SpaceGemType,
   type RestReminderSettings,
   SPECIAL_SHOOTING_STAR_TYPES,
   SPACESHIP_COLOR_KEYS,
@@ -258,6 +260,16 @@ function normalizeMonthlyEncounters(value: unknown): MonthlyEncounterId[] {
   ))];
 }
 
+function normalizeSpaceGems(value: unknown): SpaceGemType[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return [...new Set(value.filter(
+    (entry): entry is SpaceGemType =>
+      typeof entry === 'string' && (SPACE_GEM_TYPES as readonly string[]).includes(entry),
+  ))];
+}
+
 function sanitizeSaveData(data: SaveData): SaveData {
   const sanitized: SaveData = {
     clearedStage: Number.isInteger(data.clearedStage) && data.clearedStage >= 0 && data.clearedStage <= TOTAL_STAGES
@@ -296,6 +308,11 @@ function sanitizeSaveData(data: SaveData): SaveData {
   const discoveredMonthlyEncounters = normalizeMonthlyEncounters(data.discoveredMonthlyEncounters);
   if (discoveredMonthlyEncounters.length > 0) {
     sanitized.discoveredMonthlyEncounters = discoveredMonthlyEncounters;
+  }
+
+  const discoveredSpaceGems = normalizeSpaceGems(data.discoveredSpaceGems);
+  if (discoveredSpaceGems.length > 0) {
+    sanitized.discoveredSpaceGems = discoveredSpaceGems;
   }
 
   const colorAccessibility = normalizeColorAccessibilitySettings(data.colorAccessibility);
@@ -429,6 +446,14 @@ export class SaveManager {
         data.discoveredMonthlyEncounters = discoveredMonthlyEncounters;
       } else {
         delete (data as { discoveredMonthlyEncounters?: unknown }).discoveredMonthlyEncounters;
+      }
+      const discoveredSpaceGems = normalizeSpaceGems(
+        (data as { discoveredSpaceGems?: unknown }).discoveredSpaceGems,
+      );
+      if (discoveredSpaceGems.length > 0) {
+        data.discoveredSpaceGems = discoveredSpaceGems;
+      } else {
+        delete (data as { discoveredSpaceGems?: unknown }).discoveredSpaceGems;
       }
       data.gameplayStats = normalizeGameplayStats((data as { gameplayStats?: unknown }).gameplayStats);
 
@@ -676,6 +701,26 @@ export class SaveManager {
       return true;
     } catch (e) {
       console.warn('SaveManager.markMonthlyEncounterDiscovered failed:', e);
+      return false;
+    }
+  }
+
+  markSpaceGemDiscovered(gemId: SpaceGemType): boolean {
+    if (!(SPACE_GEM_TYPES as readonly string[]).includes(gemId)) {
+      return false;
+    }
+    try {
+      const data = this.load();
+      const discoveredSpaceGems = [...(data.discoveredSpaceGems ?? [])];
+      if (discoveredSpaceGems.includes(gemId)) {
+        return false;
+      }
+      discoveredSpaceGems.push(gemId);
+      data.discoveredSpaceGems = discoveredSpaceGems;
+      this.save(data);
+      return true;
+    } catch (e) {
+      console.warn('SaveManager.markSpaceGemDiscovered failed:', e);
       return false;
     }
   }

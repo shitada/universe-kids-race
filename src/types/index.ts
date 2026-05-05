@@ -103,6 +103,7 @@ export type SFXType =
   | 'starCollect'
   | 'rainbowCollect'
   | 'lovelyCollect'
+  | 'spaceGemCollect'
   | 'constellationCelebrate'
   | 'shootingStarCollect'
   | 'cometCollect'
@@ -201,6 +202,7 @@ export interface SaveData {
   discoveredConstellations?: number[];
   discoveredSpecialStars?: SpecialShootingStarType[];
   discoveredMonthlyEncounters?: MonthlyEncounterId[];
+  discoveredSpaceGems?: SpaceGemType[];
   gameplayStats?: GameplayStats;
   spaceshipCustomization?: SpaceshipCustomization;
   // Last stable adaptive pixel-ratio tier observed in the previous session.
@@ -234,6 +236,27 @@ export type SpecialShootingStarType = (typeof SPECIAL_SHOOTING_STAR_TYPES)[numbe
 
 export interface SpecialStarEncyclopediaEntry {
   id: SpecialShootingStarType;
+  name: string;
+  reading: string;
+  encyclopediaLabel: string;
+  emoji: string;
+  trivia: string;
+  accentColor: number;
+}
+
+export const SPACE_GEM_TYPES = [
+  'diamond-nebula',
+  'emerald-comet',
+  'ruby-solar-wind',
+  'sapphire-orbit',
+  'amethyst-moon',
+  'topaz-spark',
+  'pearl-dust',
+] as const;
+export type SpaceGemType = (typeof SPACE_GEM_TYPES)[number];
+
+export interface SpaceGemEncyclopediaEntry {
+  id: SpaceGemType;
   name: string;
   reading: string;
   encyclopediaLabel: string;

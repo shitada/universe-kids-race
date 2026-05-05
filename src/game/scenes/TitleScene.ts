@@ -406,6 +406,7 @@ export class TitleScene implements Scene {
       saveData.discoveredConstellations ?? [],
       saveData.colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE,
       saveData.discoveredMonthlyEncounters ?? [],
+      saveData.discoveredSpaceGems ?? [],
     );
   }
 

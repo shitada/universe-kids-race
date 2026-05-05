@@ -110,6 +110,20 @@ describe('EncyclopediaOverlay', () => {
       .toContain('？？？');
   });
 
+  it('shows discovered and hidden space gems in the treasure tab', () => {
+    overlay.show([1], () => {}, undefined, undefined, [], undefined, [], ['diamond-nebula']);
+
+    const gemTab = uiOverlay.querySelector('[data-encyclopedia-tab="gems"]') as HTMLElement;
+    dispatchReleaseConfirm(gemTab);
+
+    expect(uiOverlay.querySelector('[data-encyclopedia-panel="gems"]')?.getAttribute('data-active')).toBe('true');
+    expect(uiOverlay.textContent).toContain('たからばこ');
+    expect(uiOverlay.querySelector('[data-space-gem-card][data-space-gem-id="diamond-nebula"]')?.textContent)
+      .toContain('だいやもんどせいうん');
+    expect(uiOverlay.querySelector('[data-space-gem-card][data-space-gem-id="ruby-solar-wind"]')?.textContent)
+      .toContain('？？？');
+  });
+
   it('unlocked card shows emoji and name', () => {
     overlay.show([1], () => {});
     const cards = uiOverlay.querySelectorAll('[data-card]');

@@ -239,6 +239,31 @@ describe('SaveManager', () => {
     });
   });
 
+  describe('discoveredSpaceGems', () => {
+    it('defaults to empty array when the field is missing', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({ clearedStage: 1, unlockedPlanets: [1] }));
+      const manager = new SaveManager();
+      expect(manager.load().discoveredSpaceGems ?? []).toEqual([]);
+    });
+
+    it('sanitizes invalid space gem ids', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        discoveredSpaceGems: ['diamond-nebula', 'bad', 'ruby-solar-wind', 3, 'diamond-nebula'],
+      }));
+      const manager = new SaveManager();
+      expect(manager.load().discoveredSpaceGems ?? []).toEqual(['diamond-nebula', 'ruby-solar-wind']);
+    });
+
+    it('marks a space gem as discovered only once', () => {
+      const manager = new SaveManager();
+      expect(manager.markSpaceGemDiscovered('emerald-comet')).toBe(true);
+      expect(manager.markSpaceGemDiscovered('emerald-comet')).toBe(false);
+      expect(manager.load().discoveredSpaceGems ?? []).toEqual(['emerald-comet']);
+    });
+  });
+
   describe('language persistence', () => {
     it('restores a saved english language choice', () => {
       const manager = new SaveManager();
