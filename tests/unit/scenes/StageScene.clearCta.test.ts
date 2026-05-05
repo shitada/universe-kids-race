@@ -136,6 +136,10 @@ function dispatchReleaseOutside(button: HTMLElement): void {
   document.body.dispatchEvent(new Event('pointerup', { bubbles: true }));
 }
 
+function finishBonusSequence(scene: { update(deltaTime: number): void }): void {
+  scene.update(13);
+}
+
 function mockCanvasContext(): void {
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => {
     return {
@@ -208,7 +212,7 @@ describe('StageScene clear CTA', () => {
     };
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const button = getContinueButton();
     expect(button.textContent).toBe('つぎへ');
@@ -237,7 +241,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const button = getContinueButton();
     dispatchReleaseOutside(button);
@@ -254,7 +258,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const button = getContinueButton();
     expect(button.textContent).toBe('タイトルへ');
@@ -274,7 +278,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const nextEntry = getNextPlanetEncyclopediaEntry(stageNumber);
     expect(nextEntry).toBeDefined();
@@ -296,7 +300,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const retryButton = getRetryButton();
     expect(retryButton.textContent).toBe('もういちど');
@@ -324,7 +328,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const retryButton = getRetryButton();
     dispatchReleaseConfirm(retryButton);
@@ -347,7 +351,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const button = getContinueButton();
     expect(button.textContent).toBe('おいわいへ');
@@ -371,7 +375,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const retryButton = getRetryButton();
     expect(retryButton.textContent).toBe('もういちど');
@@ -398,7 +402,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const retryButton = getRetryButton();
     dispatchReleaseConfirm(retryButton);
@@ -422,7 +426,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const overlay = document.querySelector<HTMLElement>('[data-stage-clear-overlay]');
     expect(overlay).not.toBeNull();
@@ -453,7 +457,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const retryButton = getRetryButton();
     dispatchReleaseConfirm(retryButton);
@@ -533,7 +537,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const cardButton = getCardButton();
     expect(cardButton).not.toBeNull();
@@ -671,7 +675,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const retryButton = getRetryButton();
     const cardButton = getCardButton();

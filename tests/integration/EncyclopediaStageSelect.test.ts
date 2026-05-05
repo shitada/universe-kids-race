@@ -83,6 +83,10 @@ function dispatchReleaseConfirm(button: HTMLElement, init: PointerEventInit = {}
   button.dispatchEvent(createPointerEvent('pointerup', init));
 }
 
+function finishBonusSequence(scene: { update(deltaTime: number): void }): void {
+  scene.update(13);
+}
+
 function dispatchCancelledReleaseConfirm(
   element: HTMLElement,
   moveInit: PointerEventInit,
@@ -603,7 +607,7 @@ describe('Encyclopedia Stage Selection Integration', () => {
     stageInternal.countdownOverlay = null;
     stageInternal.isStarting = false;
     stageInternal.onStageClear();
-    stageInternal.update(1);
+    finishBonusSequence(stageInternal);
 
     const continueButton = document.querySelector('[data-stage-clear-continue]') as HTMLButtonElement | null;
     expect(continueButton?.textContent).toBe('タイトルへ');
@@ -629,7 +633,7 @@ describe('Encyclopedia Stage Selection Integration', () => {
     stageInternal.countdownOverlay = null;
     stageInternal.isStarting = false;
     stageInternal.onStageClear();
-    stageInternal.update(1);
+    finishBonusSequence(stageInternal);
 
     const retryClearContinueButton = document.querySelector('[data-stage-clear-continue]') as HTMLButtonElement | null;
     expect(retryClearContinueButton?.textContent).toBe('タイトルへ');

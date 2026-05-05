@@ -59,6 +59,7 @@ import { StageSpecialEffects } from '../effects/StageSpecialEffects';
 import { ScorePopupEffect } from '../effects/ScorePopupEffect';
 import { MonthlyEncounterEffect } from '../effects/MonthlyEncounterEffect';
 import { LovelyStarBurstEffect } from '../effects/LovelyStarBurstEffect';
+import { StarBonusEffect } from '../effects/StarBonusEffect';
 import { CompanionManager } from '../entities/CompanionManager';
 import { getConstellationForStage } from '../config/ConstellationData';
 import { getStageSpecialEventConfig } from '../config/StageSpecialEvents';
@@ -82,6 +83,7 @@ import { PauseOverlay } from '../../ui/PauseOverlay';
 import { SeasonalEventNotice } from '../../ui/SeasonalEventNotice';
 import { StageClearOverlay } from '../../ui/StageClearOverlay';
 import { FrameRateHintOverlay } from '../../ui/FrameRateHintOverlay';
+import { BonusTimeOverlay } from '../../ui/BonusTimeOverlay';
 import { ConstellationSystem } from '../systems/ConstellationSystem';
 import {
   __resetStageSceneSharedAssetCachesForTest,
@@ -95,6 +97,7 @@ import {
   getDefaultMotionSensitivity,
   getMotionSensitivityProfile,
 } from '../accessibility/motionSensitivity';
+import { BonusCollectionSystem } from '../systems/BonusCollectionSystem';
 
 const BG_STAR_PARALLAX = 1.0;
 const BG_STAR_COUNT = 2000;
@@ -210,10 +213,13 @@ export class StageScene implements Scene {
   private seasonalEventEffects = new SeasonalEventEffects();
   private monthlyEncounterEffect = new MonthlyEncounterEffect();
   private lovelyStarBurstEffect = new LovelyStarBurstEffect();
+  private starBonusEffect = new StarBonusEffect();
   private rainbowTrailEffect!: RainbowTrailEffect;
   private stageAtmosphereEffect = new StageAtmosphereEffect();
   private wormholeTunnelEffect = new WormholeTunnelEffect();
   private seasonalEventNotice = new SeasonalEventNotice();
+  private bonusTimeOverlay = new BonusTimeOverlay();
+  private bonusCollectionSystem = new BonusCollectionSystem();
 
   private stageConfig!: StageConfig;
   private stageNumber = 1;
@@ -226,8 +232,15 @@ export class StageScene implements Scene {
   private clearRewardOverlay: EncyclopediaOverlayInstance | null = null;
   private clearRewardOverlayPromise: Promise<EncyclopediaOverlayInstance> | null = null;
   private static readonly CLEAR_CONTINUE_DELAY = 0.6;
+  private static readonly BONUS_TIME_DURATION = 10;
+  private static readonly BONUS_RESULT_DURATION = 2.2;
   private stageEntryTotalScore = 0;
   private stageEntryTotalStarCount = 0;
+  private isBonusTime = false;
+  private isBonusResultVisible = false;
+  private bonusTimeRemaining = 0;
+  private bonusCollectedStars = 0;
+  private bonusResultTimer = 0;
   private playTime = 0;
   private meteoriteHitTimes: number[] = [];
   private assistTimer = 0;
@@ -415,6 +428,7 @@ export class StageScene implements Scene {
     this.scorePopupEffect.init(this.threeScene);
     this.monthlyEncounterEffect.init(this.threeScene);
     this.lovelyStarBurstEffect.init(this.threeScene);
+    this.starBonusEffect.init(this.threeScene);
 
     this.hud = new HUD();
     this.initialized = true;
@@ -450,6 +464,14 @@ export class StageScene implements Scene {
     this.prefetchEndingSceneModuleIfNeeded();
     this.isCleared = false;
     this.clearTimer = 0;
+    this.isBonusTime = false;
+    this.isBonusResultVisible = false;
+    this.bonusTimeRemaining = 0;
+    this.bonusCollectedStars = 0;
+    this.bonusResultTimer = 0;
+    this.bonusCollectionSystem.reset();
+    this.bonusTimeOverlay.hide();
+    this.starBonusEffect.clear();
     this.stageClearOverlay.hide();
     this.isClearRewardOpen = false;
     this.isOpeningClearReward = false;
@@ -723,7 +745,13 @@ export class StageScene implements Scene {
   }
 
   private syncBoostInputLock(): void {
-    const locked = this.isStarting || this.awaitingResume || this.isHomeConfirmOpen || this.isPauseOpen;
+    const locked =
+      this.isStarting
+      || this.awaitingResume
+      || this.isHomeConfirmOpen
+      || this.isPauseOpen
+      || this.isBonusTime
+      || this.isBonusResultVisible;
     this.hud.setBoostLocked(locked);
     if (locked) {
       this.resetBoostHintState();
@@ -764,6 +792,7 @@ export class StageScene implements Scene {
     if (!this.stageConfig) return false;
     if (this.isCleared) return false;
     if (this.isClearRewardOpen || this.isOpeningClearReward) return false;
+    if (this.isBonusTime || this.isBonusResultVisible) return false;
     if (this.isStarting) return false;
     if (this.awaitingResume) return false;
     if (this.isHomeConfirmOpen) return false;
@@ -846,6 +875,7 @@ export class StageScene implements Scene {
     if (!this.stageConfig) return false;
     if (this.isCleared) return false;
     if (this.isClearRewardOpen || this.isOpeningClearReward) return false;
+    if (this.isBonusTime || this.isBonusResultVisible) return false;
     if (this.isStarting) return false;
     if (this.awaitingResume) return false;
     if (this.isHomeConfirmOpen) return false;
@@ -896,6 +926,14 @@ export class StageScene implements Scene {
   private resetStageObjects(): void {
     this.clearRewardOverlay?.hide();
     this.stageClearOverlay.hide();
+    this.bonusTimeOverlay.hide();
+    this.starBonusEffect.clear();
+    this.bonusCollectionSystem.reset();
+    this.isBonusTime = false;
+    this.isBonusResultVisible = false;
+    this.bonusTimeRemaining = 0;
+    this.bonusCollectedStars = 0;
+    this.bonusResultTimer = 0;
     this.isClearRewardOpen = false;
     this.isOpeningClearReward = false;
     this.removeDestinationPlanet();
@@ -952,6 +990,7 @@ export class StageScene implements Scene {
     if (this.isCleared) {
       this.resetBoostHintState();
       this.clearTimer += deltaTime;
+      this.updateBonusTime(deltaTime);
       this.seasonalEventNotice.tick(deltaTime);
       this.constellationHintOverlay.tick(deltaTime);
       this.constellationLineEffect.update(deltaTime);
@@ -2100,7 +2139,6 @@ export class StageScene implements Scene {
 
     // Persist best (highest) star count for this stage.
     this.saveManager.updateBestStageStars(this.stageNumber, earnedStars);
-    this.recordAttemptStats(true);
 
     const bestStarCount = Math.max(previousBest, earnedStars);
     const isBestUpdated = earnedStars > previousBest;
@@ -2112,11 +2150,166 @@ export class StageScene implements Scene {
     }
 
     this.showClearMessage(isBestUpdated, earnedStars, isNewPlanetUnlock, bestStarCount);
+    this.startBonusTime();
     this.hud.announceStageClear(earnedStars, isNewPlanetUnlock, isBestUpdated);
 
     if (isBestUpdated) {
       this.audioManager.playSFX('rainbowCollect');
     }
+  }
+
+  private startBonusTime(): void {
+    this.isBonusTime = true;
+    this.isBonusResultVisible = false;
+    this.bonusTimeRemaining = StageScene.BONUS_TIME_DURATION;
+    this.bonusCollectedStars = 0;
+    this.bonusResultTimer = 0;
+    this.bonusCollectionSystem.reset();
+    this.starBonusEffect.start(this.spaceship.position.z);
+    this.bonusTimeOverlay.show({
+      remainingSeconds: this.bonusTimeRemaining,
+      collectedStars: this.bonusCollectedStars,
+      message: this.getBonusTimeMessage(this.bonusCollectedStars),
+    });
+    this.syncBoostInputLock();
+    this.syncPauseAvailability();
+  }
+
+  private updateBonusTime(deltaTime: number): void {
+    if (!this.isBonusTime && !this.isBonusResultVisible) {
+      return;
+    }
+
+    if (this.isBonusTime) {
+      const input = this.inputSystem.getState?.() ?? { moveDirection: 0, boostPressed: false };
+      this.updateBonusSpaceship(input.moveDirection, deltaTime);
+      this.starBonusEffect.update(deltaTime, this.spaceship.position.z);
+      const bonusPlayerPosition = this.spaceship.mesh?.position ?? new THREE.Vector3(
+        this.spaceship.position.x,
+        this.spaceship.position.y,
+        this.spaceship.position.z,
+      );
+
+      const collectionResult = this.bonusCollectionSystem.collect(
+        bonusPlayerPosition,
+        this.starBonusEffect.getStars(),
+      );
+      if (collectionResult.collectedStars.length > 0) {
+        this.bonusCollectedStars = collectionResult.totalCollected;
+        this.audioManager.playSFX('starCollect');
+        for (const star of collectionResult.collectedStars) {
+          this.particleBurstManager.emit(
+            this.threeScene,
+            star.position.x,
+            star.position.y,
+            star.position.z,
+            0xffef85,
+            24,
+            true,
+          );
+        }
+        this.starBonusEffect.consumeCollectedStars(collectionResult.collectedStars);
+      }
+
+      const consumedTime = Math.min(deltaTime, this.bonusTimeRemaining);
+      this.bonusTimeRemaining = Math.max(0, this.bonusTimeRemaining - deltaTime);
+      this.bonusTimeOverlay.update({
+        remainingSeconds: this.bonusTimeRemaining,
+        collectedStars: this.bonusCollectedStars,
+        message: this.getBonusTimeMessage(this.bonusCollectedStars),
+      });
+
+      if (this.bonusTimeRemaining === 0) {
+        this.finishBonusTime();
+        const remainingTime = deltaTime - consumedTime;
+        if (remainingTime > 0) {
+          this.updateBonusTime(remainingTime);
+        }
+      }
+      return;
+    }
+
+    this.bonusResultTimer += deltaTime;
+    if (this.bonusResultTimer >= StageScene.BONUS_RESULT_DURATION) {
+      this.isBonusResultVisible = false;
+      this.bonusTimeOverlay.hide();
+      this.syncBoostInputLock();
+      this.syncPauseAvailability();
+    }
+  }
+
+  private updateBonusSpaceship(moveDirection: number, deltaTime: number): void {
+    if (moveDirection < 0) {
+      this.spaceship.position.x = Math.max(
+        this.spaceship.boundaryMin,
+        this.spaceship.position.x - 15 * deltaTime,
+      );
+    } else if (moveDirection > 0) {
+      this.spaceship.position.x = Math.min(
+        this.spaceship.boundaryMax,
+        this.spaceship.position.x + 15 * deltaTime,
+      );
+    }
+
+    this.spaceship.mesh?.position.set(
+      this.spaceship.position.x,
+      this.spaceship.position.y,
+      this.spaceship.position.z,
+    );
+  }
+
+  private finishBonusTime(): void {
+    this.isBonusTime = false;
+    this.isBonusResultVisible = true;
+    this.bonusTimeRemaining = 0;
+    this.bonusResultTimer = 0;
+    this.starBonusEffect.clear();
+    this.showBonusCelebration();
+    this.bonusTimeOverlay.showResult({
+      collectedStars: this.bonusCollectedStars,
+      message: this.getBonusResultMessage(this.bonusCollectedStars),
+    });
+    this.syncBoostInputLock();
+    this.syncPauseAvailability();
+  }
+
+  private showBonusCelebration(): void {
+    const burstCount = this.bonusCollectedStars >= 7 ? 4 : this.bonusCollectedStars >= 3 ? 3 : 2;
+    for (let i = 0; i < burstCount; i++) {
+      this.particleBurstManager.emit(
+        this.threeScene,
+        this.spaceship.position.x + (i - (burstCount - 1) / 2) * 2.1,
+        1.8 + (i % 2) * 1.4,
+        this.spaceship.position.z - 6,
+        i % 2 === 0 ? 0xff9ad5 : 0x8ae8ff,
+        42,
+        true,
+      );
+    }
+  }
+
+  private getBonusTimeMessage(collectedStars: number): string {
+    if (collectedStars >= 8) {
+      return 'キラキラ だいせいこう！';
+    }
+    if (collectedStars >= 5) {
+      return 'すごいね！';
+    }
+    if (collectedStars >= 2) {
+      return 'やったね！';
+    }
+    return 'ほしを あつめよう！';
+  }
+
+  private getBonusResultMessage(collectedStars: number): string {
+    const praise = collectedStars >= 8
+      ? 'キラキラ だいせいこう！'
+      : collectedStars >= 5
+        ? 'すごいね！'
+        : collectedStars >= 2
+          ? 'やったね！'
+          : 'たのしかったね！';
+    return `${praise} ${collectedStars}こ あつめたね！`;
   }
 
   private getClearRewardOverlay(): Promise<EncyclopediaOverlayInstance> {
@@ -2243,7 +2436,11 @@ export class StageScene implements Scene {
   }
 
   private revealClearActionButtonsIfReady(): void {
-    if (this.clearTimer < StageScene.CLEAR_CONTINUE_DELAY) return;
+    if (this.isBonusTime || this.isBonusResultVisible) return;
+    if (this.clearTimer < Math.max(
+      StageScene.CLEAR_CONTINUE_DELAY,
+      StageScene.BONUS_TIME_DURATION + StageScene.BONUS_RESULT_DURATION,
+    )) return;
     this.stageClearOverlay.enableContinue();
   }
 
@@ -2257,13 +2454,15 @@ export class StageScene implements Scene {
   }
 
   private handleStageComplete(): void {
+    this.recordAttemptStats(true);
     const { totalScore, totalStarCount } = this.scoreSystem.finalizeStage();
+    const finalTotalStarCount = totalStarCount + this.bonusCollectedStars;
 
     if (this.shouldPlayWormholeTransition()) {
       this.startWormholeTransition({
         stageNumber: this.stageNumber + 1,
         totalScore,
-        totalStarCount,
+        totalStarCount: finalTotalStarCount,
       });
       return;
     }
@@ -2274,12 +2473,12 @@ export class StageScene implements Scene {
     }
 
     if (this.stageNumber >= TOTAL_STAGES) {
-      this.sceneManager.requestTransition('ending', { totalScore, totalStarCount });
+      this.sceneManager.requestTransition('ending', { totalScore, totalStarCount: finalTotalStarCount });
     } else {
       this.sceneManager.requestTransition('stage', {
         stageNumber: this.stageNumber + 1,
         totalScore,
-        totalStarCount,
+        totalStarCount: finalTotalStarCount,
       });
     }
   }
@@ -2297,6 +2496,7 @@ export class StageScene implements Scene {
     this.pendingWormholeTransition = context;
     this.wormholeTransitionTimer = 0;
     this.stageClearOverlay.hide();
+    this.bonusTimeOverlay.hide();
     this.clearRewardOverlay?.hide();
     this.isClearRewardOpen = false;
     this.isOpeningClearReward = false;
@@ -2348,7 +2548,7 @@ export class StageScene implements Scene {
     this.saveManager.recordGameplaySession?.({
       stageNumber: this.stageNumber,
       playTimeSeconds: this.playTime,
-      collectedStars: this.scoreSystem.getStarCount(),
+      collectedStars: this.scoreSystem.getStarCount() + this.bonusCollectedStars,
       boostUses: this.boostSystem.getActivationCount(),
       stageCleared,
     });
@@ -2364,6 +2564,7 @@ export class StageScene implements Scene {
     this.clearRewardRequestToken += 1;
     this.clearRewardOverlay?.hide();
     this.stageClearOverlay.hide();
+    this.bonusTimeOverlay.hide();
     this.isClearRewardOpen = false;
     this.isOpeningClearReward = false;
     this.pauseOverlay.hide();
@@ -2378,6 +2579,13 @@ export class StageScene implements Scene {
     this.audioManager.stopBGM();
     this.audioManager.stopBoostSFX();
     this.wormholeTunnelEffect.clear();
+    this.starBonusEffect.clear();
+    this.bonusCollectionSystem.reset();
+    this.isBonusTime = false;
+    this.isBonusResultVisible = false;
+    this.bonusTimeRemaining = 0;
+    this.bonusCollectedStars = 0;
+    this.bonusResultTimer = 0;
     this.pendingWormholeTransition = null;
     this.wormholeTransitionTimer = 0;
     if (this.stageIntroOverlay) {

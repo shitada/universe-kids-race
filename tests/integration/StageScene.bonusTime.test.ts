@@ -1,19 +1,15 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { SceneManager } from '../../src/game/SceneManager';
 import { StageScene } from '../../src/game/scenes/StageScene';
+import { TOTAL_STAGES } from '../../src/game/config/StageConfig';
+import type { SceneManager } from '../../src/game/SceneManager';
 import type { InputSystem } from '../../src/game/systems/InputSystem';
 import type { AudioManager } from '../../src/game/audio/AudioManager';
 import type { SaveManager } from '../../src/game/storage/SaveManager';
-import type { SceneContext, SceneType } from '../../src/types';
 
 function dispatchReleaseConfirm(button: HTMLElement): void {
   button.dispatchEvent(new Event('pointerdown', { bubbles: true }));
   button.dispatchEvent(new Event('pointerup', { bubbles: true }));
-}
-
-function finishBonusSequence(scene: { update(deltaTime: number): void }): void {
-  scene.update(13);
 }
 
 function mockCanvasContext(): void {
@@ -34,24 +30,17 @@ function mockCanvasContext(): void {
   });
 }
 
-describe('StageScene wormhole transition integration', () => {
+describe('StageScene bonus time integration', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     mockCanvasContext();
     document.body.innerHTML = '<div id="hud"></div><div id="ui-overlay"></div>';
   });
 
-  it('ステージクリア後につぎへを押すとワームホール後に次ステージへ進む', async () => {
-    const transitions: { type: SceneType; context: SceneContext }[] = [];
-    const manager = new SceneManager();
-    manager.setTransitionHandler((sceneType, context = {}) => {
-      transitions.push({ type: sceneType, context });
-      return manager.transitionTo(sceneType, context);
-    });
-
-    const inputState = { moveDirection: 0 as -1 | 0 | 1, boostPressed: false };
+  it('ステージクリア後にボーナスタイムを経て通常のクリア遷移へ進み、ボーナス回収数を合算する', () => {
+    const sceneManager = { requestTransition: vi.fn() };
     const inputSystem = {
-      getState: () => inputState,
+      getState: () => ({ moveDirection: 0 as -1 | 0 | 1, boostPressed: false }),
       setBoostPressed: vi.fn(),
       resetPointers: vi.fn(),
     } as unknown as InputSystem;
@@ -67,21 +56,25 @@ describe('StageScene wormhole transition integration', () => {
       initFromInteraction: vi.fn(),
     } as unknown as AudioManager;
     const saveManager = {
-      load: vi.fn(() => ({ clearedStage: 0, unlockedPlanets: [], muted: false, bestStageStars: {} })),
+      load: vi.fn(() => ({ clearedStage: TOTAL_STAGES - 1, unlockedPlanets: [], muted: false, bestStageStars: {} })),
       save: vi.fn(),
       clear: vi.fn(),
-      markStageCleared: vi.fn(() => false),
+      markStageCleared: vi.fn(() => true),
       updateBestStageStars: vi.fn(),
     } as unknown as SaveManager;
 
-    const scene = new StageScene(manager, inputSystem, audioManager, saveManager);
-    manager.registerScene('stage', scene);
-
-    await manager.transitionTo('stage', { stageNumber: 2, totalScore: 500, totalStarCount: 4, replayToken: 1 });
+    const scene = new StageScene(
+      sceneManager as unknown as SceneManager,
+      inputSystem,
+      audioManager,
+      saveManager,
+    );
+    scene.enter({ stageNumber: TOTAL_STAGES, totalScore: 500, totalStarCount: 4, replayToken: 1 });
 
     const internal = scene as unknown as {
       countdownOverlay: { dispose(): void } | null;
       isStarting: boolean;
+      bonusCollectedStars: number;
       scoreSystem: {
         getStarCount(): number;
         getTotalScore(): number;
@@ -90,7 +83,6 @@ describe('StageScene wormhole transition integration', () => {
       };
       onStageClear(): void;
       update(deltaTime: number): void;
-      wormholeTunnelEffect: { isActive(): boolean };
     };
 
     internal.countdownOverlay?.dispose();
@@ -104,27 +96,27 @@ describe('StageScene wormhole transition integration', () => {
     };
 
     internal.onStageClear();
-    finishBonusSequence(internal);
+
+    expect(document.querySelector('[data-bonus-time-overlay]')).not.toBeNull();
+    expect(document.querySelector('[data-bonus-time-message]')?.textContent).toContain('ほしを あつめよう！');
+
+    internal.bonusCollectedStars = 4;
+    internal.update(10.1);
+
+    expect(document.querySelector('[data-bonus-time-result]')?.textContent).toContain('4こ あつめたね！');
+
+    internal.update(2.5);
+
+    expect(document.querySelector('[data-bonus-time-overlay]')).toBeNull();
 
     const continueButton = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
-    expect(continueButton).not.toBeNull();
+    expect(continueButton?.disabled).toBe(false);
 
     dispatchReleaseConfirm(continueButton!);
 
-    expect(internal.wormholeTunnelEffect.isActive()).toBe(true);
-    expect(audioManager.playSFX).toHaveBeenCalledWith('wormhole');
-    expect(transitions).toHaveLength(0);
-
-    internal.update(2.3);
-
-    expect(transitions).toHaveLength(1);
-    expect(transitions[0]).toEqual({
-      type: 'stage',
-      context: {
-        stageNumber: 3,
-        totalScore: 900,
-        totalStarCount: 9,
-      },
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith('ending', {
+      totalScore: 900,
+      totalStarCount: 13,
     });
   });
 });

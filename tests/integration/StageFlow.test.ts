@@ -59,6 +59,10 @@ function dispatchReleaseConfirm(button: HTMLElement): void {
   button.dispatchEvent(new Event('pointerup', { bubbles: true }));
 }
 
+function finishBonusSequence(scene: { update(deltaTime: number): void }): void {
+  scene.update(13);
+}
+
 describe('Stage Flow Integration', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -278,7 +282,7 @@ describe('Stage Flow Integration', () => {
     };
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const retryButton = document.querySelector('[data-stage-clear-retry]') as HTMLButtonElement | null;
     expect(retryButton).toBeTruthy();
@@ -300,7 +304,7 @@ describe('Stage Flow Integration', () => {
     starCount = 5;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const continueButton = document.querySelector('[data-stage-clear-continue]') as HTMLButtonElement | null;
     expect(continueButton).toBeTruthy();
@@ -924,7 +928,7 @@ describe('Stage Flow Integration', () => {
     internal.scoreSystem.finalizeStage = () => ({ totalScore: 9000, totalStarCount: 72 });
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const button = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
     expect(button?.textContent).toBe('おいわいへ');
@@ -996,7 +1000,7 @@ describe('Stage Flow Integration', () => {
     internal.scoreSystem.finalizeStage = () => ({ totalScore: 9000, totalStarCount: 72 });
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const button = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
     expect(button?.textContent).toBe('おいわいへ');

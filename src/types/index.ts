@@ -169,6 +169,26 @@ export interface GameplayStats {
   stageClearCounts: Record<number, number>;
 }
 
+export interface BonusStarState {
+  mesh: THREE.Object3D;
+  position: THREE.Vector3;
+  velocityY: number;
+  driftPhase: number;
+  rotationSpeed: number;
+  isCollected: boolean;
+}
+
+export interface BonusTimeOverlayState {
+  remainingSeconds: number;
+  collectedStars: number;
+  message: string;
+}
+
+export interface BonusTimeResultState {
+  collectedStars: number;
+  message: string;
+}
+
 export interface SaveData {
   clearedStage: number;
   unlockedPlanets: number[];

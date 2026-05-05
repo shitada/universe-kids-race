@@ -18,6 +18,10 @@ function createScene(): StageScene {
   return new StageScene(sceneManager, inputSystem, audioManager, saveManager);
 }
 
+function finishBonusSequence(scene: { update(deltaTime: number): void }): void {
+  scene.update(13);
+}
+
 describe('StageScene cleanupPassedObjects', () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="hud"></div><div id="ui-overlay"></div>';
@@ -608,7 +612,7 @@ describe('StageScene best-stage-stars-update feedback on clear', () => {
     };
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const overlay = document.getElementById('ui-overlay');
     const continueButton = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
@@ -829,7 +833,7 @@ describe('StageScene cumulative totals on re-entry', () => {
     internal.scoreSystem.addStarScore('NORMAL');
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const continueButton = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
     expect(continueButton).not.toBeNull();
