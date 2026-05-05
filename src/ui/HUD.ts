@@ -2,6 +2,7 @@ import { createMuteButton, type MuteButtonHandle } from './createMuteButton';
 import { HomeConfirmOverlay } from './HomeConfirmOverlay';
 import { attachReleaseConfirmButton } from './attachReleaseConfirmButton';
 import { PauseOverlay } from './PauseOverlay';
+import { createScoreGainPresentation } from './ScorePopupManager';
 
 type BoostButtonStyleKey = 'opacity' | 'filter' | 'animation' | 'transform';
 type PauseButtonStyleKey = 'opacity' | 'filter' | 'cursor' | 'transform';
@@ -14,6 +15,7 @@ export class HUD {
   private politeLiveRegionEl: HTMLDivElement | null = null;
   private assertiveLiveRegionEl: HTMLDivElement | null = null;
   private scoreEl: HTMLSpanElement | null = null;
+  private scoreGainEl: HTMLDivElement | null = null;
   private starCountEl: HTMLSpanElement | null = null;
   private bestStarContainerEl: HTMLSpanElement | null = null;
   private bestStarCountEl: HTMLSpanElement | null = null;
@@ -79,6 +81,10 @@ export class HUD {
   // redundant textContent writes (which can trigger layout/paint on iPad Safari).
   private lastScore = -1;
   private lastStarCount = -1;
+  private displayedScore = 0;
+  private scoreAnimationToken = 0;
+  private scoreGainUseAltAnimation = false;
+  private scoreGainAnimationEndHandler: ((ev: AnimationEvent) => void) | null = null;
   // Personal best (⭐) sub-label state. bestStarCount is the value passed via
   // setBestStarCount() (0 = unset / never cleared, hides the sub-label).
   // lastBestStarCount caches the last DOM-written value to skip redundant
@@ -208,10 +214,32 @@ export class HUD {
     `;
 
     const scoreDiv = document.createElement('div');
+    scoreDiv.style.position = 'relative';
+    scoreDiv.style.display = 'inline-flex';
+    scoreDiv.style.alignItems = 'baseline';
+    scoreDiv.style.gap = '0.08rem';
     this.scoreEl = document.createElement('span');
+    this.scoreEl.setAttribute('data-hud-score-value', '');
     scoreDiv.textContent = 'スコア: ';
     this.scoreEl.textContent = '0';
     scoreDiv.appendChild(this.scoreEl);
+    this.scoreGainEl = document.createElement('div');
+    this.scoreGainEl.setAttribute('data-hud-score-gain', '');
+    this.scoreGainEl.style.position = 'absolute';
+    this.scoreGainEl.style.top = '-0.95rem';
+    this.scoreGainEl.style.right = '-0.35rem';
+    this.scoreGainEl.style.fontSize = '0.68em';
+    this.scoreGainEl.style.fontWeight = '900';
+    this.scoreGainEl.style.lineHeight = '1';
+    this.scoreGainEl.style.whiteSpace = 'nowrap';
+    this.scoreGainEl.style.pointerEvents = 'none';
+    this.scoreGainEl.style.visibility = 'hidden';
+    this.scoreGainEl.style.opacity = '0';
+    this.scoreGainEl.style.willChange = 'transform, opacity';
+    this.scoreGainEl.style.animationDuration = '560ms';
+    this.scoreGainEl.style.animationTimingFunction = 'ease-out';
+    this.scoreGainEl.style.animationIterationCount = '1';
+    scoreDiv.appendChild(this.scoreGainEl);
 
     const starDiv = document.createElement('div');
     starDiv.textContent = '⭐ ';
@@ -556,6 +584,18 @@ export class HUD {
         40%  { transform: scale(1.25); }
         100% { transform: scale(1.0); }
       }
+      @keyframes hudScoreGainFloatA {
+        0%   { opacity: 0; transform: translate3d(8%, 12%, 0) scale(0.82); }
+        22%  { opacity: 1; transform: translate3d(12%, -10%, 0) scale(1.12); }
+        58%  { opacity: 1; transform: translate3d(10%, -36%, 0) scale(0.98); }
+        100% { opacity: 0; transform: translate3d(8%, -72%, 0) scale(1.03); }
+      }
+      @keyframes hudScoreGainFloatB {
+        0%   { opacity: 0; transform: translate3d(6%, 12%, 0) scale(0.82); }
+        22%  { opacity: 1; transform: translate3d(2%, -10%, 0) scale(1.12); }
+        58%  { opacity: 1; transform: translate3d(-2%, -36%, 0) scale(0.98); }
+        100% { opacity: 0; transform: translate3d(-6%, -72%, 0) scale(1.03); }
+      }
       span[data-hud-count-pop] {
         animation: hudCountPop 0.35s ease-out 1;
         display: inline-block;
@@ -723,7 +763,7 @@ export class HUD {
   update(score: number, starCount: number): void {
     if (this.scoreEl && score !== this.lastScore) {
       const prev = this.lastScore;
-      this.scoreEl.textContent = String(score);
+      this.setDisplayedScore(score);
       this.lastScore = score;
       if (prev !== -1 && score > prev) {
         this.flashCount(this.scoreEl);
@@ -751,6 +791,23 @@ export class HUD {
       this.bestStarPulsed = true;
       this.flashCount(this.bestStarContainerEl);
     }
+  }
+
+  animateScoreGain(amount: number, stageScore: number): void {
+    if (!this.scoreEl) return;
+
+    const nextScore = Math.max(0, Math.round(stageScore));
+    const gain = Math.max(0, Math.round(amount));
+    if (gain <= 0) {
+      this.setDisplayedScore(nextScore);
+      this.lastScore = nextScore;
+      return;
+    }
+
+    this.lastScore = nextScore;
+    this.flashCount(this.scoreEl);
+    this.showScoreGainPopup(gain);
+    this.animateScoreValue(nextScore);
   }
 
   /**
@@ -793,6 +850,84 @@ export class HUD {
     };
     el.addEventListener('animationend', onEnd);
     this.registerTimeout(cleanup, 500);
+  }
+
+  private setDisplayedScore(score: number): void {
+    if (this.scoreEl && this.displayedScore !== score) {
+      this.scoreEl.textContent = String(score);
+    }
+    this.displayedScore = score;
+  }
+
+  private animateScoreValue(targetScore: number): void {
+    const startScore = this.displayedScore;
+    if (targetScore <= startScore) {
+      this.setDisplayedScore(targetScore);
+      return;
+    }
+
+    this.scoreAnimationToken += 1;
+    const token = this.scoreAnimationToken;
+    const diff = targetScore - startScore;
+    const steps = Math.min(7, Math.max(4, Math.ceil(diff / 120)));
+    const intervalMs = 40;
+
+    for (let step = 1; step <= steps; step += 1) {
+      this.registerTimeout(() => {
+        if (token !== this.scoreAnimationToken) return;
+        const progress = step / steps;
+        const eased = 1 - (1 - progress) * (1 - progress);
+        const nextValue = step === steps
+          ? targetScore
+          : Math.min(targetScore, startScore + Math.round(diff * eased));
+        this.setDisplayedScore(nextValue);
+      }, step * intervalMs);
+    }
+  }
+
+  private showScoreGainPopup(amount: number): void {
+    const scoreGainEl = this.scoreGainEl;
+    if (!scoreGainEl) return;
+
+    const presentation = createScoreGainPresentation(amount);
+    const animationName = this.scoreGainUseAltAnimation ? 'hudScoreGainFloatB' : 'hudScoreGainFloatA';
+    this.scoreGainUseAltAnimation = !this.scoreGainUseAltAnimation;
+
+    if (this.scoreGainAnimationEndHandler) {
+      scoreGainEl.removeEventListener('animationend', this.scoreGainAnimationEndHandler);
+      this.scoreGainAnimationEndHandler = null;
+    }
+
+    scoreGainEl.textContent = presentation.hudText;
+    scoreGainEl.style.color = presentation.color;
+    scoreGainEl.style.textShadow = `0 2px 10px ${presentation.shadow}`;
+    scoreGainEl.style.animationName = animationName;
+    scoreGainEl.style.visibility = 'visible';
+    scoreGainEl.style.opacity = '1';
+    scoreGainEl.setAttribute('data-hud-score-gain-kind', presentation.kind);
+    scoreGainEl.removeAttribute('data-hud-score-gain-active');
+    scoreGainEl.setAttribute('data-hud-score-gain-active', '');
+
+    let cleared = false;
+    const cleanup = (): void => {
+      if (cleared) return;
+      cleared = true;
+      scoreGainEl.removeAttribute('data-hud-score-gain-active');
+      scoreGainEl.style.visibility = 'hidden';
+      scoreGainEl.style.opacity = '0';
+      scoreGainEl.style.animationName = 'none';
+      scoreGainEl.removeEventListener('animationend', onEnd);
+      if (this.scoreGainAnimationEndHandler === onEnd) {
+        this.scoreGainAnimationEndHandler = null;
+      }
+    };
+    const onEnd = (ev: AnimationEvent): void => {
+      if (ev.animationName !== animationName) return;
+      cleanup();
+    };
+    this.scoreGainAnimationEndHandler = onEnd;
+    scoreGainEl.addEventListener('animationend', onEnd);
+    this.registerTimeout(cleanup, 620);
   }
 
   private registerTimeout(callback: () => void, delayMs: number): number {
@@ -1171,7 +1306,12 @@ export class HUD {
     this.lastStageProgressComplete = null;
     this.lastScore = -1;
     this.lastStarCount = -1;
+    this.displayedScore = 0;
+    this.scoreAnimationToken = 0;
+    this.scoreGainUseAltAnimation = false;
+    this.scoreGainAnimationEndHandler = null;
     this.scoreEl = null;
+    this.scoreGainEl = null;
     this.starCountEl = null;
     this.bestStarContainerEl = null;
     this.bestStarCountEl = null;

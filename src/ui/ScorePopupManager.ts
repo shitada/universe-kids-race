@@ -11,13 +11,32 @@ interface PopupEntry {
   currentAnimationName: 'scorePopupFloatA' | 'scorePopupFloatB' | 'none';
 }
 
-type PopupKind = 'normal' | 'bonus' | 'shooting-star' | 'special-star' | 'monthly-encounter';
+export type PopupKind = 'normal' | 'bonus' | 'shooting-star' | 'special-star' | 'monthly-encounter';
 
 interface PopupVisualStyle {
   text: string;
   kind: PopupKind;
   color: string;
   shadow: string;
+}
+
+export interface ScoreGainPresentation {
+  worldText: string;
+  hudText: string;
+  kind: PopupKind;
+  color: string;
+  shadow: string;
+}
+
+export function createScoreGainPresentation(score: number): ScoreGainPresentation {
+  const isBonus = score >= 500;
+  return {
+    worldText: `${isBonus ? '🌈' : '⬢'} +${score}`,
+    hudText: `+${score}`,
+    kind: isBonus ? 'bonus' : 'normal',
+    color: isBonus ? '#ff9cf7' : '#ffe066',
+    shadow: isBonus ? 'rgba(255, 156, 247, 0.55)' : 'rgba(255, 214, 102, 0.55)',
+  };
 }
 
 export class ScorePopupManager {
@@ -36,13 +55,13 @@ export class ScorePopupManager {
   }
 
   show(score: number, worldPosition: WorldPosition, camera: THREE.Camera): void {
-    const isBonus = score >= 500;
+    const presentation = createScoreGainPresentation(score);
     this.showPopup(
       {
-        text: `${isBonus ? '🌈' : '⬢'} +${score}`,
-        kind: isBonus ? 'bonus' : 'normal',
-        color: isBonus ? '#ff9cf7' : '#ffe066',
-        shadow: isBonus ? 'rgba(255, 156, 247, 0.55)' : 'rgba(255, 214, 102, 0.55)',
+        text: presentation.worldText,
+        kind: presentation.kind,
+        color: presentation.color,
+        shadow: presentation.shadow,
       },
       worldPosition,
       camera,

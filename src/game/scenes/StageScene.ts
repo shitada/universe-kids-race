@@ -331,10 +331,16 @@ export class StageScene implements Scene {
     this.audioManager = audioManager;
     this.saveManager = saveManager;
     this.scoreSystem.setScoreGainListener((event) => {
-      if (!event.worldPosition) {
-        return;
+      if (this.initialized) {
+        this.hud.animateScoreGain(event.amount, event.stageScore);
       }
+
+      if (!event.worldPosition) return;
+
       this.scorePopupEffect.emit(event.worldPosition, event.amount);
+      if (event.kind === 'bonus') {
+        this.scorePopupManager.show(event.amount, event.worldPosition, this.camera);
+      }
     });
     this.scheduleIdleTask = options.scheduleIdleTask ?? scheduleIdleTask;
     this.seasonalEventSystem = new SeasonalEventSystem(options.seasonalEventDateProvider);
