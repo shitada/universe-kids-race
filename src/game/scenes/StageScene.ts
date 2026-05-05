@@ -49,6 +49,7 @@ import { RainbowTrailEffect } from '../effects/RainbowTrailEffect';
 import { StageAtmosphereEffect } from '../effects/StageAtmosphereEffect';
 import { SeasonalEventEffects } from '../effects/SeasonalEventEffects';
 import { StageSpecialEffects } from '../effects/StageSpecialEffects';
+import { ScorePopupEffect } from '../effects/ScorePopupEffect';
 import { CompanionManager } from '../entities/CompanionManager';
 import { getConstellationForStage } from '../config/ConstellationData';
 import { getStageSpecialEventConfig } from '../config/StageSpecialEvents';
@@ -178,6 +179,7 @@ export class StageScene implements Scene {
   private readonly seasonalEventSystem: SeasonalEventSystem;
   private hud!: HUD;
   private scorePopupManager = new ScorePopupManager();
+  private scorePopupEffect = new ScorePopupEffect();
   private particleBurstManager = new ParticleBurstManager();
   private planetRingEffect = new PlanetRingEffect();
   private constellationLineEffect = new ConstellationLineEffect();
@@ -308,6 +310,12 @@ export class StageScene implements Scene {
     this.inputSystem = inputSystem;
     this.audioManager = audioManager;
     this.saveManager = saveManager;
+    this.scoreSystem.setScoreGainListener((event) => {
+      if (!event.worldPosition) {
+        return;
+      }
+      this.scorePopupEffect.emit(event.worldPosition, event.amount);
+    });
     this.scheduleIdleTask = options.scheduleIdleTask ?? scheduleIdleTask;
     this.seasonalEventSystem = new SeasonalEventSystem(options.seasonalEventDateProvider);
     this.loadEncyclopediaOverlay =
@@ -364,6 +372,7 @@ export class StageScene implements Scene {
     this.seasonalEventEffects.init(this.threeScene);
 
     this.stageAtmosphereEffect.init(this.threeScene);
+    this.scorePopupEffect.init(this.threeScene);
 
     this.hud = new HUD();
     this.initialized = true;
@@ -832,6 +841,7 @@ export class StageScene implements Scene {
     this.removeDestinationPlanet();
     this.resetCameraShake();
     this.planetRingEffect.clear();
+    this.scorePopupEffect.clear();
     this.particleBurstManager.clear(this.threeScene);
     this.spawnSystem.recycleAll();
     this.spawnSystem.setMeteoriteIntervalMultiplier(1);
@@ -873,6 +883,7 @@ export class StageScene implements Scene {
       this.constellationHintOverlay.tick(deltaTime);
       this.constellationLineEffect.update(deltaTime);
       this.planetRingEffect.update(deltaTime);
+      this.scorePopupEffect.update(deltaTime);
       this.particleBurstManager.update(this.threeScene, deltaTime);
       // Keep companion entrance animation progressing during clear screen
       this.companionManager?.update(
@@ -1072,7 +1083,7 @@ export class StageScene implements Scene {
 
     if (collisionResult.shootingStarHit) {
       const shootingStar = collisionResult.shootingStarHit;
-      this.scoreSystem.addBonusScore(shootingStar.scoreBonus);
+      this.scoreSystem.addBonusScore(shootingStar.scoreBonus, shootingStar.position);
       this.scoreSystem.activateShootingStarBonus(
         Math.max(StageScene.SHOOTING_STAR_SCORE_BONUS_DURATION, shootingStar.bonusDuration),
       );
@@ -1088,7 +1099,7 @@ export class StageScene implements Scene {
 
     if (collisionResult.cometHit) {
       const comet = collisionResult.cometHit;
-      this.scoreSystem.addBonusScore(comet.scoreBonus);
+      this.scoreSystem.addBonusScore(comet.scoreBonus, comet.position);
       this.scoreSystem.activateShootingStarBonus(comet.bonusDuration);
       this.audioManager.playSFX('cometCollect');
       this.particleBurstManager.emit(
@@ -1115,7 +1126,7 @@ export class StageScene implements Scene {
       const specialStar = collisionResult.specialShootingStarHit;
       const encyclopediaEntry = getSpecialStarEncyclopediaEntry(specialStar.specialType);
       const isNewDiscovery = this.saveManager.markSpecialStarDiscovered?.(specialStar.specialType) ?? false;
-      this.scoreSystem.addBonusScore(specialStar.scoreBonus);
+      this.scoreSystem.addBonusScore(specialStar.scoreBonus, specialStar.position);
       this.audioManager.playSFX('shootingStarCollect');
       triggerSharedVibration('rainbowCollect');
       this.particleBurstManager.emitShootingStar(
@@ -1154,7 +1165,7 @@ export class StageScene implements Scene {
 
     // Star collection
     for (const star of collisionResult.starCollisions) {
-      this.scoreSystem.addStarScore(star.starType);
+      this.scoreSystem.addStarScore(star.starType, star.position);
       if (star.starType === 'RAINBOW') {
         this.audioManager.playSFX('rainbowCollect');
         this.rainbowTrailEffect.start(this.spaceship.position);
@@ -1317,6 +1328,7 @@ export class StageScene implements Scene {
     this.airShield.update(deltaTime);
 
     // Particle effects
+    this.scorePopupEffect.update(deltaTime);
     this.particleBurstManager.update(this.threeScene, deltaTime);
     this.scoreSystem.update(deltaTime);
     this.constellationLineEffect.update(deltaTime);

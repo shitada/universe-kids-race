@@ -230,33 +230,45 @@ export class ScorePopupManager {
       @keyframes scorePopupFloatA {
         0% {
           opacity: 0;
-          transform: translate3d(-50%, -35%, 0) scale(0.92);
+          transform: translate3d(-50%, -32%, 0) scale(0.82);
         }
         18% {
           opacity: 1;
-          transform: translate3d(-50%, -50%, 0) scale(1);
+          transform: translate3d(-50%, -54%, 0) scale(1.16);
+        }
+        34% {
+          opacity: 1;
+          transform: translate3d(-50%, -48%, 0) scale(0.96);
+        }
+        52% {
+          opacity: 1;
+          transform: translate3d(-50%, -62%, 0) scale(1.05);
         }
         100% {
           opacity: 0;
-          transform: translate3d(-50%, -105%, 0) scale(1.04);
+          transform: translate3d(-50%, -105%, 0) scale(1.02);
         }
       }
       @keyframes scorePopupFloatB {
         0% {
           opacity: 0;
-          transform: translate3d(-50%, -35%, 0) scale(0.92);
+          transform: translate3d(-50%, -32%, 0) scale(0.82);
         }
         18% {
           opacity: 1;
-          transform: translate3d(-50%, -50%, 0) scale(1);
+          transform: translate3d(-50%, -54%, 0) scale(1.16);
+        }
+        34% {
+          opacity: 1;
+          transform: translate3d(-48%, -48%, 0) scale(0.96);
         }
         72% {
           opacity: 1;
-          transform: translate3d(-43%, -84%, 0) scale(1.02);
+          transform: translate3d(-43%, -84%, 0) scale(1.05);
         }
         100% {
           opacity: 0;
-          transform: translate3d(-38%, -105%, 0) scale(1.04);
+          transform: translate3d(-38%, -105%, 0) scale(1.03);
         }
       }
     `;

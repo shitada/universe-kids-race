@@ -50,6 +50,7 @@ describe('StageScene score popup integration', () => {
       meteorites: [];
       threeScene: THREE.Scene;
       scorePopupManager: { show: ReturnType<typeof vi.fn> };
+      scorePopupEffect: { emit: ReturnType<typeof vi.fn> };
       countdownOverlay: { dispose(): void } | null;
       isStarting: boolean;
       update(deltaTime: number): void;
@@ -59,6 +60,7 @@ describe('StageScene score popup integration', () => {
     internal.countdownOverlay = null;
     internal.isStarting = false;
     internal.scorePopupManager = { show: vi.fn(), dispose: vi.fn() };
+    internal.scorePopupEffect = { emit: vi.fn(), update: vi.fn(), clear: vi.fn(), dispose: vi.fn() };
 
     const stars = [
       new Star(0, 0, 0, 'NORMAL'),
@@ -75,13 +77,21 @@ describe('StageScene score popup integration', () => {
     internal.update(0.016);
 
     const showSpy = internal.scorePopupManager.show as ReturnType<typeof vi.fn>;
+    const effectSpy = internal.scorePopupEffect.emit as ReturnType<typeof vi.fn>;
 
     expect(showSpy).toHaveBeenCalledTimes(stars.length);
+    expect(effectSpy).toHaveBeenCalledTimes(stars.length);
     expect(showSpy.mock.calls.map(([score]) => score)).toEqual([
       100,
       500,
       100,
       500,
+    ]);
+    expect(effectSpy.mock.calls.map(([position, score]) => [score, position])).toEqual([
+      [100, expect.objectContaining({ x: expect.any(Number), y: expect.any(Number), z: expect.any(Number) })],
+      [500, expect.objectContaining({ x: expect.any(Number), y: expect.any(Number), z: expect.any(Number) })],
+      [100, expect.objectContaining({ x: expect.any(Number), y: expect.any(Number), z: expect.any(Number) })],
+      [500, expect.objectContaining({ x: expect.any(Number), y: expect.any(Number), z: expect.any(Number) })],
     ]);
     for (const [, position, cameraArg] of showSpy.mock.calls) {
       expect(position).toEqual({

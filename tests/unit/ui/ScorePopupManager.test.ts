@@ -76,9 +76,9 @@ describe('ScorePopupManager', () => {
     expect(style).not.toBeNull();
     expect(styleText).toContain('@keyframes scorePopupFloatA');
     expect(styleText).toContain('@keyframes scorePopupFloatB');
-    expect(styleText).toContain('translate3d(-50%, -105%, 0) scale(1.04)');
-    expect(styleText).toContain('translate3d(-43%, -84%, 0) scale(1.02)');
-    expect(styleText).toContain('translate3d(-38%, -105%, 0) scale(1.04)');
+    expect(styleText).toContain('scale(1.16)');
+    expect(styleText).toContain('scale(0.96)');
+    expect(styleText).toContain('translate3d(-38%, -105%, 0) scale(1.03)');
   });
 
   it('avoids layout reads when showing and replaying a popup', () => {

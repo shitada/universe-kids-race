@@ -1,5 +1,16 @@
 import type { StarType } from '../../types';
 
+type WorldPosition = Readonly<{ x: number; y: number; z: number }>;
+
+export interface ScoreGainEvent {
+  amount: number;
+  kind: 'star' | 'bonus';
+  stageScore: number;
+  starCount: number;
+  worldPosition?: WorldPosition;
+  starType?: StarType;
+}
+
 export class ScoreSystem {
   private stageScore = 0;
   private totalScore = 0;
@@ -7,11 +18,29 @@ export class ScoreSystem {
   private totalStarCount = 0;
   private scoreMultiplier = 1;
   private scoreMultiplierTimer = 0;
+  private onScoreGain: ((event: ScoreGainEvent) => void) | null;
 
-  addStarScore(starType: StarType): void {
+  constructor(onScoreGain?: (event: ScoreGainEvent) => void) {
+    this.onScoreGain = onScoreGain ?? null;
+  }
+
+  setScoreGainListener(listener: ((event: ScoreGainEvent) => void) | null): void {
+    this.onScoreGain = listener;
+  }
+
+  addStarScore(starType: StarType, worldPosition?: WorldPosition): void {
     const value = starType === 'RAINBOW' ? 500 : 100;
-    this.stageScore += value * this.scoreMultiplier;
+    const amount = value * this.scoreMultiplier;
+    this.stageScore += amount;
     this.starCount++;
+    this.onScoreGain?.({
+      amount,
+      kind: 'star',
+      stageScore: this.stageScore,
+      starCount: this.starCount,
+      starType,
+      worldPosition,
+    });
   }
 
   activateShootingStarBonus(duration: number): void {
@@ -22,11 +51,19 @@ export class ScoreSystem {
     this.scoreMultiplierTimer = Math.max(this.scoreMultiplierTimer, duration);
   }
 
-  addBonusScore(value: number): void {
+  addBonusScore(value: number, worldPosition?: WorldPosition): void {
     if (!Number.isFinite(value) || value <= 0) {
       return;
     }
-    this.stageScore += Math.round(value);
+    const amount = Math.round(value);
+    this.stageScore += amount;
+    this.onScoreGain?.({
+      amount,
+      kind: 'bonus',
+      stageScore: this.stageScore,
+      starCount: this.starCount,
+      worldPosition,
+    });
   }
 
   update(deltaTime: number): void {

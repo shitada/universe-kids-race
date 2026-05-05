@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { ScoreSystem } from '../../../src/game/systems/ScoreSystem';
 
 describe('ScoreSystem', () => {
@@ -61,6 +61,39 @@ describe('ScoreSystem', () => {
 
     expect(system.getStageScore()).toBe(1500);
     expect(system.getStarCount()).toBe(0);
+  });
+
+  it('notifies score gain listener with world position for collected stars', () => {
+    const listener = vi.fn();
+    const system = new ScoreSystem(listener);
+    const worldPosition = { x: 1, y: 2, z: 3 };
+
+    system.addStarScore('RAINBOW', worldPosition);
+
+    expect(listener).toHaveBeenCalledWith({
+      amount: 500,
+      kind: 'star',
+      stageScore: 500,
+      starCount: 1,
+      starType: 'RAINBOW',
+      worldPosition,
+    });
+  });
+
+  it('notifies score gain listener for bonus score events', () => {
+    const listener = vi.fn();
+    const system = new ScoreSystem(listener);
+    const worldPosition = { x: -1, y: 4, z: -8 };
+
+    system.addBonusScore(450, worldPosition);
+
+    expect(listener).toHaveBeenCalledWith({
+      amount: 450,
+      kind: 'bonus',
+      stageScore: 450,
+      starCount: 0,
+      worldPosition,
+    });
   });
 
   it('returns a stage stats snapshot for analytics', () => {
