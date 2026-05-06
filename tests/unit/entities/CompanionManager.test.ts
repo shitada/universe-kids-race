@@ -22,7 +22,7 @@ describe('CompanionManager', () => {
       expect(shapes.size).toBeGreaterThan(1);
     });
 
-    it('creates meshes for all 11 encyclopedia entries without error', () => {
+    it('creates meshes for all encyclopedia entries without error', () => {
       for (const entry of PLANET_ENCYCLOPEDIA) {
         expect(() => CompanionManager.createCompanionMesh(entry)).not.toThrow();
       }
@@ -40,9 +40,10 @@ describe('CompanionManager', () => {
       expect(manager.getCount()).toBe(0);
     });
 
-    it('creates meshes for all 11 planets', () => {
-      const manager = new CompanionManager([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
-      expect(manager.getCount()).toBe(11);
+    it('creates meshes for all planets', () => {
+      const all = PLANET_ENCYCLOPEDIA.map((entry) => entry.stageNumber);
+      const manager = new CompanionManager(all);
+      expect(manager.getCount()).toBe(PLANET_ENCYCLOPEDIA.length);
     });
 
     it('creates group with companion meshes as children', () => {
@@ -187,9 +188,9 @@ describe('CompanionManager', () => {
       expect(new CompanionManager([1, 2, 3]).getStarAttractionBonus()).toBeCloseTo(0.6);
     });
 
-    it('returns 2.2 for all 11 companions', () => {
-      const all = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
-      expect(new CompanionManager(all).getStarAttractionBonus()).toBeCloseTo(2.2);
+    it('returns count * 0.2 for all companions', () => {
+      const all = PLANET_ENCYCLOPEDIA.map((entry) => entry.stageNumber);
+      expect(new CompanionManager(all).getStarAttractionBonus()).toBeCloseTo(all.length * 0.2);
     });
   });
 
@@ -448,7 +449,7 @@ describe('CompanionManager', () => {
 
   describe('shared geometry / material caching', () => {
     it('reuses the same body geometry across multiple companions of the same shape', () => {
-      const all = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+      const all = PLANET_ENCYCLOPEDIA.map((entry) => entry.stageNumber);
       const manager = new CompanionManager(all);
       const group = manager.getGroup();
 

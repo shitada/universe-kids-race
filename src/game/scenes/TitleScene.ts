@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import {
+  type AudioVolumeLevel,
+  type ColorVisionSupportMode,
   DEFAULT_SPACESHIP_CUSTOMIZATION,
+  type Language,
   type MotionSensitivity,
   type SaveData,
   type Scene,
@@ -17,15 +20,25 @@ import { createMuteButton, type MuteButtonHandle } from '../../ui/createMuteButt
 import { ColorAccessibilitySettings } from '../../ui/ColorAccessibilitySettings';
 import { SpaceshipCustomizer } from '../../ui/SpaceshipCustomizer';
 import { StatsOverlay } from '../../ui/StatsOverlay';
+import { TouchFeedbackOverlay } from '../../ui/TouchFeedbackOverlay';
 import { getStageConfig, getStageMedalStatus, TOTAL_STAGES } from '../config/StageConfig';
-import { PLANET_ENCYCLOPEDIA, getPlanetEncyclopediaEntry } from '../config/PlanetEncyclopedia';
+import { DEFAULT_REST_REMINDER_ENABLED } from '../config/RestReminderConfig';
+import {
+  DEFAULT_COLOR_VISION_SUPPORT_MODE,
+  formatPlanetReadingLabel,
+  PLANET_ENCYCLOPEDIA,
+  getPlanetEncyclopediaEntry,
+} from '../config/PlanetEncyclopedia';
 import { formatEncyclopediaLabel } from '../../ui/formatEncyclopediaLabel';
 import { getViewportSize } from '../utils/getViewportSize';
 import { attachReleaseConfirmButton } from '../../ui/attachReleaseConfirmButton';
 import { createStageMedalDisplay } from '../../ui/stageMedalDisplay';
 import { prewarmStageVisualAssets } from './stageVisualAssets';
-import { setSharedVibrationIntensity } from '../systems/VibrationSystem';
-import { DEFAULT_MOTION_SENSITIVITY } from '../accessibility/motionSensitivity';
+import { setSharedVisualFeedbackIntensity } from '../systems/VisualFeedbackSystem';
+import { setActiveColorVisionSupportMode } from '../effects/ColorVisionPostProcessor';
+import { getDefaultMotionSensitivity } from '../accessibility/motionSensitivity';
+import { i18n } from '../i18n/i18nService';
+import { DEFAULT_LANGUAGE } from '../i18n/types';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // SHARED background-star resources for TitleScene
@@ -139,14 +152,21 @@ function getNextAdventurePreview(saveData: SaveData): NextAdventurePreview {
   const startStage = isAllClear ? 1 : Math.min(saveData.clearedStage + 1, TOTAL_STAGES);
   const stageConfig = getStageConfig(startStage);
   const bestStars = saveData.bestStageStars?.[startStage] ?? 0;
+  const colorVisionSupportMode =
+    saveData.colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE;
+  const destinationLabel = formatPlanetReadingLabel(
+    startStage,
+    stageConfig.destinationReading,
+    colorVisionSupportMode,
+  );
 
   if (isAllClear) {
     return {
       startStage,
-      destination: stageConfig.destinationReading,
+      destination: destinationLabel,
       emoji: stageConfig.emoji,
       statusLabel: 'ぜんぶ あつめたよ！',
-      destinationLabel: `${stageConfig.destinationReading}へ もういちど しゅっぱつ！`,
+      destinationLabel: `${destinationLabel}へ もういちど しゅっぱつ！`,
       buttonHint: `${stageConfig.emoji} ステージ ${startStage} から もういちど あそぶ`,
       bestStars,
     };
@@ -154,10 +174,10 @@ function getNextAdventurePreview(saveData: SaveData): NextAdventurePreview {
 
   return {
     startStage,
-    destination: stageConfig.destinationReading,
+    destination: destinationLabel,
     emoji: stageConfig.emoji,
     statusLabel: saveData.clearedStage > 0 ? 'つづきから しゅっぱつ！' : 'はじめての しゅっぱつ！',
-    destinationLabel: `${stageConfig.destinationReading}へ むかおう！`,
+    destinationLabel: `${destinationLabel}へ むかおう！`,
     buttonHint: `${stageConfig.emoji} ステージ ${startStage} から スタート`,
     bestStars,
   };
@@ -202,6 +222,7 @@ export class TitleScene implements Scene {
   private encyclopediaBtn: HTMLButtonElement | null = null;
   private isOpeningEncyclopedia = false;
   private isActive = false;
+  private readonly touchFeedbackOverlay = new TouchFeedbackOverlay();
   private encyclopediaRequestToken = 0;
   private companionParadeRequestToken = 0;
   // タイトル滞在中、初回 user gesture（AudioContext 初期化）を待つフラグ。
@@ -211,6 +232,8 @@ export class TitleScene implements Scene {
   // 直後に再生開始するため、その判定にこのフラグを利用する。
   private bgmPending = false;
   private readonly overlayButtonCleanups = new Set<() => void>();
+  private colorSettingsButton: HTMLButtonElement | null = null;
+  private unsubscribeLanguageChange: (() => void) | null = null;
 
   constructor(
     sceneManager: SceneManager,
@@ -260,10 +283,22 @@ export class TitleScene implements Scene {
     }
 
     const saveData = this.saveManager.load();
+    i18n.setLanguage(saveData.language ?? DEFAULT_LANGUAGE, { notify: false });
+    setActiveColorVisionSupportMode(
+      saveData.colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE,
+    );
     void this.createCompanionParade(saveData.unlockedPlanets);
 
     this.createOverlay();
     this.createMuteButton();
+    this.touchFeedbackOverlay.setMotionSensitivity(
+      saveData.colorAccessibility?.motionSensitivity ?? getDefaultMotionSensitivity(),
+    );
+    this.touchFeedbackOverlay.attach();
+    this.touchFeedbackOverlay.bindUiRoots([
+      document.getElementById('hud'),
+      document.getElementById('ui-overlay'),
+    ]);
     this.prefetchEncyclopediaOnIdle();
     this.prewarmNextAdventureOnIdle(getNextAdventurePreview(saveData).startStage);
 
@@ -373,6 +408,9 @@ export class TitleScene implements Scene {
       },
       saveData.bestStageStars ?? {},
       saveData.discoveredConstellations ?? [],
+      saveData.colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE,
+      saveData.discoveredMonthlyEncounters ?? [],
+      saveData.discoveredSpaceGems ?? [],
     );
   }
 
@@ -455,42 +493,134 @@ export class TitleScene implements Scene {
   private persistHighContrastSetting(enabled: boolean): void {
     const data = this.saveManager.load();
     const currentMotionSensitivity =
-      data.colorAccessibility?.motionSensitivity ?? DEFAULT_MOTION_SENSITIVITY;
-    data.colorAccessibility = this.buildColorAccessibilitySettings(enabled, currentMotionSensitivity);
+      data.colorAccessibility?.motionSensitivity ?? getDefaultMotionSensitivity();
+    const currentColorVisionSupportMode =
+      data.colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE;
+    data.colorAccessibility = this.buildColorAccessibilitySettings(
+      enabled,
+      currentMotionSensitivity,
+      currentColorVisionSupportMode,
+    );
     if (!data.colorAccessibility) {
       delete data.colorAccessibility;
     }
     this.saveManager.save(data);
   }
 
-  private persistVibrationIntensitySetting(intensity: 'off' | 'weak' | 'medium' | 'strong'): void {
+  private persistVisualFeedbackIntensitySetting(intensity: 'off' | 'weak' | 'medium' | 'strong'): void {
     const data = this.saveManager.load();
-    data.vibrationSettings = { intensity };
+    data.visualFeedbackSettings = { intensity };
     this.saveManager.save(data);
-    setSharedVibrationIntensity(intensity);
+    setSharedVisualFeedbackIntensity(intensity);
+  }
+
+  private persistRestReminderSetting(enabled: boolean): void {
+    const data = this.saveManager.load();
+    data.restReminderSettings = { enabled };
+    this.saveManager.save(data);
+  }
+
+  private persistLanguageSetting(language: Language): void {
+    const data = this.saveManager.load();
+    if (language === DEFAULT_LANGUAGE) {
+      delete data.language;
+    } else {
+      data.language = language;
+    }
+    this.saveManager.save(data);
+  }
+
+  private persistBGMVolumeSetting(volume: AudioVolumeLevel): void {
+    const data = this.saveManager.load();
+    data.audioSettings = this.buildAudioSettings(
+      volume,
+      data.audioSettings?.sfxVolume ?? 100,
+    );
+    if (!data.audioSettings) {
+      delete data.audioSettings;
+    }
+    this.saveManager.save(data);
+    this.audioManager.setBGMVolume(volume);
+  }
+
+  private persistSFXVolumeSetting(volume: AudioVolumeLevel): void {
+    const data = this.saveManager.load();
+    data.audioSettings = this.buildAudioSettings(
+      data.audioSettings?.bgmVolume ?? 100,
+      volume,
+    );
+    if (!data.audioSettings) {
+      delete data.audioSettings;
+    }
+    this.saveManager.save(data);
+    this.audioManager.setSFXVolume(volume);
   }
 
   private persistMotionSensitivitySetting(sensitivity: MotionSensitivity): void {
     const data = this.saveManager.load();
     const highContrastEnabled = data.colorAccessibility?.highContrast === true;
-    data.colorAccessibility = this.buildColorAccessibilitySettings(highContrastEnabled, sensitivity);
+    const currentColorVisionSupportMode =
+      data.colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE;
+    data.colorAccessibility = this.buildColorAccessibilitySettings(
+      highContrastEnabled,
+      sensitivity,
+      currentColorVisionSupportMode,
+    );
     if (!data.colorAccessibility) {
       delete data.colorAccessibility;
     }
     this.saveManager.save(data);
   }
 
+  private persistColorVisionSupportModeSetting(mode: ColorVisionSupportMode): void {
+    const data = this.saveManager.load();
+    const highContrastEnabled = data.colorAccessibility?.highContrast === true;
+    const currentMotionSensitivity =
+      data.colorAccessibility?.motionSensitivity ?? getDefaultMotionSensitivity();
+    data.colorAccessibility = this.buildColorAccessibilitySettings(
+      highContrastEnabled,
+      currentMotionSensitivity,
+      mode,
+    );
+    if (!data.colorAccessibility) {
+      delete data.colorAccessibility;
+    }
+    this.saveManager.save(data);
+    setActiveColorVisionSupportMode(mode);
+  }
+
   private buildColorAccessibilitySettings(
     highContrastEnabled: boolean,
     motionSensitivity: MotionSensitivity,
+    colorVisionSupportMode: ColorVisionSupportMode,
   ): SaveData['colorAccessibility'] {
-    if (!highContrastEnabled && motionSensitivity === DEFAULT_MOTION_SENSITIVITY) {
+    const defaultMotionSensitivity = getDefaultMotionSensitivity();
+    if (
+      !highContrastEnabled &&
+      motionSensitivity === defaultMotionSensitivity &&
+      colorVisionSupportMode === DEFAULT_COLOR_VISION_SUPPORT_MODE
+    ) {
       return undefined;
     }
 
     return {
       ...(highContrastEnabled ? { highContrast: true } : {}),
-      ...(motionSensitivity !== DEFAULT_MOTION_SENSITIVITY ? { motionSensitivity } : {}),
+      ...(motionSensitivity !== defaultMotionSensitivity ? { motionSensitivity } : {}),
+      ...(colorVisionSupportMode !== DEFAULT_COLOR_VISION_SUPPORT_MODE ? { colorVisionSupportMode } : {}),
+    };
+  }
+
+  private buildAudioSettings(
+    bgmVolume: AudioVolumeLevel,
+    sfxVolume: AudioVolumeLevel,
+  ): SaveData['audioSettings'] {
+    if (bgmVolume === 100 && sfxVolume === 100) {
+      return undefined;
+    }
+
+    return {
+      ...(bgmVolume !== 100 ? { bgmVolume } : {}),
+      ...(sfxVolume !== 100 ? { sfxVolume } : {}),
     };
   }
 
@@ -502,6 +632,8 @@ export class TitleScene implements Scene {
     const savedProgress = hasSavedProgress(initialSaveData);
 
     this.overlay = document.createElement('div');
+    this.unsubscribeLanguageChange?.();
+    this.unsubscribeLanguageChange = i18n.subscribe(() => this.applyLocalizedText());
     this.overlay.style.cssText = `
       display: flex;
       flex-direction: column;
@@ -658,6 +790,34 @@ export class TitleScene implements Scene {
       text-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
     `;
 
+    const freePlayButton = document.createElement('button');
+    freePlayButton.textContent = 'うちゅうで あそぶ';
+    freePlayButton.setAttribute('data-free-play-button', '');
+    freePlayButton.style.cssText = `
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: ${compact ? '1.05rem' : '1.35rem'};
+      font-weight: 900;
+      padding: ${compact ? '0.55rem 1.6rem' : '0.85rem 2.4rem'};
+      border: none;
+      border-radius: 2rem;
+      background: linear-gradient(135deg, #7bd9ff, #b197fc);
+      color: #1f2040;
+      cursor: pointer;
+      touch-action: manipulation;
+      box-shadow: 0 4px 15px rgba(123, 217, 255, 0.35);
+      transform: scale(1);
+      transition: transform 0.08s ease-out;
+    `;
+    this.overlayButtonCleanups.add(attachReleaseConfirmButton(freePlayButton, {
+      onActivate: () => {
+        this.ensureTitleAudioInitialized(false);
+        this.sceneManager.requestTransition('freePlay', {});
+      },
+      onPressChange: (pressed) => {
+        freePlayButton.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+      },
+    }));
+
     const secondaryActions = document.createElement('div');
     secondaryActions.setAttribute('data-title-secondary-actions', '');
     secondaryActions.style.cssText = `
@@ -784,7 +944,8 @@ export class TitleScene implements Scene {
     // Color accessibility button
     const colorSettingsBtn = document.createElement('button');
     colorSettingsBtn.setAttribute('data-color-settings-button', '');
-    colorSettingsBtn.textContent = 'みやすさ・しんどう';
+    colorSettingsBtn.textContent = i18n.t('titleScene.colorSettingsButton');
+    this.colorSettingsButton = colorSettingsBtn;
     colorSettingsBtn.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
       font-size: ${compact ? '0.82rem' : '1rem'};
@@ -808,12 +969,24 @@ export class TitleScene implements Scene {
         this.ensureTitleAudioInitialized(true);
         this.colorAccessibilitySettings.show({
           initialHighContrast: this.saveManager.load().colorAccessibility?.highContrast === true,
-          initialVibrationIntensity: this.saveManager.load().vibrationSettings?.intensity ?? 'medium',
+          initialColorVisionSupportMode:
+            this.saveManager.load().colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE,
+          initialBGMVolume: this.saveManager.load().audioSettings?.bgmVolume ?? 100,
+          initialSFXVolume: this.saveManager.load().audioSettings?.sfxVolume ?? 100,
+          initialVisualEffectIntensity: this.saveManager.load().visualFeedbackSettings?.intensity ?? 'medium',
           initialMotionSensitivity:
-            this.saveManager.load().colorAccessibility?.motionSensitivity ?? DEFAULT_MOTION_SENSITIVITY,
+            this.saveManager.load().colorAccessibility?.motionSensitivity ?? getDefaultMotionSensitivity(),
+          initialRestReminderEnabled:
+            this.saveManager.load().restReminderSettings?.enabled ?? DEFAULT_REST_REMINDER_ENABLED,
+          initialLanguage: this.saveManager.load().language ?? DEFAULT_LANGUAGE,
           onToggle: (enabled) => this.persistHighContrastSetting(enabled),
-          onVibrationIntensityChange: (intensity) => this.persistVibrationIntensitySetting(intensity),
+          onColorVisionSupportModeChange: (mode) => this.persistColorVisionSupportModeSetting(mode),
+          onBGMVolumeChange: (volume) => this.persistBGMVolumeSetting(volume),
+          onSFXVolumeChange: (volume) => this.persistSFXVolumeSetting(volume),
+          onVisualEffectIntensityChange: (intensity) => this.persistVisualFeedbackIntensitySetting(intensity),
           onMotionSensitivityChange: (sensitivity) => this.persistMotionSensitivitySetting(sensitivity),
+          onRestReminderToggle: (enabled) => this.persistRestReminderSetting(enabled),
+          onLanguageChange: (language) => this.persistLanguageSetting(language),
         });
       },
       onPressChange: (pressed) => {
@@ -857,6 +1030,7 @@ export class TitleScene implements Scene {
     }));
 
     playArea.appendChild(button);
+    playArea.appendChild(freePlayButton);
     playArea.appendChild(playButtonHint);
     secondaryActions.appendChild(customizeButton);
     secondaryActions.appendChild(statsButton);
@@ -911,6 +1085,12 @@ export class TitleScene implements Scene {
     this.overlay.addEventListener('pointerdown', () => {
       this.ensureTitleAudioInitialized(true);
     }, { once: true });
+  }
+
+  private applyLocalizedText(): void {
+    if (this.colorSettingsButton) {
+      this.colorSettingsButton.textContent = i18n.t('titleScene.colorSettingsButton');
+    }
   }
 
   private ensureTitleAudioInitialized(playTitleBgm: boolean): void {
@@ -1029,6 +1209,7 @@ export class TitleScene implements Scene {
     // 「タイトル BGM がステージ突入後にうっすら残る」可能性を断つ。
     this.audioManager.stopBGM();
     this.bgmPending = false;
+    this.touchFeedbackOverlay.hide();
     this.clearCompanionParade();
     if (this.stars) {
       // SHARED: geometry / material はモジュールキャッシュで使い回すため dispose しない。
@@ -1046,6 +1227,9 @@ export class TitleScene implements Scene {
       this.overlay = null;
     }
     this.encyclopediaBtn = null;
+    this.colorSettingsButton = null;
+    this.unsubscribeLanguageChange?.();
+    this.unsubscribeLanguageChange = null;
     if (this.muteHandle) {
       this.muteHandle.remove();
       this.muteHandle = null;

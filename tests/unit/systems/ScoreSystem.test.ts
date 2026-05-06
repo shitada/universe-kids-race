@@ -22,6 +22,13 @@ describe('ScoreSystem', () => {
     expect(system.getStarCount()).toBe(1);
   });
 
+  it('adds 1000 for LOVELY star', () => {
+    const system = new ScoreSystem();
+    system.addStarScore('LOVELY');
+    expect(system.getStageScore()).toBe(1000);
+    expect(system.getStarCount()).toBe(1);
+  });
+
   it('accumulates multiple stars', () => {
     const system = new ScoreSystem();
     system.addStarScore('NORMAL');

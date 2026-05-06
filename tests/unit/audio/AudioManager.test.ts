@@ -129,6 +129,32 @@ describe('AudioManager', () => {
     });
   });
 
+  describe('setBGMVolume() / setSFXVolume()', () => {
+    it('applies saved bus gains after initialization', async () => {
+      await audioManager.init();
+
+      audioManager.setBGMVolume(75);
+      audioManager.setSFXVolume(25);
+
+      const bgmBusGain = (audioManager as any).bgmBusGain as MockGainNode | null;
+      const sfxBusGain = (audioManager as any).sfxBusGain as MockGainNode | null;
+      expect(bgmBusGain?.gain.setTargetAtTime).toHaveBeenCalledWith(0.75, 0, 0.01);
+      expect(sfxBusGain?.gain.setTargetAtTime).toHaveBeenCalledWith(0.25, 0, 0.01);
+    });
+
+    it('remembers volume levels set before initialization', async () => {
+      audioManager.setBGMVolume(25);
+      audioManager.setSFXVolume(75);
+
+      await audioManager.init();
+
+      const bgmBusGain = (audioManager as any).bgmBusGain as MockGainNode | null;
+      const sfxBusGain = (audioManager as any).sfxBusGain as MockGainNode | null;
+      expect(bgmBusGain?.gain.setTargetAtTime).toHaveBeenCalledWith(0.25, 0, 0.01);
+      expect(sfxBusGain?.gain.setTargetAtTime).toHaveBeenCalledWith(0.75, 0, 0.01);
+    });
+  });
+
   describe('playBGM()', () => {
     it('is no-op when not initialized', () => {
       audioManager.playBGM(1); // Should not throw
@@ -168,11 +194,13 @@ describe('AudioManager', () => {
       await audioManager.init();
       audioManager.playSFX('starCollect');
       audioManager.playSFX('rainbowCollect');
+      audioManager.playSFX('constellationCelebrate');
       audioManager.playSFX('meteoriteHit');
       audioManager.playSFX('boost');
       audioManager.playSFX('stageClear');
       audioManager.playSFX('boostReady');
       audioManager.playSFX('boostDenied');
+      audioManager.playSFX('lovelyCollect');
       // All should play without error
     });
   });
@@ -409,11 +437,12 @@ describe('AudioManager', () => {
       am.playBGM(1);
 
       // Stage 1 has 3-note chords:
-      // Master gain (1) + Persistent: bass(1) + pad(3) = 5
+      // Output buses: master(1) + bgm(1) + sfx(1) = 3
+      // Persistent: bass(1) + pad(3) = 4
       // First tick (synchronous): arpeggio(1) + melody(1) = 2
-      // Total: 6 oscillators and 7 gain nodes (master + 6 voices)
+      // Total: 6 oscillators and 9 gain nodes (3 buses + 6 voices)
       expect(ctx.createOscillator).toHaveBeenCalledTimes(6);
-      expect(ctx.createGain).toHaveBeenCalledTimes(7);
+      expect(ctx.createGain).toHaveBeenCalledTimes(9);
       am.dispose();
     });
 
@@ -768,33 +797,33 @@ describe('AudioManager', () => {
   });
 
   describe('BGM_CONFIGS validation (T010)', () => {
-    it('has configs for all 11 stages plus title and ending', () => {
-      for (let stage = 0; stage <= 11; stage++) {
+    it('has configs for all 12 stages plus title and ending', () => {
+      for (let stage = 0; stage <= 12; stage++) {
         expect(BGM_CONFIGS[stage]).toBeDefined();
       }
       expect(BGM_CONFIGS[-1]).toBeDefined();
     });
 
-    it('stages 1-11 all have unique tempos', () => {
+    it('stages 1-12 all have unique tempos', () => {
       const tempos = new Set<number>();
-      for (let stage = 1; stage <= 11; stage++) {
+      for (let stage = 1; stage <= 12; stage++) {
         expect(BGM_CONFIGS[stage]).toBeDefined();
         tempos.add(BGM_CONFIGS[stage].tempo);
       }
-      expect(tempos.size).toBe(11);
+      expect(tempos.size).toBe(12);
     });
 
-    it('stages 1-11 all have unique tempo+key combinations', () => {
+    it('stages 1-12 all have unique tempo+key combinations', () => {
       const signatures = new Set<string>();
-      for (let stage = 1; stage <= 11; stage++) {
+      for (let stage = 1; stage <= 12; stage++) {
         const config = BGM_CONFIGS[stage];
         signatures.add(`${config.tempo}-${JSON.stringify(config.chords[0])}`);
       }
-      expect(signatures.size).toBe(11);
+      expect(signatures.size).toBe(12);
     });
 
     it('all configs have 8 chords, 8 bassNotes, and 8 melodyNotes', () => {
-      for (const key of [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) {
+      for (const key of [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
         const config = BGM_CONFIGS[key];
         expect(config).toBeDefined();
         expect(config.chords).toHaveLength(8);
@@ -803,12 +832,14 @@ describe('AudioManager', () => {
       }
     });
 
-    it('new BGM definitions: 水星(2, Dm, 112BPM), 金星(3, Eb, 115BPM), 地球(11, C, 145BPM)', () => {
+    it('new BGM definitions: 水星(2, Dm, 112BPM), 金星(3, Eb, 115BPM), 宇宙ステーション(11, F, 142BPM), 地球(12, C, 145BPM)', () => {
       expect(BGM_CONFIGS[2].tempo).toBe(112);
       expect(BGM_CONFIGS[3].tempo).toBe(115);
-      expect(BGM_CONFIGS[11].tempo).toBe(145);
+      expect(BGM_CONFIGS[11].tempo).toBe(142);
+      expect(BGM_CONFIGS[12].tempo).toBe(145);
+      expect(BGM_CONFIGS[11].waveforms.melody).toBe('triangle');
       // 地球 uses square wave melody
-      expect(BGM_CONFIGS[11].waveforms.melody).toBe('square');
+      expect(BGM_CONFIGS[12].waveforms.melody).toBe('square');
     });
 
     it('remapped BGM: old stage 2 (火星) is now stage 4', () => {
@@ -899,7 +930,7 @@ describe('AudioManager', () => {
       expect(filter.type).toBe('lowpass');
       expect(filter.frequency.value).toBe(800);
 
-      const gain = ctx.createGain.mock.results[1].value;
+      const gain = (am as any).boostNoiseGain;
       expect(gain.gain.value).toBe(0.15);
 
       am.dispose();
@@ -1030,7 +1061,7 @@ describe('AudioManager', () => {
       expect(osc.frequency.setValueAtTime).toHaveBeenCalledWith(880, expect.any(Number));
       expect(osc.frequency.exponentialRampToValueAtTime).toHaveBeenCalledWith(1760, expect.any(Number));
 
-      const gain = ctx.createGain.mock.results[1].value;
+      const gain = ctx.createGain.mock.results[ctx.createGain.mock.results.length - 1]?.value;
       expect(gain.gain.setValueAtTime).toHaveBeenCalledWith(0.15, expect.any(Number));
 
       expect(osc.start).toHaveBeenCalled();

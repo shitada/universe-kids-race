@@ -5,10 +5,10 @@ import {
 } from '../../../src/game/config/StageSpecialEvents';
 
 describe('StageSpecialEvents', () => {
-  it('全11ステージぶんの特別イベント設定を持つ', () => {
-    expect(STAGE_SPECIAL_EVENT_CONFIGS).toHaveLength(11);
+  it('全12ステージぶんの特別イベント設定を持つ', () => {
+    expect(STAGE_SPECIAL_EVENT_CONFIGS).toHaveLength(12);
     expect(STAGE_SPECIAL_EVENT_CONFIGS.map((config) => config.stageNumber)).toEqual(
-      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
     );
   });
 
@@ -27,11 +27,12 @@ describe('StageSpecialEvents', () => {
     expect(getStageSpecialEventConfig(1)?.style).toBe('rabbit');
     expect(getStageSpecialEventConfig(6)?.style).toBe('ring');
     expect(getStageSpecialEventConfig(8)?.style).toBe('bubble');
-    expect(getStageSpecialEventConfig(11)?.style).toBe('homecoming');
+    expect(getStageSpecialEventConfig(11)?.style).toBe('halo');
+    expect(getStageSpecialEventConfig(12)?.style).toBe('homecoming');
   });
 
   it('存在しないステージ番号では null を返す', () => {
     expect(getStageSpecialEventConfig(0)).toBeNull();
-    expect(getStageSpecialEventConfig(12)).toBeNull();
+    expect(getStageSpecialEventConfig(13)).toBeNull();
   });
 });

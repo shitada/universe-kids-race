@@ -4,6 +4,8 @@ import type { Meteorite } from '../entities/Meteorite';
 import type { ShootingStar } from '../entities/ShootingStar';
 import type { Comet } from '../entities/Comet';
 import type { SpecialShootingStar } from '../entities/SpecialShootingStar';
+import type { MonthlyEncounterEntity } from '../entities/MonthlyEncounterEntity';
+import type { SpaceGem } from '../entities/SpaceGem';
 
 export interface CollisionResult {
   starCollisions: Star[];
@@ -11,6 +13,8 @@ export interface CollisionResult {
   shootingStarHit: ShootingStar | null;
   cometHit: Comet | null;
   specialShootingStarHit: SpecialShootingStar | null;
+  monthlyEncounterHit: MonthlyEncounterEntity | null;
+  spaceGemHit: SpaceGem | null;
   // Reference to the Meteorite that triggered the collision this frame, or
   // null if no meteorite was hit. Callers should set `meteoriteHit.isActive
   // = false` after handling the hit so the same meteorite is skipped on
@@ -31,6 +35,8 @@ export class CollisionSystem {
     shootingStarHit: null,
     cometHit: null,
     specialShootingStarHit: null,
+    monthlyEncounterHit: null,
+    spaceGemHit: null,
     meteoriteHit: null,
   };
 
@@ -56,6 +62,8 @@ export class CollisionSystem {
     shootingStars: ShootingStar[] = [],
     comets: Comet[] = [],
     specialShootingStars: SpecialShootingStar[] = [],
+    monthlyEncounters: MonthlyEncounterEntity[] = [],
+    spaceGems: SpaceGem[] = [],
   ): CollisionResult {
     const result = this.result;
     result.starCollisions.length = 0;
@@ -63,6 +71,8 @@ export class CollisionSystem {
     result.shootingStarHit = null;
     result.cometHit = null;
     result.specialShootingStarHit = null;
+    result.monthlyEncounterHit = null;
+    result.spaceGemHit = null;
     result.meteoriteHit = null;
 
     const sp = spaceship.position;
@@ -154,6 +164,44 @@ export class CollisionSystem {
         if (distSq < specialShootingStarCollisionDistSq) {
           specialShootingStar.collect();
           result.specialShootingStarHit = specialShootingStar;
+          break;
+        }
+      }
+    }
+
+    if (monthlyEncounters.length > 0) {
+      const monthlyEncounterCollisionDist = 1.0 + monthlyEncounters[0].radius;
+      const monthlyEncounterCollisionDistSq = monthlyEncounterCollisionDist * monthlyEncounterCollisionDist;
+      for (const monthlyEncounter of monthlyEncounters) {
+        if (monthlyEncounter.isCollected) continue;
+        const dz = sp.z - monthlyEncounter.position.z;
+        if (dz > monthlyEncounterCollisionDist) continue;
+        if (dz < -monthlyEncounterCollisionDist) continue;
+        const dx = sp.x - monthlyEncounter.position.x;
+        const dy = sp.y - monthlyEncounter.position.y;
+        const distSq = dx * dx + dy * dy + dz * dz;
+        if (distSq < monthlyEncounterCollisionDistSq) {
+          monthlyEncounter.collect();
+          result.monthlyEncounterHit = monthlyEncounter;
+          break;
+        }
+      }
+    }
+
+    if (spaceGems.length > 0) {
+      const spaceGemCollisionDist = 1.0 + spaceGems[0].radius;
+      const spaceGemCollisionDistSq = spaceGemCollisionDist * spaceGemCollisionDist;
+      for (const spaceGem of spaceGems) {
+        if (spaceGem.isCollected) continue;
+        const dz = sp.z - spaceGem.position.z;
+        if (dz > spaceGemCollisionDist) continue;
+        if (dz < -spaceGemCollisionDist) continue;
+        const dx = sp.x - spaceGem.position.x;
+        const dy = sp.y - spaceGem.position.y;
+        const distSq = dx * dx + dy * dy + dz * dz;
+        if (distSq < spaceGemCollisionDistSq) {
+          spaceGem.collect();
+          result.spaceGemHit = spaceGem;
           break;
         }
       }

@@ -78,6 +78,11 @@ describe('shared-asset Mesh marker (userData.sharedAssets)', () => {
       expectAllSharedMarked(collectMeshes(star.mesh));
     });
 
+    it('marks LOVELY star mesh as sharedAssets (heart geometry is shared)', () => {
+      const star = new Star(0, 0, 0, 'LOVELY');
+      expectAllSharedMarked(collectMeshes(star.mesh));
+    });
+
     it('disposeObject3D does NOT dispose shared geometry/material on NORMAL', () => {
       const star = new Star(0, 0, 0, 'NORMAL');
       const meshes = collectMeshes(star.mesh);

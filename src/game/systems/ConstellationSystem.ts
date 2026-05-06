@@ -59,6 +59,21 @@ export class ConstellationSystem {
     return this.collectedPoints.length;
   }
 
+  getRemainingCount(): number {
+    if (!this.definition) {
+      return 0;
+    }
+    return Math.max(0, this.definition.points.length - this.collectedPoints.length);
+  }
+
+  getNextPoint(): ConstellationPoint | null {
+    const definition = this.definition;
+    if (!definition) {
+      return null;
+    }
+    return definition.points[this.collectedPoints.length] ?? null;
+  }
+
   isCompleted(): boolean {
     return this.definition !== null && this.collectedPoints.length === this.definition.points.length;
   }

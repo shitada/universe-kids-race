@@ -93,6 +93,28 @@ describe('FrameRateMonitor', () => {
     expect(monitor.getSampleCount()).toBe(10);
   });
 
+  it('tracks recent dropped-frame bursts separately from the fps average', () => {
+    const monitor = new FrameRateMonitor(10);
+    monitor.update(1 / 60);
+    monitor.update(0.034);
+    monitor.update(0.034);
+
+    expect(monitor.consumeFrameDropStats()).toEqual({
+      droppedFrameCount: 2,
+      droppedFrameStreak: 2,
+    });
+    expect(monitor.consumeFrameDropStats()).toEqual({
+      droppedFrameCount: 0,
+      droppedFrameStreak: 2,
+    });
+
+    monitor.update(1 / 60);
+    expect(monitor.consumeFrameDropStats()).toEqual({
+      droppedFrameCount: 0,
+      droppedFrameStreak: 0,
+    });
+  });
+
   it('reset returns the monitor to its initial state', () => {
     const monitor = new FrameRateMonitor(20);
     for (let i = 0; i < 500; i += 1) {
@@ -101,6 +123,10 @@ describe('FrameRateMonitor', () => {
     monitor.reset();
     expect(monitor.getFps()).toBe(60);
     expect(monitor.getSampleCount()).toBe(0);
+    expect(monitor.consumeFrameDropStats()).toEqual({
+      droppedFrameCount: 0,
+      droppedFrameStreak: 0,
+    });
     // After reset, new samples should accumulate cleanly from zero.
     monitor.update(1 / 30);
     expect(monitor.getSampleCount()).toBe(1);

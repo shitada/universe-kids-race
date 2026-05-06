@@ -89,7 +89,7 @@ describe('SpawnSystem', () => {
     expect(allStars.length).toBeGreaterThan(5);
     // Allow 0 rainbow due to randomness, just verify type is set
     for (const star of allStars) {
-      expect(['NORMAL', 'RAINBOW']).toContain(star.starType);
+      expect(['NORMAL', 'RAINBOW', 'LOVELY']).toContain(star.starType);
     }
   });
 
@@ -158,7 +158,7 @@ describe('SpawnSystem', () => {
       rainbowSpy.mockRestore();
     }
 
-    const normalRandoms = [0.5, 0.06, 0.5, 0.5];
+    const normalRandoms = [0.5, 0.061, 0.5, 0.5];
     const normalSpy = vi.spyOn(Math, 'random').mockImplementation(() => normalRandoms.shift() ?? 0.5);
     try {
       const system = new SpawnSystem();
@@ -167,6 +167,20 @@ describe('SpawnSystem', () => {
       expect(result.newStars[0].starType).toBe('NORMAL');
     } finally {
       normalSpy.mockRestore();
+    }
+  });
+
+  it('spawns a lovely star only when the spawn roll is below the lovely threshold', () => {
+    const lowDensityConfig = { ...testConfig, starDensity: 1 };
+    const lovelyRandoms = [0.5, 0.009, 0.5, 0.5];
+    const lovelySpy = vi.spyOn(Math, 'random').mockImplementation(() => lovelyRandoms.shift() ?? 0.5);
+    try {
+      const system = new SpawnSystem();
+      const result = system.update(0.016, -10, lowDensityConfig);
+      expect(result.newStars).toHaveLength(1);
+      expect(result.newStars[0].starType).toBe('LOVELY');
+    } finally {
+      lovelySpy.mockRestore();
     }
   });
 

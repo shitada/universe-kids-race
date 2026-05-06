@@ -1,13 +1,108 @@
-import type { MotionSensitivity, VibrationIntensity } from '../types';
+import type {
+  AudioVolumeLevel,
+  ColorVisionSupportMode,
+  Language,
+  MotionSensitivity,
+  VisualFeedbackIntensity,
+} from '../types';
 import { getMotionSensitivityVisualProfile } from '../game/accessibility/motionSensitivity';
+import { i18n } from '../game/i18n/i18nService';
+import { DEFAULT_LANGUAGE } from '../game/i18n/types';
+
+const AUDIO_VOLUME_OPTIONS = [
+  { value: 0, labelKey: 'colorSettings.audio.volume.quiet' },
+  { value: 25, labelKey: 'colorSettings.audio.volume.small' },
+  { value: 50, labelKey: 'colorSettings.audio.volume.normal' },
+  { value: 75, labelKey: 'colorSettings.audio.volume.loud' },
+  { value: 100, labelKey: 'colorSettings.audio.volume.max' },
+] as const satisfies ReadonlyArray<{ value: AudioVolumeLevel; labelKey: string }>;
+
+const COLOR_VISION_OPTIONS: ReadonlyArray<{ value: ColorVisionSupportMode; labelKey: string; descriptionKey: string; icon: string }> = [
+  {
+    value: 'color-only',
+    labelKey: 'colorSettings.colorVision.option.colorOnly',
+    descriptionKey: 'colorSettings.colorVision.description.colorOnly',
+    icon: '🎨',
+  },
+  {
+    value: 'color-and-marks',
+    labelKey: 'colorSettings.colorVision.option.colorAndMarks',
+    descriptionKey: 'colorSettings.colorVision.description.colorAndMarks',
+    icon: '★',
+  },
+  {
+    value: 'protanopia-filter',
+    labelKey: 'colorSettings.colorVision.option.protanopiaFilter',
+    descriptionKey: 'colorSettings.colorVision.description.protanopiaFilter',
+    icon: '🔴',
+  },
+  {
+    value: 'deuteranopia-filter',
+    labelKey: 'colorSettings.colorVision.option.deuteranopiaFilter',
+    descriptionKey: 'colorSettings.colorVision.description.deuteranopiaFilter',
+    icon: '🟢',
+  },
+  {
+    value: 'tritanopia-filter',
+    labelKey: 'colorSettings.colorVision.option.tritanopiaFilter',
+    descriptionKey: 'colorSettings.colorVision.description.tritanopiaFilter',
+    icon: '🔵',
+  },
+];
+
+const VISUAL_FEEDBACK_OPTIONS: ReadonlyArray<{ value: VisualFeedbackIntensity; labelKey: string }> = [
+  { value: 'strong', labelKey: 'colorSettings.visualFeedback.option.strong' },
+  { value: 'medium', labelKey: 'colorSettings.visualFeedback.option.medium' },
+  { value: 'weak', labelKey: 'colorSettings.visualFeedback.option.weak' },
+  { value: 'off', labelKey: 'colorSettings.visualFeedback.option.off' },
+];
+
+const LANGUAGE_OPTIONS: ReadonlyArray<{ value: Language; labelKey: string; icon: string }> = [
+  { value: 'ja', labelKey: 'colorSettings.language.option.ja', icon: '🇯🇵' },
+  { value: 'en', labelKey: 'colorSettings.language.option.en', icon: '🇬🇧' },
+];
+
+const MOTION_TEXT_KEYS: Record<MotionSensitivity, { shortLabel: string; description: string }> = {
+  strong: {
+    shortLabel: 'colorSettings.motion.option.strong.shortLabel',
+    description: 'colorSettings.motion.option.strong.description',
+  },
+  medium: {
+    shortLabel: 'colorSettings.motion.option.medium.shortLabel',
+    description: 'colorSettings.motion.option.medium.description',
+  },
+  gentle: {
+    shortLabel: 'colorSettings.motion.option.gentle.shortLabel',
+    description: 'colorSettings.motion.option.gentle.description',
+  },
+  minimal: {
+    shortLabel: 'colorSettings.motion.option.minimal.shortLabel',
+    description: 'colorSettings.motion.option.minimal.description',
+  },
+};
+
+function getAudioVolumeLabel(volume: AudioVolumeLevel): string {
+  const option = AUDIO_VOLUME_OPTIONS.find((entry) => entry.value === volume) ?? AUDIO_VOLUME_OPTIONS[2];
+  return i18n.t(option.labelKey);
+}
 
 export interface ColorAccessibilitySettingsOptions {
   initialHighContrast: boolean;
-  initialVibrationIntensity: VibrationIntensity;
+  initialColorVisionSupportMode: ColorVisionSupportMode;
+  initialBGMVolume: AudioVolumeLevel;
+  initialSFXVolume: AudioVolumeLevel;
+  initialVisualEffectIntensity: VisualFeedbackIntensity;
   initialMotionSensitivity: MotionSensitivity;
+  initialRestReminderEnabled: boolean;
+  initialLanguage: Language;
   onToggle: (enabled: boolean) => void;
-  onVibrationIntensityChange: (intensity: VibrationIntensity) => void;
+  onColorVisionSupportModeChange: (mode: ColorVisionSupportMode) => void;
+  onBGMVolumeChange: (volume: AudioVolumeLevel) => void;
+  onSFXVolumeChange: (volume: AudioVolumeLevel) => void;
+  onVisualEffectIntensityChange: (intensity: VisualFeedbackIntensity) => void;
   onMotionSensitivityChange: (sensitivity: MotionSensitivity) => void;
+  onRestReminderToggle: (enabled: boolean) => void;
+  onLanguageChange: (language: Language) => void;
 }
 
 export class ColorAccessibilitySettings {
@@ -15,32 +110,72 @@ export class ColorAccessibilitySettings {
   private toggleButton: HTMLButtonElement | null = null;
   private descriptionEl: HTMLParagraphElement | null = null;
   private highContrast = false;
-  private vibrationIntensity: VibrationIntensity = 'medium';
+  private colorVisionSupportMode: ColorVisionSupportMode = 'color-only';
+  private bgmVolume: AudioVolumeLevel = 100;
+  private sfxVolume: AudioVolumeLevel = 100;
+  private visualFeedbackIntensity: VisualFeedbackIntensity = 'medium';
   private motionSensitivity: MotionSensitivity = 'strong';
-  private vibrationDescriptionEl: HTMLParagraphElement | null = null;
-  private vibrationButtons = new Map<VibrationIntensity, HTMLButtonElement>();
+  private restReminderEnabled = true;
+  private language: Language = DEFAULT_LANGUAGE;
+  private bgmVolumeDescriptionEl: HTMLParagraphElement | null = null;
+  private sfxVolumeDescriptionEl: HTMLParagraphElement | null = null;
+  private bgmVolumeSlider: HTMLInputElement | null = null;
+  private sfxVolumeSlider: HTMLInputElement | null = null;
+  private colorVisionDescriptionEl: HTMLParagraphElement | null = null;
+  private colorVisionButtons = new Map<ColorVisionSupportMode, HTMLButtonElement>();
+  private visualFeedbackDescriptionEl: HTMLParagraphElement | null = null;
+  private visualFeedbackButtons = new Map<VisualFeedbackIntensity, HTMLButtonElement>();
   private motionDescriptionEl: HTMLParagraphElement | null = null;
   private motionButtons = new Map<MotionSensitivity, HTMLButtonElement>();
+  private restReminderDescriptionEl: HTMLParagraphElement | null = null;
+  private restReminderToggleButton: HTMLButtonElement | null = null;
   private motionPreviewEl: HTMLDivElement | null = null;
   private motionPreviewTokenEl: HTMLDivElement | null = null;
   private motionPreviewCaptionEl: HTMLParagraphElement | null = null;
+  private languageDescriptionEl: HTMLParagraphElement | null = null;
+  private languageButtons = new Map<Language, HTMLButtonElement>();
   private motionPreviewTimeoutId: number | null = null;
   private motionPreviewFrameId: number | null = null;
   private onToggle: ((enabled: boolean) => void) | null = null;
-  private onVibrationIntensityChange: ((intensity: VibrationIntensity) => void) | null = null;
+  private onColorVisionSupportModeChange: ((mode: ColorVisionSupportMode) => void) | null = null;
+  private onBGMVolumeChange: ((volume: AudioVolumeLevel) => void) | null = null;
+  private onSFXVolumeChange: ((volume: AudioVolumeLevel) => void) | null = null;
+  private onVisualEffectIntensityChange: ((intensity: VisualFeedbackIntensity) => void) | null = null;
   private onMotionSensitivityChange: ((sensitivity: MotionSensitivity) => void) | null = null;
+  private onRestReminderToggle: ((enabled: boolean) => void) | null = null;
+  private onLanguageChange: ((language: Language) => void) | null = null;
+  private languageUnsubscribe: (() => void) | null = null;
 
   show(options: ColorAccessibilitySettingsOptions): void {
     const host = document.getElementById('ui-overlay');
     if (!host) return;
 
     this.highContrast = options.initialHighContrast;
-    this.vibrationIntensity = options.initialVibrationIntensity;
+    this.colorVisionSupportMode = options.initialColorVisionSupportMode;
+    this.bgmVolume = options.initialBGMVolume;
+    this.sfxVolume = options.initialSFXVolume;
+    this.visualFeedbackIntensity = options.initialVisualEffectIntensity;
     this.motionSensitivity = options.initialMotionSensitivity;
+    this.restReminderEnabled = options.initialRestReminderEnabled;
+    this.language = options.initialLanguage;
     this.onToggle = options.onToggle;
-    this.onVibrationIntensityChange = options.onVibrationIntensityChange;
+    this.onColorVisionSupportModeChange = options.onColorVisionSupportModeChange;
+    this.onBGMVolumeChange = options.onBGMVolumeChange;
+    this.onSFXVolumeChange = options.onSFXVolumeChange;
+    this.onVisualEffectIntensityChange = options.onVisualEffectIntensityChange;
     this.onMotionSensitivityChange = options.onMotionSensitivityChange;
+    this.onRestReminderToggle = options.onRestReminderToggle;
+    this.onLanguageChange = options.onLanguageChange;
+
+    i18n.setLanguage(this.language, { notify: false });
+    this.languageUnsubscribe?.();
+    this.languageUnsubscribe = i18n.subscribe((language) => {
+      this.language = language;
+      this.render();
+    });
+
     if (!this.overlay) {
+      const compact = window.innerHeight <= 760;
       this.overlay = document.createElement('div');
       this.overlay.setAttribute('data-color-accessibility-settings', '');
       this.overlay.style.cssText = `
@@ -49,16 +184,20 @@ export class ColorAccessibilitySettings {
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 1.5rem;
+        padding: ${compact ? '0.75rem' : '1rem'};
         background: rgba(2, 8, 28, 0.76);
         backdrop-filter: blur(8px);
         z-index: 24;
+        box-sizing: border-box;
       `;
 
       const panel = document.createElement('div');
       panel.style.cssText = `
-        width: min(88vw, 28rem);
-        padding: 1.25rem;
+        width: min(96vw, 42rem);
+        max-height: min(92vh, 720px);
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: ${compact ? '1rem' : '1.25rem'};
         border-radius: 1.5rem;
         background: rgba(15, 23, 58, 0.96);
         border: 3px solid rgba(255, 255, 255, 0.95);
@@ -66,11 +205,15 @@ export class ColorAccessibilitySettings {
         color: #fff;
         font-family: 'Zen Maru Gothic', sans-serif;
         text-align: center;
+        transform: ${compact ? 'scale(0.93)' : 'none'};
+        transform-origin: center center;
+        box-sizing: border-box;
+        -webkit-overflow-scrolling: touch;
       `;
 
       const title = document.createElement('h2');
-      title.textContent = 'みやすさ・しんどう せってい';
-      title.style.cssText = 'margin: 0 0 0.65rem; font-size: clamp(1.25rem, 4.6vmin, 1.7rem);';
+      title.setAttribute('data-color-settings-title', '');
+      title.style.cssText = 'margin: 0 0 0.55rem; font-size: clamp(1.2rem, 4.4vmin, 1.6rem);';
 
       this.descriptionEl = document.createElement('p');
       this.descriptionEl.style.cssText = 'margin: 0 0 1rem; font-size: clamp(0.95rem, 3.4vmin, 1.05rem); line-height: 1.55;';
@@ -99,33 +242,217 @@ export class ColorAccessibilitySettings {
         this.onToggle?.(this.highContrast);
       });
 
-      const vibrationTitle = document.createElement('h3');
-      vibrationTitle.textContent = 'しんどうの つよさ';
-      vibrationTitle.style.cssText = 'margin: 1.1rem 0 0.45rem; font-size: clamp(1rem, 3.8vmin, 1.2rem);';
+      const audioTitle = document.createElement('h3');
+      audioTitle.setAttribute('data-audio-title', '');
+      audioTitle.style.cssText = 'margin: 0.75rem 0 0.45rem; font-size: clamp(1rem, 3.8vmin, 1.2rem);';
 
-      this.vibrationDescriptionEl = document.createElement('p');
-      this.vibrationDescriptionEl.style.cssText = 'margin: 0 0 0.8rem; font-size: clamp(0.9rem, 3.2vmin, 1rem); line-height: 1.5;';
+      const audioHint = document.createElement('p');
+      audioHint.setAttribute('data-audio-hint', '');
+      audioHint.style.cssText = 'margin: 0 0 0.65rem; font-size: clamp(0.9rem, 3.1vmin, 1rem); line-height: 1.45;';
 
-      const vibrationGroup = document.createElement('div');
-      vibrationGroup.setAttribute('data-vibration-intensity-group', '');
-      vibrationGroup.style.cssText = `
+      const createAudioSlider = (
+        kind: 'bgm' | 'sfx',
+        headingKey: string,
+        onChange: (volume: AudioVolumeLevel) => void,
+      ): HTMLDivElement => {
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'margin-bottom: 0.85rem; text-align: left;';
+
+        const heading = document.createElement('p');
+        heading.setAttribute(`data-${kind}-volume-heading`, '');
+        heading.dataset.i18nKey = headingKey;
+        heading.style.cssText = 'margin: 0 0 0.3rem; font-size: clamp(0.95rem, 3.2vmin, 1rem); font-weight: 900;';
+
+        const description = document.createElement('p');
+        description.setAttribute(`data-${kind}-volume-label`, '');
+        description.style.cssText = 'margin: 0 0 0.45rem; font-size: clamp(0.88rem, 3vmin, 0.98rem); line-height: 1.4;';
+
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.min = '0';
+        slider.max = '100';
+        slider.step = '25';
+        slider.value = '100';
+        slider.setAttribute(`data-${kind}-volume-slider`, '');
+        slider.style.cssText = 'width: 100%; margin: 0 0 0.3rem;';
+        slider.addEventListener('input', () => {
+          const value = Number(slider.value) as AudioVolumeLevel;
+          if (kind === 'bgm') {
+            this.bgmVolume = value;
+          } else {
+            this.sfxVolume = value;
+          }
+          this.render();
+          onChange(value);
+        });
+
+        const steps = document.createElement('div');
+        steps.style.cssText = `
+          display: grid;
+          grid-template-columns: repeat(5, minmax(0, 1fr));
+          gap: 0.2rem;
+          font-size: clamp(0.68rem, 2.25vmin, 0.8rem);
+          color: rgba(255, 255, 255, 0.86);
+          text-align: center;
+        `;
+        for (const option of AUDIO_VOLUME_OPTIONS) {
+          const chip = document.createElement('span');
+          chip.setAttribute('data-volume-option', String(option.value));
+          steps.appendChild(chip);
+        }
+
+        if (kind === 'bgm') {
+          this.bgmVolumeDescriptionEl = description;
+          this.bgmVolumeSlider = slider;
+        } else {
+          this.sfxVolumeDescriptionEl = description;
+          this.sfxVolumeSlider = slider;
+        }
+
+        wrapper.append(heading, description, slider, steps);
+        return wrapper;
+      };
+
+      const bgmVolumeControl = createAudioSlider('bgm', 'colorSettings.audio.bgm', (volume) => {
+        this.onBGMVolumeChange?.(volume);
+      });
+      const sfxVolumeControl = createAudioSlider('sfx', 'colorSettings.audio.sfx', (volume) => {
+        this.onSFXVolumeChange?.(volume);
+      });
+
+      const restReminderTitle = document.createElement('h3');
+      restReminderTitle.setAttribute('data-rest-reminder-title', '');
+      restReminderTitle.style.cssText = 'margin: 0.9rem 0 0.45rem; font-size: clamp(1rem, 3.8vmin, 1.2rem);';
+
+      this.restReminderDescriptionEl = document.createElement('p');
+      this.restReminderDescriptionEl.style.cssText = 'margin: 0 0 0.6rem; font-size: clamp(0.9rem, 3.2vmin, 1rem); line-height: 1.5;';
+
+      this.restReminderToggleButton = document.createElement('button');
+      this.restReminderToggleButton.setAttribute('data-rest-reminder-toggle', '');
+      this.restReminderToggleButton.style.cssText = `
+        display: block;
+        width: 100%;
+        min-height: 2.75rem;
+        margin-bottom: 0.85rem;
+        padding: 0.9rem 1rem;
+        border-radius: 999px;
+        border: 3px solid #fff;
+        background: linear-gradient(135deg, #ffe58b, #9fd6ff);
+        color: #102040;
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: clamp(1rem, 3.6vmin, 1.15rem);
+        font-weight: 900;
+        cursor: pointer;
+        touch-action: manipulation;
+      `;
+      this.restReminderToggleButton.addEventListener('click', () => {
+        this.restReminderEnabled = !this.restReminderEnabled;
+        this.render();
+        this.onRestReminderToggle?.(this.restReminderEnabled);
+      });
+
+      const languageTitle = document.createElement('h3');
+      languageTitle.setAttribute('data-language-title', '');
+      languageTitle.style.cssText = 'margin: 0.9rem 0 0.45rem; font-size: clamp(1rem, 3.8vmin, 1.2rem);';
+
+      this.languageDescriptionEl = document.createElement('p');
+      this.languageDescriptionEl.style.cssText = 'margin: 0 0 0.8rem; font-size: clamp(0.9rem, 3.2vmin, 1rem); line-height: 1.5;';
+
+      const languageGroup = document.createElement('div');
+      languageGroup.setAttribute('data-language-group', '');
+      languageGroup.style.cssText = `
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 0.65rem;
         margin-bottom: 0.95rem;
       `;
 
-      const vibrationOptions: Array<{ value: VibrationIntensity; label: string }> = [
-        { value: 'strong', label: 'つよい' },
-        { value: 'medium', label: 'ふつう' },
-        { value: 'weak', label: 'やさしい' },
-        { value: 'off', label: 'オフ' },
-      ];
-
-      for (const option of vibrationOptions) {
+      for (const option of LANGUAGE_OPTIONS) {
         const button = document.createElement('button');
-        button.setAttribute('data-vibration-intensity-button', option.value);
-        button.textContent = option.label;
+        button.setAttribute('data-language-button', option.value);
+        button.style.cssText = `
+          min-height: 2.95rem;
+          padding: 0.7rem 0.65rem;
+          border-radius: 1rem;
+          border: 2px solid rgba(255, 255, 255, 0.4);
+          background: rgba(255, 255, 255, 0.08);
+          color: #fff;
+          font-family: 'Zen Maru Gothic', sans-serif;
+          font-size: clamp(0.9rem, 3.3vmin, 1rem);
+          font-weight: 800;
+          cursor: pointer;
+          touch-action: manipulation;
+          transition: transform 0.08s ease-out, border-color 0.12s ease-out, background 0.12s ease-out;
+        `;
+        button.addEventListener('click', () => {
+          i18n.setLanguage(option.value);
+          this.onLanguageChange?.(option.value);
+        });
+        this.languageButtons.set(option.value, button);
+        languageGroup.appendChild(button);
+      }
+
+      const colorVisionTitle = document.createElement('h3');
+      colorVisionTitle.setAttribute('data-color-vision-title', '');
+      colorVisionTitle.style.cssText = 'margin: 0.9rem 0 0.45rem; font-size: clamp(1rem, 3.8vmin, 1.2rem);';
+
+      this.colorVisionDescriptionEl = document.createElement('p');
+      this.colorVisionDescriptionEl.style.cssText = 'margin: 0 0 0.8rem; font-size: clamp(0.9rem, 3.2vmin, 1rem); line-height: 1.5;';
+
+      const colorVisionGroup = document.createElement('div');
+      colorVisionGroup.setAttribute('data-color-vision-mode-group', '');
+      colorVisionGroup.style.cssText = `
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.55rem;
+        margin-bottom: 0.95rem;
+      `;
+
+      for (const option of COLOR_VISION_OPTIONS) {
+        const button = document.createElement('button');
+        button.setAttribute('data-color-vision-mode-button', option.value);
+        button.style.cssText = `
+          min-height: 3.25rem;
+          padding: 0.8rem 0.9rem;
+          border-radius: 1rem;
+          border: 2px solid rgba(255, 255, 255, 0.4);
+          background: rgba(255, 255, 255, 0.08);
+          color: #fff;
+          font-family: 'Zen Maru Gothic', sans-serif;
+          font-size: clamp(0.9rem, 3.3vmin, 1rem);
+          font-weight: 800;
+          cursor: pointer;
+          touch-action: manipulation;
+          transition: transform 0.08s ease-out, border-color 0.12s ease-out, background 0.12s ease-out;
+        `;
+        button.addEventListener('click', () => {
+          this.colorVisionSupportMode = option.value;
+          this.render();
+          this.onColorVisionSupportModeChange?.(option.value);
+        });
+        this.colorVisionButtons.set(option.value, button);
+        colorVisionGroup.appendChild(button);
+      }
+
+      const visualFeedbackTitle = document.createElement('h3');
+      visualFeedbackTitle.setAttribute('data-visual-feedback-title', '');
+      visualFeedbackTitle.style.cssText = 'margin: 0.9rem 0 0.45rem; font-size: clamp(1rem, 3.8vmin, 1.2rem);';
+
+      this.visualFeedbackDescriptionEl = document.createElement('p');
+      this.visualFeedbackDescriptionEl.style.cssText = 'margin: 0 0 0.8rem; font-size: clamp(0.9rem, 3.2vmin, 1rem); line-height: 1.5;';
+
+      const visualFeedbackGroup = document.createElement('div');
+      visualFeedbackGroup.setAttribute('data-visual-feedback-intensity-group', '');
+      visualFeedbackGroup.style.cssText = `
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.65rem;
+        margin-bottom: 0.95rem;
+      `;
+
+      for (const option of VISUAL_FEEDBACK_OPTIONS) {
+        const button = document.createElement('button');
+        button.setAttribute('data-visual-feedback-intensity-button', option.value);
         button.style.cssText = `
           min-height: 3.25rem;
           padding: 0.8rem 0.9rem;
@@ -141,20 +468,20 @@ export class ColorAccessibilitySettings {
           transition: transform 0.08s ease-out, border-color 0.12s ease-out, background 0.12s ease-out;
         `;
         button.addEventListener('click', () => {
-          this.vibrationIntensity = option.value;
+          this.visualFeedbackIntensity = option.value;
           this.render();
-          this.onVibrationIntensityChange?.(option.value);
+          this.onVisualEffectIntensityChange?.(option.value);
         });
-        this.vibrationButtons.set(option.value, button);
-        vibrationGroup.appendChild(button);
+        this.visualFeedbackButtons.set(option.value, button);
+        visualFeedbackGroup.appendChild(button);
       }
 
       const motionTitle = document.createElement('h3');
-      motionTitle.textContent = 'うごきの つよさ';
+      motionTitle.setAttribute('data-motion-title', '');
       motionTitle.style.cssText = 'margin: 1.1rem 0 0.45rem; font-size: clamp(1rem, 3.8vmin, 1.2rem);';
 
       const motionHint = document.createElement('p');
-      motionHint.textContent = 'えらんで みると うごきの おためしが みえるよ';
+      motionHint.setAttribute('data-motion-hint', '');
       motionHint.style.cssText = 'margin: 0 0 0.5rem; font-size: clamp(0.9rem, 3.2vmin, 1rem); line-height: 1.5;';
 
       this.motionDescriptionEl = document.createElement('p');
@@ -201,7 +528,7 @@ export class ColorAccessibilitySettings {
         stars.textContent = visual.stars;
         stars.style.cssText = 'font-size: clamp(0.82rem, 2.9vmin, 0.95rem); letter-spacing: 0.08em;';
         const label = document.createElement('span');
-        label.textContent = visual.shortLabel;
+        label.setAttribute('data-motion-label', option);
         label.style.cssText = 'font-size: clamp(0.9rem, 3vmin, 1rem);';
         button.append(emoji, stars, label);
         button.addEventListener('click', () => {
@@ -270,7 +597,7 @@ export class ColorAccessibilitySettings {
       this.motionPreviewEl.append(motionPreviewTrack, this.motionPreviewCaptionEl);
 
       const closeButton = document.createElement('button');
-      closeButton.textContent = 'とじる';
+      closeButton.setAttribute('data-color-settings-close', '');
       closeButton.style.cssText = `
         width: 100%;
         min-height: 2.75rem;
@@ -290,9 +617,22 @@ export class ColorAccessibilitySettings {
       panel.appendChild(title);
       panel.appendChild(this.descriptionEl);
       panel.appendChild(this.toggleButton);
-      panel.appendChild(vibrationTitle);
-      panel.appendChild(this.vibrationDescriptionEl);
-      panel.appendChild(vibrationGroup);
+      panel.appendChild(audioTitle);
+      panel.appendChild(audioHint);
+      panel.appendChild(bgmVolumeControl);
+      panel.appendChild(sfxVolumeControl);
+      panel.appendChild(restReminderTitle);
+      panel.appendChild(this.restReminderDescriptionEl);
+      panel.appendChild(this.restReminderToggleButton);
+      panel.appendChild(languageTitle);
+      panel.appendChild(this.languageDescriptionEl);
+      panel.appendChild(languageGroup);
+      panel.appendChild(colorVisionTitle);
+      panel.appendChild(this.colorVisionDescriptionEl);
+      panel.appendChild(colorVisionGroup);
+      panel.appendChild(visualFeedbackTitle);
+      panel.appendChild(this.visualFeedbackDescriptionEl);
+      panel.appendChild(visualFeedbackGroup);
       panel.appendChild(motionTitle);
       panel.appendChild(motionHint);
       panel.appendChild(this.motionDescriptionEl);
@@ -308,6 +648,8 @@ export class ColorAccessibilitySettings {
 
   hide(): void {
     this.clearMotionPreviewTimers();
+    this.languageUnsubscribe?.();
+    this.languageUnsubscribe = null;
     this.overlay?.remove();
   }
 
@@ -315,26 +657,89 @@ export class ColorAccessibilitySettings {
     return this.overlay?.isConnected === true;
   }
 
+  private getMotionShortLabel(value: MotionSensitivity): string {
+    return i18n.t(MOTION_TEXT_KEYS[value].shortLabel);
+  }
+
+  private getMotionDescription(value: MotionSensitivity): string {
+    return i18n.t(MOTION_TEXT_KEYS[value].description);
+  }
+
+  private setStaticText(selector: string, key: string): void {
+    const element = this.overlay?.querySelector(selector);
+    if (element) {
+      element.textContent = i18n.t(key);
+    }
+  }
+
   private render(): void {
-    if (!this.toggleButton || !this.descriptionEl || !this.vibrationDescriptionEl || !this.motionDescriptionEl) return;
+    if (
+      !this.toggleButton ||
+      !this.descriptionEl ||
+      !this.bgmVolumeDescriptionEl ||
+      !this.sfxVolumeDescriptionEl ||
+      !this.bgmVolumeSlider ||
+      !this.sfxVolumeSlider ||
+      !this.restReminderDescriptionEl ||
+      !this.restReminderToggleButton ||
+      !this.languageDescriptionEl ||
+      !this.colorVisionDescriptionEl ||
+      !this.visualFeedbackDescriptionEl ||
+      !this.motionDescriptionEl
+    ) return;
+
+    this.setStaticText('[data-color-settings-title]', 'colorSettings.title');
+    this.setStaticText('[data-audio-title]', 'colorSettings.audio.title');
+    this.setStaticText('[data-audio-hint]', 'colorSettings.audio.hint');
+    this.setStaticText('[data-bgm-volume-heading]', 'colorSettings.audio.bgm');
+    this.setStaticText('[data-sfx-volume-heading]', 'colorSettings.audio.sfx');
+    this.setStaticText('[data-rest-reminder-title]', 'colorSettings.restReminder.title');
+    this.setStaticText('[data-language-title]', 'colorSettings.language.title');
+    this.setStaticText('[data-color-vision-title]', 'colorSettings.colorVision.title');
+    this.setStaticText('[data-visual-feedback-title]', 'colorSettings.visualFeedback.title');
+    this.setStaticText('[data-motion-title]', 'colorSettings.motion.title');
+    this.setStaticText('[data-motion-hint]', 'colorSettings.motion.hint');
+    this.setStaticText('[data-color-settings-close]', 'colorSettings.close');
+
     this.descriptionEl.textContent = this.highContrast
-      ? 'いろだけじゃなく ふちや しまもようで わかりやすくしているよ。'
-      : 'いろだけでなく かたちや うごきでも みわけられるようにするよ。';
+      ? i18n.t('colorSettings.description.on')
+      : i18n.t('colorSettings.description.off');
     this.toggleButton.textContent = this.highContrast
-      ? 'みやすくする: ON'
-      : 'みやすくする: OFF';
+      ? i18n.t('colorSettings.toggle.on')
+      : i18n.t('colorSettings.toggle.off');
     this.toggleButton.setAttribute('aria-pressed', this.highContrast ? 'true' : 'false');
 
-    const vibrationDescriptions: Record<VibrationIntensity, string> = {
-      strong: 'しっかり つたえる しんどうだよ。',
-      medium: 'ちょうどよく わかる つよさだよ。',
-      weak: 'やさしく ふるえて つたえるよ。',
-      off: 'しんどうの かわりに がめんが すこし ゆれるよ。',
-    };
-    this.vibrationDescriptionEl.textContent = vibrationDescriptions[this.vibrationIntensity];
+    const bgmLabel = getAudioVolumeLabel(this.bgmVolume);
+    this.bgmVolumeDescriptionEl.textContent = `🎵 ${bgmLabel} (${this.bgmVolume}%)`;
+    this.bgmVolumeSlider.value = String(this.bgmVolume);
+    this.bgmVolumeSlider.setAttribute('aria-valuetext', `${bgmLabel} ${this.bgmVolume}%`);
 
-    for (const [value, button] of this.vibrationButtons.entries()) {
-      const selected = value === this.vibrationIntensity;
+    const sfxLabel = getAudioVolumeLabel(this.sfxVolume);
+    this.sfxVolumeDescriptionEl.textContent = `✨ ${sfxLabel} (${this.sfxVolume}%)`;
+    this.sfxVolumeSlider.value = String(this.sfxVolume);
+    this.sfxVolumeSlider.setAttribute('aria-valuetext', `${sfxLabel} ${this.sfxVolume}%`);
+
+    for (const option of AUDIO_VOLUME_OPTIONS) {
+      const chip = this.overlay?.querySelector(`[data-volume-option="${option.value}"]`);
+      if (chip) {
+        chip.textContent = i18n.t(option.labelKey);
+      }
+    }
+
+    this.restReminderDescriptionEl.textContent = this.restReminderEnabled
+      ? i18n.t('colorSettings.restReminder.description.on')
+      : i18n.t('colorSettings.restReminder.description.off');
+    this.restReminderToggleButton.textContent = this.restReminderEnabled
+      ? i18n.t('colorSettings.restReminder.toggle.on')
+      : i18n.t('colorSettings.restReminder.toggle.off');
+    this.restReminderToggleButton.setAttribute('aria-pressed', this.restReminderEnabled ? 'true' : 'false');
+
+    this.languageDescriptionEl.textContent = i18n.t('colorSettings.language.description');
+    for (const option of LANGUAGE_OPTIONS) {
+      const button = this.languageButtons.get(option.value);
+      if (!button) continue;
+      const selected = option.value === this.language;
+      button.textContent = `${option.icon} ${i18n.t(option.labelKey)}`;
       button.setAttribute('aria-pressed', selected ? 'true' : 'false');
       button.style.borderColor = selected ? '#fff27a' : 'rgba(255, 255, 255, 0.4)';
       button.style.background = selected
@@ -344,11 +749,55 @@ export class ColorAccessibilitySettings {
       button.style.transform = selected ? 'scale(1.02)' : 'scale(1)';
     }
 
-    const selectedMotionProfile = getMotionSensitivityVisualProfile(this.motionSensitivity);
-    this.motionDescriptionEl.textContent = selectedMotionProfile.description;
+    const selectedColorVisionOption = COLOR_VISION_OPTIONS.find(
+      (option) => option.value === this.colorVisionSupportMode,
+    ) ?? COLOR_VISION_OPTIONS[0];
+    this.colorVisionDescriptionEl.textContent = i18n.t(selectedColorVisionOption.descriptionKey);
+
+    for (const option of COLOR_VISION_OPTIONS) {
+      const button = this.colorVisionButtons.get(option.value);
+      if (!button) continue;
+      const selected = option.value === this.colorVisionSupportMode;
+      button.textContent = `${option.icon} ${i18n.t(option.labelKey)}`;
+      button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+      button.style.borderColor = selected ? '#fff27a' : 'rgba(255, 255, 255, 0.4)';
+      button.style.background = selected
+        ? 'linear-gradient(135deg, rgba(255, 242, 122, 0.94), rgba(118, 240, 255, 0.92))'
+        : 'rgba(255, 255, 255, 0.08)';
+      button.style.color = selected ? '#102040' : '#fff';
+      button.style.transform = selected ? 'scale(1.02)' : 'scale(1)';
+    }
+
+    const vibrationDescriptions: Record<VisualFeedbackIntensity, string> = {
+      strong: i18n.t('colorSettings.visualFeedback.description.strong'),
+      medium: i18n.t('colorSettings.visualFeedback.description.medium'),
+      weak: i18n.t('colorSettings.visualFeedback.description.weak'),
+      off: i18n.t('colorSettings.visualFeedback.description.off'),
+    };
+    this.visualFeedbackDescriptionEl.textContent = vibrationDescriptions[this.visualFeedbackIntensity];
+
+    for (const option of VISUAL_FEEDBACK_OPTIONS) {
+      const button = this.visualFeedbackButtons.get(option.value);
+      if (!button) continue;
+      const selected = option.value === this.visualFeedbackIntensity;
+      button.textContent = i18n.t(option.labelKey);
+      button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+      button.style.borderColor = selected ? '#fff27a' : 'rgba(255, 255, 255, 0.4)';
+      button.style.background = selected
+        ? 'linear-gradient(135deg, rgba(255, 242, 122, 0.94), rgba(118, 240, 255, 0.92))'
+        : 'rgba(255, 255, 255, 0.08)';
+      button.style.color = selected ? '#102040' : '#fff';
+      button.style.transform = selected ? 'scale(1.02)' : 'scale(1)';
+    }
+
+    this.motionDescriptionEl.textContent = this.getMotionDescription(this.motionSensitivity);
 
     for (const [value, button] of this.motionButtons.entries()) {
       const selected = value === this.motionSensitivity;
+      const label = button.querySelector(`[data-motion-label="${value}"]`);
+      if (label) {
+        label.textContent = this.getMotionShortLabel(value);
+      }
       button.setAttribute('aria-pressed', selected ? 'true' : 'false');
       button.style.borderColor = selected ? '#fff27a' : 'rgba(255, 255, 255, 0.4)';
       button.style.background = selected
@@ -369,6 +818,7 @@ export class ColorAccessibilitySettings {
     this.clearMotionPreviewTimers();
 
     const motionProfile = getMotionSensitivityVisualProfile(this.motionSensitivity);
+    const label = this.getMotionShortLabel(this.motionSensitivity);
     this.motionPreviewEl.dataset.previewActive = 'true';
     this.motionPreviewTokenEl.textContent = motionProfile.emoji;
     this.motionPreviewTokenEl.style.background = 'rgba(255, 242, 122, 0.92)';
@@ -376,7 +826,10 @@ export class ColorAccessibilitySettings {
     this.motionPreviewTokenEl.style.transition = 'none';
     this.motionPreviewTokenEl.style.left = '0.35rem';
     this.motionPreviewTokenEl.style.transform = 'translateY(-50%) scale(1)';
-    this.motionPreviewCaptionEl.textContent = `${motionProfile.emoji} ${motionProfile.shortLabel} で おためしちゅう`;
+    this.motionPreviewCaptionEl.textContent = i18n.t('colorSettings.motion.preview.playing', {
+      emoji: motionProfile.emoji,
+      label,
+    });
 
     this.motionPreviewFrameId = window.requestAnimationFrame(() => {
       if (!this.motionPreviewTokenEl) return;
@@ -394,6 +847,7 @@ export class ColorAccessibilitySettings {
     if (!this.motionPreviewEl || !this.motionPreviewTokenEl || !this.motionPreviewCaptionEl) return;
 
     const motionProfile = getMotionSensitivityVisualProfile(this.motionSensitivity);
+    const label = this.getMotionShortLabel(this.motionSensitivity);
     this.motionPreviewEl.dataset.previewActive = 'false';
     this.motionPreviewTokenEl.textContent = motionProfile.emoji;
     this.motionPreviewTokenEl.style.transition = 'none';
@@ -401,7 +855,10 @@ export class ColorAccessibilitySettings {
     this.motionPreviewTokenEl.style.transform = 'translateY(-50%) scale(1)';
     this.motionPreviewTokenEl.style.background = 'rgba(255, 242, 122, 0.92)';
     this.motionPreviewTokenEl.style.boxShadow = motionProfile.previewGlow;
-    this.motionPreviewCaptionEl.textContent = `${motionProfile.stars} ${motionProfile.shortLabel} を えらぶと おためしするよ`;
+    this.motionPreviewCaptionEl.textContent = i18n.t('colorSettings.motion.preview.idle', {
+      stars: motionProfile.stars,
+      label,
+    });
   }
 
   private clearMotionPreviewTimers(): void {

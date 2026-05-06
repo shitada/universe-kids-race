@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  formatPlanetEncyclopediaLabel,
   getSpecialStarEncyclopediaEntry,
   getNextPlanetEncyclopediaEntry,
   getPlanetEncyclopediaEntry,
@@ -8,22 +9,28 @@ import {
 } from '../../../src/game/config/PlanetEncyclopedia';
 
 describe('PlanetEncyclopedia', () => {
-  it('has exactly 11 entries', () => {
-    expect(PLANET_ENCYCLOPEDIA).toHaveLength(11);
+  it('has exactly 12 entries', () => {
+    expect(PLANET_ENCYCLOPEDIA).toHaveLength(12);
   });
 
-  it('has unique stageNumbers 1 through 11', () => {
+  it('has unique stageNumbers 1 through 12', () => {
     const stageNumbers = PLANET_ENCYCLOPEDIA.map((e) => e.stageNumber);
-    expect(stageNumbers.sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(stageNumbers.sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
   });
 
   it('each entry has a non-empty name', () => {
     for (const entry of PLANET_ENCYCLOPEDIA) {
       expect(entry.name.length).toBeGreaterThan(0);
       expect(entry.reading.length).toBeGreaterThan(0);
+      expect(entry.identityMark.length).toBeGreaterThan(0);
       expect(entry.encyclopediaLabel).toContain(entry.name);
       expect(entry.encyclopediaLabel).toContain(entry.reading);
     }
+  });
+
+  it('assigns a unique identity mark to every planet', () => {
+    const identityMarks = PLANET_ENCYCLOPEDIA.map((entry) => entry.identityMark);
+    expect(new Set(identityMarks).size).toBe(PLANET_ENCYCLOPEDIA.length);
   });
 
   it('each entry has a non-empty emoji', () => {
@@ -62,8 +69,9 @@ describe('PlanetEncyclopedia', () => {
 
   it('can look up the next stage entry from the current stage', () => {
     expect(getNextPlanetEncyclopediaEntry(4)?.name).toBe('木星');
-    expect(getNextPlanetEncyclopediaEntry(10)?.name).toBe('地球');
-    expect(getNextPlanetEncyclopediaEntry(11)).toBeUndefined();
+    expect(getNextPlanetEncyclopediaEntry(10)?.name).toBe('宇宙ステーション');
+    expect(getNextPlanetEncyclopediaEntry(11)?.name).toBe('地球');
+    expect(getNextPlanetEncyclopediaEntry(12)).toBeUndefined();
   });
 
   it('defines three special shooting star encyclopedia entries', () => {
@@ -75,5 +83,10 @@ describe('PlanetEncyclopedia', () => {
     expect(getSpecialStarEncyclopediaEntry('rainbow')?.name).toBe('にじりゅうせい');
     expect(getSpecialStarEncyclopediaEntry('gold')?.emoji).toBe('🥇');
     expect(getSpecialStarEncyclopediaEntry('silver')?.trivia).toContain('ぎんいろ');
+  });
+
+  it('formats planet labels with identity marks when color support is enabled', () => {
+    expect(formatPlanetEncyclopediaLabel(PLANET_ENCYCLOPEDIA[0], 'color-and-marks')).toBe('○ 月（つき）');
+    expect(formatPlanetEncyclopediaLabel(PLANET_ENCYCLOPEDIA[0], 'color-only')).toBe('月（つき）');
   });
 });

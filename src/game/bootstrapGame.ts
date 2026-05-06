@@ -17,8 +17,7 @@ import { resolveInitialPixelTier } from './utils/resolveInitialPixelTier';
 import { MemoryHealthMonitor, type MemoryHealthAlert } from './utils/MemoryHealthMonitor';
 import { GameStateBackup } from './storage/GameStateBackup';
 import { InterruptionSystem } from './systems/InterruptionSystem';
-import { FrameRateAdaptationSystem } from './systems/FrameRateAdaptationSystem';
-import { setSharedVibrationIntensity } from './systems/VibrationSystem';
+import { setSharedVisualFeedbackIntensity } from './systems/VisualFeedbackSystem';
 import { ContextLossOverlay } from '../ui/ContextLossOverlay';
 import { ResumeOverlay } from '../ui/ResumeOverlay';
 import { ResumeGentlyOverlay } from '../ui/ResumeGentlyOverlay';
@@ -26,9 +25,17 @@ import { OrientationHintOverlay } from '../ui/OrientationHintOverlay';
 import { LoadingOverlay } from '../ui/LoadingOverlay';
 import { LoadFailureOverlay } from '../ui/LoadFailureOverlay';
 import { MemoryPressureOverlay } from '../ui/MemoryPressureOverlay';
+import { PlayTimeRestOverlay } from '../ui/PlayTimeRestOverlay';
 import { createOrientationHintHandler } from './utils/createOrientationHintHandler';
 import { createRetryableModuleLoader } from './utils/createRetryableModuleLoader';
 import type { SceneType } from '../types';
+import { DEFAULT_REST_REMINDER_ENABLED } from './config/RestReminderConfig';
+import { ThermalPreventionSystem } from './systems/ThermalPreventionSystem';
+import {
+  ColorVisionPostProcessor,
+  getActiveColorVisionSupportMode,
+  setActiveColorVisionSupportMode,
+} from './effects/ColorVisionPostProcessor';
 
 export interface BootstrapGameOptions {
   canvas: HTMLCanvasElement;
@@ -63,6 +70,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   const { canvas } = options;
   const renderer = createRenderer(canvas);
   const maxPixelRatio = Math.min(window.devicePixelRatio, 2);
+  let currentRendererPixelRatio = 1;
   const pixelRatioTiers = [1.0, 1.5, maxPixelRatio];
   const maxTier = pixelRatioTiers.length - 1;
   const sceneManager = new SceneManager();
@@ -83,6 +91,10 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   let stageScene: StageScene | null = null;
   let hasScheduledStagePrefetch = false;
 
+  function isRestReminderEnabled(): boolean {
+    return saveManager.load().restReminderSettings?.enabled ?? DEFAULT_REST_REMINDER_ENABLED;
+  }
+
   function isStageManuallyPaused(): boolean {
     return (stageScene as (StageScene & { isManuallyPaused?: () => boolean }) | null)?.isManuallyPaused?.() === true;
   }
@@ -102,6 +114,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
 
     if (width !== lastAppliedWidth || height !== lastAppliedHeight) {
       renderer.setSize(width, height);
+      colorVisionPostProcessor.setSize(width * currentRendererPixelRatio, height * currentRendererPixelRatio);
       lastAppliedWidth = width;
       lastAppliedHeight = height;
       const metrics = getCanvasClientMetrics();
@@ -124,7 +137,8 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
     }
 
     const clamped = Math.max(0, Math.min(maxTier, tier));
-    renderer.setPixelRatio(pixelRatioTiers[clamped]);
+    currentRendererPixelRatio = pixelRatioTiers[clamped];
+    renderer.setPixelRatio(currentRendererPixelRatio);
     lastAppliedWidth = 0;
     lastAppliedHeight = 0;
     const { width, height } = updateViewportSizeCache();
@@ -135,13 +149,18 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
     saveManager.resetSessionDataPreservingMuted();
   }
 
+  const initialSaveData = saveManager.load();
+  setActiveColorVisionSupportMode(
+    initialSaveData.colorAccessibility?.colorVisionSupportMode ?? 'color-only',
+  );
+  const colorVisionPostProcessor = new ColorVisionPostProcessor(renderer);
   const initialPixelTier = resolveInitialPixelTier(
-    saveManager.load().lastStablePixelTier,
+    initialSaveData.lastStablePixelTier,
     maxTier,
   );
 
   applyPixelRatioTier(initialPixelTier);
-  setSharedVibrationIntensity(saveManager.load().vibrationSettings?.intensity ?? 'medium');
+  setSharedVisualFeedbackIntensity(initialSaveData.visualFeedbackSettings?.intensity ?? 'medium');
 
   const currentVisualTier = { value: initialPixelTier };
   const currentPerformanceAdaptation = { value: 0 };
@@ -167,34 +186,85 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
     {},
     initialPixelTier,
   );
-  const frameRateAdaptationSystem = new FrameRateAdaptationSystem(
-    2,
-    ({ level, previousLevel, direction }) => {
-      currentPerformanceAdaptation.value = level;
-      (stageScene as (StageScene & {
-        setPerformanceAdaptationLevel?: (value: number) => void;
-        showFrameRateHint?: (value: number) => void;
-      }) | null)?.setPerformanceAdaptationLevel?.(level);
-      if (direction === 'degraded' && level > previousLevel) {
-        (stageScene as (StageScene & {
-          showFrameRateHint?: (value: number) => void;
-        }) | null)?.showFrameRateHint?.(level);
+  const thermalPreventionSystem = new ThermalPreventionSystem({
+    onMilestoneReached: ({ level, totalPlayTimeMs }) => {
+      if (disposed) {
+        return;
       }
+
+      if (!isRestReminderEnabled()) {
+        currentPerformanceAdaptation.value = 0;
+        syncStagePerformanceProfile();
+        return;
+      }
+
+      currentPerformanceAdaptation.value = level;
+      syncStagePerformanceProfile();
+      if (
+        sceneManager.getCurrentType() !== 'stage' ||
+        stageScene?.isPlaying() !== true ||
+        memoryPressureOverlay.isVisible() ||
+        isPortraitLocked
+      ) {
+        return;
+      }
+
+      interruptionSystem.clear();
+      gameLoop.pause();
+      audioManager.suspend();
+      resumeOverlay.hide();
+      resumeGentlyOverlay.hide();
+      playTimeRestOverlay.show({
+        level,
+        totalPlayTimeMs,
+        onContinue: () => {
+          if (memoryPressureOverlay.isVisible()) {
+            return;
+          }
+          resumeGame();
+          stageScene?.requestResumeCountdown();
+        },
+        onRest: () => {
+          if (memoryPressureOverlay.isVisible()) {
+            return;
+          }
+          thermalPreventionSystem.flush();
+          resumeGame();
+          return sceneManager.requestTransition('title').then(() => {
+            if (disposed || memoryPressureOverlay.isVisible() || isPortraitLocked) {
+              return;
+            }
+            playTimeRestOverlay.show({
+              variant: 'rest-complete',
+              totalPlayTimeMs,
+              onAcknowledge: () => {},
+            });
+          }).catch(() => {});
+        },
+      });
     },
-  );
+  });
+  currentPerformanceAdaptation.value = isRestReminderEnabled()
+    ? thermalPreventionSystem.getPreventiveLevel()
+    : 0;
 
   renderer.setClearColor(0x000020);
   inputSystem.setup(canvas);
-  audioManager.setMuted(saveManager.load().muted === true);
+  audioManager.setMuted(initialSaveData.muted === true);
+  audioManager.setBGMVolume(initialSaveData.audioSettings?.bgmVolume ?? 100);
+  audioManager.setSFXVolume(initialSaveData.audioSettings?.sfxVolume ?? 100);
 
   const loadTitleSceneModule = createRetryableModuleLoader(() => import('./scenes/TitleScene'));
   const loadStageSceneModule = createRetryableModuleLoader(() => import('./scenes/StageScene'));
+  const loadFreePlaySceneModule = createRetryableModuleLoader(() => import('./scenes/FreePlayScene'));
   const loadEndingSceneModule = createRetryableModuleLoader(() => import('./scenes/EndingScene'));
 
   function getLoadingMessage(sceneType: SceneType): string {
     switch (sceneType) {
       case 'title':
         return 'タイトルの じゅんび ちゅう...';
+      case 'freePlay':
+        return 'うちゅうさんぽの じゅんび ちゅう...';
       case 'ending':
         return 'さいごの じゅんび ちゅう...';
       default:
@@ -206,6 +276,8 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
     switch (sceneType) {
       case 'title':
         return 'タイトルの じゅんびを もういちど してみよう！';
+      case 'freePlay':
+        return 'うちゅうさんぽの じゅんびを もういちど してみよう！';
       case 'ending':
         return 'さいごの じゅんびを もういちど してみよう！';
       default:
@@ -232,6 +304,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
         return;
       }
       void sceneManager.prefetchSceneModule('stage').catch(() => {});
+      void sceneManager.prefetchSceneModule('freePlay').catch(() => {});
     });
   }
 
@@ -240,10 +313,14 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
     return new TitleScene(sceneManager, saveManager, audioManager);
   });
   sceneManager.registerSceneModulePrefetch('stage', loadStageSceneModule);
+  sceneManager.registerSceneModulePrefetch('freePlay', loadFreePlaySceneModule);
   sceneManager.registerSceneModulePrefetch('ending', loadEndingSceneModule);
   sceneManager.registerSceneFactory('stage', async () => {
     const { StageScene } = await loadStageSceneModule();
     stageScene = new StageScene(sceneManager, inputSystem, audioManager, saveManager);
+    currentPerformanceAdaptation.value = isRestReminderEnabled()
+      ? thermalPreventionSystem.getPreventiveLevel()
+      : 0;
     (stageScene as StageScene & {
       setPauseHandlers?: (handlers: {
         onPauseRequested?: () => void;
@@ -270,9 +347,13 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
         void sceneManager.requestTransition('title');
       },
     });
-      syncStagePerformanceProfile();
-      return stageScene;
-    });
+    syncStagePerformanceProfile();
+    return stageScene;
+  });
+  sceneManager.registerSceneFactory('freePlay', async () => {
+    const { FreePlayScene } = await loadFreePlaySceneModule();
+    return new FreePlayScene(sceneManager, inputSystem, audioManager, saveManager);
+  });
   sceneManager.registerSceneFactory('ending', async () => {
     const { EndingScene } = await loadEndingSceneModule();
     return new EndingScene(sceneManager, saveManager, audioManager);
@@ -288,7 +369,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
     console.error(`Failed to transition to ${sceneType}`, error);
     loadingOverlay.hide();
 
-    if (sceneType !== 'title' && sceneType !== 'stage' && sceneType !== 'ending') {
+    if (sceneType !== 'title' && sceneType !== 'stage' && sceneType !== 'freePlay' && sceneType !== 'ending') {
       return;
     }
 
@@ -325,17 +406,24 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   gameLoop.start(
     (deltaTime: number) => {
       sceneManager.update(deltaTime);
+      if (
+        sceneManager.getCurrentType() === 'stage' &&
+        stageScene?.isPlaying() === true &&
+        isRestReminderEnabled()
+      ) {
+        thermalPreventionSystem.updateActivePlay(deltaTime);
+      }
     },
     () => {
       const scene = sceneManager.getCurrentThreeScene();
       const camera = sceneManager.getCurrentCamera();
       if (scene && camera) {
-        renderer.render(scene, camera);
+        colorVisionPostProcessor.setMode(getActiveColorVisionSupportMode());
+        colorVisionPostProcessor.render(scene, camera);
       }
     },
-    (fps: number, sampleTimeMs: number) => {
+    (fps: number, sampleTimeMs: number, diagnostics) => {
       pixelRatioController.sample(fps, sampleTimeMs);
-      frameRateAdaptationSystem.sample(fps, sampleTimeMs);
       const performanceMemory = getPerformanceMemory();
       const report = memoryHealthMonitor.sample({
         jsHeapUsedBytes: performanceMemory?.usedJSHeapSize,
@@ -368,7 +456,6 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   function restoreViewportAfterPause(): void {
     const now = performance.now();
     pixelRatioController.notifyResume(now);
-    frameRateAdaptationSystem.notifyResume(now);
     const { width, height } = updateViewportSizeCache();
     resizeCoalescer.schedule(width, height);
     resizeCoalescer.flush();
@@ -377,6 +464,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   const resumeOverlay = new ResumeOverlay();
   const resumeGentlyOverlay = new ResumeGentlyOverlay();
   const memoryPressureOverlay = new MemoryPressureOverlay();
+  const playTimeRestOverlay = new PlayTimeRestOverlay();
   let isPortraitLocked = false;
 
   function handleMemoryPressure(alert: MemoryHealthAlert): void {
@@ -388,6 +476,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
     gameLoop.pause();
     audioManager.suspend();
     resumeOverlay.hide();
+    playTimeRestOverlay.hide();
     if (isMemoryHealthDebugEnabled) {
       console.warn('[bootstrapGame] memory health alert', alert.reason, alert.sample);
     }
@@ -405,12 +494,14 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
 
     if (sceneManager.getCurrentType() !== 'stage' || !gameLoop.isPaused()) {
       resumeOverlay.hide();
+      playTimeRestOverlay.hide();
       resumeGame();
       return;
     }
 
     if (stageScene?.isUserPaused() === true) {
       resumeOverlay.hide();
+      playTimeRestOverlay.hide();
       return;
     }
 
@@ -436,7 +527,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
     }),
     isGamePaused: () => gameLoop.isPaused(),
     isPortraitLocked: () => isPortraitLocked,
-    isBlockingOverlayVisible: () => memoryPressureOverlay.isVisible(),
+    isBlockingOverlayVisible: () => memoryPressureOverlay.isVisible() || playTimeRestOverlay.isVisible(),
     pauseGame: () => {
       gameLoop.pause();
       audioManager.suspend();
@@ -474,6 +565,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
       isPortraitLocked = true;
       interruptionSystem.handlePortrait();
       orientationHintOverlay.show();
+      playTimeRestOverlay.hide();
       gameLoop.pause();
       audioManager.suspend();
     },
@@ -489,6 +581,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
   const contextLossOverlay = new ContextLossOverlay();
   const unsubscribeContextLoss = createWebGLContextLossHandler(canvas, {
     onLost: () => {
+      playTimeRestOverlay.hide();
       gameLoop.pause();
       audioManager.suspend();
       contextLossOverlay.show(() => {
@@ -545,6 +638,9 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
       resumeOverlay.dispose();
       resumeGentlyOverlay.hide();
       resumeGentlyOverlay.dispose();
+      playTimeRestOverlay.hide();
+      playTimeRestOverlay.dispose();
+      thermalPreventionSystem.flush();
       memoryPressureOverlay.hide();
       memoryPressureOverlay.dispose();
       contextLossOverlay.hide();
@@ -555,6 +651,7 @@ export async function bootstrapGame(options: BootstrapGameOptions): Promise<Boot
       loadingOverlay.dispose();
       loadFailureOverlay.hide();
       loadFailureOverlay.dispose();
+      colorVisionPostProcessor.dispose();
       renderer.forceContextLoss?.();
       renderer.dispose();
     },

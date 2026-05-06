@@ -8,6 +8,8 @@ import type { SaveManager } from '../../../src/game/storage/SaveManager';
 import type { AudioManager } from '../../../src/game/audio/AudioManager';
 import { TOTAL_STAGES } from '../../../src/game/config/StageConfig';
 import { EncyclopediaOverlay } from '../../../src/ui/EncyclopediaOverlay';
+import { i18n } from '../../../src/game/i18n/i18nService';
+import { DEFAULT_LANGUAGE } from '../../../src/game/i18n/types';
 import type { LoadFailureOverlayOptions } from '../../../src/ui/LoadFailureOverlay';
 
 function createMockSceneManager(): SceneManager {
@@ -33,6 +35,8 @@ function createMockAudioManager(initialized = false): AudioManager {
     isMuted: vi.fn(() => false),
     toggleMute: vi.fn(() => false),
     setMuted: vi.fn(),
+    setBGMVolume: vi.fn(),
+    setSFXVolume: vi.fn(),
     playSFX: vi.fn(),
     startBoostSFX: vi.fn(),
     stopBoostSFX: vi.fn(),
@@ -47,7 +51,9 @@ function createMockSaveManager(overrides: Partial<ReturnType<SaveManager['load']
     unlockedPlanets: [],
     tutorialShown: true,
     bestStageStars: {},
+    language: undefined,
     muted: false,
+    audioSettings: undefined,
     ...overrides,
   };
   return {
@@ -62,6 +68,7 @@ function createMockSaveManager(overrides: Partial<ReturnType<SaveManager['load']
 }
 
 beforeEach(() => {
+  i18n.setLanguage(DEFAULT_LANGUAGE, { notify: false });
   const overlay = document.createElement('div');
   overlay.id = 'ui-overlay';
   document.body.appendChild(overlay);
@@ -224,6 +231,26 @@ describe('TitleScene (T009)', () => {
         totalStarCount: 0,
       }),
     );
+
+    scene.exit();
+  });
+
+  it('"うちゅうで あそぶ" button opens the free-play mode', () => {
+    const sceneManager = createMockSceneManager();
+    const saveManager = createMockSaveManager();
+    const audioManager = createMockAudioManager(false);
+
+    const scene = new TitleScene(sceneManager, saveManager, audioManager);
+    scene.enter({});
+
+    const freePlayButton = findButtonByText('うちゅうで あそぶ');
+    expect(freePlayButton).toBeTruthy();
+
+    dispatchReleaseConfirm(freePlayButton!);
+
+    expect(audioManager.initSync).toHaveBeenCalledTimes(1);
+    expect(audioManager.playBGM).not.toHaveBeenCalled();
+    expect(sceneManager.requestTransition).toHaveBeenCalledWith('freePlay', {});
 
     scene.exit();
   });
@@ -511,7 +538,7 @@ describe('TitleScene (T009)', () => {
     scene.enter({});
 
     const settingsButton = document.querySelector('[data-color-settings-button]') as HTMLButtonElement | null;
-    expect(settingsButton?.textContent).toBe('みやすさ・しんどう');
+    expect(settingsButton?.textContent).toBe('みやすさ・おと・えいぞう');
 
     dispatchReleaseConfirm(settingsButton!);
 
@@ -526,19 +553,63 @@ describe('TitleScene (T009)', () => {
       colorAccessibility: { highContrast: true },
     }));
 
-    const strongButton = document.querySelector('[data-vibration-intensity-button="strong"]') as HTMLButtonElement | null;
+    const restReminderToggle = document.querySelector('[data-rest-reminder-toggle]') as HTMLButtonElement | null;
+    restReminderToggle?.click();
+
+    expect(saveManager.save).toHaveBeenCalledWith(expect.objectContaining({
+      restReminderSettings: { enabled: false },
+    }));
+
+    const englishButton = document.querySelector('[data-language-button="en"]') as HTMLButtonElement | null;
+    englishButton?.click();
+
+    expect(saveManager.save).toHaveBeenCalledWith(expect.objectContaining({
+      language: 'en',
+    }));
+    expect(settingsButton?.textContent).toBe('Accessibility');
+
+    const markModeButton = document.querySelector('[data-color-vision-mode-button="color-and-marks"]') as HTMLButtonElement | null;
+    markModeButton?.click();
+
+    expect(saveManager.save).toHaveBeenCalledWith(expect.objectContaining({
+      colorAccessibility: { highContrast: true, colorVisionSupportMode: 'color-and-marks' },
+    }));
+
+    const strongButton = document.querySelector('[data-visual-feedback-intensity-button="strong"]') as HTMLButtonElement | null;
     strongButton?.click();
 
     expect(saveManager.save).toHaveBeenCalledWith(expect.objectContaining({
-      vibrationSettings: { intensity: 'strong' },
+      visualFeedbackSettings: { intensity: 'strong' },
     }));
 
     const minimalMotionButton = document.querySelector('[data-motion-sensitivity-button="minimal"]') as HTMLButtonElement | null;
     minimalMotionButton?.click();
 
     expect(saveManager.save).toHaveBeenCalledWith(expect.objectContaining({
-      colorAccessibility: { highContrast: true, motionSensitivity: 'minimal' },
+      colorAccessibility: {
+        highContrast: true,
+        colorVisionSupportMode: 'color-and-marks',
+        motionSensitivity: 'minimal',
+      },
     }));
+
+    const bgmSlider = document.querySelector('[data-bgm-volume-slider]') as HTMLInputElement | null;
+    const sfxSlider = document.querySelector('[data-sfx-volume-slider]') as HTMLInputElement | null;
+
+    if (bgmSlider) {
+      bgmSlider.value = '75';
+      bgmSlider.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (sfxSlider) {
+      sfxSlider.value = '25';
+      sfxSlider.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    expect(saveManager.save).toHaveBeenCalledWith(expect.objectContaining({
+      audioSettings: { bgmVolume: 75, sfxVolume: 25 },
+    }));
+    expect(audioManager.setBGMVolume).toHaveBeenCalledWith(75);
+    expect(audioManager.setSFXVolume).toHaveBeenCalledWith(25);
 
     scene.exit();
   });

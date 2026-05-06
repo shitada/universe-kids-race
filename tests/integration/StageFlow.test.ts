@@ -59,6 +59,10 @@ function dispatchReleaseConfirm(button: HTMLElement): void {
   button.dispatchEvent(new Event('pointerup', { bubbles: true }));
 }
 
+function finishBonusSequence(scene: { update(deltaTime: number): void }): void {
+  scene.update(13);
+}
+
 describe('Stage Flow Integration', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -66,7 +70,7 @@ describe('Stage Flow Integration', () => {
     document.body.innerHTML = '<div id="hud"></div><div id="ui-overlay"></div>';
   });
 
-  it('follows full flow with lazy scene factories: title → stage1 through stage11 → ending → title', async () => {
+  it('follows full flow with lazy scene factories: title → stage1 through stage12 → ending → title', async () => {
     const log: { type: SceneType; context: SceneContext }[] = [];
     const manager = new SceneManager();
     const stageFactory = () => Promise.resolve(createTrackingScene(log, 'stage'));
@@ -127,15 +131,19 @@ describe('Stage Flow Integration', () => {
     await manager.transitionTo('stage', { stageNumber: 11, totalScore: 7500, totalStarCount: 62 });
     expect(log[11].context.stageNumber).toBe(11);
 
-    // Stage 11 → Ending
+    // Stage 11 → Stage 12
+    await manager.transitionTo('stage', { stageNumber: 12, totalScore: 8200, totalStarCount: 67 });
+    expect(log[12].context.stageNumber).toBe(12);
+
+    // Stage 12 → Ending
     await manager.transitionTo('ending', { totalScore: 9000, totalStarCount: 72 });
-    expect(log[12].type).toBe('ending');
-    expect(log[12].context.totalScore).toBe(9000);
-    expect(log[12].context.totalStarCount).toBe(72);
+    expect(log[13].type).toBe('ending');
+    expect(log[13].context.totalScore).toBe(9000);
+    expect(log[13].context.totalStarCount).toBe(72);
 
     // Ending → Title (restart)
     await manager.transitionTo('title');
-    expect(log[13].type).toBe('title');
+    expect(log[14].type).toBe('title');
   });
 
   it('tracks current scene type correctly after lazy transition', async () => {
@@ -278,7 +286,7 @@ describe('Stage Flow Integration', () => {
     };
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const retryButton = document.querySelector('[data-stage-clear-retry]') as HTMLButtonElement | null;
     expect(retryButton).toBeTruthy();
@@ -300,11 +308,12 @@ describe('Stage Flow Integration', () => {
     starCount = 5;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const continueButton = document.querySelector('[data-stage-clear-continue]') as HTMLButtonElement | null;
     expect(continueButton).toBeTruthy();
     dispatchReleaseConfirm(continueButton!);
+    internal.update(2.3);
     await flushPromises();
 
     expect(transitionLog.at(-1)).toEqual({
@@ -797,6 +806,7 @@ describe('Stage Flow Integration', () => {
     const button = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
     expect(button).not.toBeNull();
     dispatchReleaseConfirm(button!);
+    internal.update(2.3);
     await Promise.resolve();
     await Promise.resolve();
 
@@ -922,7 +932,7 @@ describe('Stage Flow Integration', () => {
     internal.scoreSystem.finalizeStage = () => ({ totalScore: 9000, totalStarCount: 72 });
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const button = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
     expect(button?.textContent).toBe('おいわいへ');
@@ -994,7 +1004,7 @@ describe('Stage Flow Integration', () => {
     internal.scoreSystem.finalizeStage = () => ({ totalScore: 9000, totalStarCount: 72 });
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const button = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
     expect(button?.textContent).toBe('おいわいへ');

@@ -6,6 +6,7 @@ import { Meteorite } from '../../../src/game/entities/Meteorite';
 import { ShootingStar } from '../../../src/game/entities/ShootingStar';
 import { Comet } from '../../../src/game/entities/Comet';
 import { SpecialShootingStar } from '../../../src/game/entities/SpecialShootingStar';
+import { SpaceGem } from '../../../src/game/entities/SpaceGem';
 
 describe('CollisionSystem', () => {
   const system = new CollisionSystem();
@@ -26,6 +27,15 @@ describe('CollisionSystem', () => {
     star.isCollected = true;
     const result = system.check(ship, [star], []);
     expect(result.starCollisions).toHaveLength(0);
+  });
+
+  it('detects LOVELY star collisions like other collectible stars', () => {
+    const ship = new Spaceship();
+    ship.position = { x: 0, y: 0, z: 0 };
+    const star = new Star(0.5, 0, 0, 'LOVELY');
+    const result = system.check(ship, [star], []);
+    expect(result.starCollisions).toEqual([star]);
+    expect(star.isCollected).toBe(true);
   });
 
   it('does not detect star collision when far away', () => {
@@ -100,6 +110,17 @@ describe('CollisionSystem', () => {
 
     expect(result.specialShootingStarHit).toBeNull();
     expect(specialStar.isCollected).toBe(false);
+  });
+
+  it('detects space gem collision when in range', () => {
+    const ship = new Spaceship();
+    ship.position = { x: 0, y: 0, z: 0 };
+    const gem = new SpaceGem(0.5, 0, 0, 'diamond-nebula');
+
+    const result = system.check(ship, [], [], 0, [], [], [], [], [gem]);
+
+    expect(result.spaceGemHit).toBe(gem);
+    expect(gem.isCollected).toBe(true);
   });
 
   it('detects meteorite collision when in range', () => {

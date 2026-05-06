@@ -1,87 +1,78 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  __setSharedVibrationSystemForTest,
-  VibrationSystem,
-  getSharedVibrationSystem,
-} from '../../../src/game/systems/VibrationSystem';
+  __setSharedVisualFeedbackSystemForTest,
+  getResolvedVisualFeedbackEffect,
+  getSharedVisualFeedbackSystem,
+  VisualFeedbackSystem,
+} from '../../../src/game/systems/VisualFeedbackSystem';
 
-describe('VibrationSystem', () => {
+describe('VisualFeedbackSystem', () => {
   beforeEach(() => {
-    __setSharedVibrationSystemForTest(null);
+    __setSharedVisualFeedbackSystemForTest(null);
   });
 
-  it('triggers the configured vibration pattern for each game event', () => {
-    const vibrate = vi.fn(() => true);
-    let now = 0;
-    const system = new VibrationSystem({ vibrate }, () => now, 0);
+  it('resolves the expected star-collection effect profile', () => {
+    expect(getResolvedVisualFeedbackEffect('starCollect', 'strong')).toEqual({
+      event: 'starCollect',
+      durationMs: 100,
+      priority: 1,
+      overlayBackground: 'transparent',
+      overlayOpacity: 0,
+      spaceshipScale: 1.2,
+    });
+  });
 
-    expect(system.trigger('starCollect')).toBe(true);
-    expect(system.trigger('rainbowCollect')).toBe(true);
+  it('scales overlay opacity and ship scale when intensity is lowered', () => {
+    expect(getResolvedVisualFeedbackEffect('boost', 'weak')).toMatchObject({
+      durationMs: 300,
+      overlayOpacity: 0.144,
+      spaceshipScale: 1.072,
+    });
+  });
+
+  it('dispatches visual effects through the registered handler', () => {
+    const handler = vi.fn();
+    const system = new VisualFeedbackSystem(() => 0, 0);
+    system.setHandler(handler);
+
     expect(system.trigger('meteoriteHit')).toBe(true);
-    expect(system.trigger('boost')).toBe(true);
-    expect(system.trigger('stageClear')).toBe(true);
 
-    expect(vibrate.mock.calls).toEqual([
-      [50],
-      [100],
-      [200],
-      [[100, 50, 100]],
-      [[100, 50, 100, 50, 150]],
-    ]);
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
+      event: 'meteoriteHit',
+      durationMs: 200,
+      overlayOpacity: 0.315,
+      spaceshipScale: 1,
+    }));
   });
 
-  it('falls back silently when vibration is unsupported', () => {
-    const system = new VibrationSystem({} as Navigator, () => 0, 0);
-
-    expect(system.isSupported()).toBe(false);
-    expect(system.trigger('stageClear')).toBe(false);
-  });
-
-  it('can be disabled explicitly', () => {
-    const vibrate = vi.fn(() => true);
-    const system = new VibrationSystem({ vibrate }, () => 0, 0);
-    system.setEnabled(false);
-
-    expect(system.trigger('boost')).toBe(false);
-    expect(vibrate).not.toHaveBeenCalled();
-  });
-
-  it('scales vibration patterns when intensity is lowered', () => {
-    const vibrate = vi.fn(() => true);
-    const system = new VibrationSystem({ vibrate }, () => 0, 0);
-    system.setIntensity('weak');
-
-    expect(system.trigger('stageClear')).toBe(true);
-    expect(vibrate).toHaveBeenCalledWith([45, 23, 45, 23, 68]);
-  });
-
-  it('uses fallback feedback when vibration is unsupported', () => {
-    const fallback = vi.fn();
-    const system = new VibrationSystem({} as Navigator, () => 0, 0);
-    system.setFallbackHandler(fallback);
-
-    expect(system.trigger('boost')).toBe(true);
-    expect(fallback).toHaveBeenCalledWith('boost');
-  });
-
-  it('suppresses repeated low-priority vibrations but allows stronger ones to override', () => {
-    const vibrate = vi.fn(() => true);
+  it('suppresses repeated low-priority effects but allows stronger ones to override', () => {
+    const handler = vi.fn();
     let now = 1000;
-    const system = new VibrationSystem({ vibrate }, () => now, 100);
+    const system = new VisualFeedbackSystem(() => now, 100);
+    system.setHandler(handler);
 
     expect(system.trigger('starCollect')).toBe(true);
     now += 20;
     expect(system.trigger('starCollect')).toBe(false);
     expect(system.trigger('meteoriteHit')).toBe(true);
 
-    expect(vibrate.mock.calls).toEqual([[50], [200]]);
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(handler.mock.calls[0]?.[0]).toMatchObject({ event: 'starCollect' });
+    expect(handler.mock.calls[1]?.[0]).toMatchObject({ event: 'meteoriteHit' });
   });
 
-  it('lets tests replace the shared vibration system', () => {
-    const vibrate = vi.fn(() => true);
-    const system = new VibrationSystem({ vibrate }, () => 0, 0);
-    __setSharedVibrationSystemForTest(system);
+  it('returns false when visual feedback is off or no handler is connected', () => {
+    const system = new VisualFeedbackSystem(() => 0, 0);
+    system.setIntensity('off');
+    expect(system.trigger('boost')).toBe(false);
 
-    expect(getSharedVibrationSystem()).toBe(system);
+    const idleSystem = new VisualFeedbackSystem(() => 0, 0);
+    expect(idleSystem.trigger('boost')).toBe(false);
+  });
+
+  it('lets tests replace the shared visual feedback system', () => {
+    const system = new VisualFeedbackSystem(() => 0, 0);
+    __setSharedVisualFeedbackSystemForTest(system);
+    expect(getSharedVisualFeedbackSystem()).toBe(system);
   });
 });

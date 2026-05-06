@@ -1,5 +1,5 @@
-import type { SFXType } from '../../types';
-import { BGM_CONFIGS } from './bgmConfigs';
+import type { AudioVolumeLevel, SFXType } from '../../types';
+import { BGM_CONFIGS, LOVELY_STAR_SFX_MELODY } from './bgmConfigs';
 import type { BGMConfig } from './bgmConfigs';
 
 export { BGM_CONFIGS } from './bgmConfigs';
@@ -11,7 +11,11 @@ export class AudioManager {
   private ctx: AudioContext | null = null;
   private initialized = false;
   private masterGain: GainNode | null = null;
+  private bgmBusGain: GainNode | null = null;
+  private sfxBusGain: GainNode | null = null;
   private muted = false;
+  private bgmVolume: AudioVolumeLevel = 100;
+  private sfxVolume: AudioVolumeLevel = 100;
   private bgmOscillators: OscillatorNode[] = [];
   private bgmGains: GainNode[] = [];
   private bgmShortVoices: { osc: OscillatorNode; gain: GainNode }[] = [];
@@ -110,8 +114,16 @@ export class AudioManager {
       this.masterGain = this.ctx.createGain();
       this.masterGain.gain.value = this.muted ? 0 : 1;
       this.masterGain.connect(this.ctx.destination);
+      this.bgmBusGain = this.ctx.createGain();
+      this.applyBusVolume(this.bgmBusGain, this.bgmVolume);
+      this.bgmBusGain.connect(this.masterGain);
+      this.sfxBusGain = this.ctx.createGain();
+      this.applyBusVolume(this.sfxBusGain, this.sfxVolume);
+      this.sfxBusGain.connect(this.masterGain);
     } catch {
       this.masterGain = null;
+      this.bgmBusGain = null;
+      this.sfxBusGain = null;
     }
   }
 
@@ -122,6 +134,37 @@ export class AudioManager {
   private sink(): AudioNode | null {
     if (this.masterGain) return this.masterGain;
     return this.ctx ? this.ctx.destination : null;
+  }
+
+  private bgmSink(): AudioNode | null {
+    if (this.bgmBusGain) return this.bgmBusGain;
+    return this.sink();
+  }
+
+  private sfxSink(): AudioNode | null {
+    if (this.sfxBusGain) return this.sfxBusGain;
+    return this.sink();
+  }
+
+  private clampVolume(volume: number): AudioVolumeLevel {
+    const clamped = Math.max(0, Math.min(100, Math.round(volume)));
+    if (clamped <= 0) return 0;
+    if (clamped <= 25) return 25;
+    if (clamped <= 50) return 50;
+    if (clamped <= 75) return 75;
+    return 100;
+  }
+
+  private applyBusVolume(bus: GainNode | null, volume: AudioVolumeLevel): void {
+    if (!this.ctx || !bus) return;
+    const target = volume / 100;
+    try {
+      bus.gain.setTargetAtTime(target, this.ctx.currentTime, 0.01);
+    } catch {
+      try {
+        bus.gain.value = target;
+      } catch { /* ignore */ }
+    }
   }
 
   /**
@@ -156,6 +199,16 @@ export class AudioManager {
     return this.muted;
   }
 
+  setBGMVolume(volume: number): void {
+    this.bgmVolume = this.clampVolume(volume);
+    this.applyBusVolume(this.bgmBusGain, this.bgmVolume);
+  }
+
+  setSFXVolume(volume: number): void {
+    this.sfxVolume = this.clampVolume(volume);
+    this.applyBusVolume(this.sfxBusGain, this.sfxVolume);
+  }
+
   playBGM(stageNumber: number): void {
     this.ensureResumed();
     if (!this.initialized || !this.ctx) return;
@@ -183,7 +236,7 @@ export class AudioManager {
       bassGain.gain.setValueAtTime(0, startTime);
       bassGain.gain.linearRampToValueAtTime(config.volumes.bass, startTime + fadeInDuration);
       bassOsc.connect(bassGain);
-      bassGain.connect(this.sink()!);
+        bassGain.connect(this.bgmSink()!);
       bassOsc.start(startTime);
       this.bgmOscillators.push(bassOsc);
       this.bgmGains.push(bassGain);
@@ -203,7 +256,7 @@ export class AudioManager {
         padGain.gain.setValueAtTime(0, startTime);
         padGain.gain.linearRampToValueAtTime(config.volumes.pad, startTime + fadeInDuration);
         padOsc.connect(padGain);
-        padGain.connect(this.sink()!);
+        padGain.connect(this.bgmSink()!);
         padOsc.start(startTime);
         padOscs.push(padOsc);
         this.bgmOscillators.push(padOsc);
@@ -311,7 +364,7 @@ export class AudioManager {
       gain.gain.setValueAtTime(volume, startTime);
       gain.gain.linearRampToValueAtTime(0.001, startTime + this.bgmBeatInterval * 0.9);
       osc.connect(gain);
-      gain.connect(this.sink()!);
+      gain.connect(this.bgmSink()!);
       osc.start(startTime);
       osc.stop(startTime + this.bgmBeatInterval * 0.95);
       this.trackShortVoice(osc, gain);
@@ -396,7 +449,7 @@ export class AudioManager {
       this.boostNoiseGain.gain.value = 0.15;
       this.boostNoiseSource.connect(this.boostNoiseFilter);
       this.boostNoiseFilter.connect(this.boostNoiseGain);
-      this.boostNoiseGain.connect(this.sink()!);
+      this.boostNoiseGain.connect(this.sfxSink()!);
       this.boostNoiseSource.start();
     } catch {
       this.boostNoiseSource = null;
@@ -465,6 +518,18 @@ export class AudioManager {
         case 'rainbowCollect':
           this.playArpeggio([440, 880, 1760], 'sine', 0.1, 0.22);
           break;
+        case 'lovelyCollect':
+          this.playArpeggio([...LOVELY_STAR_SFX_MELODY], 'triangle', 0.05, 0.18);
+          this.playSweep('sine', 784, 1568, 0.32, 0.08);
+          break;
+        case 'spaceGemCollect':
+          this.playArpeggio([784, 1175, 1568, 2093], 'triangle', 0.05, 0.18);
+          this.playSweep('sine', 1175, 2093, 0.24, 0.1);
+          break;
+        case 'constellationCelebrate':
+          this.playArpeggio([523, 659, 784, 1047, 1319], 'triangle', 0.08, 0.12);
+          this.playSweep('sine', 784, 1568, 0.42, 0.08);
+          break;
         case 'shootingStarCollect':
           this.playArpeggio([659, 988, 1319, 1760], 'triangle', 0.06, 0.2);
           break;
@@ -498,6 +563,11 @@ export class AudioManager {
           // 明るい長三和音 (C/E/G) ジングル。「スタート！」の高揚感を与える。
           this.playArpeggio([523, 659, 784], 'sine', 0.07, 0.22);
           break;
+        case 'wormhole':
+          this.playSweep('triangle', 220, 1240, 0.8, 0.08);
+          this.playSweep('sine', 880, 180, 1.1, 0.06);
+          this.playArpeggio([392, 523, 784, 1175], 'sine', 0.08, 0.05);
+          break;
       }
       this.lastSfxTime.set(type, now);
     } catch {
@@ -508,10 +578,18 @@ export class AudioManager {
   dispose(): void {
     this.stopBGM();
     this.stopBoostSFX();
-    if (this.masterGain) {
-      try { this.masterGain.disconnect(); } catch { /* ignore */ }
-      this.masterGain = null;
-    }
+      if (this.masterGain) {
+        try { this.masterGain.disconnect(); } catch { /* ignore */ }
+        this.masterGain = null;
+      }
+      if (this.bgmBusGain) {
+        try { this.bgmBusGain.disconnect(); } catch { /* ignore */ }
+        this.bgmBusGain = null;
+      }
+      if (this.sfxBusGain) {
+        try { this.sfxBusGain.disconnect(); } catch { /* ignore */ }
+        this.sfxBusGain = null;
+      }
     if (this.ctx) {
       try { this.ctx.close(); } catch { /* ignore */ }
       this.ctx = null;
@@ -532,7 +610,7 @@ export class AudioManager {
     gain.gain.setValueAtTime(volume, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
     osc.connect(gain);
-    gain.connect(this.sink()!);
+    gain.connect(this.sfxSink()!);
     this.attachOneShotCleanup(osc, gain);
     osc.start(now);
     osc.stop(now + duration + 0.01);
@@ -550,7 +628,7 @@ export class AudioManager {
       gain.gain.setValueAtTime(volume, startTime);
       gain.gain.exponentialRampToValueAtTime(0.001, startTime + noteLength * 0.9);
       osc.connect(gain);
-      gain.connect(this.sink()!);
+      gain.connect(this.sfxSink()!);
       this.attachOneShotCleanup(osc, gain);
       osc.start(startTime);
       osc.stop(startTime + noteLength);

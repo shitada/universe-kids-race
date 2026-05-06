@@ -6,9 +6,9 @@ import type { InputSystem } from '../../../src/game/systems/InputSystem';
 import type { AudioManager } from '../../../src/game/audio/AudioManager';
 import type { SaveManager } from '../../../src/game/storage/SaveManager';
 import {
-  __setSharedVibrationSystemForTest,
-  VibrationSystem,
-} from '../../../src/game/systems/VibrationSystem';
+  __setSharedVisualFeedbackSystemForTest,
+  VisualFeedbackSystem,
+} from '../../../src/game/systems/VisualFeedbackSystem';
 
 function mockCanvasContext(): void {
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => {
@@ -52,7 +52,7 @@ function createScene(inputState = { moveDirection: 0 as -1 | 0 | 1, boostPressed
       clearedStage: 0,
       unlockedPlanets: [],
       muted: false,
-      vibrationSettings: { intensity: 'strong' },
+      visualFeedbackSettings: { intensity: 'strong' },
       tutorialShown: true,
       bestStageStars: {},
     })),
@@ -69,10 +69,19 @@ function createScene(inputState = { moveDirection: 0 as -1 | 0 | 1, boostPressed
     countdownOverlay: { dispose(): void } | null;
     stageIntroOverlay: { dispose(): void } | null;
     awaitingResume: boolean;
-    cameraShakeTimer: number;
     isHomeConfirmOpen: boolean;
     isPauseOpen: boolean;
     isStarting: boolean;
+    activeVisualFeedback: object | null;
+    visualFeedbackOverlay: HTMLDivElement | null;
+    stars: Array<{
+      position: { x: number; y: number; z: number };
+      constellationOrder: number | null;
+    }>;
+    spaceship: {
+      position: { x: number; y: number; z: number };
+      mesh: { scale: { x: number } };
+    };
     onStageClear(): void;
     update(deltaTime: number): void;
   };
@@ -88,34 +97,44 @@ function createScene(inputState = { moveDirection: 0 as -1 | 0 | 1, boostPressed
   return { scene, internal, inputState };
 }
 
-describe('StageScene vibration integration', () => {
+describe('StageScene visual feedback integration', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     mockCanvasContext();
     document.body.innerHTML = '<div id="hud"></div><div id="ui-overlay"></div>';
-    __setSharedVibrationSystemForTest(null);
+    __setSharedVisualFeedbackSystemForTest(new VisualFeedbackSystem(() => 0, 0));
   });
 
   afterEach(() => {
-    __setSharedVibrationSystemForTest(null);
+    __setSharedVisualFeedbackSystemForTest(null);
   });
 
-  it('triggers the stage-clear vibration when the stage is cleared', () => {
-    const vibrate = vi.fn(() => true);
-    __setSharedVibrationSystemForTest(new VibrationSystem({ vibrate }, () => 0, 0));
-    const { internal } = createScene();
+  it('shows a celebratory overlay and ship pulse when the stage is cleared', () => {
+    const { scene, internal } = createScene();
 
     internal.onStageClear();
+    scene.update(0.16);
 
-    expect(vibrate).toHaveBeenCalledWith([100, 50, 100, 50, 150]);
+    expect(internal.activeVisualFeedback).not.toBeNull();
+    expect(internal.visualFeedbackOverlay?.style.background).toContain('linear-gradient');
+    expect(internal.visualFeedbackOverlay?.style.opacity).not.toBe('0');
   });
 
-  it('falls back to camera shake for stage clear when vibration is unavailable', () => {
-    __setSharedVibrationSystemForTest(new VibrationSystem({} as Navigator, () => 0, 0));
-    const { internal } = createScene();
+  it('shows constellation feedback when a constellation is completed', () => {
+    const { scene, internal } = createScene();
 
-    internal.onStageClear();
+    const targetStars = [...internal.stars]
+      .filter((star) => star.constellationOrder !== null)
+      .sort((a, b) => (a.constellationOrder ?? 0) - (b.constellationOrder ?? 0));
 
-    expect(internal.cameraShakeTimer).toBeGreaterThan(0);
+    for (const star of targetStars) {
+      internal.spaceship.position.x = star.position.x;
+      internal.spaceship.position.y = star.position.y;
+      internal.spaceship.position.z = star.position.z;
+      scene.update(0.016);
+    }
+
+    expect(internal.activeVisualFeedback).not.toBeNull();
+    expect(internal.visualFeedbackOverlay?.style.background).toContain('linear-gradient');
   });
 });

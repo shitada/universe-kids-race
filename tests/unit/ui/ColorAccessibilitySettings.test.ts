@@ -1,32 +1,54 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ColorAccessibilitySettings } from '../../../src/ui/ColorAccessibilitySettings';
+import { i18n } from '../../../src/game/i18n/i18nService';
+import { DEFAULT_LANGUAGE } from '../../../src/game/i18n/types';
 
 describe('ColorAccessibilitySettings', () => {
   let settings: ColorAccessibilitySettings;
+
+  function createOptions(overrides: Partial<Parameters<ColorAccessibilitySettings['show']>[0]> = {}) {
+    return {
+      initialHighContrast: false,
+      initialColorVisionSupportMode: 'color-only' as const,
+      initialBGMVolume: 100 as const,
+      initialSFXVolume: 100 as const,
+      initialVisualEffectIntensity: 'medium' as const,
+      initialMotionSensitivity: 'strong' as const,
+      initialRestReminderEnabled: true,
+      initialLanguage: 'ja' as const,
+      onToggle: vi.fn(),
+      onColorVisionSupportModeChange: vi.fn(),
+      onBGMVolumeChange: vi.fn(),
+      onSFXVolumeChange: vi.fn(),
+      onVisualEffectIntensityChange: vi.fn(),
+      onMotionSensitivityChange: vi.fn(),
+      onRestReminderToggle: vi.fn(),
+      onLanguageChange: vi.fn(),
+      ...overrides,
+    };
+  }
 
   beforeEach(() => {
     const overlay = document.createElement('div');
     overlay.id = 'ui-overlay';
     document.body.appendChild(overlay);
+    i18n.setLanguage(DEFAULT_LANGUAGE, { notify: false });
     settings = new ColorAccessibilitySettings();
   });
 
   afterEach(() => {
+    i18n.setLanguage(DEFAULT_LANGUAGE, { notify: false });
     document.body.innerHTML = '';
   });
 
   it('renders and toggles the child-friendly high-contrast button', () => {
     const onToggle = vi.fn();
-    const onVibrationIntensityChange = vi.fn();
-    settings.show({
-      initialHighContrast: false,
-      initialVibrationIntensity: 'medium',
-      initialMotionSensitivity: 'strong',
+    const onVisualEffectIntensityChange = vi.fn();
+    settings.show(createOptions({
       onToggle,
-      onVibrationIntensityChange,
-      onMotionSensitivityChange: vi.fn(),
-    });
+      onVisualEffectIntensityChange,
+    }));
 
     const toggle = document.querySelector('[data-color-accessibility-toggle]') as HTMLButtonElement | null;
     expect(toggle?.textContent).toContain('OFF');
@@ -35,40 +57,33 @@ describe('ColorAccessibilitySettings', () => {
 
     expect(toggle?.textContent).toContain('ON');
     expect(onToggle).toHaveBeenCalledWith(true);
-    expect(onVibrationIntensityChange).not.toHaveBeenCalled();
+    expect(onVisualEffectIntensityChange).not.toHaveBeenCalled();
   });
 
-  it('lets children pick vibration intensity explicitly', () => {
-    const onVibrationIntensityChange = vi.fn();
-    settings.show({
+  it('lets children pick visual effect intensity explicitly', () => {
+    const onVisualEffectIntensityChange = vi.fn();
+    settings.show(createOptions({
       initialHighContrast: true,
-      initialVibrationIntensity: 'weak',
-      initialMotionSensitivity: 'strong',
-      onToggle: vi.fn(),
-      onVibrationIntensityChange,
-      onMotionSensitivityChange: vi.fn(),
-    });
+      initialVisualEffectIntensity: 'weak',
+      onVisualEffectIntensityChange,
+    }));
 
-    const weakButton = document.querySelector('[data-vibration-intensity-button="weak"]') as HTMLButtonElement | null;
-    const strongButton = document.querySelector('[data-vibration-intensity-button="strong"]') as HTMLButtonElement | null;
+    const weakButton = document.querySelector('[data-visual-feedback-intensity-button="weak"]') as HTMLButtonElement | null;
+    const strongButton = document.querySelector('[data-visual-feedback-intensity-button="strong"]') as HTMLButtonElement | null;
     expect(weakButton?.getAttribute('aria-pressed')).toBe('true');
 
     strongButton?.click();
 
     expect(strongButton?.getAttribute('aria-pressed')).toBe('true');
-    expect(onVibrationIntensityChange).toHaveBeenCalledWith('strong');
+    expect(onVisualEffectIntensityChange).toHaveBeenCalledWith('strong');
   });
 
   it('shows visual motion choices and starts a preview when selected', () => {
     const onMotionSensitivityChange = vi.fn();
-    settings.show({
-      initialHighContrast: false,
-      initialVibrationIntensity: 'medium',
+    settings.show(createOptions({
       initialMotionSensitivity: 'medium',
-      onToggle: vi.fn(),
-      onVibrationIntensityChange: vi.fn(),
       onMotionSensitivityChange,
-    });
+    }));
 
     const mediumButton = document.querySelector('[data-motion-sensitivity-button="medium"]') as HTMLButtonElement | null;
     const minimalButton = document.querySelector('[data-motion-sensitivity-button="minimal"]') as HTMLButtonElement | null;
@@ -89,20 +104,112 @@ describe('ColorAccessibilitySettings', () => {
     expect(onMotionSensitivityChange).toHaveBeenCalledWith('minimal');
   });
 
+  it('switches language and rerenders labels right away', () => {
+    const onLanguageChange = vi.fn();
+    settings.show(createOptions({
+      initialBGMVolume: 50,
+      onLanguageChange,
+    }));
+
+    const englishButton = document.querySelector('[data-language-button="en"]') as HTMLButtonElement | null;
+    const title = document.querySelector('[data-color-settings-title]');
+    const bgmLabel = document.querySelector('[data-bgm-volume-label]');
+    const closeButton = document.querySelector('[data-color-settings-close]') as HTMLButtonElement | null;
+
+    englishButton?.click();
+
+    expect(title?.textContent).toBe('Accessibility Settings');
+    expect(bgmLabel?.textContent).toContain('Normal');
+    expect(document.body.textContent).toContain('Language');
+    expect(closeButton?.textContent).toBe('Close');
+    expect(onLanguageChange).toHaveBeenCalledWith('en');
+  });
+
+  it('lets children switch between marks and color filters', () => {
+    const onColorVisionSupportModeChange = vi.fn();
+    settings.show(createOptions({
+      onColorVisionSupportModeChange,
+    }));
+
+    const colorOnlyButton = document.querySelector('[data-color-vision-mode-button="color-only"]') as HTMLButtonElement | null;
+    const colorAndMarksButton = document.querySelector('[data-color-vision-mode-button="color-and-marks"]') as HTMLButtonElement | null;
+    const protanopiaButton = document.querySelector('[data-color-vision-mode-button="protanopia-filter"]') as HTMLButtonElement | null;
+    const tritanopiaButton = document.querySelector('[data-color-vision-mode-button="tritanopia-filter"]') as HTMLButtonElement | null;
+    expect(colorOnlyButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(protanopiaButton?.textContent).toContain('🔴');
+    expect(tritanopiaButton?.textContent).toContain('🔵');
+
+    colorAndMarksButton?.click();
+    expect(document.body.textContent).toContain('にじりゅうせいは ★');
+
+    protanopiaButton?.click();
+
+    expect(protanopiaButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(document.body.textContent).toContain('あかと みどり');
+    expect(onColorVisionSupportModeChange).toHaveBeenLastCalledWith('protanopia-filter');
+  });
+
   it('hides the panel when requested', () => {
-    settings.show({
+    settings.show(createOptions({
       initialHighContrast: true,
-      initialVibrationIntensity: 'medium',
-      initialMotionSensitivity: 'strong',
-      onToggle: vi.fn(),
-      onVibrationIntensityChange: vi.fn(),
-      onMotionSensitivityChange: vi.fn(),
-    });
+    }));
     expect(settings.isVisible()).toBe(true);
 
     settings.hide();
 
     expect(settings.isVisible()).toBe(false);
     expect(document.querySelector('[data-color-accessibility-settings]')).toBeNull();
+  });
+
+  it('lets children turn rest reminders on and off', () => {
+    const onRestReminderToggle = vi.fn();
+    settings.show(createOptions({
+      initialRestReminderEnabled: false,
+      onRestReminderToggle,
+    }));
+
+    const toggle = document.querySelector('[data-rest-reminder-toggle]') as HTMLButtonElement | null;
+    expect(toggle?.textContent).toContain('OFF');
+
+    toggle?.click();
+
+    expect(toggle?.textContent).toContain('ON');
+    expect(document.body.textContent).toContain('15ぷんごと');
+    expect(onRestReminderToggle).toHaveBeenCalledWith(true);
+  });
+
+  it('lets children adjust bgm and sfx volumes with 5-step sliders', () => {
+    const onBGMVolumeChange = vi.fn();
+    const onSFXVolumeChange = vi.fn();
+    settings.show(createOptions({
+      initialBGMVolume: 50,
+      initialSFXVolume: 25,
+      onBGMVolumeChange,
+      onSFXVolumeChange,
+    }));
+
+    const bgmSlider = document.querySelector('[data-bgm-volume-slider]') as HTMLInputElement | null;
+    const sfxSlider = document.querySelector('[data-sfx-volume-slider]') as HTMLInputElement | null;
+    const bgmLabel = document.querySelector('[data-bgm-volume-label]') as HTMLParagraphElement | null;
+    const sfxLabel = document.querySelector('[data-sfx-volume-label]') as HTMLParagraphElement | null;
+
+    expect(bgmLabel?.textContent).toContain('ふつう');
+    expect(sfxLabel?.textContent).toContain('ちいさい');
+    expect(document.body.textContent).toContain('しずか');
+    expect(document.body.textContent).toContain('さいだい');
+
+    if (bgmSlider) {
+      bgmSlider.value = '75';
+      bgmSlider.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (sfxSlider) {
+      sfxSlider.value = '0';
+      sfxSlider.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    expect(bgmLabel?.textContent).toContain('おおきい');
+    expect(sfxLabel?.textContent).toContain('しずか');
+    expect(onBGMVolumeChange).toHaveBeenCalledWith(75);
+    expect(onSFXVolumeChange).toHaveBeenCalledWith(0);
   });
 });

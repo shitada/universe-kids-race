@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import {
+  type ConstellationDefinition,
+  type ConstellationPoint,
   DEFAULT_SPACESHIP_CUSTOMIZATION,
   type AssistDirection,
   type MotionSensitivity,
@@ -12,11 +14,14 @@ import type { InputSystem } from '../systems/InputSystem';
 import type { AudioManager } from '../audio/AudioManager';
 import type { SaveManager } from '../storage/SaveManager';
 import { Spaceship } from '../entities/Spaceship';
-import { Star, setStarHighContrastMode } from '../entities/Star';
+import { Star, setStarColorVisionSupportMode, setStarHighContrastMode } from '../entities/Star';
+import { setActiveColorVisionSupportMode } from '../effects/ColorVisionPostProcessor';
 import { Meteorite, setMeteoriteHighContrastMode } from '../entities/Meteorite';
 import { ShootingStar } from '../entities/ShootingStar';
 import { Comet } from '../entities/Comet';
 import { SpecialShootingStar } from '../entities/SpecialShootingStar';
+import { MonthlyEncounterEntity } from '../entities/MonthlyEncounterEntity';
+import { SpaceGem } from '../entities/SpaceGem';
 import { CollisionSystem } from '../systems/CollisionSystem';
 import { ScoreSystem } from '../systems/ScoreSystem';
 import { SpawnSystem } from '../systems/SpawnSystem';
@@ -28,11 +33,12 @@ import { SpaceWeatherEventSystem } from '../systems/SpaceWeatherEventSystem';
 import { StageSpecialEventSystem } from '../systems/StageSpecialEventSystem';
 import { SpecialStarSpawnSystem } from '../systems/SpecialStarSpawnSystem';
 import {
-  setSharedVibrationFallbackHandler,
-  setSharedVibrationIntensity,
-  triggerSharedVibration,
-  type VibrationEvent,
-} from '../systems/VibrationSystem';
+  type VisualFeedbackEffect,
+  setSharedVisualFeedbackHandler,
+  setSharedVisualFeedbackIntensity,
+  triggerSharedVisualFeedback,
+  type VisualFeedbackEvent,
+} from '../systems/VisualFeedbackSystem';
 import { HUD } from '../../ui/HUD';
 import { AdaptiveTutorialHint } from '../../ui/AdaptiveTutorialHint';
 import { CountdownOverlay } from '../../ui/CountdownOverlay';
@@ -44,26 +50,39 @@ import { AirShield } from '../effects/AirShield';
 import { BoostLinesEffect } from '../effects/BoostLinesEffect';
 import { BoostFlameEffect } from '../effects/BoostFlameEffect';
 import { ConstellationLineEffect } from '../effects/ConstellationLineEffect';
+import { ConstellationCelebrationEffect } from '../effects/ConstellationCelebrationEffect';
 import { MeteoShowerEffect } from '../effects/MeteoShowerEffect';
 import { PlanetRingEffect } from '../effects/PlanetRingEffect';
 import { RainbowTrailEffect } from '../effects/RainbowTrailEffect';
 import { SpaceWeatherEffect } from '../effects/SpaceWeatherEffect';
 import { StageAtmosphereEffect } from '../effects/StageAtmosphereEffect';
+import { WormholeTunnelEffect } from '../effects/WormholeTunnelEffect';
 import { SeasonalEventEffects } from '../effects/SeasonalEventEffects';
 import { StageSpecialEffects } from '../effects/StageSpecialEffects';
 import { ScorePopupEffect } from '../effects/ScorePopupEffect';
+import { MonthlyEncounterEffect } from '../effects/MonthlyEncounterEffect';
+import { LovelyStarBurstEffect } from '../effects/LovelyStarBurstEffect';
+import { StarBonusEffect } from '../effects/StarBonusEffect';
+import { SpaceGemCollectionEffect } from '../effects/SpaceGemCollectionEffect';
 import { CompanionManager } from '../entities/CompanionManager';
 import { getConstellationForStage } from '../config/ConstellationData';
 import { getStageSpecialEventConfig } from '../config/StageSpecialEvents';
 import { SeasonalEventSystem } from '../systems/SeasonalEventSystem';
+import { MonthlyEncounterSystem } from '../systems/MonthlyEncounterSystem';
 import { followCameraZ } from '../utils/followCameraZ';
 import { getViewportSize } from '../utils/getViewportSize';
+import { FrameRateMonitor } from '../utils/FrameRateMonitor';
+import { AutoPerformanceManager } from '../utils/AutoPerformanceManager';
 import { ScorePopupManager } from '../../ui/ScorePopupManager';
 import {
+  DEFAULT_COLOR_VISION_SUPPORT_MODE,
+  formatPlanetReadingLabel,
   getNextPlanetEncyclopediaEntry,
   getPlanetEncyclopediaEntry,
   getSpecialStarEncyclopediaEntry,
 } from '../config/PlanetEncyclopedia';
+import { getMonthlyEncounterEntry } from '../config/MonthlyEncounterConfig';
+import { SPACE_GEM_CONFIG, getSpaceGemEncyclopediaEntry } from '../config/SpaceGemConfig';
 import { TouchGuideOverlay, type TouchGuideMode } from '../../ui/TouchGuideOverlay';
 import { ConstellationHintOverlay } from '../../ui/ConstellationHintOverlay';
 import { attachReleaseConfirmButton } from '../../ui/attachReleaseConfirmButton';
@@ -71,6 +90,8 @@ import { PauseOverlay } from '../../ui/PauseOverlay';
 import { SeasonalEventNotice } from '../../ui/SeasonalEventNotice';
 import { StageClearOverlay } from '../../ui/StageClearOverlay';
 import { FrameRateHintOverlay } from '../../ui/FrameRateHintOverlay';
+import { BonusTimeOverlay } from '../../ui/BonusTimeOverlay';
+import { TouchFeedbackOverlay } from '../../ui/TouchFeedbackOverlay';
 import { ConstellationSystem } from '../systems/ConstellationSystem';
 import {
   __resetStageSceneSharedAssetCachesForTest,
@@ -81,9 +102,10 @@ import {
 } from './stageVisualAssets';
 import { SPECIAL_STAR_CONFIG } from '../config/SpecialStarConfig';
 import {
-  DEFAULT_MOTION_SENSITIVITY,
+  getDefaultMotionSensitivity,
   getMotionSensitivityProfile,
 } from '../accessibility/motionSensitivity';
+import { BonusCollectionSystem } from '../systems/BonusCollectionSystem';
 
 const BG_STAR_PARALLAX = 1.0;
 const BG_STAR_COUNT = 2000;
@@ -95,9 +117,18 @@ interface CameraShakeProfile {
   frequency: number;
 }
 
-const CAMERA_SHAKE_PROFILES: Record<VibrationEvent, CameraShakeProfile> = {
+interface ActiveVisualFeedbackState {
+  background: string;
+  duration: number;
+  elapsed: number;
+  overlayOpacity: number;
+  spaceshipScale: number;
+}
+
+const CAMERA_SHAKE_PROFILES: Record<VisualFeedbackEvent, CameraShakeProfile> = {
   starCollect: { duration: 0.09, amplitudeX: 0.04, amplitudeY: 0.025, frequency: 34 },
   rainbowCollect: { duration: 0.12, amplitudeX: 0.07, amplitudeY: 0.04, frequency: 32 },
+  constellationCelebrate: { duration: 0.2, amplitudeX: 0.09, amplitudeY: 0.05, frequency: 24 },
   meteoriteHit: { duration: 0.28, amplitudeX: 0.18, amplitudeY: 0.12, frequency: 42 },
   boost: { duration: 0.14, amplitudeX: 0.08, amplitudeY: 0.045, frequency: 28 },
   stageClear: { duration: 0.3, amplitudeX: 0.1, amplitudeY: 0.06, frequency: 22 },
@@ -151,6 +182,7 @@ export class StageScene implements Scene {
   private static readonly ASSIST_DIRECTION_SIDE_RANGE = 7.5;
   private static readonly ASSIST_DIRECTION_DIFF_THRESHOLD = 1.1;
   private static readonly ASSIST_DIRECTION_DIFF_RATIO = 0.28;
+  private static readonly AUTO_PERFORMANCE_LEVEL_MAX = StageScene.VISUAL_QUALITY_SCALE_BY_TIER.length - 1;
 
   private threeScene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
@@ -169,6 +201,8 @@ export class StageScene implements Scene {
   private shootingStars: ShootingStar[] = [];
   private comets: Comet[] = [];
   private specialShootingStars: SpecialShootingStar[] = [];
+  private monthlyEncounters: MonthlyEncounterEntity[] = [];
+  private spaceGems: SpaceGem[] = [];
 
   private collisionSystem = new CollisionSystem();
   private scoreSystem = new ScoreSystem();
@@ -180,12 +214,14 @@ export class StageScene implements Scene {
   private spaceWeatherEventSystem = new SpaceWeatherEventSystem();
   private specialStarSpawnSystem = new SpecialStarSpawnSystem();
   private readonly seasonalEventSystem: SeasonalEventSystem;
+  private monthlyEncounterSystem = new MonthlyEncounterSystem();
   private hud!: HUD;
   private scorePopupManager = new ScorePopupManager();
   private scorePopupEffect = new ScorePopupEffect();
   private particleBurstManager = new ParticleBurstManager();
   private planetRingEffect = new PlanetRingEffect();
   private constellationLineEffect = new ConstellationLineEffect();
+  private constellationCelebrationEffect = new ConstellationCelebrationEffect();
   private constellationSystem = new ConstellationSystem();
   private constellationHintOverlay = new ConstellationHintOverlay();
   private airShield!: AirShield;
@@ -193,9 +229,16 @@ export class StageScene implements Scene {
   private spaceWeatherEffect!: SpaceWeatherEffect;
   private stageSpecialEffects!: StageSpecialEffects;
   private seasonalEventEffects = new SeasonalEventEffects();
+  private monthlyEncounterEffect = new MonthlyEncounterEffect();
+  private spaceGemCollectionEffect = new SpaceGemCollectionEffect();
+  private lovelyStarBurstEffect = new LovelyStarBurstEffect();
+  private starBonusEffect = new StarBonusEffect();
   private rainbowTrailEffect!: RainbowTrailEffect;
   private stageAtmosphereEffect = new StageAtmosphereEffect();
+  private wormholeTunnelEffect = new WormholeTunnelEffect();
   private seasonalEventNotice = new SeasonalEventNotice();
+  private bonusTimeOverlay = new BonusTimeOverlay();
+  private bonusCollectionSystem = new BonusCollectionSystem();
 
   private stageConfig!: StageConfig;
   private stageNumber = 1;
@@ -208,8 +251,15 @@ export class StageScene implements Scene {
   private clearRewardOverlay: EncyclopediaOverlayInstance | null = null;
   private clearRewardOverlayPromise: Promise<EncyclopediaOverlayInstance> | null = null;
   private static readonly CLEAR_CONTINUE_DELAY = 0.6;
+  private static readonly BONUS_TIME_DURATION = 10;
+  private static readonly BONUS_RESULT_DURATION = 2.2;
   private stageEntryTotalScore = 0;
   private stageEntryTotalStarCount = 0;
+  private isBonusTime = false;
+  private isBonusResultVisible = false;
+  private bonusTimeRemaining = 0;
+  private bonusCollectedStars = 0;
+  private bonusResultTimer = 0;
   private playTime = 0;
   private meteoriteHitTimes: number[] = [];
   private assistTimer = 0;
@@ -224,7 +274,9 @@ export class StageScene implements Scene {
   private cameraShakeElapsed = 0;
   private readonly cameraShakeOffset = new THREE.Vector3();
   private cameraShakeProfile: CameraShakeProfile = CAMERA_SHAKE_PROFILES.meteoriteHit;
-  private motionSensitivity: MotionSensitivity = DEFAULT_MOTION_SENSITIVITY;
+  private visualFeedbackOverlay: HTMLDivElement | null = null;
+  private activeVisualFeedback: ActiveVisualFeedbackState | null = null;
+  private motionSensitivity: MotionSensitivity = getDefaultMotionSensitivity();
   private readonly cameraPositionTarget = new THREE.Vector3(0, 5, 10);
   private readonly cameraLookAtTarget = new THREE.Vector3(0, 0, -10);
 
@@ -239,9 +291,12 @@ export class StageScene implements Scene {
   private static readonly BOOST_HINT_DURATION = 2.4;
   private static readonly ADAPTIVE_HINT_DURATION = 3;
   private static readonly SHOOTING_STAR_SCORE_BONUS_DURATION = 6;
+  private static readonly LOVELY_STAR_SCORE_BONUS_DURATION = 3;
+  private static readonly LOVELY_STAR_BONUS_SCORE = 200;
   private static readonly METEO_SHOWER_MESSAGE = 'りゅうせいぐんだ！ ✨';
   private static readonly METEO_SHOWER_MESSAGE_DURATION = 2.4;
   private static readonly STAGE_SPECIAL_MESSAGE_DURATION = 2.8;
+  private static readonly WORMHOLE_TRANSITION_DURATION = 2.2;
 
   // Background stars
   private bgStars: THREE.Points | null = null;
@@ -279,6 +334,7 @@ export class StageScene implements Scene {
   private isPauseOpen = false;
   private shouldResumeAfterPause = false;
   private touchGuide = new TouchGuideOverlay();
+  private readonly touchFeedbackOverlay = new TouchFeedbackOverlay();
   private touchGuideMode: TouchGuideMode = 'intro';
   private touchGuideIdleTimer = 0;
   private hasSeenMoveInput = false;
@@ -296,10 +352,15 @@ export class StageScene implements Scene {
   private static readonly TOUCH_GUIDE_IDLE_DELAY = 3;
   private visualQualityTier = StageScene.VISUAL_QUALITY_SCALE_BY_TIER.length - 1;
   private performanceAdaptationLevel = 0;
+  private autoPerformanceAdaptationLevel = 0;
   private frameRateHintOverlay = new FrameRateHintOverlay();
+  private readonly frameRateMonitor = new FrameRateMonitor(60);
+  private readonly autoPerformanceManager: AutoPerformanceManager;
   private readonly scheduleIdleTask: (callback: () => void) => void;
   private readonly loadEncyclopediaOverlay: () => Promise<{ EncyclopediaOverlay: EncyclopediaOverlayCtor }>;
   private clearRewardRequestToken = 0;
+  private wormholeTransitionTimer = 0;
+  private pendingWormholeTransition: SceneContext | null = null;
   private onPauseRequested: (() => void) | null = null;
   private onResumeRequested: (() => void) | null = null;
   private onExitHomeRequested: (() => void) | null = null;
@@ -317,13 +378,29 @@ export class StageScene implements Scene {
     this.audioManager = audioManager;
     this.saveManager = saveManager;
     this.scoreSystem.setScoreGainListener((event) => {
-      if (!event.worldPosition) {
-        return;
+      if (this.initialized) {
+        this.hud.animateScoreGain(event.amount, event.stageScore);
       }
+
+      if (!event.worldPosition) return;
+
       this.scorePopupEffect.emit(event.worldPosition, event.amount);
+      if (event.kind === 'bonus') {
+        this.scorePopupManager.show(event.amount, event.worldPosition, this.camera);
+      }
     });
     this.scheduleIdleTask = options.scheduleIdleTask ?? scheduleIdleTask;
     this.seasonalEventSystem = new SeasonalEventSystem(options.seasonalEventDateProvider);
+    this.autoPerformanceManager = new AutoPerformanceManager(
+      StageScene.AUTO_PERFORMANCE_LEVEL_MAX,
+      ({ level, direction }) => {
+        this.autoPerformanceAdaptationLevel = level;
+        this.applyVisualQualityTier();
+        if (direction === 'degraded') {
+          this.showFrameRateHint(this.getCombinedPerformanceAdaptationLevel());
+        }
+      },
+    );
     this.loadEncyclopediaOverlay =
       options.loadEncyclopediaOverlay ??
       (() => import('../../ui/EncyclopediaOverlay'));
@@ -368,6 +445,7 @@ export class StageScene implements Scene {
     this.threeScene.add(this.rainbowTrailEffect.group);
 
     this.constellationLineEffect.init(this.threeScene);
+    this.constellationCelebrationEffect.init(this.threeScene);
 
     this.meteoShowerEffect = new MeteoShowerEffect();
     this.meteoShowerEffect.init(this.threeScene);
@@ -381,7 +459,12 @@ export class StageScene implements Scene {
     this.seasonalEventEffects.init(this.threeScene);
 
     this.stageAtmosphereEffect.init(this.threeScene);
+    this.wormholeTunnelEffect.init(this.threeScene);
     this.scorePopupEffect.init(this.threeScene);
+    this.monthlyEncounterEffect.init(this.threeScene);
+    this.spaceGemCollectionEffect.init(this.threeScene);
+    this.lovelyStarBurstEffect.init(this.threeScene);
+    this.starBonusEffect.init(this.threeScene);
 
     this.hud = new HUD();
     this.initialized = true;
@@ -417,10 +500,24 @@ export class StageScene implements Scene {
     this.prefetchEndingSceneModuleIfNeeded();
     this.isCleared = false;
     this.clearTimer = 0;
+    this.isBonusTime = false;
+    this.isBonusResultVisible = false;
+    this.bonusTimeRemaining = 0;
+    this.bonusCollectedStars = 0;
+    this.bonusResultTimer = 0;
+    this.bonusCollectionSystem.reset();
+    this.bonusTimeOverlay.hide();
+    this.starBonusEffect.clear();
     this.stageClearOverlay.hide();
     this.isClearRewardOpen = false;
     this.isOpeningClearReward = false;
+    this.wormholeTransitionTimer = 0;
+    this.pendingWormholeTransition = null;
+    this.wormholeTunnelEffect.clear();
     this.damageTimer = 0;
+    this.activeVisualFeedback = null;
+    this.ensureVisualFeedbackOverlay();
+    this.updateVisualFeedbackOverlay(0, 'transparent');
     this.elapsedTime = 0;
     this.destinationPlanetSpinTarget = null;
     this.planetRingEffect.clear();
@@ -434,6 +531,8 @@ export class StageScene implements Scene {
     this.touchGuideMode = 'intro';
     this.playTime = 0;
     this.attemptStatsRecorded = false;
+    this.frameRateMonitor.reset();
+    this.autoPerformanceManager.reset(true);
     this.meteoriteHitTimes.length = 0;
     this.meteoShowerAnnouncementTimer = 0;
     this.spaceWeatherAnnouncementTimer = 0;
@@ -460,15 +559,20 @@ export class StageScene implements Scene {
     const saveData = this.saveManager.load();
     this.spaceship.applyCustomization(saveData.spaceshipCustomization ?? DEFAULT_SPACESHIP_CUSTOMIZATION);
     const highContrastEnabled = saveData.colorAccessibility?.highContrast === true;
-    this.motionSensitivity = saveData.colorAccessibility?.motionSensitivity ?? DEFAULT_MOTION_SENSITIVITY;
-    setSharedVibrationIntensity(saveData.vibrationSettings?.intensity ?? 'medium');
-    setSharedVibrationFallbackHandler((event) => this.handleVibrationFallback(event));
+    this.motionSensitivity = saveData.colorAccessibility?.motionSensitivity ?? getDefaultMotionSensitivity();
+    const colorVisionSupportMode =
+      saveData.colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE;
+    setSharedVisualFeedbackIntensity(saveData.visualFeedbackSettings?.intensity ?? 'medium');
+    setSharedVisualFeedbackHandler((effect) => this.handleVisualFeedback(effect));
     setStarHighContrastMode(highContrastEnabled);
+    setStarColorVisionSupportMode(colorVisionSupportMode);
+    setActiveColorVisionSupportMode(colorVisionSupportMode);
     setMeteoriteHighContrastMode(highContrastEnabled);
     this.hud.setHighContrastMode(highContrastEnabled);
     this.scorePopupManager.setHighContrastMode(highContrastEnabled);
     this.adaptiveTutorialHint.setHighContrastMode(highContrastEnabled);
     this.constellationHintOverlay.setHighContrastMode(highContrastEnabled);
+    this.constellationHintOverlay.setMotionSensitivity(this.motionSensitivity);
     this.seasonalEventNotice.setHighContrastMode(highContrastEnabled);
     this.stageEntryTotalScore = totalScore;
     this.stageEntryTotalStarCount = totalStarCount;
@@ -512,24 +616,40 @@ export class StageScene implements Scene {
     this.shootingStars.length = 0;
     this.comets.length = 0;
     this.specialShootingStars.length = 0;
+    this.monthlyEncounters.length = 0;
     this.spawnSystem.reset();
     this.spawnSystem.setMeteoriteIntervalMultiplier(1);
     this.specialStarSpawnSystem.reset();
+    this.monthlyEncounterSystem.reset();
     this.boostSystem.reset();
     this.scoreSystem.resetStage();
     this.constellationSystem.reset(getConstellationForStage(this.stageNumber));
     this.constellationLineEffect.clear();
+    this.constellationCelebrationEffect.clear();
     this.spawnConstellationStars();
     const constellation = this.constellationSystem.getDefinition();
     if (constellation) {
-      this.constellationHintOverlay.showHint(constellation.hintMessage);
+      this.constellationHintOverlay.showGuide(constellation, this.constellationSystem.getCollectedCount());
     } else {
       this.constellationHintOverlay.hide();
     }
 
     // HUD
-    const stageName = `ステージ${this.stageConfig.stageNumber}: ${this.stageConfig.emoji} ${this.stageConfig.displayName}`;
+    const destinationLabel = formatPlanetReadingLabel(
+      this.stageNumber,
+      this.stageConfig.destinationReading,
+      colorVisionSupportMode,
+    );
+    const stageName = `ステージ${this.stageConfig.stageNumber}: ${this.stageConfig.emoji} ${destinationLabel}を めざせ！`;
     this.hud.show(stageName, this.stageConfig.planetColor);
+    this.ensureVisualFeedbackOverlay();
+    this.touchFeedbackOverlay.setMotionSensitivity(this.motionSensitivity);
+    this.touchFeedbackOverlay.attach();
+    this.touchFeedbackOverlay.bindUiRoots([
+      document.getElementById('hud'),
+      document.getElementById('ui-overlay'),
+    ]);
+    this.inputSystem.setTouchFeedbackOverlay?.(null);
     this.hud.setBoostCallback(() => {
       this.inputSystem.setBoostPressed(true);
     });
@@ -676,7 +796,13 @@ export class StageScene implements Scene {
   }
 
   private syncBoostInputLock(): void {
-    const locked = this.isStarting || this.awaitingResume || this.isHomeConfirmOpen || this.isPauseOpen;
+    const locked =
+      this.isStarting
+      || this.awaitingResume
+      || this.isHomeConfirmOpen
+      || this.isPauseOpen
+      || this.isBonusTime
+      || this.isBonusResultVisible;
     this.hud.setBoostLocked(locked);
     if (locked) {
       this.resetBoostHintState();
@@ -717,6 +843,7 @@ export class StageScene implements Scene {
     if (!this.stageConfig) return false;
     if (this.isCleared) return false;
     if (this.isClearRewardOpen || this.isOpeningClearReward) return false;
+    if (this.isBonusTime || this.isBonusResultVisible) return false;
     if (this.isStarting) return false;
     if (this.awaitingResume) return false;
     if (this.isHomeConfirmOpen) return false;
@@ -799,6 +926,7 @@ export class StageScene implements Scene {
     if (!this.stageConfig) return false;
     if (this.isCleared) return false;
     if (this.isClearRewardOpen || this.isOpeningClearReward) return false;
+    if (this.isBonusTime || this.isBonusResultVisible) return false;
     if (this.isStarting) return false;
     if (this.awaitingResume) return false;
     if (this.isHomeConfirmOpen) return false;
@@ -849,6 +977,14 @@ export class StageScene implements Scene {
   private resetStageObjects(): void {
     this.clearRewardOverlay?.hide();
     this.stageClearOverlay.hide();
+    this.bonusTimeOverlay.hide();
+    this.starBonusEffect.clear();
+    this.bonusCollectionSystem.reset();
+    this.isBonusTime = false;
+    this.isBonusResultVisible = false;
+    this.bonusTimeRemaining = 0;
+    this.bonusCollectedStars = 0;
+    this.bonusResultTimer = 0;
     this.isClearRewardOpen = false;
     this.isOpeningClearReward = false;
     this.removeDestinationPlanet();
@@ -856,6 +992,7 @@ export class StageScene implements Scene {
     this.planetRingEffect.clear();
     this.scorePopupEffect.clear();
     this.particleBurstManager.clear(this.threeScene);
+    this.lovelyStarBurstEffect.clear();
     this.spawnSystem.recycleAll();
     this.spawnSystem.setMeteoriteIntervalMultiplier(1);
     this.meteoShowerEventSystem.reset();
@@ -869,7 +1006,12 @@ export class StageScene implements Scene {
     this.stageSpecialEffects.clear();
     this.seasonalEventSystem.clear();
     this.seasonalEventEffects.clear();
+    this.monthlyEncounterEffect.clear();
+    this.spaceGemCollectionEffect.clear();
     this.stageAtmosphereEffect.clear();
+    this.wormholeTunnelEffect.clear();
+    this.wormholeTransitionTimer = 0;
+    this.pendingWormholeTransition = null;
     this.rainbowTrailEffect.clear();
     this.stageSpecialAnnouncementTimer = 0;
     this.stageSpecialAnnouncementMessage = '';
@@ -879,11 +1021,16 @@ export class StageScene implements Scene {
     this.shootingStars.length = 0;
     this.comets.length = 0;
     this.specialShootingStars.length = 0;
+    this.monthlyEncounters.length = 0;
+    this.spaceGems.length = 0;
     this.specialStarSpawnSystem.recycleAll();
     this.specialStarSpawnSystem.reset();
+    this.monthlyEncounterSystem.recycleAll();
+    this.monthlyEncounterSystem.reset();
     this.hud?.hideAssistMessage();
     this.constellationHintOverlay.hide();
     this.constellationLineEffect.clear();
+    this.constellationCelebrationEffect.clear();
     this.constellationSystem.reset();
     this.resetBoostHintState();
   }
@@ -893,13 +1040,20 @@ export class StageScene implements Scene {
     if (!this.initialized) {
       return;
     }
+    this.updateAutoPerformanceMonitoring(deltaTime);
     if (this.isCleared) {
       this.resetBoostHintState();
       this.clearTimer += deltaTime;
+      this.updateBonusTime(deltaTime);
       this.seasonalEventNotice.tick(deltaTime);
       this.constellationHintOverlay.tick(deltaTime);
+      this.updateConstellationHintOverlay();
       this.constellationLineEffect.update(deltaTime);
+      this.constellationCelebrationEffect.update(deltaTime);
       this.planetRingEffect.update(deltaTime);
+      this.monthlyEncounterEffect.update(deltaTime);
+      this.spaceGemCollectionEffect.update(deltaTime);
+      this.lovelyStarBurstEffect.update(deltaTime);
       this.scorePopupEffect.update(deltaTime);
       this.particleBurstManager.update(this.threeScene, deltaTime);
       // Keep companion entrance animation progressing during clear screen
@@ -914,8 +1068,13 @@ export class StageScene implements Scene {
           deltaTime * StageScene.DESTINATION_PLANET_SPIN_SPEED;
       }
       this.seasonalEventEffects.update(deltaTime, this.spaceship.position.x, this.spaceship.position.z);
-      this.revealClearActionButtonsIfReady();
+      if (!this.pendingWormholeTransition) {
+        this.revealClearActionButtonsIfReady();
+      }
       this.stageAtmosphereEffect.update(deltaTime, this.camera, this.spaceship.position.x, this.spaceship.position.z);
+      if (this.updateWormholeTransition(deltaTime)) {
+        return;
+      }
       return;
     }
 
@@ -951,8 +1110,12 @@ export class StageScene implements Scene {
       this.airShield.update(deltaTime);
       this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
       this.constellationHintOverlay.tick(deltaTime);
+      this.updateConstellationHintOverlay();
       this.constellationLineEffect.update(deltaTime);
+      this.constellationCelebrationEffect.update(deltaTime);
       this.seasonalEventEffects.update(deltaTime, this.spaceship.position.x, this.spaceship.position.z);
+      this.monthlyEncounterEffect.update(deltaTime);
+      this.lovelyStarBurstEffect.update(deltaTime);
       this.stageAtmosphereEffect.update(deltaTime, this.camera, this.spaceship.position.x, this.spaceship.position.z);
       return;
     }
@@ -977,7 +1140,7 @@ export class StageScene implements Scene {
       if (this.boostSystem.activate()) {
         this.adaptiveTutorialSystem.recordBoostUsed();
         this.audioManager.playSFX('boost');
-        triggerSharedVibration('boost');
+        triggerSharedVisualFeedback('boost');
         this.audioManager.startBoostSFX();
         this.boostFlameEffect.start();
       } else {
@@ -1051,6 +1214,7 @@ export class StageScene implements Scene {
       this.shootingStars,
       this.comets,
       { meteoShowerActive: meteoShowerState.active },
+      this.spaceGems,
     );
     for (const star of spawnResult.newStars) {
       this.stars.push(star);
@@ -1068,6 +1232,10 @@ export class StageScene implements Scene {
       this.comets.push(comet);
       this.threeScene.add(comet.mesh);
     }
+    for (const spaceGem of spawnResult.newSpaceGems) {
+      this.spaceGems.push(spaceGem);
+      this.threeScene.add(spaceGem.mesh);
+    }
     const specialStarSpawnResult = this.specialStarSpawnSystem.update(
       deltaTime,
       this.spaceship.position.z,
@@ -1078,6 +1246,18 @@ export class StageScene implements Scene {
     for (const specialStar of specialStarSpawnResult.newSpecialStars) {
       this.specialShootingStars.push(specialStar);
       this.threeScene.add(specialStar.mesh);
+    }
+    const monthlyEncounterSpawnResult = this.monthlyEncounterSystem.update(
+      deltaTime,
+      this.spaceship.position.z,
+      this.monthlyEncounters,
+      this.specialShootingStars,
+      this.shootingStars,
+      this.comets,
+    );
+    for (const monthlyEncounter of monthlyEncounterSpawnResult.newMonthlyEncounters) {
+      this.monthlyEncounters.push(monthlyEncounter);
+      this.threeScene.add(monthlyEncounter.mesh);
     }
 
     this.lodSystem.update(this.spaceship.position, this.stars);
@@ -1108,6 +1288,8 @@ export class StageScene implements Scene {
       this.shootingStars,
       this.comets,
       this.specialShootingStars,
+      this.monthlyEncounters,
+      this.spaceGems,
     );
 
     if (collisionResult.shootingStarHit) {
@@ -1157,7 +1339,7 @@ export class StageScene implements Scene {
       const isNewDiscovery = this.saveManager.markSpecialStarDiscovered?.(specialStar.specialType) ?? false;
       this.scoreSystem.addBonusScore(specialStar.scoreBonus, specialStar.position);
       this.audioManager.playSFX('shootingStarCollect');
-      triggerSharedVibration('rainbowCollect');
+      triggerSharedVisualFeedback('rainbowCollect');
       this.particleBurstManager.emitShootingStar(
         this.threeScene,
         specialStar.position.x,
@@ -1192,10 +1374,80 @@ export class StageScene implements Scene {
       );
     }
 
+    if (collisionResult.monthlyEncounterHit) {
+      const monthlyEncounter = collisionResult.monthlyEncounterHit;
+      const encyclopediaEntry = getMonthlyEncounterEntry(monthlyEncounter.encounterId);
+      const isNewDiscovery = this.saveManager.markMonthlyEncounterDiscovered?.(monthlyEncounter.encounterId) ?? false;
+      this.scoreSystem.addBonusScore(monthlyEncounter.scoreBonus, monthlyEncounter.position);
+      this.audioManager.playSFX('shootingStarCollect');
+      triggerSharedVisualFeedback('rainbowCollect');
+      this.monthlyEncounterEffect.emit(
+        monthlyEncounter.position,
+        encyclopediaEntry?.accentColor ?? 0xffffff,
+      );
+      this.particleBurstManager.emitShootingStar(
+        this.threeScene,
+        monthlyEncounter.position.x,
+        monthlyEncounter.position.y,
+        monthlyEncounter.position.z,
+      );
+      this.scorePopupManager.showLabel(
+        isNewDiscovery
+          ? '✨ あたらしい てんたい はっけん！'
+          : `${encyclopediaEntry?.emoji ?? '✨'} ${encyclopediaEntry?.reading ?? 'てんたい'}`,
+        monthlyEncounter.position,
+        this.camera,
+        'monthly-encounter',
+      );
+    }
+
+    if (collisionResult.spaceGemHit) {
+      const spaceGem = collisionResult.spaceGemHit;
+      const encyclopediaEntry = getSpaceGemEncyclopediaEntry(spaceGem.gemType);
+      const gemConfig = SPACE_GEM_CONFIG[spaceGem.gemType];
+      const isNewDiscovery = this.saveManager.markSpaceGemDiscovered?.(spaceGem.gemType) ?? false;
+      this.scoreSystem.addBonusScore(spaceGem.scoreBonus, spaceGem.position);
+      this.audioManager.playSFX('spaceGemCollect');
+      triggerSharedVisualFeedback('rainbowCollect');
+      this.spaceGemCollectionEffect.emit(spaceGem.position, gemConfig.visual.glowColor);
+      this.particleBurstManager.emit(
+        this.threeScene,
+        spaceGem.position.x,
+        spaceGem.position.y,
+        spaceGem.position.z,
+        gemConfig.visual.particleColor,
+        50,
+        true,
+      );
+      this.particleBurstManager.emit(
+        this.threeScene,
+        spaceGem.position.x,
+        spaceGem.position.y,
+        spaceGem.position.z,
+        gemConfig.visual.ringColor,
+        40,
+        true,
+      );
+      this.scorePopupManager.showLabel(
+        isNewDiscovery && encyclopediaEntry
+          ? `${encyclopediaEntry.emoji} ${encyclopediaEntry.reading}`
+          : gemConfig.pickupLabel,
+        spaceGem.position,
+        this.camera,
+        'space-gem',
+      );
+    }
+
     // Star collection
     for (const star of collisionResult.starCollisions) {
       this.scoreSystem.addStarScore(star.starType, star.position);
-      if (star.starType === 'RAINBOW') {
+      if (star.starType === 'LOVELY') {
+        this.scoreSystem.addBonusScore(StageScene.LOVELY_STAR_BONUS_SCORE, star.position);
+        this.scoreSystem.activateShootingStarBonus(StageScene.LOVELY_STAR_SCORE_BONUS_DURATION);
+        this.audioManager.playSFX('lovelyCollect');
+        this.lovelyStarBurstEffect.emit(star.position);
+        this.scorePopupManager.showLabel('💖 ラブリースター！', star.position, this.camera, 'lovely-star');
+      } else if (star.starType === 'RAINBOW') {
         this.audioManager.playSFX('rainbowCollect');
         this.rainbowTrailEffect.start(this.spaceship.position);
         this.particleBurstManager.emit(
@@ -1248,7 +1500,7 @@ export class StageScene implements Scene {
           // pickup" feedback for UX consistency. Visibility is restored by
           // Meteorite.reset()/recycle() before the mesh re-enters the pool.
           hit.mesh.visible = false;
-          triggerSharedVibration('meteoriteHit');
+          triggerSharedVisualFeedback('meteoriteHit');
         }
         // Subtle orange particle burst at the hit position to signal impact
         // without distracting from gameplay; uses the non-rainbow burst
@@ -1276,6 +1528,7 @@ export class StageScene implements Scene {
 
     // Damage animation (overrides bank rotation while active)
     this.updateDamageEffect(deltaTime);
+    this.updateVisualFeedback(deltaTime);
 
     // Deactivate passed objects
     this.cleanupPassedObjects(deltaTime);
@@ -1284,10 +1537,12 @@ export class StageScene implements Scene {
     // Camera follow
     this.updateCameraFollow(deltaTime);
     this.stageAtmosphereEffect.update(deltaTime, this.camera, this.spaceship.position.x, this.spaceship.position.z);
+    this.monthlyEncounterEffect.update(deltaTime);
+    this.spaceGemCollectionEffect.update(deltaTime);
     this.rainbowTrailEffect.update(deltaTime, this.spaceship.position);
 
     for (const star of collisionResult.starCollisions) {
-      this.scorePopupManager.show(star.scoreValue, star.position, this.camera);
+      this.scorePopupManager.show(star.scoreValue, star.position, this.camera, star.starType);
     }
 
     // Sun pulse animation
@@ -1364,10 +1619,13 @@ export class StageScene implements Scene {
 
     // Particle effects
     this.scorePopupEffect.update(deltaTime);
+    this.lovelyStarBurstEffect.update(deltaTime);
     this.particleBurstManager.update(this.threeScene, deltaTime);
     this.scoreSystem.update(deltaTime);
     this.constellationLineEffect.update(deltaTime);
+    this.constellationCelebrationEffect.update(deltaTime);
     this.constellationHintOverlay.tick(deltaTime);
+    this.updateConstellationHintOverlay();
 
     // HUD update
     this.hud.update(this.scoreSystem.getStageScore(), this.scoreSystem.getStarCount());
@@ -1684,17 +1942,83 @@ export class StageScene implements Scene {
     this.cameraShakeOffset.set(0, 0, 0);
   }
 
-  private startCameraShake(event: VibrationEvent = 'meteoriteHit'): void {
+  private startCameraShake(event: VisualFeedbackEvent = 'meteoriteHit'): void {
     this.cameraShakeProfile = CAMERA_SHAKE_PROFILES[event];
     this.cameraShakeTimer = this.cameraShakeProfile.duration;
     this.cameraShakeElapsed = 0;
   }
 
-  private handleVibrationFallback(event: VibrationEvent): void {
-    if (event === 'meteoriteHit') {
+  private ensureVisualFeedbackOverlay(): void {
+    if (this.visualFeedbackOverlay) {
       return;
     }
-    this.startCameraShake(event);
+
+    const host = document.getElementById('ui-overlay');
+    if (!host) {
+      return;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.setAttribute('data-stage-visual-feedback', '');
+    overlay.style.cssText = `
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0;
+      z-index: 8;
+      transition: opacity 0.05s linear;
+      will-change: opacity, background;
+    `;
+    host.prepend(overlay);
+    this.visualFeedbackOverlay = overlay;
+  }
+
+  private updateVisualFeedbackOverlay(opacity: number, background: string): void {
+    this.visualFeedbackOverlay?.style.setProperty('opacity', String(opacity));
+    this.visualFeedbackOverlay?.style.setProperty('background', background);
+  }
+
+  private handleVisualFeedback(effect: VisualFeedbackEffect): void {
+    this.activeVisualFeedback = {
+      background: effect.overlayBackground,
+      duration: effect.durationMs / 1000,
+      elapsed: 0,
+      overlayOpacity: effect.overlayOpacity,
+      spaceshipScale: effect.spaceshipScale,
+    };
+
+    if (effect.event === 'meteoriteHit') {
+      return;
+    }
+
+    if (effect.event !== 'starCollect' && effect.event !== 'boost') {
+      this.startCameraShake(effect.event);
+    }
+
+    this.updateVisualFeedbackOverlay(effect.overlayOpacity, effect.overlayBackground);
+  }
+
+  private updateVisualFeedback(deltaTime: number): void {
+    const active = this.activeVisualFeedback;
+    if (!active) {
+      this.spaceship.mesh.scale.setScalar(1);
+      this.updateVisualFeedbackOverlay(0, 'transparent');
+      return;
+    }
+
+    active.elapsed = Math.min(active.duration, active.elapsed + deltaTime);
+    const progress = active.duration > 0 ? active.elapsed / active.duration : 1;
+    const fade = 1 - progress;
+    const scalePulse = Math.sin(progress * Math.PI);
+
+    this.spaceship.mesh.scale.setScalar(1 + ((active.spaceshipScale - 1) * scalePulse));
+    this.updateVisualFeedbackOverlay(active.overlayOpacity * fade, active.background);
+
+    if (progress >= 1) {
+      this.activeVisualFeedback = null;
+      this.spaceship.mesh.scale.setScalar(1);
+      this.updateVisualFeedbackOverlay(0, 'transparent');
+    }
   }
 
   private updateCameraShake(deltaTime: number): void {
@@ -1839,6 +2163,34 @@ export class StageScene implements Scene {
       }
     }
     specialShootingStars.length = specialWrite;
+
+    const monthlyEncounters = this.monthlyEncounters;
+    let monthlyWrite = 0;
+    for (let read = 0; read < monthlyEncounters.length; read++) {
+      const monthlyEncounter = monthlyEncounters[read];
+      if (monthlyEncounter.isCollected || monthlyEncounter.position.z > behindThreshold) {
+        this.monthlyEncounterSystem.releaseMonthlyEncounter(monthlyEncounter);
+      } else {
+        monthlyEncounter.update(deltaTime, shipZ);
+        if (monthlyWrite !== read) monthlyEncounters[monthlyWrite] = monthlyEncounter;
+        monthlyWrite++;
+      }
+    }
+    monthlyEncounters.length = monthlyWrite;
+
+    const spaceGems = this.spaceGems;
+    let spaceGemWrite = 0;
+    for (let read = 0; read < spaceGems.length; read++) {
+      const spaceGem = spaceGems[read];
+      if (spaceGem.isCollected || spaceGem.position.z > behindThreshold) {
+        this.spawnSystem.releaseSpaceGem(spaceGem);
+      } else {
+        spaceGem.update(deltaTime, shipZ);
+        if (spaceGemWrite !== read) spaceGems[spaceGemWrite] = spaceGem;
+        spaceGemWrite++;
+      }
+    }
+    spaceGems.length = spaceGemWrite;
   }
 
   private spawnConstellationStars(): void {
@@ -1862,6 +2214,11 @@ export class StageScene implements Scene {
       return;
     }
 
+    const constellation = this.constellationSystem.getDefinition();
+    if (constellation) {
+      this.constellationHintOverlay.showGuide(constellation, this.constellationSystem.getCollectedCount());
+    }
+
     if (result.lineSegment) {
       this.constellationLineEffect.addSegment(result.lineSegment.from, result.lineSegment.to);
     }
@@ -1870,14 +2227,16 @@ export class StageScene implements Scene {
       return;
     }
 
-    const constellation = this.constellationSystem.getDefinition();
     if (!constellation) {
       return;
     }
 
     this.saveManager.markConstellationDiscovered?.(this.stageNumber);
     this.constellationHintOverlay.showCelebration(constellation.celebrationMessage);
-    this.audioManager.playSFX('rainbowCollect');
+    const celebrationPosition = this.getConstellationCelebrationPosition(constellation);
+    this.constellationCelebrationEffect.play(celebrationPosition, this.stageConfig.planetColor);
+    this.audioManager.playSFX('constellationCelebrate');
+    triggerSharedVisualFeedback('constellationCelebrate');
     this.particleBurstManager.emit(
       this.threeScene,
       star.position.x,
@@ -1887,6 +2246,36 @@ export class StageScene implements Scene {
       42,
       true,
     );
+    this.particleBurstManager.emit(
+      this.threeScene,
+      celebrationPosition.x,
+      celebrationPosition.y,
+      celebrationPosition.z,
+      this.stageConfig.planetColor,
+      36,
+      true,
+    );
+  }
+
+  private getConstellationCelebrationPosition(constellation: ConstellationDefinition): ConstellationPoint {
+    if (constellation.points.length === 0) {
+      return { x: 0, y: 0, z: this.spaceship.position.z };
+    }
+
+    let x = 0;
+    let y = 0;
+    let z = 0;
+    for (const point of constellation.points) {
+      x += point.x;
+      y += point.y;
+      z += point.z;
+    }
+
+    return {
+      x: x / constellation.points.length,
+      y: y / constellation.points.length,
+      z: z / constellation.points.length,
+    };
   }
 
 
@@ -1916,7 +2305,7 @@ export class StageScene implements Scene {
     this.syncPauseAvailability();
     const isNewPlanetUnlock = this.saveManager.markStageCleared(this.stageNumber);
     this.audioManager.playSFX('stageClear');
-    triggerSharedVibration('stageClear');
+    triggerSharedVisualFeedback('stageClear');
     this.audioManager.stopBoostSFX();
     this.boostFlameEffect.remove();
     if (this.destinationPlanet) {
@@ -1937,7 +2326,6 @@ export class StageScene implements Scene {
 
     // Persist best (highest) star count for this stage.
     this.saveManager.updateBestStageStars(this.stageNumber, earnedStars);
-    this.recordAttemptStats(true);
 
     const bestStarCount = Math.max(previousBest, earnedStars);
     const isBestUpdated = earnedStars > previousBest;
@@ -1954,6 +2342,189 @@ export class StageScene implements Scene {
     if (isBestUpdated) {
       this.audioManager.playSFX('rainbowCollect');
     }
+  }
+
+  private updateConstellationHintOverlay(): void {
+    if (this.constellationSystem.isCompleted()) {
+      this.constellationHintOverlay.updateTargetScreenPosition(null);
+      return;
+    }
+
+    const nextPoint = this.constellationSystem.getNextPoint();
+    if (!nextPoint) {
+      this.constellationHintOverlay.updateTargetScreenPosition(null);
+      return;
+    }
+
+    const viewport = getViewportSize();
+    const projectedPosition = new THREE.Vector3(nextPoint.x, nextPoint.y, nextPoint.z).project(this.camera);
+    const isVisible =
+      projectedPosition.z >= -1 &&
+      projectedPosition.z <= 1 &&
+      projectedPosition.x >= -1 &&
+      projectedPosition.x <= 1 &&
+      projectedPosition.y >= -1 &&
+      projectedPosition.y <= 1;
+
+    this.constellationHintOverlay.updateTargetScreenPosition({
+      x: ((projectedPosition.x + 1) * 0.5) * viewport.width,
+      y: ((1 - projectedPosition.y) * 0.5) * viewport.height,
+      visible: isVisible,
+    });
+  }
+
+  private startBonusTime(): void {
+    this.isBonusTime = true;
+    this.isBonusResultVisible = false;
+    this.bonusTimeRemaining = StageScene.BONUS_TIME_DURATION;
+    this.bonusCollectedStars = 0;
+    this.bonusResultTimer = 0;
+    this.bonusCollectionSystem.reset();
+    this.starBonusEffect.start(this.spaceship.position.z);
+    this.bonusTimeOverlay.show({
+      remainingSeconds: this.bonusTimeRemaining,
+      collectedStars: this.bonusCollectedStars,
+      message: this.getBonusTimeMessage(this.bonusCollectedStars),
+    });
+    this.syncBoostInputLock();
+    this.syncPauseAvailability();
+  }
+
+  private updateBonusTime(deltaTime: number): void {
+    if (!this.isBonusTime && !this.isBonusResultVisible) {
+      return;
+    }
+
+    if (this.isBonusTime) {
+      const input = this.inputSystem.getState?.() ?? { moveDirection: 0, boostPressed: false };
+      this.updateBonusSpaceship(input.moveDirection, deltaTime);
+      this.starBonusEffect.update(deltaTime, this.spaceship.position.z);
+      const bonusPlayerPosition = this.spaceship.mesh?.position ?? new THREE.Vector3(
+        this.spaceship.position.x,
+        this.spaceship.position.y,
+        this.spaceship.position.z,
+      );
+
+      const collectionResult = this.bonusCollectionSystem.collect(
+        bonusPlayerPosition,
+        this.starBonusEffect.getStars(),
+      );
+      if (collectionResult.collectedStars.length > 0) {
+        this.bonusCollectedStars = collectionResult.totalCollected;
+        this.audioManager.playSFX('starCollect');
+        for (const star of collectionResult.collectedStars) {
+          this.particleBurstManager.emit(
+            this.threeScene,
+            star.position.x,
+            star.position.y,
+            star.position.z,
+            0xffef85,
+            24,
+            true,
+          );
+        }
+        this.starBonusEffect.consumeCollectedStars(collectionResult.collectedStars);
+      }
+
+      const consumedTime = Math.min(deltaTime, this.bonusTimeRemaining);
+      this.bonusTimeRemaining = Math.max(0, this.bonusTimeRemaining - deltaTime);
+      this.bonusTimeOverlay.update({
+        remainingSeconds: this.bonusTimeRemaining,
+        collectedStars: this.bonusCollectedStars,
+        message: this.getBonusTimeMessage(this.bonusCollectedStars),
+      });
+
+      if (this.bonusTimeRemaining === 0) {
+        this.finishBonusTime();
+        const remainingTime = deltaTime - consumedTime;
+        if (remainingTime > 0) {
+          this.updateBonusTime(remainingTime);
+        }
+      }
+      return;
+    }
+
+    this.bonusResultTimer += deltaTime;
+    if (this.bonusResultTimer >= StageScene.BONUS_RESULT_DURATION) {
+      this.isBonusResultVisible = false;
+      this.bonusTimeOverlay.hide();
+      this.syncBoostInputLock();
+      this.syncPauseAvailability();
+    }
+  }
+
+  private updateBonusSpaceship(moveDirection: number, deltaTime: number): void {
+    if (moveDirection < 0) {
+      this.spaceship.position.x = Math.max(
+        this.spaceship.boundaryMin,
+        this.spaceship.position.x - 15 * deltaTime,
+      );
+    } else if (moveDirection > 0) {
+      this.spaceship.position.x = Math.min(
+        this.spaceship.boundaryMax,
+        this.spaceship.position.x + 15 * deltaTime,
+      );
+    }
+
+    this.spaceship.mesh?.position.set(
+      this.spaceship.position.x,
+      this.spaceship.position.y,
+      this.spaceship.position.z,
+    );
+  }
+
+  private finishBonusTime(): void {
+    this.isBonusTime = false;
+    this.isBonusResultVisible = true;
+    this.bonusTimeRemaining = 0;
+    this.bonusResultTimer = 0;
+    this.starBonusEffect.clear();
+    this.showBonusCelebration();
+    this.bonusTimeOverlay.showResult({
+      collectedStars: this.bonusCollectedStars,
+      message: this.getBonusResultMessage(this.bonusCollectedStars),
+    });
+    this.syncBoostInputLock();
+    this.syncPauseAvailability();
+  }
+
+  private showBonusCelebration(): void {
+    const burstCount = this.bonusCollectedStars >= 7 ? 4 : this.bonusCollectedStars >= 3 ? 3 : 2;
+    for (let i = 0; i < burstCount; i++) {
+      this.particleBurstManager.emit(
+        this.threeScene,
+        this.spaceship.position.x + (i - (burstCount - 1) / 2) * 2.1,
+        1.8 + (i % 2) * 1.4,
+        this.spaceship.position.z - 6,
+        i % 2 === 0 ? 0xff9ad5 : 0x8ae8ff,
+        42,
+        true,
+      );
+    }
+  }
+
+  private getBonusTimeMessage(collectedStars: number): string {
+    if (collectedStars >= 8) {
+      return 'キラキラ だいせいこう！';
+    }
+    if (collectedStars >= 5) {
+      return 'すごいね！';
+    }
+    if (collectedStars >= 2) {
+      return 'やったね！';
+    }
+    return 'ほしを あつめよう！';
+  }
+
+  private getBonusResultMessage(collectedStars: number): string {
+    const praise = collectedStars >= 8
+      ? 'キラキラ だいせいこう！'
+      : collectedStars >= 5
+        ? 'すごいね！'
+        : collectedStars >= 2
+          ? 'やったね！'
+          : 'たのしかったね！';
+    return `${praise} ${collectedStars}こ あつめたね！`;
   }
 
   private getClearRewardOverlay(): Promise<EncyclopediaOverlayInstance> {
@@ -2016,6 +2587,8 @@ export class StageScene implements Scene {
       }, {
         bestStageStars: { [this.stageNumber]: starCount },
         backLabel: 'クリアへ もどる',
+        colorVisionSupportMode:
+          this.saveManager.load().colorAccessibility?.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE,
         discoveredConstellations: this.saveManager.load().discoveredConstellations ?? [],
         zIndex: 50,
       });
@@ -2078,6 +2651,7 @@ export class StageScene implements Scene {
   }
 
   private revealClearActionButtonsIfReady(): void {
+    if (this.isBonusTime || this.isBonusResultVisible) return;
     if (this.clearTimer < StageScene.CLEAR_CONTINUE_DELAY) return;
     this.stageClearOverlay.enableContinue();
   }
@@ -2092,7 +2666,18 @@ export class StageScene implements Scene {
   }
 
   private handleStageComplete(): void {
+    this.recordAttemptStats(true);
     const { totalScore, totalStarCount } = this.scoreSystem.finalizeStage();
+    const finalTotalStarCount = totalStarCount + this.bonusCollectedStars;
+
+    if (this.shouldPlayWormholeTransition()) {
+      this.startWormholeTransition({
+        stageNumber: this.stageNumber + 1,
+        totalScore,
+        totalStarCount: finalTotalStarCount,
+      });
+      return;
+    }
 
     if (this.launchSource === 'encyclopedia') {
       this.sceneManager.requestTransition('title');
@@ -2100,14 +2685,58 @@ export class StageScene implements Scene {
     }
 
     if (this.stageNumber >= TOTAL_STAGES) {
-      this.sceneManager.requestTransition('ending', { totalScore, totalStarCount });
+      this.sceneManager.requestTransition('ending', { totalScore, totalStarCount: finalTotalStarCount });
     } else {
       this.sceneManager.requestTransition('stage', {
         stageNumber: this.stageNumber + 1,
         totalScore,
-        totalStarCount,
+        totalStarCount: finalTotalStarCount,
       });
     }
+  }
+
+  private shouldPlayWormholeTransition(): boolean {
+    return this.launchSource === 'campaign' && this.stageNumber < TOTAL_STAGES;
+  }
+
+  private startWormholeTransition(context: SceneContext): void {
+    if (this.pendingWormholeTransition) {
+      return;
+    }
+    const nextStageNumber = context.stageNumber ?? this.stageNumber + 1;
+    const nextStageConfig = getStageConfig(nextStageNumber);
+    this.pendingWormholeTransition = context;
+    this.wormholeTransitionTimer = 0;
+    this.stageClearOverlay.hide();
+    this.bonusTimeOverlay.hide();
+    this.clearRewardOverlay?.hide();
+    this.isClearRewardOpen = false;
+    this.isOpeningClearReward = false;
+    this.wormholeTunnelEffect.start({
+      sourceColor: this.stageConfig.planetColor,
+      targetColor: nextStageConfig.planetColor,
+      duration: StageScene.WORMHOLE_TRANSITION_DURATION,
+      particleCount: 72,
+      rayCount: 20,
+    });
+    this.audioManager.playSFX('wormhole');
+  }
+
+  private updateWormholeTransition(deltaTime: number): boolean {
+    if (!this.pendingWormholeTransition) {
+      return false;
+    }
+    this.wormholeTransitionTimer += deltaTime;
+    this.wormholeTunnelEffect.update(deltaTime, this.camera);
+    if (this.wormholeTransitionTimer < StageScene.WORMHOLE_TRANSITION_DURATION) {
+      return false;
+    }
+    const context = this.pendingWormholeTransition;
+    this.pendingWormholeTransition = null;
+    this.wormholeTransitionTimer = 0;
+    this.wormholeTunnelEffect.clear();
+    this.sceneManager.requestTransition('stage', context);
+    return true;
   }
 
   private handleStageRetry(): void {
@@ -2131,7 +2760,7 @@ export class StageScene implements Scene {
     this.saveManager.recordGameplaySession?.({
       stageNumber: this.stageNumber,
       playTimeSeconds: this.playTime,
-      collectedStars: this.scoreSystem.getStarCount(),
+      collectedStars: this.scoreSystem.getStarCount() + this.bonusCollectedStars,
       boostUses: this.boostSystem.getActivationCount(),
       stageCleared,
     });
@@ -2147,19 +2776,35 @@ export class StageScene implements Scene {
     this.clearRewardRequestToken += 1;
     this.clearRewardOverlay?.hide();
     this.stageClearOverlay.hide();
+    this.bonusTimeOverlay.hide();
     this.isClearRewardOpen = false;
     this.isOpeningClearReward = false;
     this.pauseOverlay.hide();
     this.touchGuide.hide();
+    this.touchFeedbackOverlay.hide();
+    this.inputSystem.setTouchFeedbackOverlay?.(null);
+    this.visualFeedbackOverlay?.remove();
+    this.visualFeedbackOverlay = null;
+    this.activeVisualFeedback = null;
     this.adaptiveTutorialHint.hide();
     this.constellationHintOverlay.hide();
     this.seasonalEventNotice.dispose();
     this.frameRateHintOverlay.hide();
     this.hud.hide();
     this.scorePopupManager.dispose();
-    setSharedVibrationFallbackHandler(null);
+    setSharedVisualFeedbackHandler(null);
     this.audioManager.stopBGM();
     this.audioManager.stopBoostSFX();
+    this.wormholeTunnelEffect.clear();
+    this.starBonusEffect.clear();
+    this.bonusCollectionSystem.reset();
+    this.isBonusTime = false;
+    this.isBonusResultVisible = false;
+    this.bonusTimeRemaining = 0;
+    this.bonusCollectedStars = 0;
+    this.bonusResultTimer = 0;
+    this.pendingWormholeTransition = null;
+    this.wormholeTransitionTimer = 0;
     if (this.stageIntroOverlay) {
       this.stageIntroOverlay.dispose();
       this.stageIntroOverlay = null;
@@ -2190,6 +2835,8 @@ export class StageScene implements Scene {
     this.seasonalEventSystem.clear();
     this.scoreSystem.setEventStarMultiplier?.(1);
     this.frameRateHintOverlay.dispose();
+    this.frameRateMonitor.reset();
+    this.autoPerformanceManager.reset(true);
     this.resetStageObjects();
     if (this.bgStars) {
       this.bgStars.parent?.remove(this.bgStars);
@@ -2225,6 +2872,7 @@ export class StageScene implements Scene {
     this.boostLinesEffect.setQualityTier(effectiveTier);
     this.boostFlameEffect.setQualityTier(effectiveTier);
     this.stageAtmosphereEffect.setQualityTier(effectiveTier);
+    this.wormholeTunnelEffect.setQualityTier(effectiveTier);
     if (this.bgStars) {
       this.bgStars.geometry.setDrawRange(0, this.getBackgroundStarDrawCount());
     }
@@ -2249,6 +2897,7 @@ export class StageScene implements Scene {
     this.boostLinesEffect.setMotionSensitivity(this.motionSensitivity);
     this.boostFlameEffect.setMotionSensitivity(this.motionSensitivity);
     this.stageAtmosphereEffect.setMotionSensitivity(this.motionSensitivity);
+    this.wormholeTunnelEffect.setMotionSensitivity(this.motionSensitivity);
   }
 
   private static clampVisualQualityTier(tier: number): number {
@@ -2266,6 +2915,27 @@ export class StageScene implements Scene {
   }
 
   private getEffectiveVisualQualityTier(): number {
-    return StageScene.clampVisualQualityTier(this.visualQualityTier - this.performanceAdaptationLevel);
+    return StageScene.clampVisualQualityTier(this.visualQualityTier - this.getCombinedPerformanceAdaptationLevel());
+  }
+
+  private getCombinedPerformanceAdaptationLevel(): number {
+    return StageScene.clampPerformanceAdaptationLevel(
+      this.performanceAdaptationLevel + this.autoPerformanceAdaptationLevel,
+    );
+  }
+
+  private updateAutoPerformanceMonitoring(deltaTime: number): void {
+    if (!this.isPlaying()) {
+      this.frameRateMonitor.reset();
+      this.autoPerformanceManager.resetStabilityTimers();
+      return;
+    }
+
+    this.frameRateMonitor.update(deltaTime);
+    this.autoPerformanceManager.sample(
+      deltaTime,
+      this.frameRateMonitor.getFps(),
+      this.frameRateMonitor.getSampleCount(),
+    );
   }
 }

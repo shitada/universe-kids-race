@@ -136,6 +136,10 @@ function dispatchReleaseOutside(button: HTMLElement): void {
   document.body.dispatchEvent(new Event('pointerup', { bubbles: true }));
 }
 
+function finishBonusSequence(scene: { update(deltaTime: number): void }): void {
+  scene.update(13);
+}
+
 function mockCanvasContext(): void {
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => {
     return {
@@ -203,16 +207,23 @@ describe('StageScene clear CTA', () => {
       stageNumber: 4,
       finalizeStageResult: { totalScore: 2400, totalStarCount: 14 },
     });
-    const internal = scene as unknown as StageSceneInternals;
+    const internal = scene as unknown as StageSceneInternals & {
+      wormholeTunnelEffect: { isActive(): boolean };
+    };
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const button = getContinueButton();
     expect(button.textContent).toBe('つぎへ');
 
     dispatchReleaseConfirm(button);
     button.dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(internal.wormholeTunnelEffect.isActive()).toBe(true);
+    expect(sceneManager.requestTransition).not.toHaveBeenCalled();
+
+    internal.update(2.3);
 
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
     expect(sceneManager.requestTransition).toHaveBeenCalledWith('stage', {
@@ -230,7 +241,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const button = getContinueButton();
     dispatchReleaseOutside(button);
@@ -247,7 +258,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const button = getContinueButton();
     expect(button.textContent).toBe('タイトルへ');
@@ -267,7 +278,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const nextEntry = getNextPlanetEncyclopediaEntry(stageNumber);
     expect(nextEntry).toBeDefined();
@@ -289,7 +300,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const retryButton = getRetryButton();
     expect(retryButton.textContent).toBe('もういちど');
@@ -317,7 +328,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const retryButton = getRetryButton();
     dispatchReleaseConfirm(retryButton);
@@ -340,7 +351,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const button = getContinueButton();
     expect(button.textContent).toBe('おいわいへ');
@@ -364,7 +375,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const retryButton = getRetryButton();
     expect(retryButton.textContent).toBe('もういちど');
@@ -391,7 +402,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const retryButton = getRetryButton();
     dispatchReleaseConfirm(retryButton);
@@ -415,7 +426,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const overlay = document.querySelector<HTMLElement>('[data-stage-clear-overlay]');
     expect(overlay).not.toBeNull();
@@ -446,7 +457,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const retryButton = getRetryButton();
     dispatchReleaseConfirm(retryButton);
@@ -526,7 +537,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const cardButton = getCardButton();
     expect(cardButton).not.toBeNull();
@@ -556,6 +567,7 @@ describe('StageScene clear CTA', () => {
     expect(document.querySelector('[data-stage-clear-overlay]')).not.toBeNull();
 
     dispatchReleaseConfirm(continueButton);
+    internal.update(2.3);
     expect(sceneManager.requestTransition).toHaveBeenCalledTimes(1);
     expect(sceneManager.requestTransition).toHaveBeenCalledWith('stage', {
       stageNumber: 3,
@@ -663,7 +675,7 @@ describe('StageScene clear CTA', () => {
     const internal = scene as unknown as StageSceneInternals;
 
     internal.onStageClear();
-    internal.update(1);
+    finishBonusSequence(internal);
 
     const retryButton = getRetryButton();
     const cardButton = getCardButton();

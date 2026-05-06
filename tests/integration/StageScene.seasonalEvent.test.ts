@@ -57,6 +57,20 @@ describe('StageScene seasonal event integration', () => {
     expect(internal.seasonalEventNotice.isVisible()).toBe(true);
   });
 
+  it('4月前半はさくらまつりの通知UIと演出を有効化する', () => {
+    const scene = createScene(new Date(2026, 3, 10, 12));
+    scene.enter({ stageNumber: 1 });
+
+    const internal = scene as unknown as {
+      seasonalEventEffects: { getGroup(): { visible: boolean } };
+      seasonalEventNotice: { isVisible(): boolean };
+    };
+
+    expect(document.querySelector('[data-seasonal-event-notice-title]')?.textContent).toContain('さくら');
+    expect(internal.seasonalEventEffects.getGroup().visible).toBe(true);
+    expect(internal.seasonalEventNotice.isVisible()).toBe(true);
+  });
+
   it('季節イベント日でないときは通知UIも演出も表示しない', () => {
     const scene = createScene(new Date(2026, 1, 14, 12));
     scene.enter({ stageNumber: 1 });

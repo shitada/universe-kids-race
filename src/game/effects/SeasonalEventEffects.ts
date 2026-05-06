@@ -12,6 +12,7 @@ export class SeasonalEventEffects {
   private static readonly sharedOrbGeometry = new THREE.SphereGeometry(0.22, 10, 10);
   private static readonly sharedBoxGeometry = new THREE.BoxGeometry(0.32, 0.32, 0.32);
   private static readonly sharedStarGeometry = new THREE.OctahedronGeometry(0.26, 0);
+  private static readonly sharedPetalGeometry = new THREE.PlaneGeometry(0.34, 0.26);
 
   private readonly group = new THREE.Group();
   private readonly orbStates: SeasonalOrbState[] = [];
@@ -68,6 +69,8 @@ export class SeasonalEventEffects {
     this.haloMesh.visible = event.id !== 'tanabata';
     for (const state of this.orbStates) {
       state.material.color.setHex(event.accentColor);
+      state.material.opacity = event.id === 'sakura' ? 0.88 : 0.78;
+      state.material.side = event.id === 'sakura' ? THREE.DoubleSide : THREE.FrontSide;
       state.mesh.visible = true;
       state.mesh.geometry = this.getGeometry(event.id);
       state.mesh.rotation.set(0, 0, 0);
@@ -126,6 +129,19 @@ export class SeasonalEventEffects {
   ): void {
     const angle = this.elapsed * (0.8 + index * 0.03) + state.phase;
     switch (eventId) {
+      case 'sakura': {
+        const fallCycle = (this.elapsed * 0.48 + index * 0.19) % 1.8;
+        state.mesh.position.set(
+          Math.sin(angle) * 2.15 + Math.cos(this.elapsed * 0.7 + index) * 0.42,
+          1.1 - fallCycle * 1.5,
+          Math.cos(angle * 0.72) * 1.25 + Math.sin(this.elapsed * 0.5 + index * 0.35) * 0.32,
+        );
+        state.mesh.rotation.x = Math.PI / 3;
+        state.mesh.rotation.y = Math.sin(this.elapsed * 1.4 + index) * 0.45;
+        state.mesh.rotation.z += 0.028;
+        state.mesh.scale.setScalar(0.9 + Math.sin(this.elapsed * 2.2 + index * 0.7) * 0.08);
+        break;
+      }
       case 'tanabata':
         state.mesh.position.set(
           -3 + index * 0.85,
@@ -156,6 +172,9 @@ export class SeasonalEventEffects {
   }
 
   private getGeometry(eventId: SeasonalEventConfig['id']): THREE.BufferGeometry {
+    if (eventId === 'sakura') {
+      return SeasonalEventEffects.sharedPetalGeometry;
+    }
     if (eventId === 'tanabata') {
       return SeasonalEventEffects.sharedStarGeometry;
     }

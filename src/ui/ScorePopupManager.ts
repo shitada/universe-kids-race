@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { StarType } from '../types';
 
 type WorldPosition = Pick<THREE.Vector3, 'x' | 'y' | 'z'>;
 
@@ -11,13 +12,48 @@ interface PopupEntry {
   currentAnimationName: 'scorePopupFloatA' | 'scorePopupFloatB' | 'none';
 }
 
-type PopupKind = 'normal' | 'bonus' | 'shooting-star' | 'special-star';
+export type PopupKind =
+  | 'normal'
+  | 'bonus'
+  | 'shooting-star'
+  | 'special-star'
+  | 'monthly-encounter'
+  | 'space-gem'
+  | 'lovely-star';
 
 interface PopupVisualStyle {
   text: string;
   kind: PopupKind;
   color: string;
   shadow: string;
+}
+
+export interface ScoreGainPresentation {
+  worldText: string;
+  hudText: string;
+  kind: PopupKind;
+  color: string;
+  shadow: string;
+}
+
+export function createScoreGainPresentation(score: number, starType?: StarType): ScoreGainPresentation {
+  if (starType === 'LOVELY') {
+    return {
+      worldText: `💖 +${score}`,
+      hudText: `+${score}`,
+      kind: 'lovely-star',
+      color: '#ff8fd6',
+      shadow: 'rgba(255, 143, 214, 0.65)',
+    };
+  }
+  const isBonus = score >= 500;
+  return {
+    worldText: `${isBonus ? '🌈' : '⬢'} +${score}`,
+    hudText: `+${score}`,
+    kind: isBonus ? 'bonus' : 'normal',
+    color: isBonus ? '#ff9cf7' : '#ffe066',
+    shadow: isBonus ? 'rgba(255, 156, 247, 0.55)' : 'rgba(255, 214, 102, 0.55)',
+  };
 }
 
 export class ScorePopupManager {
@@ -35,14 +71,14 @@ export class ScorePopupManager {
     this.highContrastMode = enabled;
   }
 
-  show(score: number, worldPosition: WorldPosition, camera: THREE.Camera): void {
-    const isBonus = score >= 500;
+  show(score: number, worldPosition: WorldPosition, camera: THREE.Camera, starType?: StarType): void {
+    const presentation = createScoreGainPresentation(score, starType);
     this.showPopup(
       {
-        text: `${isBonus ? '🌈' : '⬢'} +${score}`,
-        kind: isBonus ? 'bonus' : 'normal',
-        color: isBonus ? '#ff9cf7' : '#ffe066',
-        shadow: isBonus ? 'rgba(255, 156, 247, 0.55)' : 'rgba(255, 214, 102, 0.55)',
+        text: presentation.worldText,
+        kind: presentation.kind,
+        color: presentation.color,
+        shadow: presentation.shadow,
       },
       worldPosition,
       camera,
@@ -51,12 +87,20 @@ export class ScorePopupManager {
 
   showLabel(text: string, worldPosition: WorldPosition, camera: THREE.Camera, kind: PopupKind = 'normal'): void {
     const style =
-      kind === 'shooting-star' || kind === 'special-star'
+      kind === 'shooting-star'
+        || kind === 'special-star'
+        || kind === 'monthly-encounter'
+        || kind === 'space-gem'
+        || kind === 'lovely-star'
         ? {
             text,
             kind,
-            color: 'rgb(255, 244, 179)',
-            shadow: 'rgba(191, 231, 255, 0.75)',
+            color: kind === 'lovely-star' ? '#ff8fd6' : kind === 'space-gem' ? '#dff8ff' : 'rgb(255, 244, 179)',
+            shadow: kind === 'lovely-star'
+              ? 'rgba(255, 143, 214, 0.65)'
+              : kind === 'space-gem'
+                ? 'rgba(167, 244, 255, 0.78)'
+                : 'rgba(191, 231, 255, 0.75)',
           }
         : {
             text,
@@ -93,12 +137,22 @@ export class ScorePopupManager {
     entry.el.style.color = style.color;
     entry.el.style.textShadow = `0 2px 10px ${style.shadow}`;
     entry.el.style.background = this.highContrastMode
-      ? style.kind === 'bonus' || style.kind === 'shooting-star' || style.kind === 'special-star'
+        ? style.kind === 'bonus'
+        || style.kind === 'shooting-star'
+        || style.kind === 'special-star'
+        || style.kind === 'monthly-encounter'
+        || style.kind === 'space-gem'
+        || style.kind === 'lovely-star'
         ? 'rgba(13, 18, 38, 0.92)'
         : 'rgba(0, 0, 0, 0.82)'
       : 'transparent';
     entry.el.style.border = this.highContrastMode
-      ? style.kind === 'bonus' || style.kind === 'shooting-star' || style.kind === 'special-star'
+        ? style.kind === 'bonus'
+        || style.kind === 'shooting-star'
+        || style.kind === 'special-star'
+        || style.kind === 'monthly-encounter'
+        || style.kind === 'space-gem'
+        || style.kind === 'lovely-star'
         ? '3px solid rgba(255, 255, 255, 0.95)'
         : '2px dashed rgba(255, 255, 255, 0.95)'
       : 'none';

@@ -48,6 +48,15 @@ function createScene(): StageScene {
   return scene;
 }
 
+function runFrames(scene: StageScene, frameCount: number, deltaTime: number): void {
+  const internal = scene as unknown as {
+    update(deltaTime: number): void;
+  };
+  for (let index = 0; index < frameCount; index += 1) {
+    internal.update(deltaTime);
+  }
+}
+
 describe('StageScene performance adaptation', () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="hud"></div><div id="ui-overlay"></div>';
@@ -83,6 +92,45 @@ describe('StageScene performance adaptation', () => {
 
     scene.showFrameRateHint(1);
 
-    expect(document.body.textContent).toContain('うちゅうせんを かるくしたよ');
+    expect(document.body.textContent).toContain('じどうで かるくしたよ');
+  });
+
+  it('automatically lowers the quality tier after sustained low fps', () => {
+    const scene = createScene();
+    const internal = scene as unknown as {
+      bgStars: THREE.Points;
+    };
+    const baseCount = internal.bgStars.geometry.drawRange.count;
+
+    runFrames(scene, 110, 1 / 30);
+
+    expect(internal.bgStars.geometry.drawRange.count).toBeLessThan(baseCount);
+    expect(document.body.textContent).toContain('じどうで かるくしたよ');
+  });
+
+  it('keeps the auto-adjusted quality across stage re-entry', () => {
+    const scene = createScene();
+    const internal = scene as unknown as {
+      bgStars: THREE.Points;
+    };
+    const baseCount = internal.bgStars.geometry.drawRange.count;
+
+    runFrames(scene, 110, 1 / 30);
+    const degradedCount = internal.bgStars.geometry.drawRange.count;
+    expect(degradedCount).toBeLessThan(baseCount);
+
+    scene.exit();
+    scene.enter({ stageNumber: 2, replayToken: 2, totalScore: 100, totalStarCount: 5 });
+
+    const nextInternal = scene as unknown as {
+      countdownOverlay: { dispose(): void } | null;
+      isStarting: boolean;
+      bgStars: THREE.Points;
+    };
+    nextInternal.countdownOverlay?.dispose();
+    nextInternal.countdownOverlay = null;
+    nextInternal.isStarting = false;
+
+    expect(nextInternal.bgStars.geometry.drawRange.count).toBe(degradedCount);
   });
 });

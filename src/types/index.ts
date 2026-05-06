@@ -1,7 +1,7 @@
 import type * as THREE from 'three';
 
 // Scene types
-export type SceneType = 'title' | 'stage' | 'ending';
+export type SceneType = 'title' | 'stage' | 'freePlay' | 'ending';
 
 export interface SceneContext {
   stageNumber?: number;
@@ -23,12 +23,20 @@ export interface Scene {
 export type SpeedState = 'NORMAL' | 'BOOST' | 'SLOWDOWN' | 'RECOVERING';
 
 // Star types
-export type StarType = 'NORMAL' | 'RAINBOW';
+export type StarType = 'NORMAL' | 'RAINBOW' | 'LOVELY';
 
-export type VibrationPattern = number | number[];
-export type VibrationIntensity = 'off' | 'weak' | 'medium' | 'strong';
+export type VisualFeedbackIntensity = 'off' | 'weak' | 'medium' | 'strong';
 export const MOTION_SENSITIVITY_LEVELS = ['strong', 'medium', 'gentle', 'minimal'] as const;
 export type MotionSensitivity = (typeof MOTION_SENSITIVITY_LEVELS)[number];
+export const COLOR_VISION_SUPPORT_MODES = [
+  'color-only',
+  'color-and-marks',
+  'protanopia-filter',
+  'deuteranopia-filter',
+  'tritanopia-filter',
+] as const;
+export type ColorVisionSupportMode = (typeof COLOR_VISION_SUPPORT_MODES)[number];
+export type Language = 'ja' | 'en';
 
 // Input
 export interface InputState {
@@ -99,6 +107,9 @@ export interface StageMedalStatus {
 export type SFXType =
   | 'starCollect'
   | 'rainbowCollect'
+  | 'lovelyCollect'
+  | 'spaceGemCollect'
+  | 'constellationCelebrate'
   | 'shootingStarCollect'
   | 'cometCollect'
   | 'meteorShowerStart'
@@ -108,16 +119,38 @@ export type SFXType =
   | 'boostReady'
   | 'boostDenied'
   | 'countdownTick'
-  | 'countdownGo';
+  | 'countdownGo'
+  | 'wormhole';
+
+export interface WormholeTunnelConfig {
+  sourceColor: number;
+  targetColor: number;
+  duration: number;
+  particleCount: number;
+  rayCount: number;
+}
 
 // Save data
 export interface ColorAccessibilitySettings {
   highContrast?: boolean;
   motionSensitivity?: MotionSensitivity;
+  colorVisionSupportMode?: ColorVisionSupportMode;
 }
 
-export interface VibrationSettings {
-  intensity: VibrationIntensity;
+export const AUDIO_VOLUME_LEVELS = [0, 25, 50, 75, 100] as const;
+export type AudioVolumeLevel = (typeof AUDIO_VOLUME_LEVELS)[number];
+
+export interface AudioSettings {
+  bgmVolume?: AudioVolumeLevel;
+  sfxVolume?: AudioVolumeLevel;
+}
+
+export interface VisualFeedbackSettings {
+  intensity: VisualFeedbackIntensity;
+}
+
+export interface RestReminderSettings {
+  enabled: boolean;
 }
 
 export const SPACESHIP_COLOR_KEYS = ['sky', 'sunset', 'aqua'] as const;
@@ -142,15 +175,39 @@ export interface GameplayStats {
   stageClearCounts: Record<number, number>;
 }
 
+export interface BonusStarState {
+  mesh: THREE.Object3D;
+  position: THREE.Vector3;
+  velocityY: number;
+  driftPhase: number;
+  rotationSpeed: number;
+  isCollected: boolean;
+}
+
+export interface BonusTimeOverlayState {
+  remainingSeconds: number;
+  collectedStars: number;
+  message: string;
+}
+
+export interface BonusTimeResultState {
+  collectedStars: number;
+  message: string;
+}
+
 export interface SaveData {
   clearedStage: number;
   unlockedPlanets: number[];
   muted?: boolean;
+  audioSettings?: AudioSettings;
   colorAccessibility?: ColorAccessibilitySettings;
-  vibrationSettings?: VibrationSettings;
+  visualFeedbackSettings?: VisualFeedbackSettings;
+  restReminderSettings?: RestReminderSettings;
   bestStageStars?: Record<number, number>;
   discoveredConstellations?: number[];
   discoveredSpecialStars?: SpecialShootingStarType[];
+  discoveredMonthlyEncounters?: MonthlyEncounterId[];
+  discoveredSpaceGems?: SpaceGemType[];
   gameplayStats?: GameplayStats;
   spaceshipCustomization?: SpaceshipCustomization;
   // Last stable adaptive pixel-ratio tier observed in the previous session.
@@ -161,6 +218,7 @@ export interface SaveData {
   // on the title screen. When false / missing, TitleScene auto-shows the
   // TutorialOverlay once on entry to introduce controls to new players.
   tutorialShown?: boolean;
+  language?: Language;
 }
 
 // Planet encyclopedia
@@ -171,6 +229,7 @@ export interface PlanetEncyclopediaEntry {
   name: string;
   reading: string;
   encyclopediaLabel: string;
+  identityMark: string;
   emoji: string;
   trivia: string;
   planetColor: number;
@@ -188,6 +247,56 @@ export interface SpecialStarEncyclopediaEntry {
   emoji: string;
   trivia: string;
   accentColor: number;
+}
+
+export const SPACE_GEM_TYPES = [
+  'diamond-nebula',
+  'emerald-comet',
+  'ruby-solar-wind',
+  'sapphire-orbit',
+  'amethyst-moon',
+  'topaz-spark',
+  'pearl-dust',
+] as const;
+export type SpaceGemType = (typeof SPACE_GEM_TYPES)[number];
+
+export interface SpaceGemEncyclopediaEntry {
+  id: SpaceGemType;
+  name: string;
+  reading: string;
+  encyclopediaLabel: string;
+  emoji: string;
+  trivia: string;
+  accentColor: number;
+}
+
+export const MONTHLY_ENCOUNTER_IDS = [
+  'new-year-comet',
+  'heart-nebula',
+  'spring-ribbon',
+  'rainbow-seed',
+  'emerald-comet',
+  'rainy-jelly',
+  'tanabata-stream',
+  'starlight-whale',
+  'harvest-lantern',
+  'pumpkin-nebula',
+  'crystal-comet',
+  'geminid-rain',
+] as const;
+export type MonthlyEncounterId = (typeof MONTHLY_ENCOUNTER_IDS)[number];
+
+export interface MonthlyEncounterEncyclopediaEntry {
+  id: MonthlyEncounterId;
+  month: number;
+  name: string;
+  reading: string;
+  encyclopediaLabel: string;
+  emoji: string;
+  trivia: string;
+  encounterMessage: string;
+  accentColor: number;
+  scoreBonus: number;
 }
 
 export interface ConstellationPoint {
@@ -238,7 +347,7 @@ export interface StageSpecialEventState {
   event: StageSpecialEventConfig | null;
 }
 
-export type SeasonalEventId = 'tanabata' | 'christmas' | 'new-year';
+export type SeasonalEventId = 'sakura' | 'tanabata' | 'christmas' | 'new-year';
 
 export interface SeasonalEventConfig {
   id: SeasonalEventId;

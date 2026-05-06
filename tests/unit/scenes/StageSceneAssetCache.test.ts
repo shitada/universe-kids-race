@@ -113,7 +113,7 @@ afterEach(() => {
 });
 
 describe('StageScene shared asset cache', () => {
-  it.each([2, 3, 5, 6, 7, 9, 10, 11])(
+  it.each([2, 3, 5, 6, 7, 9, 10, 11, 12])(
     'reuses geometry / material / texture for stage %i across re-entries',
     (stageNumber) => {
       const scene = createScene();
@@ -162,8 +162,8 @@ describe('StageScene shared asset cache', () => {
 
   it('keeps Earth cloud-layer texture and geometry shared across re-entries', () => {
     const scene = createScene();
-    const meshes1 = collectMeshes(buildPlanet(scene, 11));
-    const meshes2 = collectMeshes(buildPlanet(scene, 11));
+    const meshes1 = collectMeshes(buildPlanet(scene, 12));
+    const meshes2 = collectMeshes(buildPlanet(scene, 12));
 
     // Earth は (planet, cloud) の 2 メッシュ
     expect(meshes1).toHaveLength(2);

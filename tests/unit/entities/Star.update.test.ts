@@ -49,6 +49,19 @@ describe('Star.update view-bracket optimization', () => {
     expect(mat.color.getHex()).not.toBe(colorBefore);
   });
 
+  it('updates LOVELY star hue and pulse when inside the view bracket', () => {
+    const cameraZ = 0;
+    const star = new Star(0, 0, -20, 'LOVELY');
+    const mat = star.mesh.material as THREE.MeshToonMaterial;
+    const colorBefore = mat.color.getHex();
+    const scaleBefore = star.mesh.scale.x;
+
+    star.update(0.5, cameraZ);
+
+    expect(mat.color.getHex()).not.toBe(colorBefore);
+    expect(star.mesh.scale.x).not.toBe(scaleBefore);
+  });
+
   it('boundary: exactly at cameraZ - 60 still updates (inclusive)', () => {
     const cameraZ = 0;
     const star = new Star(0, 0, -60, 'NORMAL');

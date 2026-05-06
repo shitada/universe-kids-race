@@ -1,6 +1,19 @@
-import type { ConstellationDefinition, PlanetEncyclopediaEntry } from '../types';
-import { getPlanetEncyclopediaEntry, PLANET_ENCYCLOPEDIA } from '../game/config/PlanetEncyclopedia';
+import type {
+  ColorVisionSupportMode,
+  ConstellationDefinition,
+  MonthlyEncounterId,
+  PlanetEncyclopediaEntry,
+  SpaceGemType,
+} from '../types';
+import {
+  DEFAULT_COLOR_VISION_SUPPORT_MODE,
+  formatPlanetEncyclopediaLabel,
+  getPlanetEncyclopediaEntry,
+  PLANET_ENCYCLOPEDIA,
+} from '../game/config/PlanetEncyclopedia';
 import { CONSTELLATION_DATA, getConstellationForStage } from '../game/config/ConstellationData';
+import { MONTHLY_ENCOUNTER_CONFIG } from '../game/config/MonthlyEncounterConfig';
+import { SPACE_GEM_ENCYCLOPEDIA } from '../game/config/SpaceGemConfig';
 import { createCompanionPreviewController, type CompanionPreviewController } from './CompanionPreview';
 import { attachReleaseConfirmButton } from './attachReleaseConfirmButton';
 import { createStageMedalDisplay } from './stageMedalDisplay';
@@ -8,6 +21,7 @@ import { createStageMedalDisplay } from './stageMedalDisplay';
 interface DetailOverlayOptions {
   bestStageStars?: Record<number, number>;
   backLabel?: string;
+  colorVisionSupportMode?: ColorVisionSupportMode;
   zIndex?: number;
   discoveredConstellations?: number[];
 }
@@ -20,12 +34,21 @@ export class EncyclopediaOverlay {
   private static readonly RELEASE_CONFIRM_MOVE_TOLERANCE_PX = 12;
   private static readonly GALLERY_TITLE_ID = 'encyclopedia-gallery-title';
   private static readonly DETAIL_TITLE_ID = 'encyclopedia-detail-title';
+  private static readonly PLANET_TAB_LABEL = 'わくせいずかん';
+  private static readonly MONTHLY_TAB_LABEL = 'てんたいずかん';
+  private static readonly GEM_TAB_LABEL = 'たからばこ';
   private overlayEl: HTMLDivElement | null = null;
   private detailEl: HTMLDivElement | null = null;
+  private galleryTitleEl: HTMLDivElement | null = null;
+  private galleryPanels = new Map<'planets' | 'monthly' | 'gems', HTMLDivElement>();
+  private activeTab: 'planets' | 'monthly' | 'gems' = 'planets';
   private isShowingDetail = false;
   private onSelectStage: ((stageNumber: number) => void) | null = null;
   private bestStageStars: Record<number, number> = {};
   private discoveredConstellations: number[] = [];
+  private discoveredMonthlyEncounters: MonthlyEncounterId[] = [];
+  private discoveredSpaceGems: SpaceGemType[] = [];
+  private colorVisionSupportMode: ColorVisionSupportMode = DEFAULT_COLOR_VISION_SUPPORT_MODE;
   private detailBackLabel = 'もどる';
   private detailPreviewController: CompanionPreviewController | null = null;
   private readonly createPreviewController: () => CompanionPreviewController;
@@ -43,12 +66,20 @@ export class EncyclopediaOverlay {
     onSelectStage?: (stageNumber: number) => void,
     bestStageStars?: Record<number, number>,
     discoveredConstellations: number[] = [],
+    colorVisionSupportMode: ColorVisionSupportMode = DEFAULT_COLOR_VISION_SUPPORT_MODE,
+    discoveredMonthlyEncounters: MonthlyEncounterId[] = [],
+    discoveredSpaceGems: SpaceGemType[] = [],
   ): void {
     if (this.overlayEl) return;
     this.onSelectStage = onSelectStage ?? null;
     this.bestStageStars = bestStageStars ?? {};
     this.discoveredConstellations = discoveredConstellations;
+    this.colorVisionSupportMode = colorVisionSupportMode;
+    this.discoveredMonthlyEncounters = discoveredMonthlyEncounters;
+    this.discoveredSpaceGems = discoveredSpaceGems;
     this.detailBackLabel = 'もどる';
+    this.activeTab = 'planets';
+    this.galleryPanels.clear();
 
     const uiOverlay = document.getElementById('ui-overlay');
     if (!uiOverlay) return;
@@ -64,13 +95,12 @@ export class EncyclopediaOverlay {
     content.setAttribute('data-gallery-content', '');
     content.style.cssText = `
       width: min(960px, 100%);
-      height: 100%;
-      max-height: 720px;
+      min-height: min(100%, 720px);
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      overflow: hidden;
+      justify-content: flex-start;
+      overflow: visible;
       padding: ${isCompactHeight ? '0.45rem 0.35rem' : '0.5rem'};
       box-sizing: border-box;
     `;
@@ -78,7 +108,7 @@ export class EncyclopediaOverlay {
     // Title
     const title = document.createElement('div');
     title.id = EncyclopediaOverlay.GALLERY_TITLE_ID;
-    title.textContent = 'わくせいずかん';
+    title.textContent = EncyclopediaOverlay.PLANET_TAB_LABEL;
     title.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
       font-size: ${isCompactHeight ? '1.7rem' : '2rem'};
@@ -88,39 +118,33 @@ export class EncyclopediaOverlay {
       margin-bottom: ${isCompactHeight ? '0.45rem' : '0.8rem'};
       text-align: center;
     `;
+    this.galleryTitleEl = title;
     content.appendChild(title);
+
+    content.appendChild(this.createTabBar(isCompactHeight));
 
     const galleryMain = document.createElement('div');
     galleryMain.setAttribute('data-gallery-main', '');
     galleryMain.style.cssText = `
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(12rem, 0.34fr);
-      gap: ${isCompactHeight ? '0.55rem' : '0.8rem'};
+      position: relative;
       width: min(100%, 900px);
-      align-items: stretch;
-    `;
-
-    // Card grid
-    const grid = document.createElement('div');
-    grid.setAttribute('data-gallery-grid', '');
-    grid.setAttribute('aria-label', 'わくせい の いちらん');
-    grid.style.cssText = `
+      min-height: 0;
+      flex: 1 1 auto;
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(${isCompactHeight ? '86px' : '110px'}, 1fr));
-      gap: ${isCompactHeight ? '0.45rem' : '0.65rem'};
-      width: 100%;
-      justify-items: center;
       align-items: stretch;
+      justify-content: center;
     `;
 
-    for (const entry of PLANET_ENCYCLOPEDIA) {
-      const isUnlocked = unlockedPlanets.includes(entry.stageNumber);
-      const card = this.createCard(entry, isUnlocked, isCompactHeight);
-      grid.appendChild(card);
-    }
-
-    galleryMain.appendChild(grid);
-    galleryMain.appendChild(this.createConstellationSection(isCompactHeight));
+    const planetPanel = this.createPlanetPanel(unlockedPlanets, isCompactHeight);
+    const monthlyPanel = this.createMonthlyPanel(isCompactHeight);
+    const gemPanel = this.createGemPanel(isCompactHeight);
+    this.galleryPanels.set('planets', planetPanel);
+    this.galleryPanels.set('monthly', monthlyPanel);
+    this.galleryPanels.set('gems', gemPanel);
+    galleryMain.appendChild(planetPanel);
+    galleryMain.appendChild(monthlyPanel);
+    galleryMain.appendChild(gemPanel);
+    this.setActiveTab('planets');
     content.appendChild(galleryMain);
 
     // Back button
@@ -166,6 +190,7 @@ export class EncyclopediaOverlay {
     this.onSelectStage = null;
     this.bestStageStars = options.bestStageStars ?? {};
     this.discoveredConstellations = options.discoveredConstellations ?? [];
+    this.colorVisionSupportMode = options.colorVisionSupportMode ?? DEFAULT_COLOR_VISION_SUPPORT_MODE;
     this.detailBackLabel = options.backLabel ?? 'もどる';
 
     const uiOverlay = document.getElementById('ui-overlay');
@@ -194,7 +219,9 @@ export class EncyclopediaOverlay {
       justify-content: center;
       padding: ${this.isCompactHeight() ? '0.5rem' : '0.9rem'};
       box-sizing: border-box;
-      overflow: hidden;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
     `;
     element.style.zIndex = String(zIndex);
   }
@@ -215,8 +242,252 @@ export class EncyclopediaOverlay {
     this.onSelectStage = null;
     this.bestStageStars = {};
     this.discoveredConstellations = [];
+    this.discoveredMonthlyEncounters = [];
+    this.discoveredSpaceGems = [];
+    this.colorVisionSupportMode = DEFAULT_COLOR_VISION_SUPPORT_MODE;
     this.detailBackLabel = 'もどる';
+    this.galleryTitleEl = null;
+    this.galleryPanels.clear();
+    this.activeTab = 'planets';
     this.disposeDetailPreview();
+  }
+
+  private createTabBar(isCompactHeight: boolean): HTMLDivElement {
+    const tabBar = document.createElement('div');
+    tabBar.style.cssText = `
+      display: flex;
+      gap: 0.45rem;
+      margin-bottom: ${isCompactHeight ? '0.4rem' : '0.55rem'};
+    `;
+    tabBar.appendChild(this.createTabButton('planets', 'わくせい', isCompactHeight));
+    tabBar.appendChild(this.createTabButton('monthly', 'てんたい', isCompactHeight));
+    tabBar.appendChild(this.createTabButton('gems', 'たから', isCompactHeight));
+    return tabBar;
+  }
+
+  private createTabButton(tab: 'planets' | 'monthly' | 'gems', label: string, isCompactHeight: boolean): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.setAttribute('data-encyclopedia-tab', tab);
+    button.textContent = label;
+    button.style.cssText = `
+      min-width: ${isCompactHeight ? '7.4rem' : '8.4rem'};
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: ${isCompactHeight ? '0.95rem' : '1.05rem'};
+      font-weight: 800;
+      padding: ${isCompactHeight ? '0.42rem 0.9rem' : '0.5rem 1rem'};
+      border: none;
+      border-radius: 999px;
+      color: #fff;
+      background: rgba(255, 255, 255, 0.12);
+      cursor: pointer;
+      touch-action: manipulation;
+      transform: scale(1);
+      transition: transform 0.08s ease-out, background 0.12s ease-out;
+    `;
+    this.galleryActionCleanups.add(attachReleaseConfirmButton(button, {
+      onActivate: () => {
+        this.setActiveTab(tab);
+      },
+      onPressChange: (pressed) => {
+        button.style.transform = pressed ? 'scale(0.96)' : 'scale(1)';
+      },
+      moveTolerancePx: EncyclopediaOverlay.RELEASE_CONFIRM_MOVE_TOLERANCE_PX,
+    }));
+    return button;
+  }
+
+  private setActiveTab(tab: 'planets' | 'monthly' | 'gems'): void {
+    this.activeTab = tab;
+    if (this.galleryTitleEl) {
+      this.galleryTitleEl.textContent = tab === 'monthly'
+        ? EncyclopediaOverlay.MONTHLY_TAB_LABEL
+        : tab === 'gems'
+          ? EncyclopediaOverlay.GEM_TAB_LABEL
+          : EncyclopediaOverlay.PLANET_TAB_LABEL;
+    }
+    for (const [panelTab, panel] of this.galleryPanels) {
+      const isActive = panelTab === tab;
+      panel.style.display = isActive ? 'grid' : 'none';
+      panel.setAttribute('data-active', isActive ? 'true' : 'false');
+    }
+    const tabButtons = this.overlayEl?.querySelectorAll<HTMLElement>('[data-encyclopedia-tab]') ?? [];
+    tabButtons.forEach((button) => {
+      const isActive = button.getAttribute('data-encyclopedia-tab') === tab;
+      button.style.background = isActive ? 'linear-gradient(135deg, rgba(255, 215, 112, 0.9), rgba(123, 199, 255, 0.85))' : 'rgba(255, 255, 255, 0.12)';
+      button.style.color = isActive ? '#18233b' : '#fff';
+      button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+  }
+
+  private createPlanetPanel(unlockedPlanets: number[], isCompactHeight: boolean): HTMLDivElement {
+    const galleryMain = document.createElement('div');
+    galleryMain.setAttribute('data-encyclopedia-panel', 'planets');
+    galleryMain.style.cssText = `
+      display: grid;
+      grid-area: 1 / 1;
+      grid-template-columns: minmax(0, 1fr) minmax(12rem, 0.34fr);
+      gap: ${isCompactHeight ? '0.55rem' : '0.8rem'};
+      width: 100%;
+      align-items: stretch;
+      min-height: 0;
+    `;
+
+    const grid = document.createElement('div');
+    grid.setAttribute('data-gallery-grid', '');
+    grid.setAttribute('aria-label', 'わくせい の いちらん');
+    grid.style.cssText = `
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(${isCompactHeight ? '86px' : '110px'}, 1fr));
+      gap: ${isCompactHeight ? '0.45rem' : '0.65rem'};
+      width: 100%;
+      justify-items: center;
+      align-items: stretch;
+    `;
+
+    for (const entry of PLANET_ENCYCLOPEDIA) {
+      const isUnlocked = unlockedPlanets.includes(entry.stageNumber);
+      const card = this.createCard(entry, isUnlocked, isCompactHeight);
+      grid.appendChild(card);
+    }
+
+    galleryMain.appendChild(grid);
+    galleryMain.appendChild(this.createConstellationSection(isCompactHeight));
+    return galleryMain;
+  }
+
+  private createMonthlyPanel(isCompactHeight: boolean): HTMLDivElement {
+    const panel = document.createElement('div');
+    panel.setAttribute('data-encyclopedia-panel', 'monthly');
+    panel.style.cssText = `
+      display: none;
+      grid-area: 1 / 1;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: ${isCompactHeight ? '0.45rem' : '0.6rem'};
+      width: 100%;
+      align-content: start;
+    `;
+
+    for (const entry of MONTHLY_ENCOUNTER_CONFIG) {
+      const discovered = this.discoveredMonthlyEncounters.includes(entry.id);
+      const card = document.createElement('div');
+      card.setAttribute('data-monthly-encounter-card', '');
+      card.setAttribute('data-monthly-encounter-id', entry.id);
+      card.style.cssText = `
+        min-height: ${isCompactHeight ? '96px' : '116px'};
+        border-radius: 18px;
+        padding: ${isCompactHeight ? '0.5rem' : '0.65rem'};
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        gap: 0.18rem;
+        background: ${discovered ? `linear-gradient(135deg, #${entry.accentColor.toString(16).padStart(6, '0')}aa, rgba(255,255,255,0.16))` : 'rgba(255,255,255,0.08)'};
+        color: ${discovered ? '#fff' : '#aeb8d7'};
+        box-shadow: 0 4px 12px rgba(0,0,0,0.24);
+      `;
+
+      const monthChip = document.createElement('div');
+      monthChip.textContent = `${entry.month}がつ`;
+      monthChip.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: ${isCompactHeight ? '0.7rem' : '0.8rem'};
+        font-weight: 800;
+      `;
+      card.appendChild(monthChip);
+
+      const emoji = document.createElement('div');
+      emoji.textContent = discovered ? entry.emoji : '✨';
+      emoji.style.fontSize = isCompactHeight ? '1.4rem' : '1.7rem';
+      card.appendChild(emoji);
+
+      const name = document.createElement('div');
+      name.textContent = discovered ? entry.reading : '？？？';
+      name.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: ${isCompactHeight ? '0.78rem' : '0.9rem'};
+        font-weight: 900;
+        overflow-wrap: anywhere;
+      `;
+      card.appendChild(name);
+
+      const trivia = document.createElement('div');
+      trivia.textContent = discovered ? entry.trivia : 'こんげつ みつけると ずかんに のるよ';
+      trivia.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: ${isCompactHeight ? '0.62rem' : '0.72rem'};
+        line-height: 1.3;
+        overflow-wrap: anywhere;
+      `;
+      card.appendChild(trivia);
+
+      panel.appendChild(card);
+    }
+
+    return panel;
+  }
+
+  private createGemPanel(isCompactHeight: boolean): HTMLDivElement {
+    const panel = document.createElement('div');
+    panel.setAttribute('data-encyclopedia-panel', 'gems');
+    panel.style.cssText = `
+      display: none;
+      grid-area: 1 / 1;
+      grid-template-columns: repeat(auto-fit, minmax(${isCompactHeight ? '112px' : '132px'}, 1fr));
+      gap: ${isCompactHeight ? '0.45rem' : '0.6rem'};
+      width: 100%;
+      align-content: start;
+    `;
+
+    for (const entry of SPACE_GEM_ENCYCLOPEDIA) {
+      const discovered = this.discoveredSpaceGems.includes(entry.id);
+      const card = document.createElement('div');
+      card.setAttribute('data-space-gem-card', '');
+      card.setAttribute('data-space-gem-id', entry.id);
+      card.style.cssText = `
+        min-height: ${isCompactHeight ? '112px' : '132px'};
+        border-radius: 18px;
+        padding: ${isCompactHeight ? '0.5rem' : '0.7rem'};
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        gap: 0.22rem;
+        background: ${discovered ? `linear-gradient(135deg, #${entry.accentColor.toString(16).padStart(6, '0')}cc, rgba(255,255,255,0.16))` : 'rgba(255,255,255,0.08)'};
+        color: ${discovered ? '#fff' : '#aeb8d7'};
+        box-shadow: 0 4px 12px rgba(0,0,0,0.24);
+      `;
+
+      const emoji = document.createElement('div');
+      emoji.textContent = discovered ? entry.emoji : '🎁';
+      emoji.style.fontSize = isCompactHeight ? '1.5rem' : '1.8rem';
+      card.appendChild(emoji);
+
+      const name = document.createElement('div');
+      name.textContent = discovered ? entry.reading : '？？？';
+      name.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: ${isCompactHeight ? '0.74rem' : '0.88rem'};
+        font-weight: 900;
+        overflow-wrap: anywhere;
+      `;
+      card.appendChild(name);
+
+      const trivia = document.createElement('div');
+      trivia.textContent = discovered ? entry.trivia : 'ステージで みつけると たからばこに はいるよ';
+      trivia.style.cssText = `
+        font-family: 'Zen Maru Gothic', sans-serif;
+        font-size: ${isCompactHeight ? '0.6rem' : '0.72rem'};
+        line-height: 1.3;
+        overflow-wrap: anywhere;
+      `;
+      card.appendChild(trivia);
+
+      panel.appendChild(card);
+    }
+
+    return panel;
   }
 
   private createConstellationSection(isCompactHeight: boolean): HTMLDivElement {
@@ -398,7 +669,7 @@ export class EncyclopediaOverlay {
       card.appendChild(emoji);
 
       const name = document.createElement('div');
-      name.textContent = entry.encyclopediaLabel;
+      name.textContent = this.getPlanetLabel(entry);
       name.style.cssText = `
         font-family: 'Zen Maru Gothic', sans-serif;
         font-size: ${isCompactHeight ? '0.76rem' : '0.88rem'};
@@ -468,12 +739,14 @@ export class EncyclopediaOverlay {
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
       background: rgba(0, 0, 32, 0.9);
       z-index: 31;
       padding: ${isCompactHeight ? '0.5rem' : '0.9rem'};
       box-sizing: border-box;
-      overflow: hidden;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
     `;
 
     const colorHex = '#' + entry.planetColor.toString(16).padStart(6, '0');
@@ -482,13 +755,12 @@ export class EncyclopediaOverlay {
     detailContent.setAttribute('data-detail-content', '');
     detailContent.style.cssText = `
       width: min(560px, 100%);
-      height: 100%;
-      max-height: 720px;
+      min-height: min(100%, 720px);
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      overflow: hidden;
+      justify-content: flex-start;
+      overflow: visible;
       padding: 0;
       box-sizing: border-box;
     `;
@@ -503,10 +775,10 @@ export class EncyclopediaOverlay {
       flex-direction: column;
       align-items: center;
       padding: ${isCompactHeight ? '0.8rem 0.9rem' : '1.15rem'};
-      overflow: hidden;
+      overflow-y: visible;
+      overflow-x: visible;
       box-sizing: border-box;
     `;
-    detailCard.style.overflowY = 'hidden';
 
     const emoji = document.createElement('div');
     emoji.textContent = entry.emoji;
@@ -516,7 +788,7 @@ export class EncyclopediaOverlay {
 
     const name = document.createElement('div');
     name.id = EncyclopediaOverlay.DETAIL_TITLE_ID;
-    name.textContent = entry.encyclopediaLabel;
+    name.textContent = this.getPlanetLabel(entry);
     name.style.cssText = `
       font-family: 'Zen Maru Gothic', sans-serif;
       font-size: ${isCompactHeight ? '1.35rem' : '1.65rem'};
@@ -727,11 +999,15 @@ export class EncyclopediaOverlay {
   }
 
   private getCardAriaLabel(entry: PlanetEncyclopediaEntry, bestCount: number): string {
-    const parts = [`${entry.encyclopediaLabel}`];
+    const parts = [this.getPlanetLabel(entry)];
     if (bestCount > 0) {
       parts.push(`ベスト ほし ${bestCount}こ`);
     }
     parts.push('くわしく みる');
     return parts.join('、');
+  }
+
+  private getPlanetLabel(entry: PlanetEncyclopediaEntry): string {
+    return formatPlanetEncyclopediaLabel(entry, this.colorVisionSupportMode);
   }
 }

@@ -134,6 +134,14 @@ describe('ScorePopupManager', () => {
     expect(popup?.style.color).toBe('rgb(255, 244, 179)');
   });
 
+  it('shows a heart score popup for a lovely star', () => {
+    manager.show(1000, { x: 0, y: 0, z: 0 }, camera, 'LOVELY');
+
+    const popup = document.querySelector<HTMLElement>('[data-score-popup]');
+    expect(popup?.textContent).toBe('💖 +1000');
+    expect(popup?.getAttribute('data-score-popup-kind')).toBe('lovely-star');
+  });
+
   it('does nothing when ui-overlay is missing', () => {
     document.getElementById('ui-overlay')?.remove();
 

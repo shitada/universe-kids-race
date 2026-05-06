@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { PLANET_ENCYCLOPEDIA } from '../../../src/game/config/PlanetEncyclopedia';
 import { EncyclopediaOverlay } from '../../../src/ui/EncyclopediaOverlay';
 import type { CompanionPreviewController } from '../../../src/ui/CompanionPreview';
 
@@ -71,10 +72,16 @@ describe('EncyclopediaOverlay', () => {
     expect(uiOverlay.children.length).toBe(1);
   });
 
-  it('card grid renders 11 slots', () => {
+  it('adds identity marks to planet names when color-and-mark mode is enabled', () => {
+    overlay.show([1], () => {}, undefined, undefined, [], 'color-and-marks');
+    const firstCard = uiOverlay.querySelector('[data-card][data-stage="1"]') as HTMLElement | null;
+    expect(firstCard?.textContent).toContain('○ 月（つき）');
+  });
+
+  it('card grid renders all encyclopedia slots', () => {
     overlay.show([], () => {});
     const cards = uiOverlay.querySelectorAll('[data-card]');
-    expect(cards.length).toBe(11);
+    expect(cards.length).toBe(PLANET_ENCYCLOPEDIA.length);
   });
 
   it('renders a constellation gallery section with hidden and discovered entries', () => {
@@ -87,6 +94,34 @@ describe('EncyclopediaOverlay', () => {
     expect(uiOverlay.textContent).toContain('せいざずかん');
     expect(uiOverlay.querySelector('[data-constellation-card][data-stage="1"]')?.textContent).toContain('おおぐまざ');
     expect(uiOverlay.querySelector('[data-constellation-card][data-stage="4"]')?.textContent).toContain('？？？');
+  });
+
+  it('shows monthly encounters in the celestial encyclopedia tab', () => {
+    overlay.show([1], () => {}, undefined, undefined, [], undefined, ['new-year-comet']);
+
+    const monthlyTab = uiOverlay.querySelector('[data-encyclopedia-tab="monthly"]') as HTMLElement;
+    dispatchReleaseConfirm(monthlyTab);
+
+    expect(uiOverlay.querySelector('[data-encyclopedia-panel="monthly"]')?.getAttribute('data-active')).toBe('true');
+    expect(uiOverlay.textContent).toContain('てんたいずかん');
+    expect(uiOverlay.querySelector('[data-monthly-encounter-card][data-monthly-encounter-id="new-year-comet"]')?.textContent)
+      .toContain('しんねんすいせい');
+    expect(uiOverlay.querySelector('[data-monthly-encounter-card][data-monthly-encounter-id="geminid-rain"]')?.textContent)
+      .toContain('？？？');
+  });
+
+  it('shows discovered and hidden space gems in the treasure tab', () => {
+    overlay.show([1], () => {}, undefined, undefined, [], undefined, [], ['diamond-nebula']);
+
+    const gemTab = uiOverlay.querySelector('[data-encyclopedia-tab="gems"]') as HTMLElement;
+    dispatchReleaseConfirm(gemTab);
+
+    expect(uiOverlay.querySelector('[data-encyclopedia-panel="gems"]')?.getAttribute('data-active')).toBe('true');
+    expect(uiOverlay.textContent).toContain('たからばこ');
+    expect(uiOverlay.querySelector('[data-space-gem-card][data-space-gem-id="diamond-nebula"]')?.textContent)
+      .toContain('だいやもんどせいうん');
+    expect(uiOverlay.querySelector('[data-space-gem-card][data-space-gem-id="ruby-solar-wind"]')?.textContent)
+      .toContain('？？？');
   });
 
   it('unlocked card shows emoji and name', () => {
@@ -336,7 +371,7 @@ describe('EncyclopediaOverlay', () => {
     expect(detail).not.toBeNull();
   });
 
-  it('uses a compact no-scroll gallery layout on low viewport heights', () => {
+  it('uses a compact scrollable gallery layout on low viewport heights', () => {
     setViewportHeight(520);
 
     overlay.show([1], () => {});
@@ -347,14 +382,14 @@ describe('EncyclopediaOverlay', () => {
     const backBtn = uiOverlay.querySelector('[data-gallery-back]') as HTMLButtonElement | null;
 
     expect(galleryContent).not.toBeNull();
-    expect(galleryContent?.style.maxHeight).toBe('720px');
-    expect(galleryContent?.style.overflow).toBe('hidden');
+    expect(galleryContent?.style.minHeight).toBe('min(100%, 720px)');
+    expect(galleryContent?.style.overflow).toBe('visible');
     expect(galleryMain?.style.display).toBe('grid');
     expect(grid?.style.gridTemplateColumns).toContain('minmax(86px, 1fr)');
     expect(backBtn).not.toBeNull();
   });
 
-  it('keeps detail actions inside compact no-scroll containers on low viewport heights', () => {
+  it('keeps detail actions inside compact scrollable containers on low viewport heights', () => {
     setViewportHeight(520);
 
     overlay.show([1], () => {}, () => {});
@@ -367,9 +402,9 @@ describe('EncyclopediaOverlay', () => {
     const playBtn = uiOverlay.querySelector('[data-detail-play]') as HTMLButtonElement | null;
 
     expect(detailContent).not.toBeNull();
-    expect(detailContent?.style.maxHeight).toBe('720px');
-    expect(detailContent?.style.overflow).toBe('hidden');
-    expect(detailCard?.style.overflowY).toBe('hidden');
+    expect(detailContent?.style.minHeight).toBe('min(100%, 720px)');
+    expect(detailContent?.style.overflow).toBe('visible');
+    expect(detailCard?.style.overflowY).not.toBe('hidden');
     expect(detailCard).not.toBeNull();
     expect(backBtn).not.toBeNull();
     expect(playBtn).not.toBeNull();

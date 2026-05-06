@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as THREE from 'three';
-import { Star, setStarHighContrastMode } from '../../../src/game/entities/Star';
+import { Star, setStarColorVisionSupportMode, setStarHighContrastMode } from '../../../src/game/entities/Star';
 
 describe('Star', () => {
   afterEach(() => {
     setStarHighContrastMode(false);
+    setStarColorVisionSupportMode('color-only');
   });
 
   it('creates a NORMAL star with score 100', () => {
@@ -23,6 +24,13 @@ describe('Star', () => {
     const star = new Star(0, 0, -10, 'RAINBOW');
     expect(star.starType).toBe('RAINBOW');
     expect(star.scoreValue).toBe(500);
+  });
+
+  it('creates a LOVELY star with score 1000 and heart geometry', () => {
+    const star = new Star(0, 0, -10, 'LOVELY');
+    expect(star.starType).toBe('LOVELY');
+    expect(star.scoreValue).toBe(1000);
+    expect(star.mesh.geometry.type).toBe('ExtrudeGeometry');
   });
 
   it('marks as collected when collect is called', () => {
@@ -84,6 +92,14 @@ describe('Star', () => {
     expect(rainbow2.mesh.geometry).toBe(normal.mesh.geometry);
     expect(rainbow1.mesh.material).not.toBe(normal.mesh.material);
     expect(rainbow1.mesh.material).not.toBe(rainbow2.mesh.material);
+  });
+
+  it('LOVELY stars share heart geometry but keep per-instance animated materials', () => {
+    const lovely1 = new Star(0, 0, -10, 'LOVELY');
+    const lovely2 = new Star(0, 0, -10, 'LOVELY');
+
+    expect(lovely1.mesh.geometry).toBe(lovely2.mesh.geometry);
+    expect(lovely1.mesh.material).not.toBe(lovely2.mesh.material);
   });
 
   it('switches NORMAL stars across shared LOD resources', () => {
@@ -169,6 +185,17 @@ describe('Star', () => {
     setStarHighContrastMode(false);
     star.reset(0, 0, -10);
     expect(outline?.visible).toBe(false);
+  });
+
+  it('shows a shared ★ mark on rainbow stars only in color-and-mark mode', () => {
+    setStarColorVisionSupportMode('color-and-marks');
+    const star = new Star(0, 0, -10, 'RAINBOW');
+    const mark = star.mesh.getObjectByName('rainbow-star-mark');
+    expect(mark?.visible).toBe(true);
+
+    setStarColorVisionSupportMode('color-only');
+    star.reset(0, 0, -10);
+    expect(mark?.visible).toBe(false);
   });
 
   it('reset() repositions the star and clears transient state', () => {

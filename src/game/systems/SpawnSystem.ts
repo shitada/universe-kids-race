@@ -1,8 +1,10 @@
-import type { StageConfig } from '../../types';
+import type { StageConfig, StarType } from '../../types';
 import { Star } from '../entities/Star';
 import { Meteorite } from '../entities/Meteorite';
 import { ShootingStar } from '../entities/ShootingStar';
 import { Comet } from '../entities/Comet';
+import { SpaceGem } from '../entities/SpaceGem';
+import { SPACE_GEM_SPAWN_CONFIG, pickSpaceGemType } from '../config/SpaceGemConfig';
 import { EntityPool } from '../utils/EntityPool';
 
 /**
@@ -18,6 +20,7 @@ export interface SpawnResult {
   newMeteorites: Meteorite[];
   newShootingStars: ShootingStar[];
   newComets: Comet[];
+  newSpaceGems: SpaceGem[];
 }
 
 export interface SpawnModifiers {
@@ -49,6 +52,7 @@ export class SpawnSystem {
   private static readonly SAFE_XY_DISTANCE = 2.5;
   private static readonly SAFE_Z_BAND = 3.0;
   private static readonly MAX_REROLL = 4;
+  private static readonly LOVELY_STAR_SPAWN_CHANCE = 0.01;
   private static readonly RAINBOW_STAR_SPAWN_CHANCE = 0.05;
 
   // Constitution I (子供ファースト) / III (左右移動のみ): 宇宙船は Y=0 固定で
@@ -89,6 +93,8 @@ export class SpawnSystem {
   private nextCometDelay = SpawnSystem.COMET_MIN_DELAY;
   private spawnAheadDistance = 80;
   private meteoriteIntervalMultiplier = 1;
+  private spaceGemElapsed = 0;
+  private spaceGemAttemptTimer = 0;
 
   // Reusable result buffer to avoid per-frame GC allocations on the hot path.
   // NOTE: The returned object (and its arrays) is owned by this instance and
@@ -99,13 +105,13 @@ export class SpawnSystem {
     newMeteorites: [],
     newShootingStars: [],
     newComets: [],
+    newSpaceGems: [],
   };
 
-  // NORMAL stars, RAINBOW stars, and meteorites are all pooled to eliminate
-  // per-spawn Mesh / Material allocations on iPad Safari. RAINBOW stars own a
-  // per-instance animated MeshToonMaterial; pooling preserves that material
-  // across the instance's lifetime so hue animation reuses the same color
-  // buffers and avoids GC churn from repeated material construction/disposal.
+  // NORMAL stars, RAINBOW stars, LOVELY stars, and meteorites are all pooled
+  // to eliminate per-spawn Mesh / Material allocations on iPad Safari.
+  // RAINBOW / LOVELY stars own per-instance animated materials; pooling
+  // preserves those resources across the instance lifetime.
   private readonly normalStarPool = new EntityPool<Star, readonly [number, number, number]>(
     (x, y, z) => new Star(x, y, z, 'NORMAL'),
     (star, x, y, z) => star.reset(x, y, z),
@@ -114,6 +120,12 @@ export class SpawnSystem {
   );
   private readonly rainbowStarPool = new EntityPool<Star, readonly [number, number, number]>(
     (x, y, z) => new Star(x, y, z, 'RAINBOW'),
+    (star, x, y, z) => star.reset(x, y, z),
+    (star) => star.recycle(),
+    (star) => star.dispose(),
+  );
+  private readonly lovelyStarPool = new EntityPool<Star, readonly [number, number, number]>(
+    (x, y, z) => new Star(x, y, z, 'LOVELY'),
     (star, x, y, z) => star.reset(x, y, z),
     (star) => star.recycle(),
     (star) => star.dispose(),
@@ -135,6 +147,12 @@ export class SpawnSystem {
     (comet, x, y, z, direction) => comet.reset(x, y, z, direction),
     (comet) => comet.recycle(),
     (comet) => comet.dispose(),
+  );
+  private readonly spaceGemPool = new EntityPool<SpaceGem, readonly [number, number, number, ReturnType<typeof pickSpaceGemType>]>(
+    (x, y, z, gemType) => new SpaceGem(x, y, z, gemType),
+    (spaceGem, x, y, z, gemType) => spaceGem.reset(x, y, z, gemType),
+    (spaceGem) => spaceGem.recycle(),
+    (spaceGem) => spaceGem.dispose(),
   );
 
   /**
@@ -162,14 +180,50 @@ export class SpawnSystem {
     existingShootingStars: readonly ShootingStar[] = [],
     existingComets: readonly Comet[] = [],
     modifiers: SpawnModifiers = {},
+    existingSpaceGems: readonly SpaceGem[] = [],
   ): SpawnResult {
     const result = this.result;
     result.newStars.length = 0;
     result.newMeteorites.length = 0;
     result.newShootingStars.length = 0;
     result.newComets.length = 0;
+    result.newSpaceGems.length = 0;
     this.ensureRareShootingStarPlan(config);
     this.stageElapsedTime += deltaTime;
+    this.spaceGemElapsed += deltaTime;
+    this.spaceGemAttemptTimer += deltaTime;
+
+    while (this.spaceGemAttemptTimer >= SPACE_GEM_SPAWN_CONFIG.attemptInterval) {
+      this.spaceGemAttemptTimer -= SPACE_GEM_SPAWN_CONFIG.attemptInterval;
+      if (this.spaceGemElapsed < SPACE_GEM_SPAWN_CONFIG.introGraceSeconds) {
+        continue;
+      }
+      if (
+        this.hasActiveSpaceGem(existingSpaceGems) ||
+        this.hasActiveShootingStar(existingShootingStars) ||
+        this.hasActiveComet(existingComets)
+      ) {
+        continue;
+      }
+      if (Math.random() >= SPACE_GEM_SPAWN_CONFIG.spawnChance) {
+        continue;
+      }
+      const gemType = pickSpaceGemType(Math.random());
+      const z = spaceshipZ - SPACE_GEM_SPAWN_CONFIG.spawnAheadDistance - Math.random() * SPACE_GEM_SPAWN_CONFIG.spawnZJitter;
+      let x = (Math.random() - 0.5) * 2 * SPACE_GEM_SPAWN_CONFIG.spawnXRange;
+      let y = SPACE_GEM_SPAWN_CONFIG.spawnYMin + Math.random() * SPACE_GEM_SPAWN_CONFIG.spawnYRange;
+      let safe = this.isXySafeAgainstEntities(x, y, z, existingMeteorites, result.newMeteorites);
+      for (let attempt = 0; !safe && attempt < SpawnSystem.MAX_REROLL; attempt++) {
+        x = (Math.random() - 0.5) * 2 * SPACE_GEM_SPAWN_CONFIG.spawnXRange;
+        y = SPACE_GEM_SPAWN_CONFIG.spawnYMin + Math.random() * SPACE_GEM_SPAWN_CONFIG.spawnYRange;
+        safe = this.isXySafeAgainstEntities(x, y, z, existingMeteorites, result.newMeteorites);
+      }
+      if (!safe) {
+        continue;
+      }
+      result.newSpaceGems.push(this.spaceGemPool.acquire(x, y, z, gemType));
+      break;
+    }
 
     // Spawn stars ahead based on density
     const starSpacing = 100 / config.starDensity;
@@ -180,7 +234,7 @@ export class SpawnSystem {
       if (spawned >= SpawnSystem.MAX_STAR_SPAWNS_PER_FRAME) break;
       this.lastStarSpawnZ -= starSpacing;
       const z = this.lastStarSpawnZ;
-      const isRainbow = Math.random() < SpawnSystem.RAINBOW_STAR_SPAWN_CHANCE;
+      const starType = SpawnSystem.sampleStarType();
       let x = (Math.random() - 0.5) * 14;
       let y = (Math.random() - 0.5) * 2 * SpawnSystem.STAR_SPAWN_Y_HALF_RANGE;
       let safe = this.isXySafeAgainstEntities(x, y, z, existingMeteorites, result.newMeteorites);
@@ -194,9 +248,7 @@ export class SpawnSystem {
       // entirely; per Constitution I, a missing star is preferable to an unfair pair.
       spawned++;
       if (!safe) continue;
-      const star = isRainbow
-        ? this.rainbowStarPool.acquire(x, y, z)
-        : this.normalStarPool.acquire(x, y, z);
+      const star = this.acquireStar(x, y, z, starType);
       result.newStars.push(star);
     }
 
@@ -343,13 +395,21 @@ export class SpawnSystem {
       this.rainbowStarPool.release(star);
       return;
     }
+    if (star.starType === 'LOVELY') {
+      this.lovelyStarPool.release(star);
+      return;
+    }
     this.normalStarPool.release(star);
   }
 
-  acquireStar(x: number, y: number, z: number, starType: 'NORMAL' | 'RAINBOW' = 'NORMAL'): Star {
-    return starType === 'RAINBOW'
-      ? this.rainbowStarPool.acquire(x, y, z)
-      : this.normalStarPool.acquire(x, y, z);
+  acquireStar(x: number, y: number, z: number, starType: StarType = 'NORMAL'): Star {
+    if (starType === 'RAINBOW') {
+      return this.rainbowStarPool.acquire(x, y, z);
+    }
+    if (starType === 'LOVELY') {
+      return this.lovelyStarPool.acquire(x, y, z);
+    }
+    return this.normalStarPool.acquire(x, y, z);
   }
 
   releaseMeteorite(met: Meteorite): void {
@@ -364,6 +424,10 @@ export class SpawnSystem {
     this.cometPool.release(comet);
   }
 
+  releaseSpaceGem(spaceGem: SpaceGem): void {
+    this.spaceGemPool.release(spaceGem);
+  }
+
   reset(): void {
     this.lastStarSpawnZ = 0;
     this.meteoriteTimer = 0;
@@ -376,6 +440,8 @@ export class SpawnSystem {
     this.cometTimer = 0;
     this.nextCometDelay = SpawnSystem.COMET_MIN_DELAY;
     this.meteoriteIntervalMultiplier = 1;
+    this.spaceGemElapsed = 0;
+    this.spaceGemAttemptTimer = 0;
   }
 
   /**
@@ -394,18 +460,22 @@ export class SpawnSystem {
   recycleAll(): void {
     this.normalStarPool.releaseAll();
     this.rainbowStarPool.releaseAll();
+    this.lovelyStarPool.releaseAll();
     this.meteoritePool.releaseAll();
     this.shootingStarPool.releaseAll();
     this.cometPool.releaseAll();
+    this.spaceGemPool.releaseAll();
   }
 
   /** Permanently free all pooled GPU resources. Call from scene teardown. */
   dispose(): void {
     this.normalStarPool.dispose();
     this.rainbowStarPool.dispose();
+    this.lovelyStarPool.dispose();
     this.meteoritePool.dispose();
     this.shootingStarPool.dispose();
     this.cometPool.dispose();
+    this.spaceGemPool.dispose();
   }
 
   /** Test/diagnostic helper: number of NORMAL stars allocated by the pool. */
@@ -416,6 +486,10 @@ export class SpawnSystem {
   /** Test/diagnostic helper: number of RAINBOW stars allocated by the pool. */
   getRainbowStarPoolSize(): number {
     return this.rainbowStarPool.getPoolSize();
+  }
+
+  getLovelyStarPoolSize(): number {
+    return this.lovelyStarPool.getPoolSize();
   }
 
   /** Test/diagnostic helper: number of meteorites allocated by the pool. */
@@ -431,6 +505,10 @@ export class SpawnSystem {
     return this.cometPool.getPoolSize();
   }
 
+  getSpaceGemPoolSize(): number {
+    return this.spaceGemPool.getPoolSize();
+  }
+
   setMeteoriteIntervalMultiplier(multiplier: number): void {
     this.meteoriteIntervalMultiplier = Number.isFinite(multiplier) && multiplier >= 1 ? multiplier : 1;
   }
@@ -441,6 +519,17 @@ export class SpawnSystem {
 
   private static sampleCometDelay(): number {
     return SpawnSystem.COMET_MIN_DELAY + Math.random() * SpawnSystem.COMET_DELAY_RANGE;
+  }
+
+  private static sampleStarType(): StarType {
+    const roll = Math.random();
+    if (roll < SpawnSystem.LOVELY_STAR_SPAWN_CHANCE) {
+      return 'LOVELY';
+    }
+    if (roll < SpawnSystem.LOVELY_STAR_SPAWN_CHANCE + SpawnSystem.RAINBOW_STAR_SPAWN_CHANCE) {
+      return 'RAINBOW';
+    }
+    return 'NORMAL';
   }
 
   private ensureRareShootingStarPlan(config: StageConfig): void {
@@ -496,6 +585,15 @@ export class SpawnSystem {
       return false;
     }
     return true;
+  }
+
+  private hasActiveSpaceGem(existingSpaceGems: readonly SpaceGem[]): boolean {
+    for (const spaceGem of existingSpaceGems) {
+      if (!spaceGem.isCollected) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private spawnShootingStar(spaceshipZ: number, meteoShowerActive: boolean, index: number): ShootingStar {

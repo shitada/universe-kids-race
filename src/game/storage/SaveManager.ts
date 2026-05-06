@@ -1,18 +1,33 @@
 import {
+  AUDIO_VOLUME_LEVELS,
   DEFAULT_SPACESHIP_CUSTOMIZATION,
+  type AudioSettings,
   type GameplayStats,
+  type Language,
+  MONTHLY_ENCOUNTER_IDS,
+  type MonthlyEncounterId,
+  SPACE_GEM_TYPES,
+  type SpaceGemType,
+  type RestReminderSettings,
   SPECIAL_SHOOTING_STAR_TYPES,
   SPACESHIP_COLOR_KEYS,
   type SaveData,
   type SpecialShootingStarType,
   type SpaceshipColorKey,
   type SpaceshipCustomization,
-  type VibrationIntensity,
+  type VisualFeedbackIntensity,
 } from '../../types';
 import {
+  DEFAULT_COLOR_VISION_SUPPORT_MODE,
+  normalizeColorVisionSupportMode,
+} from '../config/PlanetEncyclopedia';
+import {
   DEFAULT_MOTION_SENSITIVITY,
+  getDefaultMotionSensitivity,
   normalizeMotionSensitivity,
 } from '../accessibility/motionSensitivity';
+import { DEFAULT_REST_REMINDER_ENABLED } from '../config/RestReminderConfig';
+import { DEFAULT_LANGUAGE, LANGUAGES } from '../i18n/types';
 import { TOTAL_STAGES } from '../config/StageConfig';
 
 const STORAGE_KEY = 'universe-kids-race-save';
@@ -31,7 +46,8 @@ const DEFAULT_DATA: SaveData = {
   clearedStage: 0,
   unlockedPlanets: [],
   muted: false,
-  vibrationSettings: { intensity: 'medium' },
+  visualFeedbackSettings: { intensity: 'medium' },
+  restReminderSettings: { enabled: DEFAULT_REST_REMINDER_ENABLED },
   bestStageStars: {},
   gameplayStats: createDefaultGameplayStats(),
   tutorialShown: false,
@@ -41,6 +57,7 @@ const DEFAULT_DATA: SaveData = {
 export type SessionState = 'fresh' | 'existing' | 'unavailable';
 
 function defaults(): SaveData {
+  const defaultMotionSensitivity = getDefaultMotionSensitivity();
   return {
     ...DEFAULT_DATA,
     unlockedPlanets: [],
@@ -48,6 +65,27 @@ function defaults(): SaveData {
     gameplayStats: createDefaultGameplayStats(),
     tutorialShown: false,
     spaceshipCustomization: { ...DEFAULT_SPACESHIP_CUSTOMIZATION },
+    ...(defaultMotionSensitivity !== DEFAULT_MOTION_SENSITIVITY
+      ? {
+        colorAccessibility: {
+          motionSensitivity: defaultMotionSensitivity,
+        },
+      }
+      : {}),
+  };
+}
+
+function applySystemMotionSensitivityDefault(
+  colorAccessibility: SaveData['colorAccessibility'],
+): SaveData['colorAccessibility'] {
+  const defaultMotionSensitivity = getDefaultMotionSensitivity();
+  if (defaultMotionSensitivity === DEFAULT_MOTION_SENSITIVITY || colorAccessibility?.motionSensitivity) {
+    return colorAccessibility;
+  }
+
+  return {
+    ...(colorAccessibility ?? {}),
+    motionSensitivity: defaultMotionSensitivity,
   };
 }
 
@@ -122,7 +160,7 @@ function normalizeGameplayStats(value: unknown): GameplayStats {
   return normalized;
 }
 
-function normalizeVibrationIntensity(value: unknown): VibrationIntensity {
+function normalizeVisualFeedbackIntensity(value: unknown): VisualFeedbackIntensity {
   switch (value) {
     case 'off':
     case 'weak':
@@ -133,23 +171,76 @@ function normalizeVibrationIntensity(value: unknown): VibrationIntensity {
   }
 }
 
+function readLegacyVisualFeedbackIntensity(data: unknown): unknown {
+  return (data as { vibrationSettings?: { intensity?: unknown } }).vibrationSettings?.intensity;
+}
+
+function normalizeAudioVolumeLevel(value: unknown): AudioSettings['bgmVolume'] {
+  return typeof value === 'number' && (AUDIO_VOLUME_LEVELS as readonly number[]).includes(value)
+    ? value as AudioSettings['bgmVolume']
+    : undefined;
+}
+
+function normalizeAudioSettings(value: unknown): SaveData['audioSettings'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const bgmVolume = normalizeAudioVolumeLevel((value as { bgmVolume?: unknown }).bgmVolume);
+  const sfxVolume = normalizeAudioVolumeLevel((value as { sfxVolume?: unknown }).sfxVolume);
+
+  if (bgmVolume === undefined && sfxVolume === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...(bgmVolume !== undefined ? { bgmVolume } : {}),
+    ...(sfxVolume !== undefined ? { sfxVolume } : {}),
+  };
+}
+
+function normalizeRestReminderSettings(value: unknown): RestReminderSettings {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { enabled: DEFAULT_REST_REMINDER_ENABLED };
+  }
+
+  return {
+    enabled: (value as { enabled?: unknown }).enabled !== false,
+  };
+}
+
+function normalizeLanguage(value: unknown): Language | undefined {
+  return typeof value === 'string' && (LANGUAGES as readonly string[]).includes(value)
+    ? value as Language
+    : undefined;
+}
+
 function normalizeColorAccessibilitySettings(value: unknown): SaveData['colorAccessibility'] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
   }
 
   const highContrast = (value as { highContrast?: unknown }).highContrast === true;
+  const defaultMotionSensitivity = getDefaultMotionSensitivity();
   const motionSensitivity = normalizeMotionSensitivity(
     (value as { motionSensitivity?: unknown }).motionSensitivity,
   );
+  const colorVisionSupportMode = normalizeColorVisionSupportMode(
+    (value as { colorVisionSupportMode?: unknown }).colorVisionSupportMode,
+  );
 
-  if (!highContrast && motionSensitivity === DEFAULT_MOTION_SENSITIVITY) {
+  if (
+    !highContrast &&
+    motionSensitivity === defaultMotionSensitivity &&
+    colorVisionSupportMode === DEFAULT_COLOR_VISION_SUPPORT_MODE
+  ) {
     return undefined;
   }
 
   return {
     ...(highContrast ? { highContrast: true } : {}),
-    ...(motionSensitivity !== DEFAULT_MOTION_SENSITIVITY ? { motionSensitivity } : {}),
+    ...(motionSensitivity !== defaultMotionSensitivity ? { motionSensitivity } : {}),
+    ...(colorVisionSupportMode !== DEFAULT_COLOR_VISION_SUPPORT_MODE ? { colorVisionSupportMode } : {}),
   };
 }
 
@@ -160,6 +251,26 @@ function normalizeSpecialShootingStars(value: unknown): SpecialShootingStarType[
   return [...new Set(value.filter(
     (entry): entry is SpecialShootingStarType =>
       typeof entry === 'string' && (SPECIAL_SHOOTING_STAR_TYPES as readonly string[]).includes(entry),
+  ))];
+}
+
+function normalizeMonthlyEncounters(value: unknown): MonthlyEncounterId[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return [...new Set(value.filter(
+    (entry): entry is MonthlyEncounterId =>
+      typeof entry === 'string' && (MONTHLY_ENCOUNTER_IDS as readonly string[]).includes(entry),
+  ))];
+}
+
+function normalizeSpaceGems(value: unknown): SpaceGemType[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return [...new Set(value.filter(
+    (entry): entry is SpaceGemType =>
+      typeof entry === 'string' && (SPACE_GEM_TYPES as readonly string[]).includes(entry),
   ))];
 }
 
@@ -178,9 +289,12 @@ function sanitizeSaveData(data: SaveData): SaveData {
     gameplayStats: normalizeGameplayStats(data.gameplayStats),
     tutorialShown: data.tutorialShown === true,
     spaceshipCustomization: normalizeSpaceshipCustomization(data.spaceshipCustomization),
-    vibrationSettings: {
-      intensity: normalizeVibrationIntensity(data.vibrationSettings?.intensity),
+    visualFeedbackSettings: {
+      intensity: normalizeVisualFeedbackIntensity(
+        data.visualFeedbackSettings?.intensity ?? readLegacyVisualFeedbackIntensity(data),
+      ),
     },
+    restReminderSettings: normalizeRestReminderSettings(data.restReminderSettings),
   };
 
   const discoveredConstellations = Array.isArray(data.discoveredConstellations)
@@ -197,9 +311,29 @@ function sanitizeSaveData(data: SaveData): SaveData {
     sanitized.discoveredSpecialStars = discoveredSpecialStars;
   }
 
+  const discoveredMonthlyEncounters = normalizeMonthlyEncounters(data.discoveredMonthlyEncounters);
+  if (discoveredMonthlyEncounters.length > 0) {
+    sanitized.discoveredMonthlyEncounters = discoveredMonthlyEncounters;
+  }
+
+  const discoveredSpaceGems = normalizeSpaceGems(data.discoveredSpaceGems);
+  if (discoveredSpaceGems.length > 0) {
+    sanitized.discoveredSpaceGems = discoveredSpaceGems;
+  }
+
   const colorAccessibility = normalizeColorAccessibilitySettings(data.colorAccessibility);
   if (colorAccessibility) {
     sanitized.colorAccessibility = colorAccessibility;
+  }
+
+  const language = normalizeLanguage(data.language);
+  if (language && language !== DEFAULT_LANGUAGE) {
+    sanitized.language = language;
+  }
+
+  const audioSettings = normalizeAudioSettings(data.audioSettings);
+  if (audioSettings) {
+    sanitized.audioSettings = audioSettings;
   }
 
   if (data.bestStageStars && typeof data.bestStageStars === 'object') {
@@ -242,17 +376,37 @@ export class SaveManager {
 
       data.muted = data.muted === true;
       data.tutorialShown = data.tutorialShown === true;
-      data.vibrationSettings = {
-        intensity: normalizeVibrationIntensity((data as { vibrationSettings?: { intensity?: unknown } }).vibrationSettings?.intensity),
+      const audioSettings = normalizeAudioSettings((data as { audioSettings?: unknown }).audioSettings);
+      if (audioSettings) {
+        data.audioSettings = audioSettings;
+      } else {
+        delete (data as { audioSettings?: unknown }).audioSettings;
+      }
+      data.visualFeedbackSettings = {
+        intensity: normalizeVisualFeedbackIntensity(
+          (data as { visualFeedbackSettings?: { intensity?: unknown } }).visualFeedbackSettings?.intensity
+          ?? readLegacyVisualFeedbackIntensity(data),
+        ),
       };
-
-      const colorAccessibility = normalizeColorAccessibilitySettings(
-        (data as { colorAccessibility?: unknown }).colorAccessibility,
+      delete (data as { vibrationSettings?: unknown }).vibrationSettings;
+      data.restReminderSettings = normalizeRestReminderSettings(
+        (data as { restReminderSettings?: unknown }).restReminderSettings,
       );
+
+      const colorAccessibility = applySystemMotionSensitivityDefault(normalizeColorAccessibilitySettings(
+        (data as { colorAccessibility?: unknown }).colorAccessibility,
+      ));
       if (colorAccessibility) {
         data.colorAccessibility = colorAccessibility;
       } else {
         delete (data as { colorAccessibility?: unknown }).colorAccessibility;
+      }
+
+      const language = normalizeLanguage((data as { language?: unknown }).language);
+      if (language && language !== DEFAULT_LANGUAGE) {
+        data.language = language;
+      } else {
+        delete (data as { language?: unknown }).language;
       }
 
       const rawBest = (data as { bestStageStars?: unknown }).bestStageStars;
@@ -294,6 +448,22 @@ export class SaveManager {
         data.discoveredSpecialStars = discoveredSpecialStars;
       } else {
         delete (data as { discoveredSpecialStars?: unknown }).discoveredSpecialStars;
+      }
+      const discoveredMonthlyEncounters = normalizeMonthlyEncounters(
+        (data as { discoveredMonthlyEncounters?: unknown }).discoveredMonthlyEncounters,
+      );
+      if (discoveredMonthlyEncounters.length > 0) {
+        data.discoveredMonthlyEncounters = discoveredMonthlyEncounters;
+      } else {
+        delete (data as { discoveredMonthlyEncounters?: unknown }).discoveredMonthlyEncounters;
+      }
+      const discoveredSpaceGems = normalizeSpaceGems(
+        (data as { discoveredSpaceGems?: unknown }).discoveredSpaceGems,
+      );
+      if (discoveredSpaceGems.length > 0) {
+        data.discoveredSpaceGems = discoveredSpaceGems;
+      } else {
+        delete (data as { discoveredSpaceGems?: unknown }).discoveredSpaceGems;
       }
       data.gameplayStats = normalizeGameplayStats((data as { gameplayStats?: unknown }).gameplayStats);
 
@@ -349,11 +519,14 @@ export class SaveManager {
     try {
       const prev = this.load();
       const muted = prev.muted === true;
-      const vibrationSettings = {
-        intensity: normalizeVibrationIntensity(prev.vibrationSettings?.intensity),
+      const visualFeedbackSettings = {
+        intensity: normalizeVisualFeedbackIntensity(prev.visualFeedbackSettings?.intensity),
       };
+      const restReminderSettings = normalizeRestReminderSettings(prev.restReminderSettings);
       const lastStablePixelTier = prev.lastStablePixelTier;
       const tutorialShown = prev.tutorialShown === true;
+      const language = normalizeLanguage(prev.language);
+      const audioSettings = normalizeAudioSettings(prev.audioSettings);
       const colorAccessibility = normalizeColorAccessibilitySettings(prev.colorAccessibility);
       const gameplayStats = normalizeGameplayStats(prev.gameplayStats);
       const spaceshipCustomization = normalizeSpaceshipCustomization(prev.spaceshipCustomization);
@@ -362,14 +535,21 @@ export class SaveManager {
         clearedStage: 0,
         unlockedPlanets: [],
         muted,
-        vibrationSettings,
+        visualFeedbackSettings,
+        restReminderSettings,
         bestStageStars: {},
         gameplayStats,
         tutorialShown,
         spaceshipCustomization,
       };
+      if (audioSettings) {
+        next.audioSettings = audioSettings;
+      }
       if (colorAccessibility) {
         next.colorAccessibility = colorAccessibility;
+      }
+      if (language && language !== DEFAULT_LANGUAGE) {
+        next.language = language;
       }
       if (typeof lastStablePixelTier === 'number') {
         next.lastStablePixelTier = lastStablePixelTier;
@@ -386,10 +566,13 @@ export class SaveManager {
     try {
       const prev = this.load();
       const muted = prev.muted === true;
-      const vibrationSettings = {
-        intensity: normalizeVibrationIntensity(prev.vibrationSettings?.intensity),
+      const visualFeedbackSettings = {
+        intensity: normalizeVisualFeedbackIntensity(prev.visualFeedbackSettings?.intensity),
       };
+      const restReminderSettings = normalizeRestReminderSettings(prev.restReminderSettings);
       const lastStablePixelTier = prev.lastStablePixelTier;
+      const language = normalizeLanguage(prev.language);
+      const audioSettings = normalizeAudioSettings(prev.audioSettings);
       const colorAccessibility = normalizeColorAccessibilitySettings(prev.colorAccessibility);
       const gameplayStats = normalizeGameplayStats(prev.gameplayStats);
       const spaceshipCustomization = normalizeSpaceshipCustomization(prev.spaceshipCustomization);
@@ -398,14 +581,21 @@ export class SaveManager {
         clearedStage: 0,
         unlockedPlanets: [],
         muted,
-        vibrationSettings,
+        visualFeedbackSettings,
+        restReminderSettings,
         bestStageStars: {},
         gameplayStats,
         tutorialShown: false,
         spaceshipCustomization,
       };
+      if (audioSettings) {
+        next.audioSettings = audioSettings;
+      }
       if (colorAccessibility) {
         next.colorAccessibility = colorAccessibility;
+      }
+      if (language && language !== DEFAULT_LANGUAGE) {
+        next.language = language;
       }
       if (typeof lastStablePixelTier === 'number') {
         next.lastStablePixelTier = lastStablePixelTier;
@@ -501,6 +691,46 @@ export class SaveManager {
       return true;
     } catch (e) {
       console.warn('SaveManager.markSpecialStarDiscovered failed:', e);
+      return false;
+    }
+  }
+
+  markMonthlyEncounterDiscovered(encounterId: MonthlyEncounterId): boolean {
+    if (!(MONTHLY_ENCOUNTER_IDS as readonly string[]).includes(encounterId)) {
+      return false;
+    }
+    try {
+      const data = this.load();
+      const discoveredMonthlyEncounters = [...(data.discoveredMonthlyEncounters ?? [])];
+      if (discoveredMonthlyEncounters.includes(encounterId)) {
+        return false;
+      }
+      discoveredMonthlyEncounters.push(encounterId);
+      data.discoveredMonthlyEncounters = discoveredMonthlyEncounters;
+      this.save(data);
+      return true;
+    } catch (e) {
+      console.warn('SaveManager.markMonthlyEncounterDiscovered failed:', e);
+      return false;
+    }
+  }
+
+  markSpaceGemDiscovered(gemId: SpaceGemType): boolean {
+    if (!(SPACE_GEM_TYPES as readonly string[]).includes(gemId)) {
+      return false;
+    }
+    try {
+      const data = this.load();
+      const discoveredSpaceGems = [...(data.discoveredSpaceGems ?? [])];
+      if (discoveredSpaceGems.includes(gemId)) {
+        return false;
+      }
+      discoveredSpaceGems.push(gemId);
+      data.discoveredSpaceGems = discoveredSpaceGems;
+      this.save(data);
+      return true;
+    } catch (e) {
+      console.warn('SaveManager.markSpaceGemDiscovered failed:', e);
       return false;
     }
   }

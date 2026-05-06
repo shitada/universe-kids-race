@@ -39,6 +39,7 @@ describe('SaveManager', () => {
     storage.clear();
     sessionStore.clear();
     vi.clearAllMocks();
+    Reflect.deleteProperty(globalThis, 'matchMedia');
   });
 
   it('returns default data when no save exists', () => {
@@ -52,7 +53,7 @@ describe('SaveManager', () => {
       totalBoostUses: 0,
       stageClearCounts: {},
     });
-    expect(data.vibrationSettings).toEqual({ intensity: 'medium' });
+    expect(data.visualFeedbackSettings).toEqual({ intensity: 'medium' });
   });
 
   it('saves and loads data', () => {
@@ -127,8 +128,8 @@ describe('SaveManager', () => {
       expect(data.unlockedPlanets).toEqual([]);
     });
 
-    it('filters out values outside range 1-11', () => {
-      storage.set('universe-kids-race-save', JSON.stringify({ clearedStage: 3, unlockedPlanets: [0, 1, 2, 12, 99, -1] }));
+    it('filters out values outside the valid stage range', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({ clearedStage: 3, unlockedPlanets: [0, 1, 2, 13, 99, -1] }));
       const manager = new SaveManager();
       const data = manager.load();
       expect(data.unlockedPlanets).toEqual([1, 2]);
@@ -210,6 +211,72 @@ describe('SaveManager', () => {
       expect(manager.markSpecialStarDiscovered('silver')).toBe(true);
       expect(manager.markSpecialStarDiscovered('silver')).toBe(false);
       expect(manager.load().discoveredSpecialStars ?? []).toEqual(['silver']);
+    });
+  });
+
+  describe('discoveredMonthlyEncounters', () => {
+    it('defaults to empty array when the field is missing', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({ clearedStage: 1, unlockedPlanets: [1] }));
+      const manager = new SaveManager();
+      expect(manager.load().discoveredMonthlyEncounters ?? []).toEqual([]);
+    });
+
+    it('sanitizes invalid monthly encounter ids', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        discoveredMonthlyEncounters: ['new-year-comet', 'bad', 'geminid-rain', 3, 'geminid-rain'],
+      }));
+      const manager = new SaveManager();
+      expect(manager.load().discoveredMonthlyEncounters ?? []).toEqual(['new-year-comet', 'geminid-rain']);
+    });
+
+    it('marks a monthly encounter as discovered only once', () => {
+      const manager = new SaveManager();
+      expect(manager.markMonthlyEncounterDiscovered('starlight-whale')).toBe(true);
+      expect(manager.markMonthlyEncounterDiscovered('starlight-whale')).toBe(false);
+      expect(manager.load().discoveredMonthlyEncounters ?? []).toEqual(['starlight-whale']);
+    });
+  });
+
+  describe('discoveredSpaceGems', () => {
+    it('defaults to empty array when the field is missing', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({ clearedStage: 1, unlockedPlanets: [1] }));
+      const manager = new SaveManager();
+      expect(manager.load().discoveredSpaceGems ?? []).toEqual([]);
+    });
+
+    it('sanitizes invalid space gem ids', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        discoveredSpaceGems: ['diamond-nebula', 'bad', 'ruby-solar-wind', 3, 'diamond-nebula'],
+      }));
+      const manager = new SaveManager();
+      expect(manager.load().discoveredSpaceGems ?? []).toEqual(['diamond-nebula', 'ruby-solar-wind']);
+    });
+
+    it('marks a space gem as discovered only once', () => {
+      const manager = new SaveManager();
+      expect(manager.markSpaceGemDiscovered('emerald-comet')).toBe(true);
+      expect(manager.markSpaceGemDiscovered('emerald-comet')).toBe(false);
+      expect(manager.load().discoveredSpaceGems ?? []).toEqual(['emerald-comet']);
+    });
+  });
+
+  describe('language persistence', () => {
+    it('restores a saved english language choice', () => {
+      const manager = new SaveManager();
+      manager.save({ clearedStage: 1, unlockedPlanets: [1], language: 'en' });
+
+      expect(manager.load().language).toBe('en');
+    });
+
+    it('drops invalid language values and falls back to default japanese behavior', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({ clearedStage: 1, unlockedPlanets: [1], language: 'fr' }));
+      const manager = new SaveManager();
+
+      expect(manager.load().language).toBeUndefined();
     });
   });
 
@@ -326,13 +393,24 @@ describe('SaveManager', () => {
     });
   });
 
-  describe('vibrationSettings', () => {
-    it('defaults vibration intensity to medium', () => {
+  describe('visualFeedbackSettings', () => {
+    it('defaults visual feedback intensity to medium', () => {
       const manager = new SaveManager();
-      expect(manager.load().vibrationSettings).toEqual({ intensity: 'medium' });
+      expect(manager.load().visualFeedbackSettings).toEqual({ intensity: 'medium' });
     });
 
-    it('keeps valid vibration intensity values on load', () => {
+    it('keeps valid visual feedback intensity values on load', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        visualFeedbackSettings: { intensity: 'weak' },
+      }));
+      const manager = new SaveManager();
+
+      expect(manager.load().visualFeedbackSettings).toEqual({ intensity: 'weak' });
+    });
+
+    it('migrates legacy vibration settings into visual feedback settings', () => {
       storage.set('universe-kids-race-save', JSON.stringify({
         clearedStage: 1,
         unlockedPlanets: [1],
@@ -340,31 +418,73 @@ describe('SaveManager', () => {
       }));
       const manager = new SaveManager();
 
-      expect(manager.load().vibrationSettings).toEqual({ intensity: 'weak' });
+      expect(manager.load().visualFeedbackSettings).toEqual({ intensity: 'weak' });
     });
 
-    it('falls back to medium when vibration intensity is malformed', () => {
+    it('falls back to medium when visual feedback intensity is malformed', () => {
       storage.set('universe-kids-race-save', JSON.stringify({
         clearedStage: 1,
         unlockedPlanets: [1],
-        vibrationSettings: { intensity: 'loud' },
+        visualFeedbackSettings: { intensity: 'loud' },
       }));
       const manager = new SaveManager();
 
-      expect(manager.load().vibrationSettings).toEqual({ intensity: 'medium' });
+      expect(manager.load().visualFeedbackSettings).toEqual({ intensity: 'medium' });
     });
 
-    it('preserves vibration settings when progress is reset', () => {
+    it('preserves visual feedback settings when progress is reset', () => {
       const manager = new SaveManager();
       manager.save({
         clearedStage: 4,
         unlockedPlanets: [1, 2, 3, 4],
-        vibrationSettings: { intensity: 'off' },
+        visualFeedbackSettings: { intensity: 'off' },
       });
 
       manager.resetProgressPreservingSettings();
 
-      expect(manager.load().vibrationSettings).toEqual({ intensity: 'off' });
+      expect(manager.load().visualFeedbackSettings).toEqual({ intensity: 'off' });
+    });
+  });
+
+  describe('restReminderSettings', () => {
+    it('defaults rest reminders to enabled', () => {
+      const manager = new SaveManager();
+      expect(manager.load().restReminderSettings).toEqual({ enabled: true });
+    });
+
+    it('keeps valid disabled rest reminder settings on load', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        restReminderSettings: { enabled: false },
+      }));
+      const manager = new SaveManager();
+
+      expect(manager.load().restReminderSettings).toEqual({ enabled: false });
+    });
+
+    it('falls back to enabled when rest reminder settings are malformed', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        restReminderSettings: { enabled: 'nope' },
+      }));
+      const manager = new SaveManager();
+
+      expect(manager.load().restReminderSettings).toEqual({ enabled: true });
+    });
+
+    it('preserves rest reminder settings when progress is reset', () => {
+      const manager = new SaveManager();
+      manager.save({
+        clearedStage: 4,
+        unlockedPlanets: [1, 2, 3, 4],
+        restReminderSettings: { enabled: false },
+      });
+
+      manager.resetProgressPreservingSettings();
+
+      expect(manager.load().restReminderSettings).toEqual({ enabled: false });
     });
   });
 
@@ -440,6 +560,14 @@ describe('SaveManager', () => {
   });
 
   describe('colorAccessibility', () => {
+    it('uses the browser reduced-motion preference when no motion setting was saved', () => {
+      vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true }));
+
+      const manager = new SaveManager();
+
+      expect(manager.load().colorAccessibility).toEqual({ motionSensitivity: 'gentle' });
+    });
+
     it('persists high contrast mode when enabled', () => {
       const manager = new SaveManager();
       manager.save({
@@ -473,6 +601,28 @@ describe('SaveManager', () => {
       expect(manager.load().colorAccessibility).toEqual({ motionSensitivity: 'gentle' });
     });
 
+    it('keeps color-and-mark mode on load', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        colorAccessibility: { colorVisionSupportMode: 'color-and-marks' },
+      }));
+      const manager = new SaveManager();
+
+      expect(manager.load().colorAccessibility).toEqual({ colorVisionSupportMode: 'color-and-marks' });
+    });
+
+    it('keeps color filter modes on load', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        colorAccessibility: { colorVisionSupportMode: 'deuteranopia-filter' },
+      }));
+      const manager = new SaveManager();
+
+      expect(manager.load().colorAccessibility).toEqual({ colorVisionSupportMode: 'deuteranopia-filter' });
+    });
+
     it('drops default-only motion sensitivity payloads', () => {
       storage.set('universe-kids-race-save', JSON.stringify({
         clearedStage: 1,
@@ -482,6 +632,19 @@ describe('SaveManager', () => {
       const manager = new SaveManager();
 
       expect(manager.load().colorAccessibility).toBeUndefined();
+    });
+
+    it('preserves an explicit strong motion choice when reduced motion is preferred', () => {
+      vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true }));
+      const manager = new SaveManager();
+
+      manager.save({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        colorAccessibility: { motionSensitivity: 'strong' },
+      });
+
+      expect(manager.load().colorAccessibility).toEqual({ motionSensitivity: 'strong' });
     });
 
     it('preserves motion sensitivity when progress is reset', () => {
@@ -495,6 +658,56 @@ describe('SaveManager', () => {
       manager.resetProgressPreservingSettings();
 
       expect(manager.load().colorAccessibility).toEqual({ motionSensitivity: 'minimal' });
+    });
+
+    it('preserves color-and-mark mode when session progress is reset', () => {
+      const manager = new SaveManager();
+      manager.save({
+        clearedStage: 4,
+        unlockedPlanets: [1, 2, 3, 4],
+        colorAccessibility: { colorVisionSupportMode: 'color-and-marks' },
+      });
+
+      manager.resetSessionDataPreservingMuted();
+
+      expect(manager.load().colorAccessibility).toEqual({ colorVisionSupportMode: 'color-and-marks' });
+    });
+  });
+
+  describe('audioSettings', () => {
+    it('persists non-default bgm and sfx volumes', () => {
+      const manager = new SaveManager();
+      manager.save({
+        clearedStage: 2,
+        unlockedPlanets: [1, 2],
+        audioSettings: { bgmVolume: 75, sfxVolume: 25 },
+      });
+
+      expect(manager.load().audioSettings).toEqual({ bgmVolume: 75, sfxVolume: 25 });
+    });
+
+    it('drops malformed audio settings payloads', () => {
+      storage.set('universe-kids-race-save', JSON.stringify({
+        clearedStage: 1,
+        unlockedPlanets: [1],
+        audioSettings: { bgmVolume: 60, sfxVolume: 'loud' },
+      }));
+      const manager = new SaveManager();
+
+      expect(manager.load().audioSettings).toBeUndefined();
+    });
+
+    it('preserves audio settings when session progress is reset', () => {
+      const manager = new SaveManager();
+      manager.save({
+        clearedStage: 4,
+        unlockedPlanets: [1, 2, 3, 4],
+        audioSettings: { bgmVolume: 50, sfxVolume: 25 },
+      });
+
+      manager.resetSessionDataPreservingMuted();
+
+      expect(manager.load().audioSettings).toEqual({ bgmVolume: 50, sfxVolume: 25 });
     });
   });
 
@@ -621,7 +834,8 @@ describe('SaveManager', () => {
         },
         tutorialShown: false,
         muted: true,
-        vibrationSettings: { intensity: 'medium' },
+        visualFeedbackSettings: { intensity: 'medium' },
+        restReminderSettings: { enabled: true },
         spaceshipCustomization: { bodyColor: 'sky', noseColor: 'sunset', wingColor: 'aqua' },
       });
     });
@@ -723,7 +937,8 @@ describe('SaveManager', () => {
         },
         muted: true,
         tutorialShown: true,
-        vibrationSettings: { intensity: 'medium' },
+        visualFeedbackSettings: { intensity: 'medium' },
+        restReminderSettings: { enabled: true },
         spaceshipCustomization: { bodyColor: 'sky', noseColor: 'sunset', wingColor: 'aqua' },
       };
       const manager = new SaveManager();
@@ -755,7 +970,8 @@ describe('SaveManager', () => {
         },
         muted: false,
         tutorialShown: true,
-        vibrationSettings: { intensity: 'medium' },
+        visualFeedbackSettings: { intensity: 'medium' },
+        restReminderSettings: { enabled: true },
         spaceshipCustomization: { bodyColor: 'sky', noseColor: 'sunset', wingColor: 'aqua' },
       };
       const manager = new SaveManager();
@@ -814,7 +1030,8 @@ describe('SaveManager', () => {
         muted: true,
         tutorialShown: false,
         colorAccessibility: { highContrast: true },
-        vibrationSettings: { intensity: 'medium' },
+        visualFeedbackSettings: { intensity: 'medium' },
+        restReminderSettings: { enabled: true },
         bestStageStars: {},
         gameplayStats: {
           totalPlayTimeSeconds: 0,
@@ -843,7 +1060,8 @@ describe('SaveManager', () => {
         unlockedPlanets: [],
         muted: false,
         tutorialShown: false,
-        vibrationSettings: { intensity: 'medium' },
+        visualFeedbackSettings: { intensity: 'medium' },
+        restReminderSettings: { enabled: true },
         bestStageStars: {},
         gameplayStats: {
           totalPlayTimeSeconds: 0,
@@ -896,7 +1114,8 @@ describe('SaveManager', () => {
         muted: true,
         tutorialShown: true,
         colorAccessibility: { highContrast: true },
-        vibrationSettings: { intensity: 'medium' },
+        visualFeedbackSettings: { intensity: 'medium' },
+        restReminderSettings: { enabled: true },
         bestStageStars: {},
         gameplayStats: {
           totalPlayTimeSeconds: 0,
@@ -919,7 +1138,8 @@ describe('SaveManager', () => {
         unlockedPlanets: [],
         muted: false,
         tutorialShown: false,
-        vibrationSettings: { intensity: 'medium' },
+        visualFeedbackSettings: { intensity: 'medium' },
+        restReminderSettings: { enabled: true },
         bestStageStars: {},
         gameplayStats: {
           totalPlayTimeSeconds: 0,

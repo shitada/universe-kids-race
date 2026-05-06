@@ -5,14 +5,14 @@ import {
 } from '../../../src/game/config/StageAtmosphereConfig';
 
 describe('StageAtmosphereConfig', () => {
-  it('11ステージ分の雰囲気設定を持つ', () => {
-    expect(STAGE_ATMOSPHERE_CONFIGS).toHaveLength(11);
+  it('12ステージ分の雰囲気設定を持つ', () => {
+    expect(STAGE_ATMOSPHERE_CONFIGS).toHaveLength(12);
     expect(STAGE_ATMOSPHERE_CONFIGS.map((config) => config.stageNumber)).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
     ]);
   });
 
-  it('月と火星と土星に固有の背景と粒子設定を持つ', () => {
+  it('月と火星と土星と宇宙ステーションに固有の背景と粒子設定を持つ', () => {
     expect(getStageAtmosphereConfig(1)).toMatchObject({
       gradientTopColor: 0xf4f8ff,
       gradientBottomColor: 0x4a547d,
@@ -27,10 +27,14 @@ describe('StageAtmosphereConfig', () => {
       particlePattern: 'ring',
       particleCount: 54,
     });
+    expect(getStageAtmosphereConfig(11)).toMatchObject({
+      particlePattern: 'crystal',
+      particleCount: 34,
+    });
   });
 
   it('不正なステージ番号では例外を投げる', () => {
     expect(() => getStageAtmosphereConfig(0)).toThrow('Invalid stage atmosphere number: 0');
-    expect(() => getStageAtmosphereConfig(12)).toThrow('Invalid stage atmosphere number: 12');
+    expect(() => getStageAtmosphereConfig(13)).toThrow('Invalid stage atmosphere number: 13');
   });
 });

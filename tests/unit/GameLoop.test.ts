@@ -83,6 +83,38 @@ describe('GameLoop', () => {
     loop.stop();
   });
 
+  it('passes dropped-frame diagnostics to the fps callback', () => {
+    const loop = new GameLoop();
+    const diagnostics: Array<{ droppedFrameCount: number; droppedFrameStreak: number }> = [];
+    loop.start(
+      () => {},
+      () => {},
+      (_fps, _sampleTimeMs, stats) => diagnostics.push(stats),
+    );
+
+    advance(34);
+    advance(34);
+    advance(34);
+
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toEqual({
+      droppedFrameCount: 3,
+      droppedFrameStreak: 3,
+    });
+
+    for (let i = 0; i < 7; i += 1) {
+      advance(16);
+    }
+
+    expect(diagnostics).toHaveLength(2);
+    expect(diagnostics[1]).toEqual({
+      droppedFrameCount: 0,
+      droppedFrameStreak: 0,
+    });
+
+    loop.stop();
+  });
+
   it('exposes the current fps via getFps()', () => {
     const loop = new GameLoop();
     loop.start(
