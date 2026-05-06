@@ -31,15 +31,15 @@ const VISUAL_FEEDBACK_CONFIGS: Record<VisualFeedbackEvent, VisualFeedbackConfig>
   starCollect: {
     durationMs: 100,
     priority: 1,
-    overlayBackground: 'linear-gradient(135deg, #ffffff, #fff7b0)',
-    overlayOpacity: 0.28,
+    overlayBackground: 'transparent',
+    overlayOpacity: 0,
     spaceshipScale: 1.2,
   },
   rainbowCollect: {
     durationMs: 120,
     priority: 2,
-    overlayBackground: 'linear-gradient(135deg, #ffffff, #ffd76f)',
-    overlayOpacity: 0.34,
+    overlayBackground: 'transparent',
+    overlayOpacity: 0,
     spaceshipScale: 1.24,
   },
   constellationCelebrate: {

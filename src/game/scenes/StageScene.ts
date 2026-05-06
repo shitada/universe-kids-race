@@ -649,7 +649,7 @@ export class StageScene implements Scene {
       document.getElementById('hud'),
       document.getElementById('ui-overlay'),
     ]);
-    this.inputSystem.setTouchFeedbackOverlay?.(this.touchFeedbackOverlay);
+    this.inputSystem.setTouchFeedbackOverlay?.(null);
     this.hud.setBoostCallback(() => {
       this.inputSystem.setBoostPressed(true);
     });
@@ -1408,7 +1408,7 @@ export class StageScene implements Scene {
       const isNewDiscovery = this.saveManager.markSpaceGemDiscovered?.(spaceGem.gemType) ?? false;
       this.scoreSystem.addBonusScore(spaceGem.scoreBonus, spaceGem.position);
       this.audioManager.playSFX('spaceGemCollect');
-      triggerSharedVisualFeedback('constellationCelebrate');
+      triggerSharedVisualFeedback('rainbowCollect');
       this.spaceGemCollectionEffect.emit(spaceGem.position, gemConfig.visual.glowColor);
       this.particleBurstManager.emit(
         this.threeScene,
@@ -2337,7 +2337,6 @@ export class StageScene implements Scene {
     }
 
     this.showClearMessage(isBestUpdated, earnedStars, isNewPlanetUnlock, bestStarCount);
-    this.startBonusTime();
     this.hud.announceStageClear(earnedStars, isNewPlanetUnlock, isBestUpdated);
 
     if (isBestUpdated) {
@@ -2653,10 +2652,7 @@ export class StageScene implements Scene {
 
   private revealClearActionButtonsIfReady(): void {
     if (this.isBonusTime || this.isBonusResultVisible) return;
-    if (this.clearTimer < Math.max(
-      StageScene.CLEAR_CONTINUE_DELAY,
-      StageScene.BONUS_TIME_DURATION + StageScene.BONUS_RESULT_DURATION,
-    )) return;
+    if (this.clearTimer < StageScene.CLEAR_CONTINUE_DELAY) return;
     this.stageClearOverlay.enableContinue();
   }
 

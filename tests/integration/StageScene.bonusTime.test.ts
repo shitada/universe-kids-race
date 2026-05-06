@@ -30,14 +30,14 @@ function mockCanvasContext(): void {
   });
 }
 
-describe('StageScene bonus time integration', () => {
+describe('StageScene stage clear flow without bonus time', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     mockCanvasContext();
     document.body.innerHTML = '<div id="hud"></div><div id="ui-overlay"></div>';
   });
 
-  it('ステージクリア後にボーナスタイムを経て通常のクリア遷移へ進み、ボーナス回収数を合算する', () => {
+  it('ステージクリア後にボーナスタイムを出さず通常のクリア遷移へ進む', () => {
     const sceneManager = { requestTransition: vi.fn() };
     const inputSystem = {
       getState: () => ({ moveDirection: 0 as -1 | 0 | 1, boostPressed: false }),
@@ -74,7 +74,6 @@ describe('StageScene bonus time integration', () => {
     const internal = scene as unknown as {
       countdownOverlay: { dispose(): void } | null;
       isStarting: boolean;
-      bonusCollectedStars: number;
       scoreSystem: {
         getStarCount(): number;
         getTotalScore(): number;
@@ -97,17 +96,8 @@ describe('StageScene bonus time integration', () => {
 
     internal.onStageClear();
 
-    expect(document.querySelector('[data-bonus-time-overlay]')).not.toBeNull();
-    expect(document.querySelector('[data-bonus-time-message]')?.textContent).toContain('ほしを あつめよう！');
-
-    internal.bonusCollectedStars = 4;
-    internal.update(10.1);
-
-    expect(document.querySelector('[data-bonus-time-result]')?.textContent).toContain('4こ あつめたね！');
-
-    internal.update(2.5);
-
     expect(document.querySelector('[data-bonus-time-overlay]')).toBeNull();
+    internal.update(0.7);
 
     const continueButton = document.querySelector<HTMLButtonElement>('[data-stage-clear-continue]');
     expect(continueButton?.disabled).toBe(false);
@@ -116,7 +106,7 @@ describe('StageScene bonus time integration', () => {
 
     expect(sceneManager.requestTransition).toHaveBeenCalledWith('ending', {
       totalScore: 900,
-      totalStarCount: 13,
+      totalStarCount: 9,
     });
   });
 });

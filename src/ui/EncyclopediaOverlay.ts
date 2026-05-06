@@ -95,13 +95,12 @@ export class EncyclopediaOverlay {
     content.setAttribute('data-gallery-content', '');
     content.style.cssText = `
       width: min(960px, 100%);
-      height: 100%;
-      max-height: 720px;
+      min-height: min(100%, 720px);
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      overflow: hidden;
+      justify-content: flex-start;
+      overflow: visible;
       padding: ${isCompactHeight ? '0.45rem 0.35rem' : '0.5rem'};
       box-sizing: border-box;
     `;
@@ -220,7 +219,9 @@ export class EncyclopediaOverlay {
       justify-content: center;
       padding: ${this.isCompactHeight() ? '0.5rem' : '0.9rem'};
       box-sizing: border-box;
-      overflow: hidden;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
     `;
     element.style.zIndex = String(zIndex);
   }
@@ -738,12 +739,14 @@ export class EncyclopediaOverlay {
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
       background: rgba(0, 0, 32, 0.9);
       z-index: 31;
       padding: ${isCompactHeight ? '0.5rem' : '0.9rem'};
       box-sizing: border-box;
-      overflow: hidden;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
     `;
 
     const colorHex = '#' + entry.planetColor.toString(16).padStart(6, '0');
@@ -752,13 +755,12 @@ export class EncyclopediaOverlay {
     detailContent.setAttribute('data-detail-content', '');
     detailContent.style.cssText = `
       width: min(560px, 100%);
-      height: 100%;
-      max-height: 720px;
+      min-height: min(100%, 720px);
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      overflow: hidden;
+      justify-content: flex-start;
+      overflow: visible;
       padding: 0;
       box-sizing: border-box;
     `;
@@ -773,10 +775,10 @@ export class EncyclopediaOverlay {
       flex-direction: column;
       align-items: center;
       padding: ${isCompactHeight ? '0.8rem 0.9rem' : '1.15rem'};
-      overflow: hidden;
+      overflow-y: visible;
+      overflow-x: visible;
       box-sizing: border-box;
     `;
-    detailCard.style.overflowY = 'hidden';
 
     const emoji = document.createElement('div');
     emoji.textContent = entry.emoji;

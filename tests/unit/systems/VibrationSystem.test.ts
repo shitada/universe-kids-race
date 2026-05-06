@@ -16,8 +16,8 @@ describe('VisualFeedbackSystem', () => {
       event: 'starCollect',
       durationMs: 100,
       priority: 1,
-      overlayBackground: 'linear-gradient(135deg, #ffffff, #fff7b0)',
-      overlayOpacity: 0.28,
+      overlayBackground: 'transparent',
+      overlayOpacity: 0,
       spaceshipScale: 1.2,
     });
   });

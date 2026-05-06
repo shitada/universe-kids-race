@@ -371,7 +371,7 @@ describe('EncyclopediaOverlay', () => {
     expect(detail).not.toBeNull();
   });
 
-  it('uses a compact no-scroll gallery layout on low viewport heights', () => {
+  it('uses a compact scrollable gallery layout on low viewport heights', () => {
     setViewportHeight(520);
 
     overlay.show([1], () => {});
@@ -382,14 +382,14 @@ describe('EncyclopediaOverlay', () => {
     const backBtn = uiOverlay.querySelector('[data-gallery-back]') as HTMLButtonElement | null;
 
     expect(galleryContent).not.toBeNull();
-    expect(galleryContent?.style.maxHeight).toBe('720px');
-    expect(galleryContent?.style.overflow).toBe('hidden');
+    expect(galleryContent?.style.minHeight).toBe('min(100%, 720px)');
+    expect(galleryContent?.style.overflow).toBe('visible');
     expect(galleryMain?.style.display).toBe('grid');
     expect(grid?.style.gridTemplateColumns).toContain('minmax(86px, 1fr)');
     expect(backBtn).not.toBeNull();
   });
 
-  it('keeps detail actions inside compact no-scroll containers on low viewport heights', () => {
+  it('keeps detail actions inside compact scrollable containers on low viewport heights', () => {
     setViewportHeight(520);
 
     overlay.show([1], () => {}, () => {});
@@ -402,9 +402,9 @@ describe('EncyclopediaOverlay', () => {
     const playBtn = uiOverlay.querySelector('[data-detail-play]') as HTMLButtonElement | null;
 
     expect(detailContent).not.toBeNull();
-    expect(detailContent?.style.maxHeight).toBe('720px');
-    expect(detailContent?.style.overflow).toBe('hidden');
-    expect(detailCard?.style.overflowY).toBe('hidden');
+    expect(detailContent?.style.minHeight).toBe('min(100%, 720px)');
+    expect(detailContent?.style.overflow).toBe('visible');
+    expect(detailCard?.style.overflowY).not.toBe('hidden');
     expect(detailCard).not.toBeNull();
     expect(backBtn).not.toBeNull();
     expect(playBtn).not.toBeNull();

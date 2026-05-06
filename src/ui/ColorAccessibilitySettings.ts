@@ -184,15 +184,19 @@ export class ColorAccessibilitySettings {
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 1.5rem;
+        padding: ${compact ? '0.75rem' : '1rem'};
         background: rgba(2, 8, 28, 0.76);
         backdrop-filter: blur(8px);
         z-index: 24;
+        box-sizing: border-box;
       `;
 
       const panel = document.createElement('div');
       panel.style.cssText = `
-        width: min(92vw, 30rem);
+        width: min(96vw, 42rem);
+        max-height: min(92vh, 720px);
+        overflow-y: auto;
+        overflow-x: hidden;
         padding: ${compact ? '1rem' : '1.25rem'};
         border-radius: 1.5rem;
         background: rgba(15, 23, 58, 0.96);
@@ -203,6 +207,8 @@ export class ColorAccessibilitySettings {
         text-align: center;
         transform: ${compact ? 'scale(0.93)' : 'none'};
         transform-origin: center center;
+        box-sizing: border-box;
+        -webkit-overflow-scrolling: touch;
       `;
 
       const title = document.createElement('h2');
